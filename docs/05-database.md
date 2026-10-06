@@ -1,10 +1,10 @@
-# Phase 5: Database (draft v0)
+# Phase 5: Database (locked rev 1)
 
 Two kinds of database, never mixed:
 
 | | Control plane | Tenant database |
 |---|---|---|
-| Count | One (ours) | **One Supabase project per tenant** (owner decision), or the tenant's own Postgres |
+| Count | One (ours) | **One Supabase project per tenant, in the tenant's own Supabase organisation** (owner decision), or the tenant's own Postgres |
 | Holds | Tenants, licences, seats, trials, purchases, downloads, releases, owner notices | Everything the tenant does inside the app: users, BOQs, tenders, schedules, documents, accounts |
 | Exposed via Supabase Data API | **No.** Tables live in schema `core`, which is not exposed | **No.** Module schemas are not exposed; Supabase Auth/REST are unused for tenant data |
 | Retention | 3-5 years (owner decision) | Tenant's own project. We keep none of it |
@@ -137,7 +137,8 @@ is around 500 MB. **A tenant who actually uses the 1M-line capability will excee
 your rule that heavy-load tenants pay, but the app must warn before the limit (`tenant_db.status = full`) rather than fail
 at it. The Wave 0 benchmark will replace these guesses with measured numbers.
 
-## 12. Open questions
+## 12. Decisions closed at lock
 
-1. **Whose Supabase organisation owns each tenant project, ours or the tenant's?** (See the README and infra-existing-stack.md §5.)
-2. Do any tenants need more than one legal entity in v1, or can `entity` stay single for now (keeping the column)?
+1. **Tenant projects live in the tenant's own Supabase organisation.** Onboarding flow in infra-existing-stack.md §5.
+2. **Same screens and features for every tenant.** No per-tenant feature variants. Roles still limit what a user may *do* (a Worker cannot approve a PO); that is permission, not a different feature set.
+3. **Entities/branches:** in India a contractor working in several states needs a **separate GSTIN per state**, and invoices must carry the right one. Under "same screens for all", every tenant gets the entity/branch selector; a single-GSTIN tenant simply has one entity and the selector stays out of the way. Built in v1.

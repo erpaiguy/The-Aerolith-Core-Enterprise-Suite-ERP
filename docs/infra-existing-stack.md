@@ -48,9 +48,22 @@ The "no paid tools" rule covers software licences. Compute and storage are opera
 
 ## 5. Tenant database provisioning (revised after owner input)
 
-**Owner decision:** one Supabase project per tenant, created in the background at signup; everything the tenant does in the app, including files, lives in that project. **Still open: which Supabase organisation owns those projects** (ours = cap/cost below; the tenant's = they need a Supabase account). Mode H below remains the documented fallback.
+**Owner decision (final):** every tenant has **their own Supabase organisation and their own Supabase project**. The owner holds none.
+Everything the tenant does in the app (users, app-level "projects", BOQs, tenders, schedules, documents, files) is rows and files
+inside that one Supabase project. App-level projects are table rows, not Supabase projects.
 
-Owner's plan: a separate Supabase project per tenant, created at signup, on free tiers while usage is light.
+**Onboarding flow this requires:**
+1. Signup on the website, email verified.
+2. **"Connect your Supabase"**: the tenant signs in to (or creates) their Supabase account and authorises our OAuth app to create a project in their organisation. [Certain] We cannot create anything in someone else's organisation without this one-time consent. "Background" creation starts *after* it. [Likely] Supabase offers OAuth for third-party integrations with project-management scopes; verify before Wave 0.
+3. Our server creates the project (Mumbai region), generates a strong database password, creates the app and migration roles, runs migrations, creates the private storage bucket, and records it in `core.tenant_db`.
+4. Licence key issued and emailed; download proceeds.
+
+**Consequences accepted:**
+- Signup has one extra step (a Supabase account). Expect some trial drop-off there; measure it.
+- The tenant's Supabase bill is theirs. Free is enough for light use; heavy use (1M-line BOQs, many documents) moves them to a paid Supabase plan. **Our pricing must say this plainly**, so nobody is surprised by a second bill.
+- If the tenant pauses, deletes, or lets their project hit a limit, only that tenant is affected. The app detects it and shows the fix.
+- We store the OAuth token only if it is needed for status checks or resuming a paused project, encrypted, with minimal scopes. Database credentials are envelope-encrypted.
+- Mode H (hosted by us) is dropped as the default and kept only as a documented fallback. Mode P (tenant's own Postgres) remains for tenants who refuse Supabase.
 
 **What is solid:** Supabase is plain Postgres underneath. Our app connects with a normal connection string and never uses
 Supabase's REST/Auth/Realtime for tenant data, so any Supabase project can be a tenant database. `ltree`, `pg_trgm`,
@@ -62,7 +75,7 @@ partitioning and `COPY` work on it [Likely, verify at spike time].
 3. [Likely] Free database size is about **500 MB**. A tenant with a few large BOQs (the 1M-line requirement) exceeds that. At the cap the database goes read-only.
 4. [Likely] Free tier compute is shared and small, which interacts with the performance targets in 03 §13.
 
-**Three provisioning modes (default marked):**
+**Provisioning modes considered (owner chose S):**
 
 | Mode | Where the DB lives | Who pays / owns | Use |
 |------|--------------------|------------------|-----|
