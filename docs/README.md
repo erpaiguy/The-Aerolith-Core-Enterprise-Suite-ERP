@@ -7,7 +7,7 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 1 | MVP | [01-mvp.md](01-mvp.md) | **Locked (rev 3)** |
 | 2 | Tech Stack | [02-tech-stack.md](02-tech-stack.md) | **Locked (rev 3)** |
 | 3 | Architecture | [03-architecture.md](03-architecture.md) | **Locked (rev 3)** |
-| 4 | Features / Modules | [04-features.md](04-features.md) | Draft v0 |
+| 4 | Features / Modules | [04-features.md](04-features.md) | **Locked (rev 1)** |
 | 5 | Database | _pending_ | Not started |
 | 6 | Pricing | _pending_ | Not started |
 | 7 | Payments | _pending_ | Not started |
@@ -40,4 +40,8 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | Sole-admin recovery | Email reset link; support email with identity verification if email is lost |
 | **Licensing** | **No paid tools; permissive licences only, CI-enforced. See [licensing-policy.md](licensing-policy.md)** |
 
-## Next: Phase 4 sign-off, then Phase 5 (Database)
+| Existing infra | GoDaddy domain+mail, Vercel site, GitHub, GitHub Releases, Supabase (control plane only). See [infra-existing-stack.md](infra-existing-stack.md) |
+| Payments | Razorpay as a per-transaction operating service behind an adapter (explained to owner; confirm in Phase 7) |
+| .mpp | Best-effort via LGPL sidecar, MSPDI XML fallback |
+
+## Next: Phase 5 (Database)

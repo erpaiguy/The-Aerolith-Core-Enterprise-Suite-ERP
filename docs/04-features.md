@@ -1,4 +1,4 @@
-# Phase 4: Features and Modules (draft v0)
+# Phase 4: Features and Modules (locked rev 1)
 
 Legend: **W#** = wave. **Dep** = must exist first. All modules obey [licensing-policy.md](licensing-policy.md).
 Segments in priority order: **1 Buildings, 2 Interiors, 3 Joineries, 4 MEP, 5 Others** (see §V).
@@ -143,7 +143,7 @@ first.
 | Excel/CSV | Yes | Yes | All modules (P9) |
 | MS Project XML (MSPDI) | Yes | Yes | Documented, public XML schema. Our own parser. |
 | Primavera P6 XER | Yes | Yes | Implemented from public structure and behaviour, validated against sample files from tenants. [Likely] Round-trip fidelity of calendars and resource data is the hard part. |
-| MS Project .mpp (binary) | Best-effort via an LGPL-licensed reader run as a separate process, or ask users to save as MSPDI XML | No (export MSPDI) | Proprietary binary. Decide in Phase 10 whether the sidecar is worth its weight. |
+| MS Project .mpp (binary) | **Decided:** best-effort via an LGPL-licensed reader run as a separate process (no licence fee), with "save as MSPDI XML" as the documented fallback | No (export MSPDI) | Proprietary binary. LGPL is acceptable only as an unmodified separate process, per licensing-policy §2. |
 | Tally XML | n/a | Yes | See 03 §14 |
 | PDF | n/a | Yes | Reports, programmes, invoices |
 

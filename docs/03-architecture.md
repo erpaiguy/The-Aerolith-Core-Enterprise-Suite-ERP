@@ -34,7 +34,7 @@ A **modular monolith** split into two planes.
 
 Same migrations and same app for all four. Only the *connection descriptor* and *licence source* differ.
 
-## 3. Control plane data (our DB, never tenant data)
+## 3. Control plane data (our DB, never tenant data; today hosted on Supabase, see infra-existing-stack.md)
 
 `tenants`, `tenant_databases` (mode, host, port, db name, encrypted credentials ref, schema_version, status),
 `tenant_owners` (admin email identity, one per tenant plus optional co-owners), `licence_keys`, `device_activations`, `plans`, `entitlements`, `subscriptions`,
