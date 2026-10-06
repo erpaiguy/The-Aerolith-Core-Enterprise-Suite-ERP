@@ -45,3 +45,45 @@ Legend: [Certain] documented/structural, [Likely] strong inference, [Guessing] n
 WebSockets, per-tenant connection management) and cannot use free hosted Postgres tiers. It needs a server
 (VPS or similar) running Postgres, PgBouncer, Valkey, SeaweedFS and the API. **Free is not possible for this layer.**
 The "no paid tools" rule covers software licences. Compute and storage are operating costs. This is a decision for Phase 10 and I need your position on it.
+
+## 5. Tenant database provisioning (revised after owner input)
+
+Owner's plan: a separate Supabase project per tenant, created at signup, on free tiers while usage is light.
+
+**What is solid:** Supabase is plain Postgres underneath. Our app connects with a normal connection string and never uses
+Supabase's REST/Auth/Realtime for tenant data, so any Supabase project can be a tenant database. `ltree`, `pg_trgm`,
+partitioning and `COPY` work on it [Likely, verify at spike time].
+
+**What breaks (verify limits against current Supabase pricing before relying on them):**
+1. [Certain] Free plan allows only **2 active projects per organisation**. Tenant #3 forces a paid project if projects are created in *our* organisation.
+2. [Certain] Free projects **pause after ~1 week of inactivity** and have **no point-in-time recovery**. A paused tenant database means that tenant is down until someone resumes it.
+3. [Likely] Free database size is about **500 MB**. A tenant with a few large BOQs (the 1M-line requirement) exceeds that. At the cap the database goes read-only.
+4. [Likely] Free tier compute is shared and small, which interacts with the performance targets in 03 §13.
+
+**Three provisioning modes (default marked):**
+
+| Mode | Where the DB lives | Who pays / owns | Use |
+|------|--------------------|------------------|-----|
+| H. Hosted by us | One shared Postgres server we run, one **database** per tenant, size-capped | Us (a single server, not one-project-per-tenant) | **Default for trials** (3 users) |
+| S. Tenant's own Supabase | A project in the **tenant's own Supabase organisation**, connected through Supabase's OAuth/API ("Connect your Supabase" button) [Likely available, verify] | Tenant (their free limits and their plan) | Light-load tenants who want their data under their own account |
+| P. Tenant's own Postgres | Tenant's server or any managed Postgres | Tenant | Heavy-load, compliance-minded, self-hosted |
+
+[Likely] Mode H avoids the 2-project cap and the signup friction of making every trial user create a Supabase account.
+A free ARM VM from an always-free cloud tier could host mode H during the trial period. [Guessing] Check region, terms and
+account-termination risk before depending on it.
+
+**Our responsibilities in S and P modes:** we hold the tenant's connection credentials (the server must connect), so they are
+envelope-encrypted and never logged; the app detects "paused / unreachable / nearly full" and shows the tenant exactly what to do; the P13
+scheduled export is on by default and shows backup status prominently, because free tiers have no backups and tenant data loss lands on our reputation too.
+
+## 6. Retention (control plane only, draft)
+
+Tenant business data in S/P modes is in the tenant's account: we do not keep it. We still hold, and must define retention for:
+
+| Data we hold | Proposed retention | Why |
+|--------------|--------------------|-----|
+| Tenant account, contacts | Until deletion request or N months after last activity | DPDP: purpose limitation, erasure on request |
+| Licence, device and seat history | Duration of contract + short tail | Dispute handling |
+| **Invoices and payment records we issue** | **Statutory period for tax records (GST law is multi-year; verify the exact period with an accountant)** | We are a seller in India, so this applies to us regardless of where tenant data lives |
+| Download/purchase events | Aggregated after 12 months | Analytics |
+| Mode H tenant databases | After subscription ends: read-only export window (e.g. 30 days), then deletion with a deletion record | We host it, so we are the processor |

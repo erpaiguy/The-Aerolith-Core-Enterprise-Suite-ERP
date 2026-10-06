@@ -225,3 +225,11 @@ If a target fails, the stack changes before module work starts.
 ## 15. Licence compliance
 
 See [licensing-policy.md](licensing-policy.md). Architectural effect: every paid or non-free external service (object store, email, payments, banks) is behind an adapter interface with a free default.
+
+## 16. Seats, tiers and trial (decided)
+
+- **Download/purchase flow asks for the number of users.** The issued licence carries a **seat cap** for that tier. More seats means buying a higher tier. Tiers and prices are defined in Phase 6, once the app is commercially released.
+- **Trial licence:** fixed at **3 seats: 1 Admin, 1 Manager, 1 Worker**. Roles are preset for trials. Trial runs until a countable set of real tenants use the product.
+- **Enforcement is server-side:** the seat cap lives in the tenant's entitlements. The server refuses to create a user over the cap, and a user limit is also checked at login. The key encodes the tier but the server is the source of truth, so a key can't be edited to add seats.
+- **Self-hosted (offline):** the seat cap is in the signed licence file. Enforcement is local and tamper-resistant only against casual changes.
+- **Open for Phase 6:** named vs concurrent seats, over-cap behaviour on downgrade, whether Worker seats are priced differently from Manager seats.
