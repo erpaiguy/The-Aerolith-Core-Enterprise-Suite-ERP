@@ -9,8 +9,8 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 3 | Architecture | [03-architecture.md](03-architecture.md) | **Locked (rev 3)** |
 | 4 | Features / Modules | [04-features.md](04-features.md) | **Locked (rev 1)** |
 | 5 | Database | [05-database.md](05-database.md) | **Locked (rev 1)** |
-| 6 | Pricing | [06-pricing.md](06-pricing.md) | Draft v0 (framework, prices set at commercial release) |
-| 7 | Payments | _pending_ | Not started |
+| 6 | Pricing | [06-pricing.md](06-pricing.md) | **Locked (rev 1)**, prices set at commercial release |
+| 7 | Payments | [07-payments.md](07-payments.md) | Draft v0 |
 | 8 | Dashboard | _pending_ | Not started |
 | 9 | Security | _pending_ | Not started |
 | 10 | Deployment | _pending_ | Not started |
@@ -51,4 +51,6 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | Seats | Named users; seat cap per tier, enforced server-side |
 | Retention | Control plane kept 3-5 years. Tenant data not held by us. Owner-run backups deferred until commercial release |
 
-## Next: Phase 6 sign-off, then Phase 7 (Payments)
+| Pricing model | Seat tiers only; immediate seat reuse with an owner-console abuse report |
+
+## Next: Phase 7 sign-off, then Phase 8 (Dashboard)

@@ -1,4 +1,4 @@
-# Phase 6: Pricing (draft v0, framework only)
+# Phase 6: Pricing (locked rev 1, framework only)
 
 Actual prices are set when the app goes commercial (owner decision). This phase fixes the **model**, so the licence,
 payment and owner-console code can be built now and prices become configuration later.
@@ -37,7 +37,7 @@ payment and owner-console code can be built now and prices become configuration 
 - [Likely] GST on SaaS sold to Indian businesses is 18%, and GST registration becomes mandatory above the services turnover threshold. **Confirm both with a chartered accountant** before charging anyone.
 - [Guessing] Competitor price points for Indian construction ERP/estimation software. Research at commercial release, not now, because they will have changed.
 
-## 5. Open questions
+## 5. Decisions closed at lock
 
-1. Do you agree that tiers differ by seats only, or will some tiers ever unlock storage, support level, or priority updates?
-2. Should seat reassignment be unlimited, or limited (e.g. a deactivated user's seat frees after N days) to stop one seat being shared by rotating users?
+1. **Seats only** for now. Richer plan composition (storage, support, early access) later; the tier table keeps room for extra attributes.
+2. **Seat reuse is immediate** when a user is deactivated (owner decision). Risk accepted: one seat can be rotated among several people. Cheap mitigation that does not block anyone: the owner console reports tenants whose seat reassignments per month exceed a threshold, so abuse is visible before pricing decisions are made.
