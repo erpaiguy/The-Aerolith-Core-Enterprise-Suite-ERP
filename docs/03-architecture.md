@@ -12,7 +12,7 @@ A **modular monolith** split into two planes.
                  └───────────────┬──────────────────────────────────────┘
                                  │ tenant_id → connection descriptor
  Browser SPA ─┐                  ▼
- Desktop (Tauri)─▶ API Gateway ─▶ Tenant Resolver ─▶ Connection Manager (LRU pools + PgBouncer)
+ Desktop (Electron)─▶ API Gateway ─▶ Tenant Resolver ─▶ Connection Manager (LRU pools + PgBouncer)
                                  │
                  ┌───────────────┴──────────── Data Plane ──────────────┐
                  │ ERP modules (NestJS): Projects, BOQ, Procurement, ... │
@@ -37,7 +37,7 @@ Same migrations and same app for all four. Only the *connection descriptor* and 
 ## 3. Control plane data (our DB, never tenant data)
 
 `tenants`, `tenant_databases` (mode, host, port, db name, encrypted credentials ref, schema_version, status),
-`users` (global identity), `memberships` (user ↔ tenant ↔ role), `plans`, `entitlements`, `subscriptions`,
+`tenant_owners` (admin email identity, one per tenant plus optional co-owners), `licence_keys`, `device_activations`, `plans`, `entitlements`, `subscriptions`,
 `licences`, `invoices`, `audit_events`, `migration_runs`.
 
 Credentials for BYO-DB are envelope-encrypted (KMS or libsodium sealed box), never in plain config.
@@ -59,13 +59,49 @@ Credentials for BYO-DB are envelope-encrypted (KMS or libsodium sealed box), nev
 - Tenant-scoped test fixture: every integration test runs against two tenants and asserts no leakage.
 - A tenant's BYO-DB being down must degrade only that tenant. Circuit breaker per tenant.
 
-## 6. Multi-user model
+## 6. Identity, login and multi-user model (rev 2)
 
-- **Identity** is global (one email can belong to several tenants, which matters for consultants and auditors).
-- **Membership** gives a role in a tenant: Owner, Admin, Project Manager, Engineer, Accounts, Store, Viewer, plus custom roles.
-- **Permissions** are `module.resource.action` (e.g. `procurement.po.approve`) with optional **project scope** (a site engineer sees only assigned projects).
-- **Single-user** tenants are just a tenant with one Owner membership. No separate code path.
-- Seat limits enforced from entitlements.
+Two kinds of people, two login paths.
+
+| | Tenant Admin (owner) | Tenant User (staff) |
+|---|---|---|
+| Created by | Website signup with their email | Tenant Admin, inside the app |
+| Website/portal login | Email + password | Not applicable |
+| App login | **Email + password + licence key** | **Username + password** (+ tenant code/licence key on first activation of a device) |
+| Credentials stored | Control plane | **Tenant's own database** (so BYO-DB and self-hosted tenants keep their users) |
+| Forgot / change password | Yes | Yes |
+
+**Licence key is a tenant locator and device activation token, not a secret.** Keys get shared and pasted into emails.
+The password is the security factor. The key tells the server which tenant database to open, and it is bound to a
+device activation count. Admin can revoke a device or rotate the key from the portal.
+
+**Key delivery (two paths, as specified):**
+1. Download from the website: the key is shown in the customer portal and displayed on the download page after login.
+2. Emailed: the key is sent from our company domain email to the tenant's signup email. [Guessing] I read "domain
+   email" as our own company domain address; tell me if you meant something else.
+
+**Usernames:** unique within a tenant, not globally. The login screen therefore carries the tenant context
+(licence key remembered after first activation on that device, or tenant code entered once).
+
+**Forgot password, per user type:**
+- Admin: email reset link (single-use, 15 min expiry).
+- Staff with an email or mobile on file: self-service reset link/OTP.
+- Staff with **no email or mobile**: self-service is impossible by definition. The reset becomes admin-initiated
+  (admin issues a one-time temporary password, user must change on next login). **I recommend requiring email or
+  mobile when the admin creates a user, with admin-reset as the fallback.**
+
+**Change password:** any logged-in user; requires the current password; revokes other sessions on success.
+
+**Rules for all accounts:** Argon2id hashing, minimum length + breached-password check, login rate limiting and
+lockout with backoff, no password ever visible to admins, forced change on first login of an admin-issued password,
+audit events for every login, reset, and change, optional TOTP for admins (mandatory on paid plans, to decide in Phase 9).
+
+**Authorization:** roles (Owner, Admin, Estimator, Project Manager, Engineer, Accounts, Store, Viewer, custom) with
+permissions of the form `module.resource.action` and optional project scope. Single-user tenant = a tenant with only
+the Owner. Seat limits come from entitlements.
+
+**Self-hosted mode:** the identity and licence-verification services ship inside the deployment, so logins work with
+no internet. Licence file is verified offline (see §10).
 
 ## 7. Cross-cutting building blocks (Wave 0)
 
@@ -82,14 +118,17 @@ These are modelled in the finance core from the start. Retrofitting them is expe
 
 ## 9. Desktop vs browser
 
-Same SPA bundle. Tauri shell adds: native file access (drawings, bulk upload), print/PDF, auto-update, deep links,
-OS keychain for refresh tokens. All business logic stays on the server, so there is no divergence.
+Same SPA bundle. The **Electron** shell adds native file access (drawings, bulk upload), print/PDF, auto-update,
+deep links, and the OS keychain (via `safeStorage`) for refresh tokens. Security posture: context isolation on,
+node integration off, strict IPC allowlist, signed and notarised builds. All business logic stays on the server, so
+there is no divergence between browser and desktop.
 
 ## 10. Licensing and trial
 
-- Website signup creates a tenant in `trial` (14-30 days, module and data caps). The download or browser app both log in to that tenant.
-- Entitlements are checked server-side on every request (cached for seconds).
-- Self-hosted: Ed25519-signed licence file (tenant, seats, modules, expiry, grace period). The server verifies it offline with an embedded public key. It is a deterrent against casual piracy, not a guarantee.
+- Website signup creates a tenant in `trial` (14-30 days, module and data caps). Licence key issued and emailed.
+- Browser access: admin signs in with email + password + licence key, staff with username + password. Desktop is identical after device activation.
+- Entitlements (plan, modules, seats, expiry, state) are checked server-side on every request and cached for seconds.
+- Self-hosted: Ed25519-signed licence file (tenant, seats, modules, expiry, grace). Verified offline with an embedded public key. It deters casual piracy and does not stop a determined one.
 
 ## 11. Key decisions and trade-offs
 
@@ -97,8 +136,9 @@ OS keychain for refresh tokens. All business logic stays on the server, so there
 |----------|--------|---------------|
 | Database per tenant for all | Yes (your call) | Fleet ops: migrations, backups, pooling. Mitigated by orchestrator and connection manager. |
 | Modular monolith | Yes | Needs discipline on module boundaries (lint rules, no cross-module table access) |
-| Online-only desktop | Yes | Poor-signal sites can't use it. Revisit with an offline-capable mobile/PWA in Wave 4. |
-| Global identity with memberships | Yes | Control-plane auth is a critical single dependency, so it needs HA |
+| Electron, online-only desktop | Yes | Poor-signal sites can't use it. Revisit with an offline-capable mobile/PWA in Wave 4. |
+| Admin identity in control plane, staff identity in tenant DB | Yes | Login must resolve tenant first (licence key/tenant code). Staff without email need admin-reset. |
+| Typed SQL data layer, no ORM on hot paths | Yes | More hand-written SQL |
 
 ## 12. Open questions for Phase 4+
 
@@ -106,3 +146,41 @@ OS keychain for refresh tokens. All business logic stays on the server, so there
 2. Do you need WhatsApp notifications at MVP (Meta Business API cost and approval time)?
 3. Will you host for tenants' BYO-DB inside India only?
 4. Who is the pilot customer, and which of their workflows is the acceptance test?
+
+## 13. Performance architecture (requirement: 1M+ BOQ lines, multiple BOQs, 50+ pages of micro/macro schedules)
+
+[Certain] This requirement is a design constraint now. It cannot be added after the UI exists.
+
+**Data model**
+- Line items in one partitioned table keyed by (boq_id, ...); hierarchy by materialized path/ltree plus a stored sort key.
+- Parent totals come from **incrementally maintained rollups** (delta updates on edit), never from summing 1M rows on read.
+- Narrow hot rows, wide cold data (notes, attachments) in side tables. Covering indexes for the grid's sort/filter columns.
+- Edits are written as batched, versioned changes. Optimistic concurrency per row, conflict surfaced to the user.
+
+**API**
+- Grid reads use a **server-side row model**: the client asks for a window (rows N..N+200, sort, filter, expanded groups); the server answers with keyset pagination. The client never holds the full BOQ.
+- Bulk import via streamed upload, validated in chunks, loaded with `COPY` into staging, then merged. Bulk export via streamed writers.
+- Long operations (import, recalculation, revision compare) run as background jobs with progress events over WebSocket.
+
+**Scheduling (micro and macro plans)**
+- Activities, links, calendars, resources in normalised tables; macro plans are **rollups** of micro plans via WBS.
+- CPM/forward-backward pass in a worker (Rust/WASM if profiling requires), **incremental recalculation** from changed nodes.
+- Gantt renders only visible rows and time range on canvas. 50+ pages is a viewport problem, not a data problem.
+
+**Client**
+- Canvas virtual grid, row virtualization, column virtualization, web workers for parsing and local filtering of the visible window, debounced saves, undo/redo as a local command stack.
+
+**Targets (starting hypotheses, to be validated in the Wave 0 benchmark spike)** [Guessing]
+
+| Operation | Target |
+|-----------|--------|
+| Open a 1M-line BOQ (first window painted) | < 1.5 s |
+| Scroll/page a window | < 100 ms p95 |
+| Filter or sort on an indexed column | < 500 ms |
+| Edit a quantity and see ancestor totals update | < 300 ms |
+| Import 1M lines from Excel/CSV | < 5 min |
+| Full CPM recalculation, 50k activities | < 3 s |
+
+**Benchmark spike (Wave 0, before any module UI):** generate a synthetic tenant with 5 BOQs x 200k lines and a
+50k-activity schedule, then measure every row in the table above on a mid-range laptop and on the cheapest hosting tier.
+If a target fails, the stack changes before module work starts.

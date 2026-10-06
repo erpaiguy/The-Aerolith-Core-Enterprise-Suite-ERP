@@ -1,31 +1,38 @@
-# Phase 2: Tech Stack
+# Phase 2: Tech Stack (rev 2)
 
-Principle: one language, boring open-source parts, and everything must also run in Docker on a customer's server.
+Principle: one language, open-source parts, everything also runs in Docker on a customer's server.
+Changes from rev 1: **Electron** for desktop, and a **large-scale data access layer** replacing the ORM-first approach.
 
 | Layer | Choice | Why / note |
 |-------|--------|-----------|
-| Language | TypeScript | One language across web, API, desktop UI, workers |
+| Language | TypeScript | One language across web, API, desktop, workers |
 | Monorepo | pnpm + Turborepo | Shared types, one CI |
-| Web app | React + Vite SPA, TanStack Router/Query, shadcn/ui + Tailwind | An SPA wraps cleanly in a desktop shell. ERP screens don't need SSR. |
-| Marketing/download site | Next.js (separate app) | SEO, trial signup, download page |
-| Desktop | Tauri 2 | Small installers (~10 MB vs ~100 MB Electron), signed auto-update. Online-only at MVP. |
-| API | NestJS (modular monolith) on Fastify | Modules map to ERP domains, DI, guards for RBAC |
-| API style | REST + OpenAPI (generated client); WebSocket for notifications | Simple to integrate with third parties |
-| DB | PostgreSQL 16 | Free, open source, runs anywhere a tenant brings it |
-| Data access | Drizzle ORM (or Kysely) | **Not Prisma**: per-request dynamic connections to many databases is awkward there |
-| Migrations | Drizzle Kit run by our own orchestrator | Fan-out across tenant databases, see 03-architecture |
-| Connection pooling | PgBouncer | Many tenant DBs mean many connections |
+| Web app | React + Vite SPA, TanStack Router/Query, Tailwind + shadcn/ui | SPA wraps cleanly in Electron |
+| Heavy grids | **Canvas-based virtual grid** (Glide Data Grid, MIT) or a custom canvas grid; **server-side row model** | DOM grids stall far below 1M rows. AG Grid's server-side row model is paid. |
+| Gantt/scheduling UI | **Custom canvas/WebGL Gantt** with virtualized rows and time axis | Off-the-shelf Gantts struggle at 50+ pages of activities |
+| Marketing/download site | Next.js | SEO, trial signup, download page, customer portal |
+| Desktop | **Electron** (your decision) | Consistent Chromium on every OS, so one rendering engine to test for the grid and Gantt. Installers ~100+ MB and higher RAM; auto-update via electron-updater, code-signed. |
+| API | NestJS (modular monolith) on Fastify | Modules map to ERP domains |
+| API style | REST + OpenAPI; WebSocket for live updates; **binary/streamed responses (NDJSON/Arrow) for bulk** | Large data must stream |
+| DB | PostgreSQL 16+ | Free, open source, runs anywhere |
+| **Data access** | **Kysely (typed SQL builder) + `postgres`/`pg` driver; hand-written SQL for hot paths; `COPY` for bulk load; no ORM in bulk or hot paths** | ORMs hide N+1 and row-by-row inserts that kill 1M-row workloads. Typed SQL keeps control per tenant connection. |
+| Schema migrations | Plain SQL migrations (ordered, checksummed) run by our orchestrator | Reviewable, DBA-friendly, works on BYO-DB |
+| DB techniques for scale | Hash/range **partitioning** of line tables by BOQ or tenant, **ltree/materialized path** for hierarchy, covering indexes, **keyset pagination**, rollup tables maintained incrementally, `pg_trgm` for search | See 03 §13 |
+| Compute workers | Node worker threads; **Rust (napi-rs or WASM) for CPM/schedule and rollup engines** if profiling demands it | Critical-path calc on tens of thousands of activities |
+| Connection pooling | PgBouncer | Many tenant databases |
 | Cache/queue | Redis + BullMQ | Jobs, rate limits, sessions |
-| Files | S3-compatible (Cloudflare R2 / MinIO self-hosted) | Same API in cloud and self-host |
-| Search | Postgres full-text first; Meilisearch later | Avoid extra infra at the start |
-| Auth | Own module on the control plane (Argon2id, TOTP, OIDC for SSO) | Avoid per-seat vendor pricing |
-| PDF/reports | Headless Chromium render for invoices and RA bills | Pixel-accurate GST invoices |
-| Payments | Razorpay (subscriptions + payment links) | See Phase 7 |
-| Observability | OpenTelemetry, Grafana/Loki/Prometheus, Sentry | Open source, self-hostable |
-| CI/CD | GitHub Actions, Docker images, Tauri signed releases | |
-| Hosting | One Indian region (e.g. Mumbai) on a VPS/cloud with managed Postgres | Data residency, latency |
+| Files | S3-compatible (Cloudflare R2 / MinIO self-hosted) | Same API cloud and self-host |
+| Search | Postgres FTS + trigram first; Meilisearch/OpenSearch if benchmarks require | Avoid infra before it is needed |
+| Auth | Own module (Argon2id, TOTP, signed tokens) | See 03 §6 |
+| PDF/reports | Headless Chromium render, streamed Excel (exceljs streaming writer) | Large exports must not hold everything in memory |
+| Payments | Razorpay | Phase 7 |
+| Observability | OpenTelemetry, Grafana/Loki/Prometheus, Sentry | Self-hostable |
+| CI/CD | GitHub Actions, Docker images, signed Electron releases (Windows/macOS/Linux) | |
+| Hosting | India region (e.g. Mumbai) | Data residency, latency |
+| AI (Wave 7) | Classical ML (Python/ONNX) + self-hosted open-weight model serving | See 01-mvp.md |
 
 ## Risks
 
-- [Likely] Tauri webviews differ per OS (WebView2/WKWebView/WebKitGTK). Test the matrix early.
-- [Likely] NestJS modular monolith is the right call. Microservices on a small team would sink you.
+- [Certain] Electron means a bigger download and memory footprint than Tauri. Accepted. Consistent rendering is worth more for grid and Gantt performance.
+- [Likely] Dropping the ORM costs developer speed on ordinary CRUD. Mitigation: generate typed query helpers, use plain Kysely for CRUD and hand SQL only where benchmarks demand it.
+- [Likely] Building a custom canvas Gantt is months of work on its own. Budget it as a product inside the product.
