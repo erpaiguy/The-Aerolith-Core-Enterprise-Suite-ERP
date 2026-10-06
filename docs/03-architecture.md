@@ -117,8 +117,8 @@ file is verified offline (see §10).
 ## 7. Cross-cutting building blocks (Wave 0)
 
 Approval/workflow engine, document numbering series (financial-year aware), audit log, attachments, notifications
-(email/WhatsApp/in-app), custom fields, import/export (Excel), i18n (en-IN first, Hindi later), money as integer
-paise with explicit rounding rules, FY (Apr-Mar) handling, soft delete with retention.
+(email/WhatsApp/in-app), custom fields, import/export (Excel), i18n (en-IN first, Hindi later), money as exact `numeric`
+with explicit rounding rules (see 05-database §1), FY (Apr-Mar) handling, soft delete with retention.
 
 ## 8. India-specific constraints that shape the design now
 
@@ -229,7 +229,8 @@ See [licensing-policy.md](licensing-policy.md). Architectural effect: every paid
 ## 16. Seats, tiers and trial (decided)
 
 - **Download/purchase flow asks for the number of users.** The issued licence carries a **seat cap** for that tier. More seats means buying a higher tier. Tiers and prices are defined in Phase 6, once the app is commercially released.
-- **Trial licence:** fixed at **3 seats: 1 Admin, 1 Manager, 1 Worker**. Roles are preset for trials. Trial runs until a countable set of real tenants use the product.
+- **Trial licence:** **120 days**, fixed at **3 named seats: 1 Admin, 1 Manager, 1 Worker**. The owner can extend or shorten any trial from the owner console; the tenant is told by email and in-app notice (same channel as update notices). Recommended: a minimum notice period before any shortening takes effect.
 - **Enforcement is server-side:** the seat cap lives in the tenant's entitlements. The server refuses to create a user over the cap, and a user limit is also checked at login. The key encodes the tier but the server is the source of truth, so a key can't be edited to add seats.
 - **Self-hosted (offline):** the seat cap is in the signed licence file. Enforcement is local and tamper-resistant only against casual changes.
-- **Open for Phase 6:** named vs concurrent seats, over-cap behaviour on downgrade, whether Worker seats are priced differently from Manager seats.
+- **Seats are named users** (decided).
+- **Open for Phase 6:** over-cap behaviour on downgrade, whether Worker seats are priced differently from Manager seats.

@@ -8,7 +8,7 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 2 | Tech Stack | [02-tech-stack.md](02-tech-stack.md) | **Locked (rev 3)** |
 | 3 | Architecture | [03-architecture.md](03-architecture.md) | **Locked (rev 3)** |
 | 4 | Features / Modules | [04-features.md](04-features.md) | **Locked (rev 1)** |
-| 5 | Database | _pending_ | Not started |
+| 5 | Database | [05-database.md](05-database.md) | Draft v0 |
 | 6 | Pricing | _pending_ | Not started |
 | 7 | Payments | _pending_ | Not started |
 | 8 | Dashboard | _pending_ | Not started |
@@ -44,4 +44,9 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | Payments | Razorpay as a per-transaction operating service behind an adapter (explained to owner; confirm in Phase 7) |
 | .mpp | Best-effort via LGPL sidecar, MSPDI XML fallback |
 
-## Next: Phase 5 (Database)
+| Tenant DB | One Supabase project per tenant, created in the background at signup; all tenant activity and files in that project (owner decision). Owning organisation still open |
+| Trial | 120 days, 3 named seats (Admin, Manager, Worker). Owner can extend/shorten with email + in-app notice |
+| Seats | Named users; seat cap per tier, enforced server-side |
+| Retention | Control plane kept 3-5 years. Tenant data not held by us. Owner-run backups deferred until commercial release |
+
+## Next: Phase 5 sign-off, then Phase 6 (Pricing)

@@ -48,6 +48,8 @@ The "no paid tools" rule covers software licences. Compute and storage are opera
 
 ## 5. Tenant database provisioning (revised after owner input)
 
+**Owner decision:** one Supabase project per tenant, created in the background at signup; everything the tenant does in the app, including files, lives in that project. **Still open: which Supabase organisation owns those projects** (ours = cap/cost below; the tenant's = they need a Supabase account). Mode H below remains the documented fallback.
+
 Owner's plan: a separate Supabase project per tenant, created at signup, on free tiers while usage is light.
 
 **What is solid:** Supabase is plain Postgres underneath. Our app connects with a normal connection string and never uses
