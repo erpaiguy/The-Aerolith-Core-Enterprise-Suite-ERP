@@ -7,7 +7,7 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 1 | MVP | [01-mvp.md](01-mvp.md) | **Locked (rev 3)** |
 | 2 | Tech Stack | [02-tech-stack.md](02-tech-stack.md) | **Locked (rev 3)** |
 | 3 | Architecture | [03-architecture.md](03-architecture.md) | **Locked (rev 3)** |
-| 4 | Features / Modules | _next_ | Not started |
+| 4 | Features / Modules | [04-features.md](04-features.md) | Draft v0 |
 | 5 | Database | _pending_ | Not started |
 | 6 | Pricing | _pending_ | Not started |
 | 7 | Payments | _pending_ | Not started |
@@ -33,4 +33,11 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | Licensing | Cloud entitlements; signed offline licence for self-hosted |
 | AI / chat / productivity | v2; approach decided at the start of v2 |
 
-## Next: Phase 4 (Features / modules)
+| Accounting | Full double-entry GL + Tally export + optional Tally link (connector). Live bank transactions are tenant opt-in, OFF by default, not enabled until the app is complete and deployed |
+| Tender programme | Standalone submission document, unlinked to projects, XER/MSPDI import-export |
+| Takeoff | None in v1 (manual + Excel only) |
+| Segments | Buildings, Interiors, Joineries, MEP, then others |
+| Sole-admin recovery | Email reset link; support email with identity verification if email is lost |
+| **Licensing** | **No paid tools; permissive licences only, CI-enforced. See [licensing-policy.md](licensing-policy.md)** |
+
+## Next: Phase 4 sign-off, then Phase 5 (Database)

@@ -1,4 +1,4 @@
-# Phase 1: MVP and Wave Plan (rev 3, locked)
+# Phase 1: MVP and Wave Plan (rev 4, locked)
 
 ## Strategy
 
@@ -12,7 +12,7 @@ any project execution exists.
 |------|-------|----------|---------------|
 | 0 | Platform | Control plane, tenant provisioning, licence service, auth (see 03 §6), RBAC, audit log, file storage, **generic approval engine (basic)**, **notification + reminder + pending-actions inbox (basic)**, numbering series, Electron shell, **performance spike (see 03 §13)** | Tenant created, licensed, logged in from browser and Electron; 1M-row BOQ benchmark passes |
 | 1 | **Core MVP: Estimation + Bid/Tender** | See below | A pilot contractor prices and submits a real tender |
-| 2 | Execution | Projects, scheduling (macro/micro plans), procurement, inventory, daily site reports, project documents | Won tender converts to a live project with baseline schedule |
+| 2 | Execution (2a projects + scheduling, 2b procurement + inventory + DSR) | Projects, scheduling (macro/micro plans), procurement, inventory, daily site reports, project documents | Won tender converts to a live project with baseline schedule |
 | 3 | Operations | Client RA billing, subcontractor/vendor bills, accounts-lite (GST/TDS), equipment, HR/payroll, labour contractors, quality, safety | Money flows end to end |
 | 4 | Control | Cost control and forecasting, earned value, variations/change orders, contracts and claims | Planned vs actual vs forecast per project |
 | 5 | Document workflow | E-signature, document approval workflows, transmittals, controlled issue | Signed and approved documents end to end |
@@ -54,6 +54,11 @@ reminders, and the password-reset request flow in 03 §6 needs a Pending inbox. 
 - Subcontractor/supplier RFQs and quote comparison (comparative statement)
 - Competitor bids, win/loss analysis, bid pipeline dashboard
 
+**Tender programme (submission document only)**
+- Bar chart/Gantt with links, calendars, milestones, critical path, PDF print
+- Import/export MS Project XML and Primavera XER (Excel/CSV also)
+- **No link to live projects and no use by other modules.** Winning a tender creates a project from the priced BOQ only
+
 **Dedicated documents (basic)**
 - Per-tender document vault, folders, versioning, tags, search, permissions, templates
 - Preview, bulk upload/download, retention rules
@@ -94,3 +99,13 @@ Offline-first sync, native mobile before Wave 6, multi-country tax, payroll stat
 ## Deployment gate
 
 Public deployment waits until Phases 1-10 are complete and v1 is built. See README for the pilot recommendation.
+
+## Segment order (decided in Phase 4)
+
+Buildings, then Interiors, then Joineries, then MEP, then all other verticals. Details in 04-features.md §V.
+Pre-construction scope limits for v1: **no drawing takeoff**, manual or Excel-imported quantities only.
+
+## Licensing rule (decided in Phase 4)
+
+No paid tools and no restrictive licences anywhere in the product. See [licensing-policy.md](licensing-policy.md).
+This changed Phase 2 (Valkey, SeaweedFS, GlitchTip, adapters for paid services) and added CI licence gating.

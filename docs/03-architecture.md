@@ -96,9 +96,12 @@ subdomain (browser).
 3. Admin approves and issues a **one-time temporary password** (shown once, never stored in recoverable form). User must set a new password at next login. Reset is audited.
 4. The admin never sees or sets a user's permanent password.
 
-[Certain] Consequence of "no email needed": **if the only Admin forgets their password and loses their email, there is no
-self-service path**, so Admin accounts keep email recovery (platform support can verify and recover). Support recovery needs
-a documented identity-verification procedure (Phase 9).
+**Sole-Admin recovery (decided):**
+1. Self-service: Admin taps "Forgot password" and gets an email link with a time-limited window to set a new password.
+2. If they have lost access to that email: they write to the platform's domain support email. Support verifies identity
+   (procedure defined in Phase 9, e.g. matching business registration/GST details and a callback) and then issues the same reset window.
+3. After the change: all existing sessions are revoked, a notice goes to the registered email, and the licence key, devices, users and data are untouched. The Admin continues exactly as before.
+[Likely] Step 2 is the social-engineering target, so it needs a written verification checklist and an audit trail. Never "verify" by reply-to-email alone.
 
 **Rules for all accounts:** Argon2id hashing, minimum length + breached-password check, login rate limiting with
 backoff and lockout, audit events for every login/reset/change, sessions revoked on password change, optional TOTP for
@@ -207,3 +210,18 @@ URLs. [Likely] An Indian-region provider or self-hosted open-source MTA is neede
 **Benchmark spike (Wave 0, before any module UI):** generate a synthetic tenant with 5 BOQs x 200k lines and a
 50k-activity schedule, then measure every row in the table above on a mid-range laptop and on the cheapest hosting tier.
 If a target fails, the stack changes before module work starts.
+
+## 14. Money movement, bank and Tally integration (decided in Phase 4)
+
+- **Live bank transactions are OFF by default and never enabled by us.** A per-tenant setting `bank_live_enabled` (default false) can be turned on only by the tenant Admin through an explicit checkbox with a typed confirmation and an audit entry. A platform-level kill switch can disable it for everyone.
+- **Until the whole app is built, tested, debugged and deployed**, the live-bank code path is not shipped enabled. Development and staging use a mock bank adapter only. No real credentials in non-production.
+- **v1 without live banking:** bank statement import (CSV/Excel/OFX/MT940), auto-matching and reconciliation, payment advices, and bank-specific bulk payment upload files that the tenant uploads to their own bank portal.
+- **Live adapters (optional, tenant-opt-in, later):** read-only statement feeds and payment initiation sit behind a `BankAdapter` interface. [Certain] India's bank APIs need commercial/onboarding agreements with each bank or an aggregator, so they cannot be free. The interface exists in v1, real adapters come when a tenant asks and the cost is agreed.
+- **Tally** (decision: export first, link second):
+  1. **Export** vouchers and masters as Tally-importable XML files. Works everywhere, offline, no coupling.
+  2. **Link** to a running Tally Prime via its local XML-over-HTTP interface. [Certain] Tally listens on the tenant's own machine/LAN, so a cloud browser app cannot reach it. A small **open-source connector agent** (or the Electron app on that LAN) relays it. Tally itself is the tenant's own licensed product and is never bundled.
+  3. **Accounts mode per tenant:** (a) native full double-entry GL, (b) native GL + Tally export, (c) Tally holds the books and our app pushes vouchers. In (c) the GL module is read-only reporting.
+
+## 15. Licence compliance
+
+See [licensing-policy.md](licensing-policy.md). Architectural effect: every paid or non-free external service (object store, email, payments, banks) is behind an adapter interface with a free default.

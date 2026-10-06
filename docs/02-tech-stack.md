@@ -20,19 +20,27 @@ Changes from rev 1: **Electron** for desktop, and a **large-scale data access la
 | DB techniques for scale | Hash/range **partitioning** of line tables by BOQ or tenant, **ltree/materialized path** for hierarchy, covering indexes, **keyset pagination**, rollup tables maintained incrementally, `pg_trgm` for search | See 03 §13 |
 | Compute workers | Node worker threads; **Rust (napi-rs or WASM) for CPM/schedule and rollup engines** if profiling demands it | Critical-path calc on tens of thousands of activities |
 | Connection pooling | PgBouncer | Many tenant databases |
-| Cache/queue | Redis + BullMQ | Jobs, rate limits, sessions |
-| Files | S3-compatible (Cloudflare R2 / MinIO self-hosted) | Same API cloud and self-host |
+| Cache/queue | **Valkey** (BSD-3) + BullMQ (MIT) | Redis licence changed; Valkey is the open fork |
+| Files | S3-compatible API behind an adapter. Default **SeaweedFS** (Apache-2.0), tenants may use any S3 store they already own | MinIO is AGPL; R2 is a paid service |
 | Search | Postgres FTS + trigram first; Meilisearch/OpenSearch if benchmarks require | Avoid infra before it is needed |
 | Auth | Own module (Argon2id, TOTP, signed tokens) | See 03 §6 |
 | PDF/reports | Headless Chromium render, streamed Excel (exceljs streaming writer) | Large exports must not hold everything in memory |
-| Payments | Razorpay | Phase 7 |
-| Observability | OpenTelemetry, Grafana/Loki/Prometheus, Sentry | Self-hostable |
-| CI/CD | GitHub Actions, Docker images, signed Electron releases (Windows/macOS/Linux) | |
-| Hosting | India region (e.g. Mumbai) | Data residency, latency |
-| AI (Wave 7) | Classical ML (Python/ONNX) + self-hosted open-weight model serving | See 01-mvp.md |
+| Payments | Razorpay behind a gateway adapter (an operating service, no licence cost; per-transaction fees) | Phase 7 |
+| Observability | OpenTelemetry + Prometheus (Apache-2.0), **GlitchTip** (MIT) for errors | Sentry is FSL. Grafana/Loki are AGPL: internal ops only, never bundled |
+| CI/CD | GitHub Actions, Docker images, signed Electron releases (Windows/macOS/Linux), **licence scan + SBOM gate** | Code-signing certs are a real cost, see licensing-policy |
+| Hosting | India region (e.g. Mumbai). An operating cost, not an embedded tool | Data residency, latency |
+| AI (v2) | Permissively licensed models only; classical ML (ONNX) | See licensing-policy §4 |
 
 ## Risks
 
 - [Certain] Electron means a bigger download and memory footprint than Tauri. Accepted. Consistent rendering is worth more for grid and Gantt performance.
 - [Likely] Dropping the ORM costs developer speed on ordinary CRUD. Mitigation: generate typed query helpers, use plain Kysely for CRUD and hand SQL only where benchmarks demand it.
 - [Likely] Building a custom canvas Gantt is months of work on its own. Budget it as a product inside the product.
+
+## Licence compliance (new in rev 3)
+
+All embedded dependencies must satisfy [licensing-policy.md](licensing-policy.md): permissive licences only, enforced in CI.
+Verified-permissive choices in this stack: Electron, React, Vite, TanStack, Tailwind, shadcn/ui (MIT); NestJS, Fastify,
+Kysely, BullMQ, exceljs (MIT); PostgreSQL and contrib `ltree`/`pg_trgm` (PostgreSQL licence); PgBouncer (ISC);
+Glide Data Grid (MIT); Meilisearch community core (MIT, never the BUSL enterprise features) or OpenSearch (Apache-2.0);
+Chromium/Puppeteer (BSD/Apache-2.0). [Likely] each was permissive at my last check, but licences change, so the CI scan is the real guarantee.
