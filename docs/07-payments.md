@@ -1,4 +1,4 @@
-# Phase 7: Payments (draft v0)
+# Phase 7: Payments (locked rev 1)
 
 Scope: how **tenants pay us** for seats. (Tenant-side bank transactions inside the ERP are a different thing, covered in 03 §14.)
 
@@ -25,14 +25,14 @@ Scope: how **tenants pay us** for seats. (Tenant-side bank transactions inside t
 
 | Option | How | Trade-off |
 |--------|-----|-----------|
-| **Manual renewal (recommended for launch)** | Reminder emails + in-app notices at 30/7/1 days with a payment link | Simple, no mandate rules; some tenants forget and lapse into read-only |
-| Auto-renew | Gateway subscriptions using card/UPI e-mandates | Fewer lapses. [Likely] Indian recurring-payment rules require mandate registration and extra authentication above a set amount, and failures are common. More states to handle. |
+| Manual renewal | Reminder emails + in-app notices at 30/7/1 days with a payment link | Simple, no mandate rules; some tenants forget and lapse into read-only |
+| **Auto-renew (decided)** | Gateway subscriptions using card/UPI e-mandates | Fewer lapses. [Likely] Indian recurring-payment rules require mandate registration and extra authentication above a set amount, and failures are common. More states to handle. |
 
 **D. Manual bank transfer/UPI (fallback, also for self-hosted and Enterprise)**: we issue a proforma invoice; tenant pays to our account; owner marks it paid in the owner console with the bank reference; the same licence update runs; audit entry recorded.
 
 **E. Failed or disputed payments**: payment failed = nothing changes, tenant is told. Chargeback/dispute = owner console flag; licence moves to grace, never instantly locked.
 
-**F. Refunds**: per a published refund policy; issued through the gateway; we issue a GST credit note; seats revert at the end of the paid period, not instantly.
+**F. Refunds**: none by default (see §8). Owner may issue a discretionary credit; any invoice correction uses a GST credit note.
 
 ## 3. Lapse rules (from Phase 6)
 
@@ -64,8 +64,15 @@ recorded_by, evidence file), `dunning_step` (reminder sent at).
 bank account, and a website with **terms, privacy policy, refund/cancellation policy, pricing and contact details**. Test mode
 works without KYC. Check their current activation checklist at the time.
 
-## 8. Open questions
+## 8. Decisions closed at lock
 
-1. What business entity will receive the money (proprietorship, LLP, private limited)? Do you have a GST registration yet?
-2. Renewal at launch: manual with reminders (recommended), or auto-renew?
-3. Refund policy: none, pro-rata, or full refund within N days?
+1. **Entity:** private limited company, GST-registered. **Demo/test mode only**: no live bank account and no live gateway keys connected until the owner decides to go commercial.
+2. **Auto-renewal** via gateway subscriptions with e-mandates. Requirements this adds:
+   - **Pre-debit notice** to the tenant before each renewal charge (email + in-app). [Likely] Indian e-mandate rules require a pre-debit notification; the gateway sends one, we send our own too.
+   - **"Cancel auto-renew" available to the tenant admin at any time**, effective at the end of the paid period. Hard-to-cancel renewals are the biggest source of disputes.
+   - Failed debit: retry schedule, then a payment-link fallback, then the normal lapse rules (§3).
+3. **No refunds by default.** This does **not** remove dispute handling:
+   - [Certain] A card or UPI payer can raise a chargeback/dispute with their bank whatever our policy says. Flow E (§2) stays.
+   - [Likely] The gateway and Indian e-commerce rules still require a **published** refund/cancellation policy. Ours will state "no refunds; cancel auto-renew anytime before the renewal date".
+   - Auto-renew + no refunds is the combination most likely to produce disputes ("I forgot it renews"). The pre-debit notice and easy cancellation are the mitigation.
+   - Credit notes remain in the design for owner-discretion goodwill credits and invoice corrections.

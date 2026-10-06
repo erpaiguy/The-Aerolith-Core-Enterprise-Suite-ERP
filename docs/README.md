@@ -10,8 +10,8 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 4 | Features / Modules | [04-features.md](04-features.md) | **Locked (rev 1)** |
 | 5 | Database | [05-database.md](05-database.md) | **Locked (rev 1)** |
 | 6 | Pricing | [06-pricing.md](06-pricing.md) | **Locked (rev 1)**, prices set at commercial release |
-| 7 | Payments | [07-payments.md](07-payments.md) | Draft v0 |
-| 8 | Dashboard | _pending_ | Not started |
+| 7 | Payments | [07-payments.md](07-payments.md) | **Locked (rev 1)** |
+| 8 | Dashboard | [08-dashboard.md](08-dashboard.md) | Draft v0 |
 | 9 | Security | _pending_ | Not started |
 | 10 | Deployment | _pending_ | Not started |
 
@@ -53,4 +53,6 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 
 | Pricing model | Seat tiers only; immediate seat reuse with an owner-console abuse report |
 
-## Next: Phase 7 sign-off, then Phase 8 (Dashboard)
+| Payments | Pvt Ltd, GST-registered; demo/test mode only until commercial; auto-renew with pre-debit notice and self-service cancel; no refunds by default (disputes still handled) |
+
+## Next: Phase 8 sign-off, then Phase 9 (Security)
