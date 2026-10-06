@@ -1,4 +1,4 @@
-# Phase 10: Deployment (draft v0)
+# Phase 10: Deployment (locked rev 1)
 
 Two stages: **Trial launch** (free tiers, demo payments, 120-day trials) and **Commercial launch** (owner may change
 domain, DNS, VPN, database and deployment method, per owner decision). This document fixes the trial launch and lists what
@@ -12,7 +12,7 @@ must change for commercial.
 | DNS | GoDaddy (current) | Already paid |
 | Licence and notification email | GoDaddy mailbox via SMTP, behind `EmailAdapter` | Already paid |
 | Control plane | Supabase, **owner's** organisation, Mumbai, schema `core` not exposed, keep-alive ping | Free tier |
-| **API + workers** (NestJS, BullMQ, Valkey) | **One always-on Linux VM in India** running Docker Compose + Caddy (Apache-2.0, automatic TLS) | See §2 |
+| **API + workers** (NestJS, BullMQ, Valkey) | **Stage 0: owner's PC (Docker) behind an outbound tunnel; Stage 1: free VM in India.** Docker Compose + Caddy (Apache-2.0) | See §2 and §10.1 |
 | Browser app (SPA) | Static files served by Caddy on the same VM at `app.<domain>` | Included |
 | Tenant databases and files | **Each tenant's own Supabase organisation/project**, created via OAuth at signup | Tenant's free tier |
 | Desktop installers and auto-update | **Public releases-only GitHub repo** (source stays private) | Free |
@@ -94,8 +94,25 @@ encrypted dumps of the control plane with monthly restore tests (infra §3.10).
 - [ ] External penetration test; CERT-In/DPDP obligations confirmed with a lawyer
 - [ ] Re-evaluate hosting, DNS, VPN and database choices (owner decision)
 
-## 10. Open questions
+## 10. Decisions closed at lock
 
-1. Code signing during trial: (a) unsigned, (b) Windows only, (c) both?
-2. API server: free VM or a small paid VPS?
-3. Desktop platforms at trial launch: Windows only, or Windows + macOS + Linux?
+1. **Code signing: Windows only** (option b). macOS is not shipped at trial launch, so it needs no signing.
+   - [Likely] Windows code-signing certificates now require the private key on a hardware token or cloud HSM, which affects how CI signs. Cloud signing services are an option; [Guessing] check eligibility for an Indian private limited company. Decide the provider before the first public installer.
+2. **Desktop platform at trial launch: Windows only.** The CI builds Windows installers only; macOS/Linux build jobs are added later without code changes (Electron is cross-platform).
+3. **API server: Docker on the owner's PC first, then a free VM if available.**
+
+### 10.1 Owner-PC hosting: stage 0 rules
+
+[Certain] The owner's PC becomes the server every tenant depends on and the place where the master key for all tenant
+database credentials lives (09 §1). Rules while it is the server:
+
+| Risk | Mitigation (required) |
+|------|------------------------|
+| Exposing a home connection to the internet; [Likely] Indian ISPs often use CGNAT/dynamic IPs, so port forwarding may not even work | **No inbound ports.** Publish `api.`/`app.` through an outbound tunnel (e.g. Cloudflare Tunnel, free) |
+| Master key on a daily-use machine (browsing, email, downloads) | Run the stack under a **separate Windows user or WSL2/VM**; full-disk encryption (BitLocker); master key in a file readable only by that user, never in the repo; no other software in the server environment |
+| PC off, asleep, rebooting for updates, power cuts | Tenants are down during those times. Disable sleep, auto-start Docker and the stack on boot, UPS if possible. **Tell trial tenants this is a beta with possible downtime** |
+| Disk failure | Control-plane data is on Supabase, not the PC. Keep an encrypted offline copy of the master key and `.env`. Losing the master key means re-issuing every tenant's database credential |
+| Malware on the PC | Updated OS and antivirus; no admin rights for the daily-use account |
+
+**Recommended move trigger:** move to a VM **before the first tenant you don't personally know** signs up, or at the
+first outage that a tenant notices, whichever comes first. The Docker Compose stack moves unchanged.

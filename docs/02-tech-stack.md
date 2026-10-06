@@ -27,7 +27,7 @@ Changes from rev 1: **Electron** for desktop, and a **large-scale data access la
 | PDF/reports | Headless Chromium render, streamed Excel (exceljs streaming writer) | Large exports must not hold everything in memory |
 | Payments | Razorpay behind a gateway adapter (an operating service, no licence cost; per-transaction fees) | Phase 7 |
 | Observability | OpenTelemetry + Prometheus (Apache-2.0), **GlitchTip** (MIT) for errors | Sentry is FSL. Grafana/Loki are AGPL: internal ops only, never bundled |
-| CI/CD | GitHub Actions, Docker images, signed Electron releases (Windows/macOS/Linux), **licence scan + SBOM gate** | Code-signing certs are a real cost, see licensing-policy |
+| CI/CD | GitHub Actions, Docker images, signed Electron releases (**Windows only at trial launch**), **licence scan + SBOM gate** | Code-signing certs are a real cost, see licensing-policy |
 | Hosting | India region (e.g. Mumbai). An operating cost, not an embedded tool | Data residency, latency |
 | AI (v2) | Permissively licensed models only; classical ML (ONNX) | See licensing-policy §4 |
 

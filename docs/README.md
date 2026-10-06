@@ -13,7 +13,7 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 7 | Payments | [07-payments.md](07-payments.md) | **Locked (rev 1)** |
 | 8 | Dashboard | [08-dashboard.md](08-dashboard.md) | **Locked (rev 1)** |
 | 9 | Security | [09-security.md](09-security.md) | **Locked (rev 1)** |
-| 10 | Deployment | [10-deployment.md](10-deployment.md) | Draft v0 |
+| 10 | Deployment | [10-deployment.md](10-deployment.md) | **Locked (rev 1)** |
 
 ## Decisions locked (rev 3)
 
@@ -59,4 +59,8 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 
 | Security | MFA mandatory for all tenant admins and owner; idle timeout 30 min browser / 12 h desktop; single owner with break-glass codes |
 
-## Next: Phase 10 sign-off, then build Wave 0
+| Deployment | Windows-only desktop, Windows code signing; API in Docker on owner's PC behind a tunnel (stage 0), then a free VM |
+
+**All 10 planning phases are locked.**
+
+## Next: build Wave 0
