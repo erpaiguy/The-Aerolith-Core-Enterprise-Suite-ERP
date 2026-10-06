@@ -1,4 +1,4 @@
-# Phase 9: Security (draft v0)
+# Phase 9: Security (locked rev 1)
 
 Tags: [Certain] structural fact, [Likely] strong inference, [Guessing] verify before relying on it.
 Legal points are not legal advice; confirm with a lawyer before commercial release.
@@ -92,8 +92,11 @@ Privacy notice at signup; purpose-limited collection; telemetry opt-in (Phase 8)
 
 OWASP ASVS Level 2 as the checklist; OWASP ZAP (free) in CI against staging; the isolation test suite (§3.5); one external penetration test before taking real money (a cost, not a tool).
 
-## 7. Open questions
+## 7. Decisions closed at lock
 
-1. **MFA for tenant admins:** mandatory, optional, or mandatory only on paid plans? (Recommended: mandatory for all admins. The admin account controls every user and the licence.)
-2. **Idle session timeout:** recommended 30 minutes idle on the browser, 12 hours on the desktop with the OS keychain. Accept or change?
-3. Will anyone other than you have owner-console access? If yes, owner-console roles are needed (support vs full owner).
+1. **MFA (TOTP) is mandatory for every tenant admin** and for the owner console. Admins get one-time recovery codes at enrolment; losing both the authenticator and the codes goes through the §3.4 support-recovery checklist.
+2. **Idle timeout:** 30 minutes in the browser, 12 hours on desktop (refresh token in the OS keychain).
+3. **Owner console has a single user (the owner).** Consequences handled:
+   - **Break-glass:** printed recovery codes for the owner's MFA, stored offline in two places. Without them, a lost phone locks the only person who can run the platform.
+   - **Account hygiene:** the owner's email, GitHub, Supabase, hosting, GoDaddy and gateway accounts all use MFA and a password manager. These six accounts together *are* the platform.
+   - **Roles are still built** (owner, support, read-only) but only the owner role is assigned, so adding a second person later needs no code change.

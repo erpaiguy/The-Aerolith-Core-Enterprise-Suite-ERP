@@ -12,8 +12,8 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 6 | Pricing | [06-pricing.md](06-pricing.md) | **Locked (rev 1)**, prices set at commercial release |
 | 7 | Payments | [07-payments.md](07-payments.md) | **Locked (rev 1)** |
 | 8 | Dashboard | [08-dashboard.md](08-dashboard.md) | **Locked (rev 1)** |
-| 9 | Security | [09-security.md](09-security.md) | Draft v0 |
-| 10 | Deployment | _pending_ | Not started |
+| 9 | Security | [09-security.md](09-security.md) | **Locked (rev 1)** |
+| 10 | Deployment | [10-deployment.md](10-deployment.md) | Draft v0 |
 
 ## Decisions locked (rev 3)
 
@@ -57,4 +57,6 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 
 | Dashboards | Fixed per role/module + per-user KPI picker from a catalog in v1; custom dashboards v2; telemetry opt-in |
 
-## Next: Phase 9 sign-off, then Phase 10 (Deployment)
+| Security | MFA mandatory for all tenant admins and owner; idle timeout 30 min browser / 12 h desktop; single owner with break-glass codes |
+
+## Next: Phase 10 sign-off, then build Wave 0
