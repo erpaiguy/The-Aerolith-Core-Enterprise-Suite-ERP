@@ -1,8 +1,7 @@
-# Phase 8: Dashboard (draft v0)
+# Phase 8: Dashboard (locked rev 1)
 
 Two separate dashboard products: the **owner console** (our side, control plane) and **tenant dashboards** (inside the
-app, tenant's own Supabase). Personal/custom dashboards are v2 (Wave 7). v1 ships **fixed dashboards per role and per
-module**, with filters.
+app, tenant's own Supabase). v1 ships **fixed dashboards per role and per module**, with filters, plus a **KPI picker** (§2.6). Fully custom dashboards (own formulas, layouts, cross-module widgets) stay in v2 (Wave 7).
 
 ## 1. Rules for every dashboard
 
@@ -42,6 +41,9 @@ segment (Buildings / Interiors / Joineries / MEP), quote-comparison status of op
 BOQs in progress per estimator, BOQ value by tender and version, revision count and value change between versions,
 cost breakdown (material / labour / equipment / subcontract / overhead / profit), rate-library items changed recently.
 
+### 2.6 KPI picker (v1, decided)
+Every dashboard has 3 fixed headline numbers (tender dashboard: **upcoming deadlines, pipeline value, EMD/BG expiries**), and each user can **add more tiles from a predefined catalog** for that dashboard, reorder them, and remove the ones they added. Saved per user. Catalog tiles are built-in queries over summary tables, so they keep the 300 ms rule and respect permissions. No user-written formulas in v1.
+
 ### 2.5 Later waves (defined when each wave starts)
 | Wave | Dashboards |
 |------|-----------|
@@ -68,7 +70,7 @@ cost breakdown (material / labour / equipment / subcontract / overhead / profit)
 The owner console reads only control-plane data plus health metadata (sizes, status, schema version) reported by each
 tenant app. It never reads tenant business data, which lives in the tenant's own Supabase.
 
-## 4. Open questions
+## 4. Decisions closed at lock
 
-1. For the Wave 1 tender dashboard, which **three numbers** does a contractor owner look at first? I proposed upcoming deadlines, pipeline value, and EMD/BG expiries.
-2. Should the tenant's usage metrics (logins, module usage counts) be sent to the owner console for product decisions? That is **telemetry** and needs an opt-in or a clear statement in the privacy policy (DPDP).
+1. Tender dashboard headline numbers: upcoming deadlines, pipeline value, EMD/BG expiries. **Users can add more tiles from a catalog** (§2.6). This moves a small part of the v2 personalisation into v1; full custom dashboards stay in v2.
+2. **Usage telemetry is opt-in.** Off by default, tenant admin enables it, the privacy policy describes exactly what is sent (counts and events, never business data), and it can be turned off at any time.
