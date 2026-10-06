@@ -6,5 +6,8 @@ export default defineConfig({
   plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     include: ['test/**/*.spec.ts'],
+    // Integration tests share one test database.
+    fileParallelism: false,
+    env: { NODE_ENV: 'test' },
   },
 });

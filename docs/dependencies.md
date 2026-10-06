@@ -11,7 +11,8 @@ The CI licence gate (`pnpm licenses:check`) checks transitive dependencies autom
 | reflect-metadata | Apache-2.0 | api | Decorator metadata for NestJS dependency injection |
 | rxjs | Apache-2.0 | api | NestJS peer dependency |
 | react, react-dom | MIT | web | UI |
-| postgres | Unlicense | bench (and later api) | PostgreSQL driver with COPY streaming; the driver named in 02-tech-stack |
+| postgres | Unlicense | api, bench | PostgreSQL driver (tagged-template queries, COPY streaming). The control plane uses it directly; Kysely is re-evaluated when tenant-module CRUD starts |
+| zod | MIT | api | Request validation and environment/config validation |
 
 ## Development only
 
