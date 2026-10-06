@@ -50,7 +50,10 @@ describe.skipIf(!url)('control plane (integration)', () => {
   });
 
   it('migrations are idempotent and reject edited files', async () => {
-    expect(await migrate(sql)).toEqual({ applied: [], skipped: ['0001_core.sql'] });
+    expect(await migrate(sql)).toEqual({
+      applied: [],
+      skipped: ['0001_core.sql', '0002_tenant_db.sql'],
+    });
     await sql`UPDATE aerolith_meta.schema_migration SET checksum = 'x' WHERE name = '0001_core.sql'`;
     await expect(migrate(sql)).rejects.toThrow(/changed after it was applied/);
     await sql`DELETE FROM aerolith_meta.schema_migration`;

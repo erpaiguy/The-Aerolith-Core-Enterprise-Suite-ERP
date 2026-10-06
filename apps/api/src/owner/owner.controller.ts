@@ -11,6 +11,9 @@ import {
 import { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { LicensingService } from '../licensing/licensing.service.js';
+import { OnboardingService } from '../onboarding/onboarding.service.js';
+import { MigrationOrchestrator } from '../provisioning/orchestrator.js';
+import { ProvisioningService } from '../provisioning/provisioning.service.js';
 import { OwnerGuard } from './owner.guard.js';
 
 const ACTOR = 'owner';
@@ -24,11 +27,46 @@ const trialChangeSchema = z.object({
   reason: z.string().trim().max(500).default(''),
 });
 const reasonSchema = z.object({ reason: z.string().trim().min(3).max(500) });
+const provisionSchema = z.object({ provider: z.enum(['local_postgres']) });
+const rolloutSchema = z.object({
+  concurrency: z.number().int().min(1).max(32).default(4),
+  failureThreshold: z.number().int().min(1).max(1000).default(3),
+});
 
 @Controller('owner')
 @UseGuards(OwnerGuard)
 export class OwnerController {
-  constructor(private readonly licensing: LicensingService) {}
+  constructor(
+    private readonly licensing: LicensingService,
+    private readonly provisioning: ProvisioningService,
+    private readonly onboarding: OnboardingService,
+    private readonly orchestrator: MigrationOrchestrator,
+  ) {}
+
+  /** Stand-in provider (local Postgres). Supabase tenants are provisioned through the onboarding link instead. */
+  @Post('tenants/:id/provision')
+  provision(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(provisionSchema)) body: z.infer<typeof provisionSchema>,
+  ) {
+    return this.provisioning.register(id, body.provider);
+  }
+
+  @Post('tenants/:id/onboarding-link')
+  onboardingLink(@Param('id', ParseUUIDPipe) id: string) {
+    return this.onboarding.createLink(id);
+  }
+
+  @Get('tenants/:id/database')
+  database(@Param('id', ParseUUIDPipe) id: string) {
+    return this.provisioning.status(id);
+  }
+
+  @Post('migrations/rollout')
+  @HttpCode(200)
+  rollout(@Body(new ZodPipe(rolloutSchema)) body: z.infer<typeof rolloutSchema>) {
+    return this.orchestrator.rollout(body);
+  }
 
   @Post('tenants')
   createTrial(@Body(new ZodPipe(createTrialSchema)) body: z.infer<typeof createTrialSchema>) {

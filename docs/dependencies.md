@@ -13,6 +13,7 @@ The CI licence gate (`pnpm licenses:check`) checks transitive dependencies autom
 | react, react-dom | MIT | web | UI |
 | postgres | Unlicense | api, bench | PostgreSQL driver (tagged-template queries, COPY streaming). The control plane uses it directly; Kysely is re-evaluated when tenant-module CRUD starts |
 | zod | MIT | api | Request validation and environment/config validation |
+| fastify | MIT | api | Already used through @nestjs/platform-fastify; declared directly for redirect types and the fake Supabase server in tests |
 
 ## Development only
 

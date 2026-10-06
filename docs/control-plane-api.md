@@ -24,6 +24,10 @@ Until then, never expose these routes publicly: bind the API to localhost or the
 | POST | `/owner/licences/:id/revoke` | `{ reason }`. Blocks activation and refresh |
 | POST | `/owner/licences/:id/devices/:deviceId/revoke` | Frees a device slot; that device cannot re-activate |
 | POST | `/owner/licences/:id/reveal-key` | Decrypts the stored key for resending. Audited |
+| POST | `/owner/tenants/:id/onboarding-link` | Registers a Supabase tenant database and emails a 7-day onboarding link ([provisioning](tenant-provisioning.md)) |
+| POST | `/owner/tenants/:id/provision` | `{ provider: "local_postgres" }`: stand-in provider for development and the owner-PC stage |
+| GET | `/owner/tenants/:id/database` | Provisioning status, schema version, last error (no secrets) |
+| POST | `/owner/migrations/rollout` | `{ concurrency, failureThreshold }`: apply tenant migrations to all ready tenants |
 
 ## Rules implemented
 

@@ -18,6 +18,15 @@ const envSchema = z.object({
   MIN_SHORTEN_NOTICE_DAYS: z.coerce.number().int().min(0).default(14),
   ENTITLEMENT_TTL_HOURS: z.coerce.number().int().positive().default(168),
   DEVICES_PER_SEAT: z.coerce.number().int().positive().default(2),
+  PUBLIC_API_URL: z.string().url().default('http://127.0.0.1:3000'),
+  WEBSITE_URL: z.string().url().default('http://localhost:5173'),
+  LOCAL_PG_ADMIN_URL: z.string().url().optional(),
+  SUPABASE_API_URL: z.string().url().default('https://api.supabase.com'),
+  SUPABASE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+  SUPABASE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
+  TENANT_DB_REGION: z.string().default('ap-south-1'),
+  PROVISIONING_WORKER: z.enum(['on', 'off']).optional(),
+  MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
 });
 
 export interface AppConfig {
@@ -32,6 +41,14 @@ export interface AppConfig {
   minShortenNoticeDays: number;
   entitlementTtlHours: number;
   devicesPerSeat: number;
+  publicApiUrl: string;
+  websiteUrl: string;
+  /** Superuser URL of a Postgres server for the local stand-in provider. Unset = provider disabled. */
+  localPgAdminUrl: string | null;
+  supabase: { apiUrl: string; clientId: string; clientSecret: string; redirectUri: string } | null;
+  tenantDbRegion: string;
+  provisioningWorker: boolean;
+  maxTenantPools: number;
   /** Secrets generated for this process only (development/test). Never true in production. */
   ephemeralSecrets: string[];
 }
@@ -84,6 +101,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     minShortenNoticeDays: e.MIN_SHORTEN_NOTICE_DAYS,
     entitlementTtlHours: e.ENTITLEMENT_TTL_HOURS,
     devicesPerSeat: e.DEVICES_PER_SEAT,
+    publicApiUrl: e.PUBLIC_API_URL,
+    websiteUrl: e.WEBSITE_URL,
+    localPgAdminUrl: e.LOCAL_PG_ADMIN_URL ?? null,
+    supabase:
+      e.SUPABASE_OAUTH_CLIENT_ID && e.SUPABASE_OAUTH_CLIENT_SECRET
+        ? {
+            apiUrl: e.SUPABASE_API_URL,
+            clientId: e.SUPABASE_OAUTH_CLIENT_ID,
+            clientSecret: e.SUPABASE_OAUTH_CLIENT_SECRET,
+            redirectUri: new URL('/api/onboarding/supabase/callback', e.PUBLIC_API_URL).toString(),
+          }
+        : null,
+    tenantDbRegion: e.TENANT_DB_REGION,
+    provisioningWorker: (e.PROVISIONING_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
+    maxTenantPools: e.MAX_TENANT_POOLS,
     ephemeralSecrets: ephemeral,
   };
 }

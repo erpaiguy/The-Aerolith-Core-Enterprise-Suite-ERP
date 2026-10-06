@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { Sql } from 'postgres';
 
 export const CONTROL_PLANE_MIGRATIONS = join(__dirname, '..', '..', 'migrations', 'control-plane');
+export const TENANT_MIGRATIONS = join(__dirname, '..', '..', 'migrations', 'tenant');
 const LOCK_ID = 7_310_001; // arbitrary, unique to this runner
 
 export interface MigrationResult {
@@ -13,16 +14,26 @@ export interface MigrationResult {
   skipped: string[];
 }
 
+export interface MigrateOptions {
+  /** Run every statement as this role (tenant databases: `aerolith_owner`, so it owns all objects). */
+  asRole?: string;
+}
+
+export const migrationFiles = (dir: string): string[] =>
+  readdirSync(dir)
+    .filter((f) => /^\d{4}_[\w-]+\.sql$/.test(f))
+    .sort();
+
 export async function migrate(
   sql: Sql,
   dir: string = CONTROL_PLANE_MIGRATIONS,
+  opts: MigrateOptions = {},
 ): Promise<MigrationResult> {
-  const files = readdirSync(dir)
-    .filter((f) => /^\d{4}_[\w-]+\.sql$/.test(f))
-    .sort();
+  const files = migrationFiles(dir);
   const result: MigrationResult = { applied: [], skipped: [] };
   await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(${LOCK_ID})`;
+    if (opts.asRole !== undefined) await tx.unsafe(`SET LOCAL ROLE ${quoteIdent(opts.asRole)}`);
     await tx`CREATE SCHEMA IF NOT EXISTS aerolith_meta`;
     await tx`CREATE TABLE IF NOT EXISTS aerolith_meta.schema_migration (
       name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())`;
@@ -49,4 +60,9 @@ export async function migrate(
     }
   });
   return result;
+}
+
+export function quoteIdent(name: string): string {
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(name)) throw new Error(`unsafe SQL identifier: ${name}`);
+  return `"${name}"`;
 }

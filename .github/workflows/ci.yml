@@ -28,6 +28,7 @@ jobs:
           --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       TEST_CONTROL_DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/aerolith_test
+      TEST_LOCAL_PG_ADMIN_URL: postgres://ci:ci@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
