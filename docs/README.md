@@ -63,4 +63,14 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 
 **All 10 planning phases are locked.**
 
-## Next: build Wave 0
+## Wave 0 build progress
+
+| Step | What | Status |
+|------|------|--------|
+| 1 | Monorepo scaffold (pnpm + Turborepo, lint, format, typecheck, tests, licence gate, CI) | **Done** |
+| 2 | Performance benchmark: 1M-line BOQ + 50k-activity schedule on local Postgres | Next |
+| 3 | Control plane: `core` schema, licence keys, trial/seat rules, owner console API | |
+| 4 | Tenant onboarding: Supabase OAuth connect, provisioning, migration orchestrator | |
+| 5 | Auth: login, mandatory admin MFA, staff reset requests, roles | |
+| 6 | Electron + browser shells; notifications/reminders/pending inbox | |
+| 7 | Docker Compose stack for the owner PC with tunnel | |
