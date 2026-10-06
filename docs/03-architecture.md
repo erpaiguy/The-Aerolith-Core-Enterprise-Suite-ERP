@@ -178,7 +178,7 @@ URLs. [Likely] An Indian-region provider or self-hosted open-source MTA is neede
 [Certain] This requirement is a design constraint now. It cannot be added after the UI exists.
 
 **Data model**
-- Line items in one partitioned table keyed by (boq_id, ...); hierarchy by materialized path/ltree plus a stored sort key.
+- Line items in one partitioned table keyed by (boq_id, ...); hierarchy by materialized path/ltree plus a stored hierarchical fractional sort key.
 - Parent totals come from **incrementally maintained rollups** (delta updates on edit), never from summing 1M rows on read.
 - Narrow hot rows, wide cold data (notes, attachments) in side tables. Covering indexes for the grid's sort/filter columns.
 - Edits are written as batched, versioned changes. Optimistic concurrency per row, conflict surfaced to the user.
@@ -196,7 +196,7 @@ URLs. [Likely] An Indian-region provider or self-hosted open-source MTA is neede
 **Client**
 - Canvas virtual grid, row virtualization, column virtualization, web workers for parsing and local filtering of the visible window, debounced saves, undo/redo as a local command stack.
 
-**Targets (starting hypotheses, to be validated in the Wave 0 benchmark spike)** [Guessing]
+**Targets** (all met in the Wave 0 benchmark on a 4-vCPU container with local Postgres; see [benchmarks/wave0-benchmark.md](benchmarks/wave0-benchmark.md). Rerun against a real Supabase project before relying on them for the free tier)
 
 | Operation | Target |
 |-----------|--------|

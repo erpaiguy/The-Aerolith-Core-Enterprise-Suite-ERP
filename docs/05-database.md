@@ -74,12 +74,12 @@ How it meets the targets in 03 §13:
 | Need | Mechanism |
 |------|-----------|
 | Show rows N..N+200 in tree order | `sort_key` is a hierarchical fractional key, so `ORDER BY sort_key` is depth-first order. Keyset paging on index `(boq_id, sort_key)` |
-| Collapsed sections | Server excludes descendants with `NOT (path <@ ANY(:collapsed))` using a GiST index on `path` |
+| Collapsed sections | Server **jumps over** each collapsed subtree using its sort-key range (`key` to `key + '"'`), so cost depends on rows shown, not rows hidden. No GiST index needed (benchmark: 2 ms p95 with 60 collapsed sections) |
 | Insert a row between two rows | New fractional key between neighbours. **No renumbering of 1M rows** |
 | Section totals | Stored `subtotal` on section nodes. An edit applies the **delta to its ancestors only** (depth ~5-8 rows) in the same transaction |
 | Search descriptions | `pg_trgm` GIN index on `boq_node_text.description` |
 | Bulk import | `COPY` into an unlogged staging table, validate, then one `INSERT ... SELECT` |
-| Revision | New `boq` version copies nodes with one `INSERT ... SELECT` (same `line_key`). Compare = join on `line_key` |
+| Revision | **Changed after the Wave 0 benchmark:** a full copy of a 1M-line BOQ took 64 s and another ~780 MB. Revisions will be **copy-on-write**: a new version shares unchanged lines with its base and stores only added, changed and deleted lines (keyed by `line_key`). Compare = the stored changes. Design detail in Wave 1 |
 | Concurrent editing | `row_version` check per row; conflicts returned to the user |
 
 ## 5. Tender (`tender`)
@@ -130,12 +130,20 @@ quickly. Heavy tenants move up a tier, which matches your "heavy load pays" rule
 - Expand/contract: a release never breaks the previous app version's queries.
 - Orchestrator (03 §5) runs per tenant with bounded concurrency, records results in `core.migration_run_tenant`, pauses the rollout when failures pass a threshold. Paused projects (free-tier inactivity) are retried when they resume.
 
-## 11. Sizing reality check
+## 11. Sizing (measured in the Wave 0 benchmark)
 
-[Guessing] One million BOQ nodes with indexes and description text is roughly 0.5-1 GB. [Likely] The free Supabase database size
-is around 500 MB. **A tenant who actually uses the 1M-line capability will exceed the free tier.** This is consistent with
-your rule that heavy-load tenants pay, but the app must warn before the limit (`tenant_db.status = full`) rather than fail
-at it. The Wave 0 benchmark will replace these guesses with measured numbers.
+[Certain, measured] One 1M-line BOQ with descriptions and all indexes takes **~784 MB** (about 800 bytes per line). Breakdown across
+all BOQ data: line rows ~28%, line indexes ~23%, description text ~21%, description indexes ~28% (the trigram search index alone ~22%).
+
+Consequences:
+- [Likely] A free Supabase project (~500 MB) holds roughly **600,000 BOQ lines in total**, with nothing else stored. One 1M-line BOQ does not fit. This confirms the "heavy load pays" rule with real numbers.
+- The app must warn well before the limit (`tenant_db.status = full`).
+- Size reductions to evaluate in Wave 1 (each is a trade-off, not free):
+  1. Copy-on-write revisions (§4). Without this, every revision of a 1M-line BOQ adds ~780 MB.
+  2. A shared description dictionary: BOQ descriptions repeat heavily, so storing each distinct text once could cut text and its search index substantially.
+  3. Make the amount index optional, since sorting by an unindexed column is a background job anyway.
+
+Full results: [benchmarks/wave0-benchmark.md](benchmarks/wave0-benchmark.md).
 
 ## 12. Decisions closed at lock
 

@@ -12,7 +12,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tools/**/*.mjs'],
+    files: ['tools/**/*.mjs', 'tools/bench/src/**/*.ts'],
     rules: { 'no-console': 'off' },
     languageOptions: { globals: { process: 'readonly', console: 'readonly', URL: 'readonly' } },
   },
