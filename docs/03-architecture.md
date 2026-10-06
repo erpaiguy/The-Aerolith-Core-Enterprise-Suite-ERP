@@ -59,49 +59,57 @@ Credentials for BYO-DB are envelope-encrypted (KMS or libsodium sealed box), nev
 - Tenant-scoped test fixture: every integration test runs against two tenants and asserts no leakage.
 - A tenant's BYO-DB being down must degrade only that tenant. Circuit breaker per tenant.
 
-## 6. Identity, login and multi-user model (rev 2)
+## 6. Identity, login and multi-user model (rev 3)
 
-Two kinds of people, two login paths.
+Two kinds of people, and **two separate gates**: *who you are* (password) and *what the tenant may use* (licence key).
 
 | | Tenant Admin (owner) | Tenant User (staff) |
 |---|---|---|
 | Created by | Website signup with their email | Tenant Admin, inside the app |
-| Website/portal login | Email + password | Not applicable |
-| App login | **Email + password + licence key** | **Username + password** (+ tenant code/licence key on first activation of a device) |
-| Credentials stored | Control plane | **Tenant's own database** (so BYO-DB and self-hosted tenants keep their users) |
-| Forgot / change password | Yes | Yes |
+| Login to the app | **Email + password** | **Username + password** |
+| Credentials stored | Control plane | **Tenant's own database** (BYO-DB and self-hosted tenants keep their users) |
+| Forgot password | Email reset link (single-use, 15 min) | **"Request reset" to the Tenant Admin** (below) |
+| Change password | Yes, needs current password | Yes, needs current password |
 
-**Licence key is a tenant locator and device activation token, not a secret.** Keys get shared and pasted into emails.
-The password is the security factor. The key tells the server which tenant database to open, and it is bound to a
-device activation count. Admin can revoke a device or rotate the key from the portal.
+**Gate 1, login (password):** gets you into the app shell and your account screen. Username/email + password only.
 
-**Key delivery (two paths, as specified):**
-1. Download from the website: the key is shown in the customer portal and displayed on the download page after login.
-2. Emailed: the key is sent from our company domain email to the tenant's signup email. [Guessing] I read "domain
-   email" as our own company domain address; tell me if you meant something else.
+**Gate 2, licence key (feature access):** mandatory to unlock features. The key is entered **once per device/browser
+profile** (normally by the admin, who receives it), after which it is remembered and staff on that device just log in
+with username + password. Without a valid key the app opens in a locked state: account, licence and data export only.
+The key is a tenant locator and entitlement token. It is **not** a secret, so it never replaces the password.
 
-**Usernames:** unique within a tenant, not globally. The login screen therefore carries the tenant context
-(licence key remembered after first activation on that device, or tenant code entered once).
+**Licence states and behaviour:**
 
-**Forgot password, per user type:**
-- Admin: email reset link (single-use, 15 min expiry).
-- Staff with an email or mobile on file: self-service reset link/OTP.
-- Staff with **no email or mobile**: self-service is impossible by definition. The reset becomes admin-initiated
-  (admin issues a one-time temporary password, user must change on next login). **I recommend requiring email or
-  mobile when the admin creates a user, with admin-reset as the fallback.**
+| State | Behaviour |
+|-------|-----------|
+| Trial active / Paid active | Full access to licensed modules |
+| Expired or payment lapsed | Grace period (to decide in Phase 6), then **read-only + export always allowed** |
+| Revoked / device limit exceeded | Features locked; admin can free a device in the portal |
+| No key on this device | Locked state (above) |
 
-**Change password:** any logged-in user; requires the current password; revokes other sessions on success.
+**Usernames** are unique within a tenant. The tenant context comes from the activated key (desktop) or tenant
+subdomain (browser).
 
-**Rules for all accounts:** Argon2id hashing, minimum length + breached-password check, login rate limiting and
-lockout with backoff, no password ever visible to admins, forced change on first login of an admin-issued password,
-audit events for every login, reset, and change, optional TOTP for admins (mandatory on paid plans, to decide in Phase 9).
+**Password-reset request (staff):**
+1. User taps "Forgot password" and enters their username. The response is always the same ("request sent if the account exists") so usernames cannot be probed.
+2. A request lands in the admin's **Pending** inbox with the username, time, and device. It is rate limited, and repeated requests collapse into one.
+3. Admin approves and issues a **one-time temporary password** (shown once, never stored in recoverable form). User must set a new password at next login. Reset is audited.
+4. The admin never sees or sets a user's permanent password.
+
+[Certain] Consequence of "no email needed": **if the only Admin forgets their password and loses their email, there is no
+self-service path**, so Admin accounts keep email recovery (platform support can verify and recover). Support recovery needs
+a documented identity-verification procedure (Phase 9).
+
+**Rules for all accounts:** Argon2id hashing, minimum length + breached-password check, login rate limiting with
+backoff and lockout, audit events for every login/reset/change, sessions revoked on password change, optional TOTP for
+admins (decision in Phase 9).
 
 **Authorization:** roles (Owner, Admin, Estimator, Project Manager, Engineer, Accounts, Store, Viewer, custom) with
-permissions of the form `module.resource.action` and optional project scope. Single-user tenant = a tenant with only
-the Owner. Seat limits come from entitlements.
+permissions `module.resource.action` and optional project scope. Single-user tenant = only the Owner. Seat limits from
+entitlements.
 
-**Self-hosted mode:** the identity and licence-verification services ship inside the deployment, so logins work with
-no internet. Licence file is verified offline (see §10).
+**Self-hosted mode:** identity and licence verification ship inside the deployment, so logins work offline. The licence
+file is verified offline (see §10).
 
 ## 7. Cross-cutting building blocks (Wave 0)
 
@@ -123,12 +131,27 @@ deep links, and the OS keychain (via `safeStorage`) for refresh tokens. Security
 node integration off, strict IPC allowlist, signed and notarised builds. All business logic stays on the server, so
 there is no divergence between browser and desktop.
 
-## 10. Licensing and trial
+## 10. Licensing, trial and key-delivery automation
 
-- Website signup creates a tenant in `trial` (14-30 days, module and data caps). Licence key issued and emailed.
-- Browser access: admin signs in with email + password + licence key, staff with username + password. Desktop is identical after device activation.
-- Entitlements (plan, modules, seats, expiry, state) are checked server-side on every request and cached for seconds.
-- Self-hosted: Ed25519-signed licence file (tenant, seats, modules, expiry, grace). Verified offline with an embedded public key. It deters casual piracy and does not stop a determined one.
+**Customer side (automatic, no human step):**
+1. Visitor chooses **Trial** or **Paid** and clicks Download (or Open in browser).
+2. They give an email. We **verify it** (link or OTP) *before* the download or key is released. This stops throwaway-email trial farming and typo'd addresses.
+3. The system creates the tenant (trial) or links the paid subscription, generates the key, and **sends it automatically from the website's domain email** to the verified address. The key is also shown in the customer portal.
+4. Trial keys expire (14-30 days). Paid keys follow the subscription. Both are checked server-side on every request (cached for seconds).
+5. Automatic emails: key delivered, key resent on request, trial expiring (e.g. 7/3/1 days), trial expired, payment succeeded/failed, subscription renewing, key rotated, new device activated.
+
+**Owner side (automation in the platform owner's admin console):**
+- Rules and templates for every email above, editable without a deploy; per-plan content.
+- Auto-issue, resend, rotate, suspend, revoke and extend keys; bulk actions; every action audited.
+- Trial controls: length, module and data caps, one trial per email and per company domain, abuse flags.
+- Trial-to-paid nudges, win-back for lapsed, and dunning on failed payments (ties to Phase 7).
+- Delivery health: bounce/complaint tracking, resend queue, suppression list.
+- Manual override for sales: grant a key or extension to a named tenant.
+
+**Email infrastructure:** transactional provider with SPF, DKIM and DMARC on the sending domain; keys never travel in
+URLs. [Likely] An Indian-region provider or self-hosted open-source MTA is needed for volume and residency. Provider choice goes in Phase 10.
+
+**Self-hosted:** an Ed25519-signed licence file (tenant, seats, modules, expiry, grace) is delivered the same way and verified offline against an embedded public key. It deters casual piracy and does not stop a determined one.
 
 ## 11. Key decisions and trade-offs
 
@@ -137,14 +160,14 @@ there is no divergence between browser and desktop.
 | Database per tenant for all | Yes (your call) | Fleet ops: migrations, backups, pooling. Mitigated by orchestrator and connection manager. |
 | Modular monolith | Yes | Needs discipline on module boundaries (lint rules, no cross-module table access) |
 | Electron, online-only desktop | Yes | Poor-signal sites can't use it. Revisit with an offline-capable mobile/PWA in Wave 4. |
-| Admin identity in control plane, staff identity in tenant DB | Yes | Login must resolve tenant first (licence key/tenant code). Staff without email need admin-reset. |
+| Admin identity in control plane, staff identity in tenant DB; licence key gates features, password gates identity | Yes | Staff reset depends on the Admin being reachable. Sole-admin recovery needs a support procedure. |
 | Typed SQL data layer, no ORM on hot paths | Yes | More hand-written SQL |
 
 ## 12. Open questions for Phase 4+
 
 1. Which accounting depth: accounts-lite with Tally export, or full double-entry GL inside the app?
 2. Do you need WhatsApp notifications at MVP (Meta Business API cost and approval time)?
-3. Will you host for tenants' BYO-DB inside India only?
+3. Will you host for tenants' BYO-DB inside India only? (Phase 9/10)
 4. Who is the pilot customer, and which of their workflows is the acceptance test?
 
 ## 13. Performance architecture (requirement: 1M+ BOQ lines, multiple BOQs, 50+ pages of micro/macro schedules)

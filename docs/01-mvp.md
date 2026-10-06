@@ -1,4 +1,4 @@
-# Phase 1: MVP and Wave Plan (rev 2)
+# Phase 1: MVP and Wave Plan (rev 3, locked)
 
 ## Strategy
 
@@ -10,14 +10,31 @@ any project execution exists.
 
 | Wave | Theme | Contents | Exit criteria |
 |------|-------|----------|---------------|
-| 0 | Platform | Control plane, tenant provisioning, licence service, auth (see 03 §6), RBAC, audit log, file storage, **generic approval engine (basic)**, numbering series, Electron shell, **performance spike (see 03 §13)** | Tenant created, licensed, logged in from browser and Electron; 1M-row BOQ benchmark passes |
+| 0 | Platform | Control plane, tenant provisioning, licence service, auth (see 03 §6), RBAC, audit log, file storage, **generic approval engine (basic)**, **notification + reminder + pending-actions inbox (basic)**, numbering series, Electron shell, **performance spike (see 03 §13)** | Tenant created, licensed, logged in from browser and Electron; 1M-row BOQ benchmark passes |
 | 1 | **Core MVP: Estimation + Bid/Tender** | See below | A pilot contractor prices and submits a real tender |
 | 2 | Execution | Projects, scheduling (macro/micro plans), procurement, inventory, daily site reports, project documents | Won tender converts to a live project with baseline schedule |
 | 3 | Operations | Client RA billing, subcontractor/vendor bills, accounts-lite (GST/TDS), equipment, HR/payroll, labour contractors, quality, safety | Money flows end to end |
 | 4 | Control | Cost control and forecasting, earned value, variations/change orders, contracts and claims | Planned vs actual vs forecast per project |
 | 5 | Document workflow | E-signature, document approval workflows, transmittals, controlled issue | Signed and approved documents end to end |
 | 6 | Growth | CRM, real-estate sales/RERA, BI/report builder, mobile app, integrations (Tally, e-invoice, e-way bill) | Self-serve analytics |
-| 7 | AI | Company-owned AI inside the ERP (see "AI" below) | Features in "AI" below, measured |
+| 7 | **v2:** AI + collaboration and productivity | Own AI; in-app chat; to-do lists, personal dashboards, saved views, calendar, productivity options (see below) | Features measured against targets set at the start of the wave |
+
+## Release plan
+
+| Release | Contents | Public launch |
+|---------|----------|---------------|
+| **v1** | Waves 0-6 (platform and all mandatory modules) | Only after all 10 planning phases are complete and v1 is built |
+| **v2** | Wave 7: AI, chat, productivity suite | After v1 is live |
+
+## Wave 7 (v2): collaboration, productivity, AI
+
+- **In-app chat:** user-to-user and group chat, project/tender channels, mentions, file sharing, presence, search, retention rules.
+- **Productivity:** to-do lists, personal and team dashboards, saved filters/views, calendar, snooze, keyboard shortcuts, user preferences, recent and favourites. Full list is decided at the start of the wave.
+- **AI:** see below.
+
+**Exception I am keeping in v1, because of a hard dependency:** a *basic* notification, reminder and pending-actions inbox in
+Wave 0/1. Tender submission deadlines, EMD/bank-guarantee expiries and approval requests are useless without
+reminders, and the password-reset request flow in 03 §6 needs a Pending inbox. Everything else productivity-related waits for v2 as you specified.
 
 ## Wave 1 scope (Core MVP)
 
@@ -55,21 +72,15 @@ any project execution exists.
 5. [Likely] Site staff need to submit daily reports in Wave 2 before the mobile app exists in Wave 6. Wave 2 ships a
    mobile-responsive web UI (PWA) for site forms.
 
-## AI (Wave 7), your own AI
+## AI (v2), your own AI
 
-[Certain] Training a general-purpose language model from scratch costs millions of dollars and large GPU clusters.
-That is not feasible here. What is feasible and still "yours":
+[Certain] A general-purpose language model trained from scratch is not feasible (millions of dollars, GPU clusters).
+Decision on approach is deferred to the start of v2. Candidate options then: classical ML on tenant data (rate
+prediction, delay risk, bill anomalies) and self-hosted open-weight models run on your servers.
+v1 commitments: keep structured, clean history, keep tenant data exportable only with opt-in consent for training, and
+keep a model-serving interface behind a feature flag.
 
-- **Classical ML on your own data:** rate prediction, cost estimating from past BOQs, delay-risk scoring, anomaly
-  detection on bills. Trained on tenant-approved data.
-- **Self-hosted open-weight models** (fine-tuned and run on your own servers, branded as your AI), for BOQ item
-  matching, tender-document extraction, and search. No third-party API calls, so tenant data never leaves your servers or theirs.
-- **Decision deferred to Wave 7.** Platform commitments now: store clean structured history, keep tenant data
-  exportable for training only with opt-in consent, and keep a model-serving interface behind a feature flag.
-
-If "own AI" means "no open-weight models either", say so, and I'll scope it as classical ML only.
-
-## Non-goals (until stated otherwise)
+## Non-goals for v1
 
 Offline-first sync, native mobile before Wave 6, multi-country tax, payroll statutory filing before Wave 3.
 
@@ -79,3 +90,7 @@ Offline-first sync, native mobile before Wave 6, multi-country tax, payroll stat
 - 1M-line BOQ: scroll, filter, and edit stay interactive (targets in 03 §13).
 - Tenant provisioning under 2 min (shared cluster) and 15 min (BYO-DB).
 - Zero cross-tenant data access in the isolation test suite.
+
+## Deployment gate
+
+Public deployment waits until Phases 1-10 are complete and v1 is built. See README for the pilot recommendation.
