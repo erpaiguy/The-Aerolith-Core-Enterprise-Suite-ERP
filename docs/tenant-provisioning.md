@@ -51,7 +51,7 @@ least-recently-used order, and closes the oldest above `MAX_TENANT_POOLS`. Used 
 
 ## Known gaps (tracked)
 
-1. **Supabase client is unverified against the live API.** Endpoint paths and payloads follow the public Management
+1. **Supabase client is unverified against the live API.** Setup and verification steps: [supabase-oauth-setup.md](supabase-oauth-setup.md). Endpoint paths and payloads follow the public Management
    API docs. Verify once the OAuth app is registered: consent, organisation list, project creation, pooler config,
    role login through the pooler (`<role>.<project-ref>`).
 2. **Storage bucket** creation for documents is not done yet. It is needed in Wave 1 (tender documents).

@@ -6,12 +6,12 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "node --watch dist/main.js",
-    "start": "node dist/main.js",
+    "dev": "node --env-file-if-exists=.env --watch dist/main.js",
+    "start": "node --env-file-if-exists=.env dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src test",
     "test": "vitest run",
-    "migrate:control": "node dist/cli/migrate-control.js",
+    "migrate:control": "node --env-file-if-exists=.env dist/cli/migrate-control.js",
     "secrets:generate": "node dist/cli/generate-secrets.js"
   },
   "dependencies": {

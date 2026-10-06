@@ -68,9 +68,9 @@ describe('Supabase client', () => {
     expect((call.init?.headers as Record<string, string>).authorization).toBe('Bearer at');
     expect(JSON.parse(String(call.init?.body))).toEqual({
       name: 'n',
-      organization_id: 'org1',
-      region: 'ap-south-1',
+      organization_slug: 'org1',
       db_pass: 'pw',
+      region_selection: { type: 'specific', code: 'ap-south-1' },
     });
   });
 

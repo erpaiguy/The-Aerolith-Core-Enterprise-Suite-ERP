@@ -297,7 +297,10 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     expect(after.status).toBe('creating');
     const create = supabaseCalls.find((c) => c.method === 'POST' && c.url === '/v1/projects')!;
     expect(create.auth).toBe('Bearer sb-access-token');
-    expect(create.body).toMatchObject({ organization_id: 'org-company', region: 'ap-south-1' });
+    expect(create.body).toMatchObject({
+      organization_slug: 'org-company',
+      region_selection: { type: 'specific', code: 'ap-south-1' },
+    });
     expect((create.body as { db_pass: string }).db_pass.length).toBeGreaterThanOrEqual(24);
 
     const [row] = await control<

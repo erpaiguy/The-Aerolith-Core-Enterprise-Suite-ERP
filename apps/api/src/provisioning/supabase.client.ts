@@ -94,11 +94,13 @@ export class SupabaseClient {
     accessToken: string,
     p: { name: string; organisationId: string; region: string; dbPassword: string },
   ): Promise<SupabaseProject> {
+    // `organization_id` and `region` are deprecated in the Management API. The organisation "id" returned by
+    // GET /v1/organizations is its slug, and a fixed region is requested with region_selection type "specific".
     return this.api<SupabaseProject>(accessToken, 'POST', '/v1/projects', {
       name: p.name,
-      organization_id: p.organisationId,
-      region: p.region,
+      organization_slug: p.organisationId,
       db_pass: p.dbPassword,
+      region_selection: { type: 'specific', code: p.region },
     });
   }
 
