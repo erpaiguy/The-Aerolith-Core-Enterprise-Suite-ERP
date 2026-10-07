@@ -154,7 +154,8 @@ describe.skipIf(!controlUrl)('email worker (integration)', () => {
   it('retries temporary failures with backoff, then delivers', async () => {
     const id = await queue('retry@example.in');
     behaviour.tempFailData = true;
-    const now = new Date();
+    // Pinned clock a second ahead: created_at has microseconds, a JS Date only milliseconds.
+    const now = new Date(Date.now() + 1000);
     expect(await worker.runOnce(now)).toMatchObject({ retrying: 1 });
     const first = await row(id);
     expect(first).toMatchObject({ status: 'queued', attempts: 1 });
