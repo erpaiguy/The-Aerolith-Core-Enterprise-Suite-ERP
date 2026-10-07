@@ -37,4 +37,4 @@ The CI licence gate (`pnpm licenses:check`) checks transitive dependencies autom
 | happy-dom, @testing-library/react | MIT | Web unit tests (happy-dom instead of jsdom: jsdom 30 needs Node ≥ 22.22.2) |
 | electron | MIT | Desktop runtime (bundled into the installer; its Chromium licences ship with it) |
 | electron-builder | MIT | Windows installer packaging. Pulls in `truncate-utf8-bytes` (WTFPL) at build time only; accepted under the build-tooling rule in licensing-policy §2 |
-| @playwright/test | Apache-2.0 | Browser end-to-end tests (pinned to 1.56.x to match the CI-installed Chromium) |
+| @playwright/test | Apache-2.0 | Browser end-to-end tests. CI installs its own Chromium; sandboxed machines can point `PW_CHROMIUM_PATH` at a pre-installed one |
