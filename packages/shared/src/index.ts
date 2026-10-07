@@ -16,3 +16,5 @@ export function buildHealthReport(
 ): HealthReport {
   return { service, status: 'ok', version, time: now.toISOString() };
 }
+
+export * from './licence-key.js';

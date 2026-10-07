@@ -1,0 +1,190 @@
+// Small UI kit on Tailwind. Colours come from CSS variables in styles.css so light and dark themes stay in one place.
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import { AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react';
+
+const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
+
+type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
+
+export function Button({
+  variant = 'primary',
+  busy = false,
+  className,
+  children,
+  disabled,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; busy?: boolean }) {
+  const styles: Record<Variant, string> = {
+    primary: 'bg-accent text-accent-fg hover:bg-accent-hover',
+    secondary: 'bg-surface-2 text-fg border border-line hover:bg-surface-3',
+    danger: 'bg-danger text-white hover:opacity-90',
+    ghost: 'text-fg-muted hover:bg-surface-2',
+  };
+  return (
+    <button
+      className={cx(
+        'inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+        styles[variant],
+        className,
+      )}
+      disabled={disabled || busy}
+      {...rest}
+    >
+      {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
+      {children}
+    </button>
+  );
+}
+
+export function Field({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  error?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-sm font-medium text-fg">{label}</span>
+      {children}
+      {hint && !error && <span className="block text-xs text-fg-muted">{hint}</span>}
+      {error && (
+        <span className="block text-xs text-danger" role="alert">
+          {error}
+        </span>
+      )}
+    </label>
+  );
+}
+
+export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      className={cx(
+        'block w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-2 focus:outline-accent/30',
+        className,
+      )}
+      {...rest}
+    />
+  );
+}
+
+export function Card({
+  title,
+  actions,
+  children,
+  className,
+}: {
+  title?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cx('rounded-lg border border-line bg-surface p-5', className)}>
+      {(title || actions) && (
+        <div className="mb-4 flex items-center justify-between gap-3">
+          {title && <h2 className="text-base font-semibold text-fg">{title}</h2>}
+          {actions}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+export function Alert({
+  tone = 'info',
+  children,
+}: {
+  tone?: 'info' | 'success' | 'warning' | 'danger';
+  children: ReactNode;
+}) {
+  const Icon = tone === 'success' ? CheckCircle2 : tone === 'info' ? Info : AlertTriangle;
+  const styles = {
+    info: 'border-info/30 bg-info/10 text-fg',
+    success: 'border-success/30 bg-success/10 text-fg',
+    warning: 'border-warning/40 bg-warning/10 text-fg',
+    danger: 'border-danger/30 bg-danger/10 text-fg',
+  };
+  const iconColour = {
+    info: 'text-info',
+    success: 'text-success',
+    warning: 'text-warning',
+    danger: 'text-danger',
+  };
+  return (
+    <div
+      className={cx('flex gap-2.5 rounded-md border px-3.5 py-2.5 text-sm', styles[tone])}
+      role={tone === 'danger' ? 'alert' : 'status'}
+    >
+      <Icon className={cx('mt-0.5 size-4 shrink-0', iconColour[tone])} aria-hidden />
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+export function Badge({
+  tone = 'neutral',
+  children,
+}: {
+  tone?: 'neutral' | 'accent' | 'warning' | 'danger' | 'success';
+  children: ReactNode;
+}) {
+  const styles = {
+    neutral: 'bg-surface-2 text-fg-muted',
+    accent: 'bg-accent/15 text-accent',
+    warning: 'bg-warning/15 text-warning',
+    danger: 'bg-danger/15 text-danger',
+    success: 'bg-success/15 text-success',
+  };
+  return (
+    <span
+      className={cx(
+        'inline-flex items-center rounded px-2 py-0.5 text-xs font-medium',
+        styles[tone],
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function Spinner({ label = 'Loading' }: { label?: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 p-8 text-sm text-fg-muted" role="status">
+      <Loader2 className="size-4 animate-spin" aria-hidden /> {label}
+    </div>
+  );
+}
+
+/** Centered card layout for sign-in, activation and password screens. */
+export function AuthLayout({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-canvas px-4 py-10">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-lg bg-accent font-bold text-accent-fg">
+            A
+          </div>
+          <h1 className="text-xl font-semibold text-fg">{title}</h1>
+          {subtitle && <p className="mt-1 text-sm text-fg-muted">{subtitle}</p>}
+        </div>
+        <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">{children}</div>
+        <p className="mt-6 text-center text-xs text-fg-subtle">Aerolith Core · Construction ERP</p>
+      </div>
+    </main>
+  );
+}
