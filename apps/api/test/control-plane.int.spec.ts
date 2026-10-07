@@ -8,7 +8,7 @@ import postgres, { type Sql } from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap.js';
-import { migrate } from '../src/db/migrate.js';
+import { CONTROL_PLANE_MIGRATIONS, migrate, migrationFiles } from '../src/db/migrate.js';
 import { signInOperator } from './helpers/operator.js';
 
 const url = process.env.TEST_CONTROL_DATABASE_URL;
@@ -54,7 +54,7 @@ describe.skipIf(!url)('control plane (integration)', () => {
   it('migrations are idempotent and reject edited files', async () => {
     expect(await migrate(sql)).toEqual({
       applied: [],
-      skipped: ['0001_core.sql', '0002_tenant_db.sql', '0003_auth.sql'],
+      skipped: migrationFiles(CONTROL_PLANE_MIGRATIONS),
     });
     await sql`UPDATE aerolith_meta.schema_migration SET checksum = 'x' WHERE name = '0001_core.sql'`;
     await expect(migrate(sql)).rejects.toThrow(/changed after it was applied/);

@@ -30,6 +30,19 @@ const envSchema = z.object({
   RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
   CORS_ORIGINS: z.string().default('app://aerolith'),
+  EMAIL_TRANSPORT: z.enum(['smtp', 'file', 'disabled']).optional(),
+  EMAIL_FILE_DIR: z.string().default('.mail-outbox'),
+  EMAIL_FROM: z.string().min(3).optional(),
+  EMAIL_REPLY_TO: z.string().email().optional(),
+  SUPPORT_EMAIL: z.string().email().optional(),
+  EMAIL_MAX_PER_HOUR: z.coerce.number().int().positive().default(60),
+  EMAIL_WORKER: z.enum(['on', 'off']).optional(),
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z.enum(['true', 'false']).default('false'),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASSWORD: z.string().default(''),
+  SMTP_REQUIRE_TLS: z.enum(['true', 'false']).default('true'),
 });
 
 export interface AppConfig {
@@ -59,6 +72,23 @@ export interface AppConfig {
   trustProxy: boolean;
   /** Origins allowed to call the API cross-origin (the desktop app). */
   corsOrigins: string[];
+  email: {
+    transport: 'smtp' | 'file' | 'disabled';
+    fileDir: string;
+    from: string;
+    replyTo: string | null;
+    supportEmail: string | null;
+    maxPerHour: number;
+    worker: boolean;
+    smtp: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      password: string;
+      requireTls: boolean;
+    } | null;
+  };
   /** Mark cookies Secure (true whenever the public API URL is https). */
   secureCookies: boolean;
   /** Secrets generated for this process only (development/test). Never true in production. */
@@ -135,7 +165,44 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     corsOrigins: e.CORS_ORIGINS.split(',')
       .map((o) => o.trim())
       .filter(Boolean),
+    email: emailConfig(e),
     secureCookies: e.PUBLIC_API_URL.startsWith('https://'),
     ephemeralSecrets: ephemeral,
+  };
+}
+
+/**
+ * Email: production must say explicitly how mail is sent (smtp, or disabled on purpose). Development defaults to
+ * writing .eml files. Unencrypted SMTP is refused in production.
+ */
+function emailConfig(e: z.infer<typeof envSchema>): AppConfig['email'] {
+  const transport = e.EMAIL_TRANSPORT ?? (e.NODE_ENV === 'production' ? undefined : 'file');
+  if (!transport) throw new Error('EMAIL_TRANSPORT must be set in production (smtp, or disabled)');
+  const requireTls = e.SMTP_REQUIRE_TLS === 'true';
+  if (e.NODE_ENV === 'production' && !requireTls)
+    throw new Error('SMTP_REQUIRE_TLS=false is not allowed in production');
+  if (transport === 'smtp' && (!e.SMTP_HOST || !e.EMAIL_FROM))
+    throw new Error('EMAIL_TRANSPORT=smtp needs SMTP_HOST and EMAIL_FROM');
+  return {
+    transport,
+    fileDir: e.EMAIL_FILE_DIR,
+    from: e.EMAIL_FROM ?? 'Aerolith Core <no-reply@localhost>',
+    replyTo: e.EMAIL_REPLY_TO ?? null,
+    supportEmail: e.SUPPORT_EMAIL ?? null,
+    maxPerHour: e.EMAIL_MAX_PER_HOUR,
+    worker:
+      transport !== 'disabled' &&
+      (e.EMAIL_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
+    smtp:
+      transport === 'smtp'
+        ? {
+            host: e.SMTP_HOST!,
+            port: e.SMTP_PORT,
+            secure: e.SMTP_SECURE === 'true',
+            user: e.SMTP_USER,
+            password: e.SMTP_PASSWORD,
+            requireTls,
+          }
+        : null,
   };
 }

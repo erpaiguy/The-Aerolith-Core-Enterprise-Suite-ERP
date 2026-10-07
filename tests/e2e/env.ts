@@ -6,7 +6,9 @@ export const CONTROL_URL = (() => {
   u.pathname = '/aerolith_e2e';
   return u.toString();
 })();
-// Fixed test-only key so the test can open sealed links from the email outbox. Never used outside e2e.
+// Fixed test-only encryption key for the e2e API. Never used outside e2e.
 export const ENC_KEY = Buffer.alloc(32, 7).toString('base64');
 export const WEB_PORT = 4173;
 export const API_PORT = 3100;
+// The API writes real .eml files here (EMAIL_TRANSPORT=file); the test reads them like an inbox.
+export const MAIL_DIR = new URL('./.mail/', import.meta.url).pathname;

@@ -1,6 +1,6 @@
 // The first-run journey of a new tenant, in a real browser against the real API and databases.
 import { expect, test } from '@playwright/test';
-import { createTenant, emailedLink, timeStep, totp } from './helpers.js';
+import { createTenant, licenceKeyIn, linkIn, timeStep, totp, waitForEmail } from './helpers.js';
 
 const ADMIN = 'admin@sharma-builders.in';
 const ADMIN_PASSWORD = 'Monsoon-Slab-Pour-7';
@@ -9,7 +9,9 @@ const shot = (name: string) => ({ path: `screenshots/${name}.png`, fullPage: tru
 test('admin activates, secures the account, adds a worker; the worker sets a password and adds a reminder', async ({
   page,
 }) => {
-  const { licenceKey } = await createTenant(ADMIN);
+  await createTenant(ADMIN);
+  // The licence key arrives by email, sent by the email worker.
+  const licenceKey = licenceKeyIn(await waitForEmail(ADMIN, 'Your Aerolith Core licence key'));
 
   // 1. First launch: the device needs the licence key. A typo is caught before the server is asked.
   await page.goto('/');
@@ -25,7 +27,9 @@ test('admin activates, secures the account, adds a worker; the worker sets a pas
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 
   // 2. The admin sets a password from the emailed setup link.
-  const setupLink = new URL(await emailedLink('admin_password_setup', ADMIN));
+  const setupLink = new URL(
+    linkIn(await waitForEmail(ADMIN, 'Set your Aerolith Core admin password')),
+  );
   await page.goto(`${setupLink.pathname}${setupLink.search}`);
   await page.getByLabel('New password', { exact: true }).fill('short');
   await page.getByLabel('Repeat new password').fill('short');

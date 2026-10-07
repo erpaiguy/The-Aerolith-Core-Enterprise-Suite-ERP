@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { createDecipheriv, createHmac } from 'node:crypto';
-import postgres from 'postgres';
-import { API_PORT, CONTROL_URL, ENC_KEY } from '../env.js';
+import { createHmac } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { simpleParser } from 'mailparser';
+import { API_PORT, CONTROL_URL, MAIL_DIR } from '../env.js';
 
 const API = `http://127.0.0.1:${API_PORT}/api`;
 
@@ -30,30 +32,43 @@ export function totp(secret: string, step: number): string {
   return String((mac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
 }
 
-// --- sealed values in the control plane (AES-256-GCM, see apps/api/src/crypto/secretbox.ts) ---
-function unseal(sealed: string): string {
-  const [, iv, tag, ct] = sealed.split('.');
-  const d = createDecipheriv(
-    'aes-256-gcm',
-    Buffer.from(ENC_KEY, 'base64'),
-    Buffer.from(iv!, 'base64url'),
-  );
-  d.setAuthTag(Buffer.from(tag!, 'base64url'));
-  return Buffer.concat([d.update(Buffer.from(ct!, 'base64url')), d.final()]).toString('utf8');
+// --- the inbox: the API writes every email as a .eml file (EMAIL_TRANSPORT=file) ---
+export interface Email {
+  subject: string;
+  text: string;
 }
 
-/** The newest emailed link of a template for an address (stands in for reading the inbox). */
-export async function emailedLink(template: string, to: string): Promise<string> {
-  const sql = postgres(CONTROL_URL, { max: 1 });
-  try {
-    const [row] = await sql<{ data: { link: string } }[]>`
-      SELECT data FROM core.email_outbox WHERE template = ${template} AND lower(to_email) = lower(${to})
-      ORDER BY created_at DESC LIMIT 1`;
-    return unseal(row!.data.link);
-  } finally {
-    await sql.end();
+/** Waits for the email worker (10 s poll) to deliver a message with this subject to this address. */
+export async function waitForEmail(
+  to: string,
+  subject: string,
+  timeoutMs = 40_000,
+): Promise<Email> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(MAIL_DIR)) {
+      for (const file of readdirSync(MAIL_DIR).sort().reverse()) {
+        if (!file.endsWith(`-${to.toLowerCase()}.eml`)) continue;
+        const mail = await simpleParser(readFileSync(join(MAIL_DIR, file)));
+        if (mail.subject === subject) return { subject, text: mail.text ?? '' };
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
   }
+  throw new Error(`no email "${subject}" to ${to} within ${timeoutMs} ms`);
 }
+
+export const linkIn = (email: Email): string => {
+  const m = /https?:\/\/\S+token=[\w-]+/.exec(email.text);
+  if (!m) throw new Error(`no link in "${email.subject}"`);
+  return m[0];
+};
+
+export const licenceKeyIn = (email: Email): string => {
+  const m = /AERO(?:-[0-9A-Z]{5}){4}/.exec(email.text);
+  if (!m) throw new Error('no licence key in the email');
+  return m[0];
+};
 
 async function call<T>(path: string, body?: unknown, token?: string): Promise<T> {
   const res = await fetch(`${API}${path}`, {

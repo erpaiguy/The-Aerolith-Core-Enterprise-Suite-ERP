@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { ADMIN_URL, API_PORT, CONTROL_URL, ENC_KEY, WEB_PORT } from './env.js';
+import { ADMIN_URL, API_PORT, CONTROL_URL, ENC_KEY, MAIL_DIR, WEB_PORT } from './env.js';
 
 const api = `../../apps/api/dist`;
 const apiEnv = [
@@ -11,6 +11,9 @@ const apiEnv = [
   `PUBLIC_API_URL=http://127.0.0.1:${WEB_PORT}`,
   `WEBSITE_URL=http://127.0.0.1:${WEB_PORT}`,
   'RATE_LIMIT_SCALE=10',
+  'EMAIL_TRANSPORT=file',
+  `EMAIL_FILE_DIR=${MAIL_DIR}`,
+  `EMAIL_FROM='Aerolith Core <no-reply@aerolith.test>'`,
 ].join(' ');
 
 export default defineConfig({

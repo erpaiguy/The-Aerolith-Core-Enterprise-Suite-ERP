@@ -73,4 +73,5 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 4 | Tenant onboarding: Supabase OAuth connect, provisioning, migration orchestrator | **Done** ([details](tenant-provisioning.md)). Supabase calls unverified until the owner registers the OAuth app |
 | 5 | Auth: login, mandatory admin MFA, staff reset requests, roles | **Done** ([details](authentication.md)). Interim owner token removed |
 | 6 | Electron + browser shells; notifications/reminders/pending inbox | **Done** ([details](app-shells.md)). Browser journey covered end to end; Windows installer built in CI (unsigned) |
-| 7 | Docker Compose stack for the owner PC with tunnel | Next (recommended first: the email worker, see app-shells.md) |
+| 6b | Email worker: SMTP delivery, retries, suppression, owner controls | **Done** ([details](email.md)). Check your GoDaddy mailbox type before December 2026 |
+| 7 | Docker Compose stack for the owner PC with tunnel | Next |

@@ -12,7 +12,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^22.20.0",
+    "mailparser": "^3.9.36",
     "postgres": "^3.4.9"
   }
 }

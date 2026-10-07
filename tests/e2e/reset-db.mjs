@@ -1,5 +1,8 @@
 // Recreates the e2e control database and removes tenant databases/roles left by earlier runs.
+import { rmSync } from 'node:fs';
 import postgres from 'postgres';
+
+rmSync(new URL('./.mail/', import.meta.url), { recursive: true, force: true });
 
 const adminUrl = process.env.E2E_PG_ADMIN_URL ?? 'postgres://bench:bench@127.0.0.1:5432/postgres';
 const sql = postgres(adminUrl, { max: 1, onnotice: () => {} });

@@ -50,7 +50,7 @@ pnpm build
 pnpm --filter @aerolith/api start            # API on :3000 (uses apps/api/.env)
 pnpm --filter @aerolith/web dev              # browser UI on :5173, proxies /api
 pnpm --filter @aerolith/desktop start        # desktop app pointing at http://127.0.0.1:3000 (dev only)
-pnpm --filter @aerolith/api dev:outbox       # see emailed links (set-password, reset) until email sending exists
+# emails: with EMAIL_TRANSPORT=file they are written as .eml files to apps/api/.mail-outbox (open them in any mail app)
 ```
 
 The desktop app reads its API address from `apps/desktop/resources/app-config.json` (see the `.example` file); set
@@ -69,5 +69,5 @@ The desktop app reads its API address from `apps/desktop/resources/app-config.js
 
 ## Not yet built
 
-Auto-update, code signing, the installer's icon and branding, email sending, a dedicated owner-console UI, offline
+Auto-update, code signing, the installer's icon and branding, a dedicated owner-console UI, offline
 use (out of scope for v1), and the Wave 1 modules.
