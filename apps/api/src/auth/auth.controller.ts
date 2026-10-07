@@ -91,7 +91,7 @@ export class AuthController {
     const result = await this.auth.login(body);
     if (result.status !== 'ok' || body.client !== 'browser') return result;
     reply.header('set-cookie', refreshCookie(result.refreshToken, this.config.secureCookies));
-    const { refreshToken: _omitted, ...rest } = result;
+    const { refreshToken: _refreshToken, ...rest } = result;
     return rest;
   }
 
@@ -111,7 +111,7 @@ export class AuthController {
       throw new BadRequestException({ code: 'refresh_token_missing' });
     const result = await this.auth.refresh(fromCookie);
     reply.header('set-cookie', refreshCookie(result.refreshToken, this.config.secureCookies));
-    const { refreshToken: _omitted, ...rest } = result;
+    const { refreshToken: _refreshToken, ...rest } = result;
     return rest;
   }
 
