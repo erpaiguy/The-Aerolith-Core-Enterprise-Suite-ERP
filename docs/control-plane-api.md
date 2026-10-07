@@ -13,8 +13,9 @@ Implemented in `apps/api` (NestJS). Schema: `apps/api/migrations/control-plane/0
 
 ## Owner routes (`/owner/...`)
 
-**Interim auth:** `Authorization: Bearer <OWNER_API_TOKEN>`. Replaced by owner login with mandatory MFA in step 5.
-Until then, never expose these routes publicly: bind the API to localhost or the tunnel only.
+**Auth:** `Authorization: Bearer <operator access token>` from `/owner/auth/login` (email + password + mandatory TOTP,
+see [authentication.md](authentication.md)). `owner` operators can change things; `support` and `read_only` can read.
+The interim owner API token from step 3 has been removed.
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -45,14 +46,14 @@ Until then, never expose these routes publicly: bind the API to localhost or the
 
 ## Not yet built (later steps)
 
-Email sending (the outbox is filled; a worker sends it via the EmailAdapter), owner login with MFA (step 5),
-rate limiting on public routes (step 5), paid tiers and payment webhooks (Phase 7 work, demo mode).
+Email sending (the outbox is filled; a worker sends it via the EmailAdapter), paid tiers and payment webhooks (Phase 7 work, demo mode).
 
 ## Running it
 
 ```sh
 pnpm --filter @aerolith/api build
 pnpm --filter @aerolith/api secrets:generate      # once; store output in apps/api/.env (never commit)
+pnpm --filter @aerolith/api operator:create -- --email you@domain --name "You"   # first owner-console account
 CONTROL_DATABASE_URL=... pnpm --filter @aerolith/api migrate:control
 pnpm --filter @aerolith/api start
 ```

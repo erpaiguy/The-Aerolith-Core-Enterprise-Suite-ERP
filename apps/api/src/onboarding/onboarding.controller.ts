@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Inject, Post, Query, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { RateLimit } from '../auth/rate-limit.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { OnboardingService } from './onboarding.service.js';
@@ -18,6 +19,7 @@ const chooseOrgBody = z.object({
 
 /** Browser-facing onboarding routes. Results are shown by the website, so redirects never carry secrets. */
 @Controller('onboarding')
+@RateLimit(30)
 export class OnboardingController {
   constructor(
     private readonly onboarding: OnboardingService,

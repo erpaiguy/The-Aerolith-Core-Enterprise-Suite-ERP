@@ -9,7 +9,7 @@ const envSchema = z.object({
     .string()
     .url()
     .default('postgres://bench:bench@127.0.0.1:5432/aerolith_control'),
-  OWNER_API_TOKEN: z.string().min(32).optional(),
+  SESSION_SIGNING_KEY: z.string().min(32).optional(),
   LICENCE_KEY_PEPPER: z.string().min(32).optional(),
   CONTROL_PLANE_ENC_KEY: z.string().optional(),
   ENTITLEMENT_PRIVATE_KEY_PEM: z.string().optional(),
@@ -27,12 +27,15 @@ const envSchema = z.object({
   TENANT_DB_REGION: z.string().default('ap-south-1'),
   PROVISIONING_WORKER: z.enum(['on', 'off']).optional(),
   MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
+  RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
+  TRUST_PROXY: z.enum(['true', 'false']).default('false'),
 });
 
 export interface AppConfig {
   env: 'development' | 'test' | 'production';
   controlDatabaseUrl: string;
-  ownerApiToken: string;
+  /** Signs access tokens and keys refresh-token HMACs. */
+  sessionKey: Buffer;
   licenceKeyPepper: Buffer;
   controlPlaneEncKey: Buffer;
   entitlementPrivateKey: KeyObject;
@@ -49,6 +52,10 @@ export interface AppConfig {
   tenantDbRegion: string;
   provisioningWorker: boolean;
   maxTenantPools: number;
+  /** Multiplies every rate limit (tests raise it). */
+  rateLimitScale: number;
+  /** Trust X-Forwarded-For (only behind a proxy/tunnel that sets it). */
+  trustProxy: boolean;
   /** Secrets generated for this process only (development/test). Never true in production. */
   ephemeralSecrets: string[];
 }
@@ -86,8 +93,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     env: e.NODE_ENV,
     controlDatabaseUrl: e.CONTROL_DATABASE_URL,
-    ownerApiToken: required('OWNER_API_TOKEN', e.OWNER_API_TOKEN, () =>
-      randomBytes(32).toString('base64url'),
+    sessionKey: Buffer.from(
+      required('SESSION_SIGNING_KEY', e.SESSION_SIGNING_KEY, () =>
+        randomBytes(32).toString('base64url'),
+      ),
     ),
     licenceKeyPepper: Buffer.from(
       required('LICENCE_KEY_PEPPER', e.LICENCE_KEY_PEPPER, () =>
@@ -116,6 +125,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     tenantDbRegion: e.TENANT_DB_REGION,
     provisioningWorker: (e.PROVISIONING_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
     maxTenantPools: e.MAX_TENANT_POOLS,
+    rateLimitScale: e.RATE_LIMIT_SCALE,
+    trustProxy: e.TRUST_PROXY === 'true',
     ephemeralSecrets: ephemeral,
   };
 }

@@ -14,9 +14,11 @@ import { LicensingService } from '../licensing/licensing.service.js';
 import { OnboardingService } from '../onboarding/onboarding.service.js';
 import { MigrationOrchestrator } from '../provisioning/orchestrator.js';
 import { ProvisioningService } from '../provisioning/provisioning.service.js';
-import { OwnerGuard } from './owner.guard.js';
+import { Auth, OperatorGuard } from '../auth/guards.js';
+import type { AccessClaims } from '../auth/tokens.js';
 
-const ACTOR = 'owner';
+type OperatorClaims = Extract<AccessClaims, { kind: 'operator' }>;
+const actor = (op: OperatorClaims) => `operator:${op.sub}`;
 
 const createTrialSchema = z.object({
   email: z.string().email().max(254),
@@ -34,7 +36,7 @@ const rolloutSchema = z.object({
 });
 
 @Controller('owner')
-@UseGuards(OwnerGuard)
+@UseGuards(OperatorGuard)
 export class OwnerController {
   constructor(
     private readonly licensing: LicensingService,
@@ -69,8 +71,11 @@ export class OwnerController {
   }
 
   @Post('tenants')
-  createTrial(@Body(new ZodPipe(createTrialSchema)) body: z.infer<typeof createTrialSchema>) {
-    return this.licensing.createTenantWithTrial(body.email, body.tenantName, ACTOR);
+  createTrial(
+    @Auth() op: OperatorClaims,
+    @Body(new ZodPipe(createTrialSchema)) body: z.infer<typeof createTrialSchema>,
+  ) {
+    return this.licensing.createTenantWithTrial(body.email, body.tenantName, actor(op));
   }
 
   @Get('licences/:id')
@@ -81,33 +86,36 @@ export class OwnerController {
   @Post('licences/:id/trial-end')
   @HttpCode(200)
   changeTrialEnd(
+    @Auth() op: OperatorClaims,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(trialChangeSchema)) body: z.infer<typeof trialChangeSchema>,
   ) {
-    return this.licensing.changeTrialEnd(id, body.newEndsAt, body.reason, ACTOR);
+    return this.licensing.changeTrialEnd(id, body.newEndsAt, body.reason, actor(op));
   }
 
   @Post('licences/:id/revoke')
   @HttpCode(200)
   revoke(
+    @Auth() op: OperatorClaims,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
   ) {
-    return this.licensing.revokeLicence(id, body.reason, ACTOR);
+    return this.licensing.revokeLicence(id, body.reason, actor(op));
   }
 
   @Post('licences/:id/devices/:deviceId/revoke')
   @HttpCode(200)
   revokeDevice(
+    @Auth() op: OperatorClaims,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('deviceId', ParseUUIDPipe) deviceId: string,
   ) {
-    return this.licensing.revokeDevice(id, deviceId, ACTOR);
+    return this.licensing.revokeDevice(id, deviceId, actor(op));
   }
 
   @Post('licences/:id/reveal-key')
   @HttpCode(200)
-  async revealKey(@Param('id', ParseUUIDPipe) id: string) {
-    return { licenceKey: await this.licensing.revealKey(id, ACTOR) };
+  async revealKey(@Auth() op: OperatorClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return { licenceKey: await this.licensing.revealKey(id, actor(op)) };
   }
 }

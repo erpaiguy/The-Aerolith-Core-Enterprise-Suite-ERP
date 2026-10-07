@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { RateLimit } from '../auth/rate-limit.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { LicensingService } from './licensing.service.js';
 
@@ -34,30 +35,34 @@ const bearer = (header: string | undefined): string => {
   return token;
 };
 
-/** Endpoints the desktop/browser app and the website call. Rate limiting is added with auth in step 5. */
+/** Endpoints the desktop/browser app and the website call. */
 @Controller()
 export class LicensingController {
   constructor(private readonly licensing: LicensingService) {}
 
   @Post('licences/activate')
   @HttpCode(200)
+  @RateLimit(20)
   activate(@Body(new ZodPipe(activateSchema)) body: z.infer<typeof activateSchema>) {
     return this.licensing.activate(body.key, body.deviceId, body.platform, body.label);
   }
 
   @Post('licences/refresh')
   @HttpCode(200)
+  @RateLimit(60)
   refresh(@Body(new ZodPipe(refreshSchema)) body: z.infer<typeof refreshSchema>) {
     return this.licensing.refresh(body.token);
   }
 
   @Get('licences/notices')
+  @RateLimit(60)
   notices(@Headers('authorization') authorization: string | undefined) {
     return this.licensing.noticesFor(bearer(authorization));
   }
 
   @Post('downloads')
   @HttpCode(204)
+  @RateLimit(10)
   async download(
     @Body(new ZodPipe(downloadSchema)) body: z.infer<typeof downloadSchema>,
   ): Promise<void> {

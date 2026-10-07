@@ -7,7 +7,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHash, type KeyObject } from 'node:crypto';
+import { createHash, createHmac, randomBytes, type KeyObject } from 'node:crypto';
 import type { Sql, TransactionSql } from 'postgres';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { open, seal } from '../crypto/secretbox.js';
@@ -29,7 +29,9 @@ import {
   featuresUnlocked,
   licenceState,
   validateTrialChange,
+  type LicenceState,
   type LicenceStatus,
+  type Role,
 } from './licence-rules.js';
 
 interface LicenceRow {
@@ -57,6 +59,17 @@ export interface ActivationResult {
   token: string;
   entitlement: Entitlement;
   featuresUnlocked: boolean;
+}
+
+export const tokenHmac = (token: string, pepper: Buffer): string =>
+  createHmac('sha256', pepper).update(token).digest('hex');
+
+export interface TenantLicence {
+  licenceId: string;
+  tierId: string;
+  seatCap: number;
+  roleCaps: Partial<Record<Role, number>> | null;
+  state: LicenceState;
 }
 
 const hashDevice = (deviceId: string): string =>
@@ -118,6 +131,16 @@ export class LicensingService {
       // The email worker decrypts the key at send time; the plaintext key is never stored in the outbox.
       await tx`INSERT INTO core.email_outbox (to_email, template, data)
         VALUES (${email}, 'licence_key', ${tx.json({ licenceId: licence!.id, tenantName, endsAt: endsAt.toISOString() })})`;
+      // Link for the tenant admin to set their password (docs/03-architecture.md §6). 7 days, single use.
+      const setupToken = randomBytes(32).toString('base64url');
+      const setupUrl = new URL('/account/set-password', this.config.websiteUrl);
+      setupUrl.searchParams.set('token', setupToken);
+      await tx`INSERT INTO core.owner_password_token (owner_account_id, purpose, token_hmac, expires_at)
+        SELECT ${owner!.id}, 'setup', ${tokenHmac(setupToken, this.config.licenceKeyPepper)}, ${addDays(now, 7)}
+        WHERE NOT EXISTS (SELECT 1 FROM core.owner_account WHERE id = ${owner!.id} AND password_hash IS NOT NULL)`;
+      await tx`INSERT INTO core.email_outbox (to_email, template, data)
+        SELECT ${email}, 'admin_password_setup', ${tx.json({ link: seal(setupUrl.toString(), this.config.controlPlaneEncKey) })}
+        WHERE NOT EXISTS (SELECT 1 FROM core.owner_account WHERE id = ${owner!.id} AND password_hash IS NOT NULL)`;
       await this.audit(
         tx,
         'tenant.create_trial',
@@ -202,6 +225,40 @@ export class LicensingService {
   }
 
   /** In-app notices for the tenant behind a valid (even expired) entitlement token. */
+  /** Tenant and licence behind a device's entitlement token. Expired tokens are accepted; callers re-check state. */
+  deviceTenant(
+    token: string,
+    now = new Date(),
+  ): { tenantId: string; licenceId: string; deviceHash: string } {
+    const verified = verifyEntitlement(token, this.publicKey, Math.floor(now.getTime() / 1000));
+    if (!verified.ok) throw new UnauthorizedException({ code: 'invalid_entitlement' });
+    return {
+      tenantId: verified.payload.ten,
+      licenceId: verified.payload.lic,
+      deviceHash: verified.payload.dev,
+    };
+  }
+
+  /** The tenant's current licence with its tier rules and state (latest licence wins). */
+  async tenantLicence(tenantId: string, now = new Date()): Promise<TenantLicence> {
+    const [row] = await this.sql<
+      (LicenceRow & { role_caps: Partial<Record<Role, number>> | null })[]
+    >`
+      SELECT l.*, t.role_caps FROM core.licence l JOIN core.tier t ON t.id = l.tier_id
+      WHERE l.tenant_id = ${tenantId} ORDER BY l.created_at DESC LIMIT 1`;
+    if (!row) throw new NotFoundException({ code: 'licence_not_found' });
+    return {
+      licenceId: row.id,
+      tierId: row.tier_id,
+      seatCap: row.seat_cap,
+      roleCaps: row.role_caps,
+      state: licenceState(
+        { status: row.status, endsAt: row.ends_at, graceDays: row.grace_days },
+        now,
+      ),
+    };
+  }
+
   async noticesFor(token: string, now = new Date()) {
     const verified = verifyEntitlement(token, this.publicKey, Math.floor(now.getTime() / 1000));
     if (!verified.ok) throw new UnauthorizedException({ code: 'invalid_token' });

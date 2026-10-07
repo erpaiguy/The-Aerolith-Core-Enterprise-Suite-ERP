@@ -1,19 +1,19 @@
 // End-to-end control plane tests against a real Postgres. Needs TEST_CONTROL_DATABASE_URL pointing at a throwaway
 // database (the test drops and recreates the `core` schema). CI provides one; locally the suite is skipped without it.
 import 'reflect-metadata';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import postgres, { type Sql } from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { migrate } from '../src/db/migrate.js';
+import { signInOperator } from './helpers/operator.js';
 
 const url = process.env.TEST_CONTROL_DATABASE_URL;
 if (process.env.CI && !url) throw new Error('TEST_CONTROL_DATABASE_URL is required in CI');
 
-const OWNER = randomBytes(32).toString('base64url');
-const owner = { authorization: `Bearer ${OWNER}` };
+let owner: Record<string, string> = {};
 const DAY = 86_400_000;
 
 describe.skipIf(!url)('control plane (integration)', () => {
@@ -35,13 +35,14 @@ describe.skipIf(!url)('control plane (integration)', () => {
     await sql`DROP SCHEMA IF EXISTS core CASCADE`;
     await sql`DROP SCHEMA IF EXISTS aerolith_meta CASCADE`;
     process.env.CONTROL_DATABASE_URL = url;
-    process.env.OWNER_API_TOKEN = OWNER;
+    process.env.RATE_LIMIT_SCALE = '100';
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     app.setGlobalPrefix('api');
     await migrate(sql);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    owner = (await signInOperator(app)).headers;
   });
 
   afterAll(async () => {
@@ -52,7 +53,7 @@ describe.skipIf(!url)('control plane (integration)', () => {
   it('migrations are idempotent and reject edited files', async () => {
     expect(await migrate(sql)).toEqual({
       applied: [],
-      skipped: ['0001_core.sql', '0002_tenant_db.sql'],
+      skipped: ['0001_core.sql', '0002_tenant_db.sql', '0003_auth.sql'],
     });
     await sql`UPDATE aerolith_meta.schema_migration SET checksum = 'x' WHERE name = '0001_core.sql'`;
     await expect(migrate(sql)).rejects.toThrow(/changed after it was applied/);
@@ -61,7 +62,7 @@ describe.skipIf(!url)('control plane (integration)', () => {
     await migrate(sql);
   });
 
-  it('owner routes require the owner token', async () => {
+  it('owner routes require an operator sign-in', async () => {
     expect((await post('/owner/tenants', { email: 'a@b.in', tenantName: 'X Co' })).statusCode).toBe(
       401,
     );
@@ -88,9 +89,8 @@ describe.skipIf(!url)('control plane (integration)', () => {
     expect(licence).toMatchObject({ seat_cap: 3, max_devices: 6, kind: 'trial', status: 'active' });
     expect(JSON.stringify(licence)).not.toContain(trial.licenceKey.slice(5)); // only HMAC + ciphertext stored
 
-    const outbox = await sql`SELECT template, data FROM core.email_outbox`;
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toMatchObject({ template: 'licence_key' });
+    const outbox = await sql`SELECT template, data FROM core.email_outbox ORDER BY created_at`;
+    expect(outbox.map((e) => e.template).sort()).toEqual(['admin_password_setup', 'licence_key']);
     expect(JSON.stringify(outbox)).not.toContain(trial.licenceKey.slice(5));
 
     const reveal = await post(`/owner/licences/${trial.licenceId}/reveal-key`, {}, owner);

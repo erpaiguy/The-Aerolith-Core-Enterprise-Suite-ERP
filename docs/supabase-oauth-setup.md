@@ -19,8 +19,8 @@ Supabase changes its dashboard often. If a label differs from what is written he
 | A5 | The API built and its secrets generated: `pnpm --filter @aerolith/api build` then `pnpm --filter @aerolith/api secrets:generate` | The `.env` file in Part C needs them |
 
 **Protect the owner routes before you open the tunnel.** The tunnel makes the whole API public, including `/api/owner/*`,
-which is guarded only by the interim owner token until step 5. Add a Cloudflare rule (free plan) that **blocks
-`/api/owner/*` from the internet**, and call those routes only from your PC via `http://127.0.0.1:3000`.
+which require an operator sign-in with mandatory MFA. Still, block `/api/owner/*` from the internet at whatever
+tunnel or proxy you use, and call those routes only from your PC via `http://127.0.0.1:3000`.
 
 ---
 
@@ -63,7 +63,7 @@ The API reads `apps/api/.env` on start (`pnpm --filter @aerolith/api start`). On
 separate Windows user / WSL environment that runs the server (docs/10-deployment.md §10.1).
 
 1. Create `apps/api/.env` from `apps/api/.env.example`.
-2. Paste the four secrets printed by `secrets:generate` (`OWNER_API_TOKEN`, `LICENCE_KEY_PEPPER`,
+2. Paste the four secrets printed by `secrets:generate` (`SESSION_SIGNING_KEY`, `LICENCE_KEY_PEPPER`,
    `CONTROL_PLANE_ENC_KEY`, `ENTITLEMENT_PRIVATE_KEY_PEM`).
 3. Set these values:
 
@@ -97,8 +97,9 @@ separate Windows user / WSL environment that runs the server (docs/10-deployment
 
 ## Part D. Verify end to end with the test tenant account
 
-Run the `curl` commands **on your PC** against `127.0.0.1` (the owner routes are blocked publicly). Replace
-`$OWNER` with your `OWNER_API_TOKEN`.
+Run the `curl` commands **on your PC** against `127.0.0.1` (the owner routes are blocked publicly). First sign in to the
+owner console (`POST /api/owner/auth/login` with email, password and authenticator code, see
+[authentication.md](authentication.md)) and set `$OWNER` to the `accessToken` it returns (valid 15 minutes).
 
 1. **Create a trial tenant** using the second account's email:
 
@@ -141,7 +142,7 @@ Run the `curl` commands **on your PC** against `127.0.0.1` (the owner routes are
    ```sh
    curl -s http://127.0.0.1:3000/api/owner/tenants/<tenantId>/database -H "Authorization: Bearer $OWNER"
    ```
-   Expected: `"status":"ready"`, `"schemaVersion":"0001_platform.sql"`, `"lastError":null`.
+   Expected: `"status":"ready"`, `"schemaVersion"` = the newest file in `apps/api/migrations/tenant/`, `"lastError":null`.
 
 8. In the **test** account's Supabase dashboard you should see a new project named `aerolith-t…` in **South Asia (Mumbai)**,
    with a `platform` schema containing `entity`, `user`, and so on.

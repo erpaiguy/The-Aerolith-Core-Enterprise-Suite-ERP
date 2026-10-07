@@ -15,15 +15,15 @@ import { AppModule } from '../src/app.module.js';
 import { open, seal } from '../src/crypto/secretbox.js';
 import { migrate, TENANT_MIGRATIONS } from '../src/db/migrate.js';
 import { ProvisioningService } from '../src/provisioning/provisioning.service.js';
+import { signInOperator } from './helpers/operator.js';
 
 const controlUrl = process.env.TEST_CONTROL_DATABASE_URL;
 const adminUrl = process.env.TEST_LOCAL_PG_ADMIN_URL;
 if (process.env.CI && (!controlUrl || !adminUrl))
   throw new Error('TEST_CONTROL_DATABASE_URL and TEST_LOCAL_PG_ADMIN_URL are required in CI');
 
-const OWNER = randomBytes(32).toString('base64url');
 const ENC = randomBytes(32);
-const owner = { authorization: `Bearer ${OWNER}` };
+let owner: Record<string, string> = {};
 
 describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', () => {
   let app: NestFastifyApplication;
@@ -111,7 +111,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
 
     Object.assign(process.env, {
       CONTROL_DATABASE_URL: controlUrl,
-      OWNER_API_TOKEN: OWNER,
+      RATE_LIMIT_SCALE: '100',
       CONTROL_PLANE_ENC_KEY: ENC.toString('base64'),
       LOCAL_PG_ADMIN_URL: adminUrl,
       SUPABASE_API_URL: fakeUrl,
@@ -125,6 +125,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     app.setGlobalPrefix('api');
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    owner = (await signInOperator(app)).headers;
   });
 
   afterAll(async () => {
@@ -152,7 +153,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     const settled = await provisioning().runUntilSettled(tenantA);
     expect(settled).toMatchObject({
       status: 'ready',
-      schemaVersion: '0001_platform.sql',
+      schemaVersion: '0002_sessions.sql',
       lastError: null,
     });
     expect((await get(`/owner/tenants/${tenantA}/database`, owner)).json()).toMatchObject({
@@ -207,7 +208,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
   it('rolls out new migrations to every tenant and pauses on failures', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aerolith-mig-'));
     cpSync(TENANT_MIGRATIONS, dir, { recursive: true });
-    writeFileSync(join(dir, '0002_probe.sql'), 'CREATE TABLE platform.probe (id int PRIMARY KEY);');
+    writeFileSync(join(dir, '0090_probe.sql'), 'CREATE TABLE platform.probe (id int PRIMARY KEY);');
 
     const first = (
       await post('/owner/migrations/rollout', { concurrency: 2, failureThreshold: 1 })
@@ -219,14 +220,14 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     const run = await app.get(orchestrator).rollout({ dir, concurrency: 2, failureThreshold: 1 });
     expect(run).toMatchObject({
       status: 'completed',
-      targetVersion: '0002_probe.sql',
+      targetVersion: '0090_probe.sql',
       counts: { applied: 2 },
     });
     const appB = connect(open((await secrets(tenantB)).app_url_secret, ENC));
     expect(await appB`SELECT count(*)::int AS n FROM platform.probe`).toEqual([{ n: 0 }]); // default privileges apply
 
     // Break tenant A's migrator credentials; with threshold 1 and concurrency 1, B must not be attempted.
-    writeFileSync(join(dir, '0003_probe2.sql'), 'CREATE TABLE platform.probe2 (id int);');
+    writeFileSync(join(dir, '0091_probe2.sql'), 'CREATE TABLE platform.probe2 (id int);');
     const bad = new URL(open((await secrets(tenantA)).migrator_url_secret, ENC));
     bad.password = 'wrong-password';
     await control`UPDATE core.tenant_db SET migrator_url_secret = ${seal(bad.toString(), ENC)} WHERE tenant_id = ${tenantA}`;

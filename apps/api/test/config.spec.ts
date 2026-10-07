@@ -9,7 +9,7 @@ describe('loadConfig', () => {
     const config = loadConfig({ NODE_ENV: 'development' });
     expect(config.ephemeralSecrets).toEqual(
       expect.arrayContaining([
-        'OWNER_API_TOKEN',
+        'SESSION_SIGNING_KEY',
         'LICENCE_KEY_PEPPER',
         'CONTROL_PLANE_ENC_KEY',
         'ENTITLEMENT_PRIVATE_KEY_PEM',

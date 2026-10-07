@@ -4,7 +4,7 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const pem = (k: string) => k.trim().replace(/\n/g, '\\n');
 const lines = [
-  `OWNER_API_TOKEN=${randomBytes(32).toString('base64url')}`,
+  `SESSION_SIGNING_KEY=${randomBytes(32).toString('base64url')}`,
   `LICENCE_KEY_PEPPER=${randomBytes(32).toString('base64url')}`,
   `CONTROL_PLANE_ENC_KEY=${randomBytes(32).toString('base64')}`,
   `ENTITLEMENT_PRIVATE_KEY_PEM="${pem(privateKey.export({ type: 'pkcs8', format: 'pem' }).toString())}"`,
