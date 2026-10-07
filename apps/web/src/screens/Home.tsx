@@ -99,6 +99,10 @@ function ReminderForm() {
   );
 }
 
+/** "Suresh Patil" → "Suresh"; an admin whose name is still their email → the part before the @. */
+const firstName = (name: string): string =>
+  name.includes('@') ? name.split('@')[0]! : name.split(' ')[0]!;
+
 export function HomeScreen() {
   const session = useSession();
   const qc = useQueryClient();
@@ -131,7 +135,7 @@ export function HomeScreen() {
       <div className="space-y-5">
         <h1 className="text-xl font-semibold">
           Good {new Date().getHours() < 12 ? 'morning' : 'day'},{' '}
-          {session.user?.displayName.split(' ')[0]}
+          {firstName(session.user?.displayName ?? '')}
         </h1>
         {session.user?.role === 'admin' && (inbox.data?.pending.passwordResets ?? 0) > 0 && (
           <Alert tone="warning">

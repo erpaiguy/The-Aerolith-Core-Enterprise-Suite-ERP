@@ -18,7 +18,14 @@
     "BlueOak-1.0.0",
     "Python-2.0"
   ],
-  "reviewOnlyForDev": ["MPL-2.0", "LGPL-2.1", "LGPL-2.1-only", "LGPL-3.0", "LGPL-3.0-only"],
+  "reviewOnlyForDev": [
+    "MPL-2.0",
+    "LGPL-2.1",
+    "LGPL-2.1-only",
+    "LGPL-3.0",
+    "LGPL-3.0-only",
+    "WTFPL"
+  ],
   "banned": [
     "GPL-2.0",
     "GPL-2.0-only",
@@ -39,5 +46,6 @@
     "UNLICENSED"
   ],
   "$exceptionsComment": "Workspace packages are our own code. Add third-party exceptions only with a reason and a docs/dependencies.md entry.",
-  "exceptions": {}
+  "exceptions": {},
+  "$reviewComment": "WTFPL: maximally permissive and allows commercial use; accepted for build tooling only (electron-builder -> sanitize-filename -> truncate-utf8-bytes), never for shipped code, because its informal wording makes some legal reviewers uneasy."
 }

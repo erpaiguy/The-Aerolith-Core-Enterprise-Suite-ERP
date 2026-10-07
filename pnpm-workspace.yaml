@@ -2,3 +2,4 @@ packages:
   - apps/*
   - packages/*
   - tools/bench
+  - tests/e2e

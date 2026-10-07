@@ -8,3 +8,8 @@ coverage/
 !.env.example
 .DS_Store
 Thumbs.db
+
+# Playwright output
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/e2e/screenshots/

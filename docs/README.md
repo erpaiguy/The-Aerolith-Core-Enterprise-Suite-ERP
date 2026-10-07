@@ -72,5 +72,5 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 3 | Control plane: `core` schema, licence keys, trial/seat rules, owner console API | **Done** ([API](control-plane-api.md)). Owner auth is an interim token until step 5 |
 | 4 | Tenant onboarding: Supabase OAuth connect, provisioning, migration orchestrator | **Done** ([details](tenant-provisioning.md)). Supabase calls unverified until the owner registers the OAuth app |
 | 5 | Auth: login, mandatory admin MFA, staff reset requests, roles | **Done** ([details](authentication.md)). Interim owner token removed |
-| 6 | Electron + browser shells; notifications/reminders/pending inbox | Next |
-| 7 | Docker Compose stack for the owner PC with tunnel | |
+| 6 | Electron + browser shells; notifications/reminders/pending inbox | **Done** ([details](app-shells.md)). Browser journey covered end to end; Windows installer built in CI (unsigned) |
+| 7 | Docker Compose stack for the owner PC with tunnel | Next (recommended first: the email worker, see app-shells.md) |

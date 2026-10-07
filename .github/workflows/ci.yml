@@ -49,3 +49,63 @@ jobs:
         run: pnpm build
       - name: Licence gate (docs/licensing-policy.md)
         run: pnpm licenses:check
+
+  e2e:
+    # The first-run journey in a real browser against the real API and databases (docs/app-shells.md).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      E2E_PG_ADMIN_URL: postgres://ci:ci@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @aerolith/e2e exec playwright install --with-deps chromium
+      - name: Browser end-to-end
+        run: pnpm --filter @aerolith/e2e e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: tests/e2e/test-results
+          retention-days: 7
+
+  desktop-windows:
+    # Proves the Windows installer packages. Unsigned until code signing is set up (docs/10-deployment.md §10).
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @aerolith/web --filter @aerolith/shared --filter @aerolith/desktop build
+      - name: Desktop app configuration
+        shell: bash
+        run: echo '{"apiBaseUrl":"${{ vars.DESKTOP_API_BASE_URL || 'https://api.example.invalid' }}"}' > apps/desktop/resources/app-config.json
+      - name: Build Windows installer
+        run: pnpm --filter @aerolith/desktop dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-unsigned
+          path: apps/desktop/release/*.exe
+          retention-days: 7

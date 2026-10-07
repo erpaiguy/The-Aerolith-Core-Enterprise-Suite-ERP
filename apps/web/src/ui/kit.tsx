@@ -1,5 +1,12 @@
 // Small UI kit on Tailwind. Colours come from CSS variables in styles.css so light and dark themes stay in one place.
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import {
+  cloneElement,
+  useId,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react';
 
 const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
@@ -36,6 +43,10 @@ export function Button({
   );
 }
 
+/**
+ * Label + control + hint/error. The label names the control; the hint and error are linked with aria-describedby so
+ * screen readers announce them separately. `children` must be a single input-like element.
+ */
 export function Field({
   label,
   hint,
@@ -45,19 +56,32 @@ export function Field({
   label: string;
   hint?: ReactNode;
   error?: string | null;
-  children: ReactNode;
+  children: ReactElement<{ id?: string }>;
 }) {
+  const id = useId();
+  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
+  const control = cloneElement(children, {
+    id,
+    ...(describedBy ? { 'aria-describedby': describedBy } : {}),
+    ...(error ? { 'aria-invalid': true } : {}),
+  } as Record<string, unknown>);
   return (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-medium text-fg">{label}</span>
-      {children}
-      {hint && !error && <span className="block text-xs text-fg-muted">{hint}</span>}
-      {error && (
-        <span className="block text-xs text-danger" role="alert">
-          {error}
-        </span>
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="block text-sm font-medium text-fg">
+        {label}
+      </label>
+      {control}
+      {hint && !error && (
+        <p id={`${id}-hint`} className="text-xs text-fg-muted">
+          {hint}
+        </p>
       )}
-    </label>
+      {error && (
+        <p id={`${id}-error`} className="text-xs text-danger" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

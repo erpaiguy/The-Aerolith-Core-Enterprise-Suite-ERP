@@ -1,0 +1,24 @@
+# Windows-only at trial launch (docs/10-deployment.md §10). Code signing is configured in CI through
+# electron-builder's environment variables; nothing secret lives in this file.
+appId: in.aerolith.core
+productName: Aerolith Core
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: ../web/dist
+    to: web
+  - from: resources/app-config.json
+    to: app-config.json
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: AerolithCore-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+publish: null

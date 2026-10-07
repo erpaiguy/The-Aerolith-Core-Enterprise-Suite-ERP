@@ -14,6 +14,7 @@ Introduced in Phase 4 discussion; Phases 2, 3 and the stack were revised to comp
 |-------|----------|------|
 | Allowed | MIT, BSD-2/3, ISC, Apache-2.0, PostgreSQL, Zlib, 0BSD, CC0, Unlicense, OFL (fonts), CC-BY (with attribution) | Use freely, keep notices |
 | Allowed with care | MPL-2.0 (file-level copyleft), LGPL | Only unmodified, dynamically linked or as a separate process. Review each case. |
+| Build tooling only | WTFPL | Permits all use including commercial; allowed for development/build tools that never ship (currently one transitive dependency of electron-builder) |
 | **Banned** | GPL, AGPL, SSPL, BUSL, FSL, Elastic License, Commons Clause, RSAL, "source-available", non-commercial (CC-NC), proprietary freeware, "free for individuals/small companies", "free community edition with paid features" | Cannot be embedded or bundled |
 
 AGPL/GPL tools may run **only as internal ops tooling** that is never distributed to tenants and never linked into our code. The self-hosted tenant bundle contains allowed licences only.
