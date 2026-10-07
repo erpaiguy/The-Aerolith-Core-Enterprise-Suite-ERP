@@ -32,6 +32,9 @@ importers:
       '@aerolith/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@fastify/cors':
+        specifier: ^11.3.0
+        version: 11.3.0
       '@nestjs/common':
         specifier: ^12.1.0
         version: 12.1.2(reflect-metadata@0.2.2)(rxjs@7.8.2)

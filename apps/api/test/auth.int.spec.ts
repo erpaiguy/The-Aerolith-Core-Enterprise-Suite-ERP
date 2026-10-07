@@ -7,6 +7,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import postgres, { type Sql } from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
+import { configureApp } from '../src/bootstrap.js';
 import { timeStep, totpCode } from '../src/auth/totp.js';
 import { open } from '../src/crypto/secretbox.js';
 import { migrate } from '../src/db/migrate.js';
@@ -47,7 +48,7 @@ describe.skipIf(!controlUrl || !adminUrl)('authentication (integration)', () => 
       entitlementToken: entitlement,
       identifier,
       password,
-      client: 'browser',
+      client: 'desktop',
       ...(code ? { code } : {}),
     });
   /** Next unused TOTP code for the admin. Valid only while it is within one step of the clock. */
@@ -82,7 +83,7 @@ describe.skipIf(!controlUrl || !adminUrl)('authentication (integration)', () => 
     });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-    app.setGlobalPrefix('api');
+    configureApp(app);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
     owner = (await signInOperator(app)).headers;
@@ -338,7 +339,7 @@ describe.skipIf(!controlUrl || !adminUrl)('authentication (integration)', () => 
         user: { role: 'manager' },
       });
       const temp = bearer(res.accessToken as string);
-      expect((await get('/tenant/notifications', temp)).json()).toMatchObject({
+      expect((await get('/tenant/inbox', temp)).json()).toMatchObject({
         code: 'password_change_required',
       });
       expect((await get('/auth/me', temp)).statusCode).toBe(200);
@@ -357,12 +358,8 @@ describe.skipIf(!controlUrl || !adminUrl)('authentication (integration)', () => 
         temp,
       );
       expect(
-        (
-          await get(
-            '/tenant/notifications',
-            bearer(changed.json<{ accessToken: string }>().accessToken),
-          )
-        ).statusCode,
+        (await get('/tenant/inbox', bearer(changed.json<{ accessToken: string }>().accessToken)))
+          .statusCode,
       ).toBe(200);
       // Staff cannot use admin routes.
       expect(
@@ -411,9 +408,12 @@ describe.skipIf(!controlUrl || !adminUrl)('authentication (integration)', () => 
         { id: string; username: string }[]
       >();
       expect(pending).toHaveLength(1);
-      expect((await get('/tenant/notifications', admin)).json<{ kind: string }[]>()[0]?.kind).toBe(
-        'password_reset_request',
-      );
+      const inbox = (await get('/tenant/inbox', admin)).json<{
+        items: { kind: string }[];
+        pending: { passwordResets: number };
+      }>();
+      expect(inbox.items[0]?.kind).toBe('password_reset_request');
+      expect(inbox.pending.passwordResets).toBe(1);
 
       const issued = (
         await post(`/tenant/password-resets/${pending[0]!.id}/issue`, {}, admin)

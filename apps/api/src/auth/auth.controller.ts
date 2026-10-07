@@ -1,14 +1,27 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
+  Inject,
   Param,
   ParseUUIDPipe,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { APP_CONFIG, type AppConfig } from '../config/config.js';
+import {
+  CLIENT_HEADER,
+  REFRESH_COOKIE,
+  clearedRefreshCookie,
+  readCookie,
+  refreshCookie,
+} from './cookie.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { AuthService, type TenantClaims } from './auth.service.js';
 import {
@@ -31,7 +44,8 @@ const loginSchema = z.object({
   code: z.string().trim().max(20).optional(),
   client: z.enum(['browser', 'desktop']),
 });
-const refreshSchema = z.object({ refreshToken: z.string().min(10).max(512) });
+const refreshSchema = z.object({ refreshToken: z.string().min(10).max(512).optional() });
+const operatorRefreshSchema = z.object({ refreshToken: z.string().min(10).max(512) });
 const changePasswordSchema = z.object({ currentPassword: password, newPassword: password });
 const resetRequestSchema = z.object({
   entitlementToken: z.string().min(10).max(4096),
@@ -63,28 +77,54 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly mfa: MfaService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
+  /** Browser clients get the refresh token as an HttpOnly cookie instead of in the response body. */
   @Post('login')
   @HttpCode(200)
   @RateLimit(10)
-  login(@Body(new ZodPipe(loginSchema)) body: z.infer<typeof loginSchema>) {
-    return this.auth.login(body);
+  async login(
+    @Body(new ZodPipe(loginSchema)) body: z.infer<typeof loginSchema>,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.auth.login(body);
+    if (result.status !== 'ok' || body.client !== 'browser') return result;
+    reply.header('set-cookie', refreshCookie(result.refreshToken, this.config.secureCookies));
+    const { refreshToken: _omitted, ...rest } = result;
+    return rest;
   }
 
+  /** Desktop sends the refresh token in the body. Browsers use the cookie plus the client header (CSRF guard). */
   @Post('refresh')
   @HttpCode(200)
   @RateLimit(60)
-  refresh(@Body(new ZodPipe(refreshSchema)) body: z.infer<typeof refreshSchema>) {
-    return this.auth.refresh(body.refreshToken);
+  async refresh(
+    @Body(new ZodPipe(refreshSchema)) body: z.infer<typeof refreshSchema>,
+    @Headers('cookie') cookie: string | undefined,
+    @Headers(CLIENT_HEADER) client: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    if (body.refreshToken) return this.auth.refresh(body.refreshToken);
+    const fromCookie = readCookie(cookie, REFRESH_COOKIE);
+    if (!fromCookie || client !== 'browser')
+      throw new BadRequestException({ code: 'refresh_token_missing' });
+    const result = await this.auth.refresh(fromCookie);
+    reply.header('set-cookie', refreshCookie(result.refreshToken, this.config.secureCookies));
+    const { refreshToken: _omitted, ...rest } = result;
+    return rest;
   }
 
   @Post('logout')
   @HttpCode(204)
   @UseGuards(TenantAuthGuard)
   @AllowWhilePasswordChangeRequired()
-  async logout(@Auth() claims: TenantClaims): Promise<void> {
+  async logout(
+    @Auth() claims: TenantClaims,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
     await this.auth.logout(claims);
+    reply.header('set-cookie', clearedRefreshCookie(this.config.secureCookies));
   }
 
   @Get('me')
@@ -156,16 +196,11 @@ export class AuthController {
   }
 }
 
-/** Tenant admin: staff accounts, reset requests. Any signed-in user: own notifications. */
+/** Tenant admin: staff accounts and password-reset requests. */
 @Controller('tenant')
 @UseGuards(TenantAuthGuard)
 export class TenantUsersController {
   constructor(private readonly users: UsersService) {}
-
-  @Get('notifications')
-  notifications(@Auth() claims: TenantClaims) {
-    return this.users.notifications(claims);
-  }
 
   @Get('users')
   @Roles('admin')
@@ -246,7 +281,7 @@ export class OperatorAuthController {
   @Post('refresh')
   @HttpCode(200)
   @RateLimit(60)
-  refresh(@Body(new ZodPipe(refreshSchema)) body: z.infer<typeof refreshSchema>) {
+  refresh(@Body(new ZodPipe(operatorRefreshSchema)) body: z.infer<typeof operatorRefreshSchema>) {
     return this.operators.refresh(body.refreshToken);
   }
 }

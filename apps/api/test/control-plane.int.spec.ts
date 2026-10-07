@@ -7,6 +7,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import postgres, { type Sql } from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
+import { configureApp } from '../src/bootstrap.js';
 import { migrate } from '../src/db/migrate.js';
 import { signInOperator } from './helpers/operator.js';
 
@@ -38,7 +39,7 @@ describe.skipIf(!url)('control plane (integration)', () => {
     process.env.RATE_LIMIT_SCALE = '100';
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-    app.setGlobalPrefix('api');
+    configureApp(app);
     await migrate(sql);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();

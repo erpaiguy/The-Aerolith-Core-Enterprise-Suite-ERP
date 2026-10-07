@@ -13,10 +13,12 @@
     "test": "vitest run",
     "migrate:control": "node --env-file-if-exists=.env dist/cli/migrate-control.js",
     "secrets:generate": "node dist/cli/generate-secrets.js",
-    "operator:create": "node --env-file-if-exists=.env dist/cli/create-operator.js"
+    "operator:create": "node --env-file-if-exists=.env dist/cli/create-operator.js",
+    "dev:outbox": "node --env-file-if-exists=.env dist/cli/dev-outbox.js"
   },
   "dependencies": {
     "@aerolith/shared": "workspace:*",
+    "@fastify/cors": "^11.3.0",
     "@nestjs/common": "^12.1.0",
     "@nestjs/core": "^12.1.0",
     "@nestjs/platform-fastify": "^12.1.0",

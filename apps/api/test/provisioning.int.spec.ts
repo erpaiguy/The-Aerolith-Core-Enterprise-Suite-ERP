@@ -12,6 +12,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import postgres, { type Sql } from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
+import { configureApp } from '../src/bootstrap.js';
 import { open, seal } from '../src/crypto/secretbox.js';
 import { migrate, TENANT_MIGRATIONS } from '../src/db/migrate.js';
 import { ProvisioningService } from '../src/provisioning/provisioning.service.js';
@@ -122,7 +123,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-    app.setGlobalPrefix('api');
+    configureApp(app);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
     owner = (await signInOperator(app)).headers;

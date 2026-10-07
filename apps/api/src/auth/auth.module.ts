@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { InboxController } from '../inbox/inbox.controller.js';
+import { InboxService } from '../inbox/inbox.service.js';
 import { LicensingModule } from '../licensing/licensing.module.js';
 import { ProvisioningModule } from '../provisioning/provisioning.module.js';
 import {
@@ -19,8 +21,9 @@ import { UsersService } from './users.service.js';
     TenantUsersController,
     OperatorAuthController,
     OperatorSessionController,
+    InboxController,
   ],
-  providers: [AuthService, UsersService, MfaService, OperatorAuthService],
+  providers: [AuthService, UsersService, MfaService, OperatorAuthService, InboxService],
   exports: [OperatorAuthService],
 })
 export class AuthModule {}

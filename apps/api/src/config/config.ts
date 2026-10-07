@@ -29,6 +29,7 @@ const envSchema = z.object({
   MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
   RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
+  CORS_ORIGINS: z.string().default('app://aerolith'),
 });
 
 export interface AppConfig {
@@ -56,6 +57,10 @@ export interface AppConfig {
   rateLimitScale: number;
   /** Trust X-Forwarded-For (only behind a proxy/tunnel that sets it). */
   trustProxy: boolean;
+  /** Origins allowed to call the API cross-origin (the desktop app). */
+  corsOrigins: string[];
+  /** Mark cookies Secure (true whenever the public API URL is https). */
+  secureCookies: boolean;
   /** Secrets generated for this process only (development/test). Never true in production. */
   ephemeralSecrets: string[];
 }
@@ -127,6 +132,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     maxTenantPools: e.MAX_TENANT_POOLS,
     rateLimitScale: e.RATE_LIMIT_SCALE,
     trustProxy: e.TRUST_PROXY === 'true',
+    corsOrigins: e.CORS_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+    secureCookies: e.PUBLIC_API_URL.startsWith('https://'),
     ephemeralSecrets: ephemeral,
   };
 }

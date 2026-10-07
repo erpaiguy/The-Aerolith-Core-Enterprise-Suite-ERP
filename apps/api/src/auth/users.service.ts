@@ -139,12 +139,6 @@ export class UsersService {
     return { id: requestId, status: 'dismissed' };
   }
 
-  async notifications(claims: TenantClaims) {
-    const db = await this.tenants.forTenant(claims.ten);
-    return db`SELECT id, kind, title, body, link, due_at AS "dueAt", read_at AS "readAt", created_at AS "createdAt"
-      FROM platform.notification WHERE user_id = ${claims.sub} OR user_id IS NULL ORDER BY created_at DESC LIMIT 100`;
-  }
-
   private async assertSeat(
     tx: TransactionSql,
     tenantId: string,

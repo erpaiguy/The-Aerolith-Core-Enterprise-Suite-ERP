@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
+import { configureApp } from './bootstrap.js';
 import { loadConfig } from './config/config.js';
 
 async function bootstrap(): Promise<void> {
@@ -9,7 +10,7 @@ async function bootstrap(): Promise<void> {
     AppModule,
     new FastifyAdapter({ trustProxy: loadConfig().trustProxy }),
   );
-  app.setGlobalPrefix('api');
+  configureApp(app);
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port, process.env.HOST ?? '127.0.0.1');
