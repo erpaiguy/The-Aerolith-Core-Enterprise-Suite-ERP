@@ -36,7 +36,7 @@ export default defineConfig({
       stdout: 'pipe',
     },
     {
-      command: `pnpm --filter @aerolith/web exec vite preview --port ${WEB_PORT} --strictPort`,
+      command: `pnpm --filter @aerolith/web exec vite preview --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
       env: { API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}` },
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: false,
