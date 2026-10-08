@@ -3,3 +3,8 @@ packages:
   - packages/*
   - tools/bench
   - tests/e2e
+
+# ExcelJS 4.4.0 pins unzipper 0.10, which pulls in `buffers` (no licence at all) and `chainsaw`. unzipper 0.12 has
+# neither; the import tests prove ExcelJS's streaming reader works with it (docs/dependencies.md).
+overrides:
+  exceljs>unzipper: 0.12.5

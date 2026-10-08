@@ -12,6 +12,7 @@ import postgres, { type Sql } from 'postgres';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { open } from '../crypto/secretbox.js';
 import { CONTROL_DB } from '../db/db.module.js';
+import { OWNER_GROUP } from './bootstrap.js';
 
 @Injectable()
 export class TenantConnections implements OnApplicationShutdown {
@@ -50,6 +51,32 @@ export class TenantConnections implements OnApplicationShutdown {
       void oldest.end({ timeout: 5 });
     }
     return pool;
+  }
+
+  /**
+   * Refreshes planner statistics after a bulk load. The app role cannot ANALYZE tables it does not own (Postgres skips
+   * them with a warning), so this uses the migrator login, as the owner role. Best effort: autovacuum gets there too,
+   * just later. `tables` are fixed names from our code, never input.
+   */
+  async analyze(tenantId: string, tables: string[]): Promise<boolean> {
+    const [row] = await this.control<{ migrator_url_secret: string | null }[]>`
+      SELECT migrator_url_secret FROM core.tenant_db WHERE tenant_id = ${tenantId} AND status = 'ready'`;
+    if (!row?.migrator_url_secret) return false;
+    const db = postgres(open(row.migrator_url_secret, this.config.controlPlaneEncKey), {
+      max: 1,
+      connect_timeout: 10,
+      prepare: false,
+      onnotice: () => {},
+    });
+    try {
+      await db.begin(async (tx) => {
+        await tx.unsafe(`SET LOCAL ROLE ${OWNER_GROUP}`);
+        for (const t of tables) await tx.unsafe(`ANALYZE ${t}`);
+      });
+      return true;
+    } finally {
+      await db.end({ timeout: 5 });
+    }
   }
 
   get openPools(): number {

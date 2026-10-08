@@ -1,10 +1,16 @@
 import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, ListTree, PanelLeft, Plus, Search, X } from 'lucide-react';
+import { ArrowLeft, Download, FileUp, ListTree, PanelLeft, Plus, Search, X } from 'lucide-react';
 import { useCallback, useDeferredValue, useRef, useState, type FormEvent } from 'react';
-import { api } from '../api/client';
+import { api, saveFile } from '../api/client';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
+import {
+  ImportBanner,
+  ImportWizard,
+  useImportFinished,
+  useLatestImport,
+} from '../boq/ImportWizard';
 import { formatAmount, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
@@ -117,6 +123,20 @@ export function BoqScreen({ boqId }: { boqId: string }) {
     queryKey: ['boq', boqId],
     queryFn: () => api.request<BoqHeader>(`/api/tenant/boqs/${boqId}`),
   });
+  const [wizard, setWizard] = useState(false);
+  const [gridKey, setGridKey] = useState(0);
+  const latestImport = useLatestImport(boqId, canEditBoq);
+  const importJob = latestImport.data?.job;
+  useImportFinished(
+    importJob,
+    useCallback(() => {
+      setWizard(false);
+      setGridKey((k) => k + 1); // the grid re-reads its window
+      void qc.invalidateQueries({ queryKey: ['boq', boqId] });
+      void qc.invalidateQueries({ queryKey: ['boq-outline', boqId] });
+      void qc.invalidateQueries({ queryKey: ['tender-boqs'] });
+    }, [qc, boqId]),
+  );
   const onHeader = useCallback(
     (h: BoqHeader) => {
       qc.setQueryData<BoqHeader>(['boq', boqId], (old) => ({ ...old, ...h }));
@@ -129,6 +149,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
   if (header.isError) return <Alert tone="danger">{describeError(header.error)}</Alert>;
   const h = header.data;
   const canEdit = canEditBoq && h.status === 'draft';
+  const running = importJob?.status === 'importing';
 
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] min-h-[34rem] flex-col gap-3">
@@ -156,6 +177,12 @@ export function BoqScreen({ boqId }: { boqId: string }) {
           </p>
         </div>
         <div className="flex items-end gap-4">
+          {canEdit && h.nodeCount === 0 && !wizard && (
+            <Button variant="secondary" onClick={() => setWizard(true)}>
+              <FileUp className="size-4" aria-hidden /> Import
+            </Button>
+          )}
+          <ExportMenu boqId={boqId} />
           <Button
             variant="ghost"
             aria-pressed={panel}
@@ -172,21 +199,89 @@ export function BoqScreen({ boqId }: { boqId: string }) {
           </div>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-        {panel && <SidePanel boqId={boqId} onJump={(key) => grid.current?.jumpTo(key)} />}
-        <BoqGrid
-          ref={grid}
-          boqId={boqId}
-          canEdit={canEdit}
-          onHeader={onHeader}
-          onSaving={setSaving}
-        />
-      </div>
-      <p className="hidden text-xs text-fg-subtle lg:block">
+      {running && !wizard && importJob && <ImportBanner job={importJob} />}
+      {wizard ? (
+        <ImportWizard boqId={boqId} onClose={() => setWizard(false)} />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+          {panel && <SidePanel boqId={boqId} onJump={(key) => grid.current?.jumpTo(key)} />}
+          <BoqGrid
+            key={gridKey}
+            ref={grid}
+            boqId={boqId}
+            canEdit={canEdit && !running}
+            onHeader={onHeader}
+            onSaving={setSaving}
+          />
+        </div>
+      )}
+      <p className={wizard ? 'hidden' : 'hidden text-xs text-fg-subtle lg:block'}>
         Arrows move · Enter or type to edit · Tab next cell · Ctrl+Enter add item · Ctrl+Shift+Enter
         add section · Alt+Shift+arrows indent/move · Space folds a section · Ctrl+Home/End · Paste
         rows from Excel · Formulas like =12*3.5
       </p>
+    </div>
+  );
+}
+
+/** Download the BOQ as Excel (with outline levels) or CSV. Anyone who can read the BOQ can export it. */
+function ExportMenu({ boqId }: { boqId: string }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (format: 'xlsx' | 'csv') => {
+    setOpen(false);
+    setBusy(true);
+    setError(null);
+    try {
+      const { blob, fileName } = await api.download(
+        `/api/tenant/boqs/${boqId}/export?format=${format}`,
+      );
+      saveFile(blob, fileName);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="relative">
+      <Button
+        variant="secondary"
+        busy={busy}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Download className="size-4" aria-hidden /> Export
+      </Button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-line bg-surface p-1 shadow-lg"
+          onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+        >
+          <button
+            role="menuitem"
+            className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-surface-2"
+            onClick={() => void run('xlsx')}
+          >
+            Excel (.xlsx)
+          </button>
+          <button
+            role="menuitem"
+            className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-surface-2"
+            onClick={() => void run('csv')}
+          >
+            CSV (.csv)
+          </button>
+        </div>
+      )}
+      {error && (
+        <div className="absolute right-0 z-20 mt-1 w-72">
+          <Alert tone="danger">{error}</Alert>
+        </div>
+      )}
     </div>
   );
 }

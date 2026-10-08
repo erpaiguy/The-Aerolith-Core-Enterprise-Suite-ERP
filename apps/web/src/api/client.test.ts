@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiClient, ApiError } from './client';
+import { ApiClient, ApiError, fileNameOf } from './client';
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -96,5 +96,45 @@ describe('ApiClient', () => {
     await expect(client.request('/api/x', { auth: false })).rejects.toEqual(
       new ApiError(0, 'network_error', {}),
     );
+  });
+
+  it('uploads files as multipart without a JSON content type', async () => {
+    const fetchImpl = vi.fn(async () => json(201, { id: 'job' }));
+    const client = new ApiClient(fetchImpl as typeof fetch);
+    client.setAccessToken('a');
+    await client.upload('/api/up', new File(['x,y'], 'boq.csv'));
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get('file')).toBeInstanceOf(File);
+    expect((init.headers as Record<string, string>)['content-type']).toBeUndefined();
+  });
+
+  it('downloads with the server-suggested file name, refreshing once on 401', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url) === '/api/auth/refresh')
+        return json(200, { accessToken: 'b', mustChangePassword: false, licence: {} });
+      return ++calls === 1
+        ? json(401, {})
+        : new Response('Level,Type', {
+            status: 200,
+            headers: {
+              'content-disposition': `attachment; filename="T-1 Civil _.csv"; filename*=UTF-8''T-1%20Civil%20%E2%82%B9.csv`,
+            },
+          });
+    });
+    const client = new ApiClient(fetchImpl as typeof fetch);
+    client.setAccessToken('a');
+    const { blob, fileName } = await client.download('/api/x');
+    expect(fileName).toBe('T-1 Civil ₹.csv');
+    expect(await blob.text()).toBe('Level,Type');
+  });
+
+  it('reads plain and missing file names', () => {
+    const r = (cd?: string) =>
+      new Response('', cd ? { headers: { 'content-disposition': cd } } : {});
+    expect(fileNameOf(r('attachment; filename="a b.xlsx"'))).toBe('a b.xlsx');
+    expect(fileNameOf(r())).toBeNull();
   });
 });

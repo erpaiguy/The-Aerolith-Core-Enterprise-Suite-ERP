@@ -42,17 +42,39 @@ export class ApiClient {
     path: string,
     init: { method?: string; body?: unknown; auth?: boolean } = {},
   ): Promise<T> {
+    return this.parse<T>(await this.authed(path, init));
+  }
+
+  /** Sends a file (multipart/form-data) in the field `file`. */
+  upload<T>(path: string, file: File): Promise<T> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.request<T>(path, { method: 'POST', body: form });
+  }
+
+  /** Fetches a file the API streams (exports, reports), with the name the server suggests. */
+  async download(path: string): Promise<{ blob: Blob; fileName: string }> {
+    const res = await this.authed(path, {});
+    if (!res.ok) throw await this.toError(res);
+    return { blob: await res.blob(), fileName: fileNameOf(res) ?? 'download' };
+  }
+
+  /** One request; on 401 refreshes the session once and retries. */
+  private async authed(
+    path: string,
+    init: { method?: string; body?: unknown; auth?: boolean },
+  ): Promise<Response> {
     const auth = init.auth ?? true;
     const res = await this.send(path, init, auth);
     if (res.status === 401 && auth) {
       const refreshed = await this.refresh();
       if (!refreshed) {
         this.onSessionLost();
-        throw await this.toError(res);
+        return res;
       }
-      return this.parse<T>(await this.send(path, init, auth));
+      return this.send(path, init, auth);
     }
-    return this.parse<T>(res);
+    return res;
   }
 
   /** Single-flight: concurrent callers wait on the same refresh. Returns null when the session is gone. */
@@ -89,13 +111,17 @@ export class ApiClient {
     auth: boolean,
   ): Promise<Response> {
     const headers: Record<string, string> = { 'x-aerolith-client': clientKind() };
-    if (init.body !== undefined) headers['content-type'] = 'application/json';
+    const form = init.body instanceof FormData;
+    // FormData sets its own multipart content type with the boundary.
+    if (init.body !== undefined && !form) headers['content-type'] = 'application/json';
     if (auth && this.accessToken) headers.authorization = `Bearer ${this.accessToken}`;
     try {
       return await this.fetchImpl(`${apiBase()}${path}`, {
         method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
         headers,
-        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        ...(init.body === undefined
+          ? {}
+          : { body: form ? (init.body as FormData) : JSON.stringify(init.body) }),
         credentials: 'same-origin',
       });
     } catch {
@@ -118,6 +144,32 @@ export class ApiClient {
     }
     return new ApiError(res.status, typeof body.code === 'string' ? body.code : undefined, body);
   }
+}
+
+/** The file name from Content-Disposition, preferring the UTF-8 form. */
+export function fileNameOf(res: Response): string | null {
+  const cd = res.headers.get('content-disposition') ?? '';
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1]!);
+    } catch {
+      // fall through to the plain name
+    }
+  }
+  return /filename="([^"]+)"/i.exec(cd)?.[1] ?? null;
+}
+
+/** Hands a downloaded file to the browser (or the desktop app's save dialog). */
+export function saveFile(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export const api = new ApiClient();

@@ -180,3 +180,69 @@ export interface TenderDetail extends TenderSummary {
     actor: string | null;
   }[];
 }
+
+// --- BOQ import (apps/api/src/boq/import) ---
+
+export type ImportField =
+  'code' | 'description' | 'unit' | 'qty' | 'rate' | 'amount' | 'level' | 'type' | 'notes';
+export type ImportStructure = 'headings' | 'numbering' | 'level' | 'flat';
+
+export interface ImportSettings {
+  sheet: number;
+  headerRow: number | null;
+  mapping: Partial<Record<ImportField, number>>;
+  structure: ImportStructure;
+  normaliseUnits: boolean;
+}
+
+export interface ImportIssue {
+  rowNo: number;
+  field?: ImportField;
+  severity: 'error' | 'warning';
+  message: string;
+}
+
+export interface ImportJob {
+  id: string;
+  boqId: string;
+  fileName: string;
+  fileType: 'xlsx' | 'csv';
+  fileSize: number;
+  status:
+    | 'scanning'
+    | 'uploaded'
+    | 'validating'
+    | 'validated'
+    | 'importing'
+    | 'imported'
+    | 'failed'
+    | 'cancelled';
+  sheets: {
+    name: string;
+    rows: number;
+    columns: number;
+    preview: { rowNo: number; cells: string[] }[];
+    detected: Pick<ImportSettings, 'headerRow' | 'mapping' | 'structure'>;
+  }[];
+  settings: ImportSettings | null;
+  summary: {
+    counts: {
+      rows: number;
+      sections: number;
+      items: number;
+      notes: number;
+      skipped: number;
+      errors: number;
+      warnings: number;
+      unitsNormalised: number;
+    };
+    lines: number;
+    total: string;
+    issues: ImportIssue[];
+    moreIssues: number;
+    unknownUnits: { unit: string; rows: number }[];
+    result?: { nodeCount: number; itemCount: number; total: string; seconds: number };
+  } | null;
+  progress: number;
+  error: string | null;
+}

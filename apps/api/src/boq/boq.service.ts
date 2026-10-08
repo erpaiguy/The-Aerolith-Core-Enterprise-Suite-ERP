@@ -15,6 +15,7 @@ import { ancestorKeys, childKey, midpoint, splitKey, SUBTREE_END } from '@aeroli
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { importRunning } from './import/import.service.js';
 
 export type NodeType = 'section' | 'item' | 'note';
 
@@ -339,6 +340,12 @@ export class BoqService {
    */
   async apply(claims: TenantClaims, boqId: string, ops: Op[]) {
     const db = await this.tenants.forTenant(claims.ten);
+    // Checked before taking the lock: a running import holds it until it commits.
+    if (await importRunning(db, boqId))
+      throw new ConflictException({
+        code: 'boq_importing',
+        message: 'A file is being imported into this BOQ. Try again when it has finished.',
+      });
     return db.begin(async (tx) => {
       const [boq] = await tx<{ status: string }[]>`
         SELECT status FROM est.boq WHERE id = ${boqId} FOR UPDATE`;

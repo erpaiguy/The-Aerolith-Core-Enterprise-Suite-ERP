@@ -20,6 +20,9 @@ The CI licence gate (`pnpm licenses:check`) checks transitive dependencies autom
 | zod | MIT | api | Request validation and environment/config validation |
 | @node-rs/argon2 | MIT | api | Argon2id password hashing (prebuilt binaries; Node 22 has no built-in Argon2) |
 | fastify | MIT | api | Already used through @nestjs/platform-fastify; declared directly for redirect types and the fake Supabase server in tests |
+| exceljs | MIT | api | BOQ import/export: streaming .xlsx reader and writer, so a million-line workbook never sits in memory. **pnpm override `exceljs>unzipper: 0.12.5`**: exceljs pins unzipper 0.10, whose dependencies `buffers` (no licence at all) and `chainsaw` ("MIT/X11") fail the licence gate; 0.12.5 drops both and passes the import tests, including a 993k-row workbook |
+| csv-parse | MIT | api | BOQ import from CSV (quoted multi-line cells, byte-order mark, `;`/tab delimiters) |
+| @fastify/multipart | MIT | api | File upload for imports; streams to disk with a size limit |
 
 ## Development only
 

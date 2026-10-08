@@ -84,4 +84,5 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 1 | Tender register: clients, numbering, pipeline, bid/no-bid scoring, reminders | **Done** |
 | 2 | BOQ engine (API): windows, collapsed sections, batched edits, totals by delta | **Done** |
 | 3 | BOQ grid: keyboard editing, formulas, paste from Excel, fold, outline, search, sliding window | **Done** |
-| 4 | Import/export (Excel/CSV) | Next |
+| 4 | Import/export: units, Excel/CSV import wizard with dry run, Excel/CSV export | **Done** |
+| 5 | Rate library + rate analysis | Next |

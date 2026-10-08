@@ -127,6 +127,11 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
   const pendingScroll = useRef<{ delta: number } | { index: number; offset: number } | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const pending = useRef(0);
+  /**
+   * Row versions from save responses. The next queued batch can start before React re-renders with the merged rows,
+   * so batches read versions from here first; otherwise quick consecutive edits of one line conflict with themselves.
+   */
+  const versions = useRef(new Map<string, number>());
   const undoStack = useRef<Undo[]>([]);
 
   const rows = slice.rows;
@@ -271,6 +276,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
             method: 'POST',
             body: { ops },
           });
+          for (const r of changes.rows) versions.current.set(r.id, r.rowVersion);
           onHeader(changes.header);
           if (!changes.reload)
             setSlice((s) =>
@@ -298,7 +304,11 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
     [boqId, onHeader, onSaving, open, firstVisible],
   );
 
-  const rowById = (id: string) => sliceRef.current.rows.find((r) => r.id === id);
+  const rowById = (id: string) => {
+    const row = sliceRef.current.rows.find((r) => r.id === id);
+    const v = versions.current.get(id);
+    return row && v !== undefined && v > row.rowVersion ? { ...row, rowVersion: v } : row;
+  };
 
   /** Saves one cell. Returns false (and keeps the editor open) when the value is not valid. */
   const commitCell = (id: string, col: EditableColumn, input: string, record = true): boolean => {

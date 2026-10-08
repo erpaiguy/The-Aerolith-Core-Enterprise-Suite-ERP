@@ -30,7 +30,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 1 | **Tender register** | Clients (party master), tender numbering, tender register and pipeline, bid/no-bid scoring, status flow, deadline reminders, activity log | **Done** (see below) |
 | 2 | BOQ engine (API) | `est` schema, partitioned lines, fractional sort keys, windowed reads with collapsed sections, ancestor total deltas, row-version conflicts | The benchmark design (05-database.md §4) made real |
 | 3 | BOQ grid (UI) | Virtualised grid, keyboard editing, insert/indent/move/delete, collapse, search | **Done** (see below) |
-| 4 | Import/export | Units master, Excel/CSV import with mapping, dry run and error report, `COPY` staging; Excel/CSV export | Library must pass the licence gate. [Certain] The app role cannot `ANALYZE` (Postgres skips it with a warning), so after a bulk load the import must analyze through the migration role or plans run blind until autovacuum |
+| 4 | **Import/export** | Units master, Excel/CSV import wizard with mapping, dry run and error report; Excel/CSV export | **Done** (see below) |
 | 5 | Rate library + rate analysis | Resources and rates with effective dates; analyses (resources × productivity + wastage + overheads + profit) feeding BOQ rates | E1, E2 |
 | 6 | Measurement + pricing | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | E4, E5 |
 | 7 | Revisions | Copy-on-write versions, compare two versions, lock on submission | E6. 1M-line copy must not take 64 s again |
@@ -261,3 +261,75 @@ Each step ships with API tests and a browser test of the main journey, like Wave
 - **API:**
   - `GET /api/tenant/permissions/mine`: what I may do.
   - `GET/POST /api/tenant/permissions`: admin only.
+
+## Step 4 delivered: import and export
+
+**Journey:** on an empty draft BOQ, **Import** → drop an .xlsx or .csv → check the suggested sheet, header row, columns
+and section structure against a preview → **Check file** (every row is read, nothing saved) → see counts, the total,
+errors and warnings (all of them as a CSV report) → **Import N lines**. **Export** gives Excel (outline levels, bold
+sections, frozen header) or CSV; anyone who can read the BOQ can export, even on a read-only licence.
+
+**What the importer understands** (`apps/api/src/boq/import/builder.ts`, shared by the check and the import, so they
+cannot disagree):
+- Header row found among the first 30 rows (title rows above it are skipped); Indian headings such as "Sl. No.",
+  "Particulars", "UOM", "Rate (₹)", "Amount in Rs.".
+- Sections four ways: **item numbers** (1 / 1.1 / 1.1.1, with (a), (b), (iv) placed under the line above), **headings**
+  (a row without unit, quantity and rate), a **Level** column (our own export), or **flat**.
+- Numbers as written in India: "1,25,000.50", "₹ 350", "Rs. 42". [Certain] "1.200,5" (a European decimal comma) is an
+  error, not silently 1.2005. More than 4 decimals are rounded, with a warning.
+- Amounts are recomputed as round(qty × rate, 2), exactly as Postgres does (checked to the paisa); a file amount that
+  differs by more than ₹1 is a warning.
+- Units normalised through the **units master** (`platform.unit`, 18 seeded with aliases: Cu.M, m3 → cum). Unknown
+  units are kept and listed. Admins and roles with `boq.edit` can add units (`POST /api/tenant/units`).
+- Refused with a clear message: old binary **.xls** (save as .xlsx), PDF, other binaries, files over `IMPORT_MAX_MB`
+  (100 MB, about two million lines).
+
+**Decisions made while building (change any you disagree with):**
+- **Import only into an empty BOQ.** Merging into an existing BOQ belongs with revisions (step 7).
+- **Rows with errors block the import** until the user ticks "import without the rows that have errors".
+- **[Certain] No `COPY` staging, unlike the plan.** Postgres refuses `COPY FROM` on tables with row-level security
+  ("COPY FROM not supported with row-level security"), and every tenant table has it. The upload waits on the API
+  server's disk instead (`IMPORT_DIR`, deleted after import or cancel, swept after 24 h), and lines go in as
+  2,000-row `INSERT … SELECT FROM jsonb_to_recordset`. This also keeps a half-finished upload from doubling the
+  tenant's database size.
+- **One transaction per import:** it lands whole or not at all. Sort keys, ids, subtotals and child counts are worked
+  out while streaming, so the stored totals meet the same invariants as hand edits (checked by the tests).
+- **Edits are refused while an import runs** (`boq_importing`); the grid turns read-only and shows progress.
+- **After the import, statistics are refreshed** with `ANALYZE` through the migration login (the app role cannot), best
+  effort.
+- **Interrupted jobs:** a job that stops reporting for 15 minutes (server restart) shows as failed; start again.
+- [Likely] One API instance only: the upload lives on that instance's disk. A second instance needs a shared folder.
+- [Certain] **Docker:** uploads sit in the API container's `/tmp`; recreating the container loses unfinished uploads
+  (the user uploads again). Nothing else is lost.
+
+**Measured** (sandbox Postgres 16, 993,100-line workbook of 52 MB, as the app role through the HTTP API):
+
+| Stage | Time |
+|-------|------|
+| Upload | 0.3 s |
+| Read the file (sheets, preview, suggestions) | 21 s |
+| Check every row | 28 s |
+| Import, including subtotals and `ANALYZE` | **162 s** (target < 5 min) |
+| Afterwards: first window / end / outline / one edit | 7 / 4 / 63 / 33 ms |
+| Afterwards: common / rare search | 35 / 190 ms |
+| Export to Excel (63 MB) | 45 s |
+
+The API process grew by about 30 MB during the import. [Guessing] Over the internet to a Supabase project in Mumbai,
+the import will take longer (500 round trips); measure on the first pilot's project.
+
+**Bug fixed on the way (grid, step 3):** quick consecutive edits of one line (type, Tab, type) could conflict with
+themselves ("Someone else changed this record") when a save took a little longer, because the next save read the row
+version before React re-rendered. Save responses now record versions immediately. Real internet latency would have
+triggered it for every user.
+
+**API:**
+- `POST /api/tenant/boqs/:id/imports` (multipart, field `file`), `GET /api/tenant/boqs/:id/imports/latest`
+- `GET /api/tenant/imports/:id`, `POST …/validate` (settings), `GET …/issues` (CSV), `POST …/start`, `POST …/cancel`
+- `GET /api/tenant/boqs/:id/export?format=xlsx|csv`
+- `GET/POST /api/tenant/units`
+
+**Tests:** 12 builder unit tests; 15 API integration tests (Excel with cover sheet, formulas and sub-items; messy
+semicolon CSV with multi-line cells and errors; Excel and CSV round trips; permissions; cancel; interrupted jobs; bad
+files; units); a browser test that imports a CSV through the wizard, exports to Excel, and imports that into a second
+BOQ with the same total.
+

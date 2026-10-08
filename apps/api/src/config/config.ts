@@ -1,4 +1,6 @@
 import { createPrivateKey, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { z } from 'zod';
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -27,6 +29,8 @@ const envSchema = z.object({
   TENANT_DB_REGION: z.string().default('ap-south-1'),
   PROVISIONING_WORKER: z.enum(['on', 'off']).optional(),
   MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
+  IMPORT_DIR: z.string().optional(),
+  IMPORT_MAX_MB: z.coerce.number().int().positive().max(1024).default(100),
   RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
   CORS_ORIGINS: z.string().default('app://aerolith'),
@@ -66,6 +70,9 @@ export interface AppConfig {
   tenantDbRegion: string;
   provisioningWorker: boolean;
   maxTenantPools: number;
+  /** Where uploaded import files wait while the user maps columns (docs/wave1-plan.md step 4). */
+  importDir: string;
+  importMaxBytes: number;
   /** Multiplies every rate limit (tests raise it). */
   rateLimitScale: number;
   /** Trust X-Forwarded-For (only behind a proxy/tunnel that sets it). */
@@ -163,6 +170,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     tenantDbRegion: e.TENANT_DB_REGION,
     provisioningWorker: (e.PROVISIONING_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
     maxTenantPools: e.MAX_TENANT_POOLS,
+    importDir: e.IMPORT_DIR ?? join(tmpdir(), 'aerolith-imports'),
+    importMaxBytes: e.IMPORT_MAX_MB * 1024 * 1024,
     rateLimitScale: e.RATE_LIMIT_SCALE,
     trustProxy: e.TRUST_PROXY === 'true',
     corsOrigins: e.CORS_ORIGINS.split(',')
