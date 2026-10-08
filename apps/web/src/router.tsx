@@ -13,7 +13,7 @@ import { AppShell } from './screens/AppShell';
 import { HomeScreen } from './screens/Home';
 import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
-import { Spinner } from './ui/kit';
+import { Spinner } from '@aerolith/ui';
 
 /** Pages opened from email links: usable in any browser, with or without an activated licence or session. */
 const PUBLIC_PATHS = ['/account/set-password', '/account/reset-password'];

@@ -92,15 +92,10 @@ async function call<T>(path: string, body?: unknown, token?: string): Promise<T>
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-/**
- * Owner-console setup through the real flows: create an operator with the CLI, enrol MFA, change the one-time
- * password, create a trial tenant, provision its database locally and wait until it is ready.
- */
-export async function createTenant(
-  adminEmail: string,
-): Promise<{ licenceKey: string; tenantId: string }> {
-  const operatorEmail = `owner-${Date.now()}@aerolith.test`;
-  const args = ['--email', operatorEmail, '--name', 'E2E Owner'];
+/** Creates an owner-console operator with the real CLI (inside the API container when testing the Docker stack). */
+export function createOperator(): { email: string; tempPassword: string } {
+  const email = `owner-${Date.now()}@aerolith.test`;
+  const args = ['--email', email, '--name', 'E2E Owner'];
   const out = (
     OPERATOR_CMD
       ? execFileSync(OPERATOR_CMD[0]!, [...OPERATOR_CMD.slice(1), ...args], { cwd: OPERATOR_CWD })
@@ -108,7 +103,17 @@ export async function createTenant(
           env: { ...process.env, CONTROL_DATABASE_URL: CONTROL_URL },
         })
   ).toString();
-  const tempPassword = /One-time password: (\S+)/.exec(out)![1]!;
+  return { email, tempPassword: /One-time password: (\S+)/.exec(out)![1]! };
+}
+
+/**
+ * Owner-console setup through the real flows: create an operator with the CLI, enrol MFA, change the one-time
+ * password, create a trial tenant, provision its database locally and wait until it is ready.
+ */
+export async function createTenant(
+  adminEmail: string,
+): Promise<{ licenceKey: string; tenantId: string }> {
+  const { email: operatorEmail, tempPassword } = createOperator();
 
   const first = await call<{ enrollmentToken: string }>('/owner/auth/login', {
     email: operatorEmail,

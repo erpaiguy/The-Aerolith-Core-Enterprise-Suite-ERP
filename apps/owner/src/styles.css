@@ -1,0 +1,4 @@
+@import 'tailwindcss';
+@import '@aerolith/ui/tokens.css';
+/* Tailwind does not scan node_modules; include the shared UI kit's classes explicitly. */
+@source '../../../packages/ui/src';

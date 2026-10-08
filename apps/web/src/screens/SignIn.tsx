@@ -7,7 +7,7 @@ import { errorMessage } from '../lib/format';
 import { load, save } from '../lib/storage';
 import { clientKind } from '../platform';
 import { useSession } from '../session/session';
-import { Alert, AuthLayout, Button, Field, Input } from '../ui/kit';
+import { Alert, AuthLayout, Button, Field, Input } from '@aerolith/ui';
 
 type Step =
   | { kind: 'credentials' }

@@ -5,6 +5,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -68,6 +69,29 @@ export class OperatorAuthService {
         throw new ConflictException({ code: 'operator_exists' });
       throw err;
     }
+  }
+
+  /**
+   * CLI only (break-glass, e.g. lost phone and recovery codes): new one-time password, authenticator and recovery
+   * codes cleared, every session signed out. The next sign-in goes through MFA enrolment again. Access to the server's
+   * command line is the root of trust here, which is why there is no HTTP route for this.
+   */
+  async resetOperator(email: string): Promise<{ temporaryPassword: string }> {
+    const password = temporaryPassword();
+    const hash = await hashPassword(password);
+    return this.sql.begin(async (tx) => {
+      const [op] = await tx<{ id: string }[]>`
+        UPDATE core.operator SET password_hash = ${hash}, must_change_password = true, totp_secret = NULL,
+          totp_pending_secret = NULL, totp_last_step = NULL, mfa_enabled_at = NULL, recovery_codes = '{}',
+          failed_logins = 0, locked_until = NULL, status = 'active'
+        WHERE lower(email) = lower(${email}) RETURNING id`;
+      if (!op) throw new NotFoundException({ code: 'operator_not_found' });
+      await tx`UPDATE core.operator_session SET revoked_at = now(), revoked_reason = 'operator_reset'
+        WHERE operator_id = ${op.id} AND revoked_at IS NULL`;
+      await tx`INSERT INTO core.owner_audit (action, target, data)
+        VALUES ('operator.reset', ${`operator:${op.id}`}, ${tx.json({ actor: 'cli' })})`;
+      return { temporaryPassword: password };
+    });
   }
 
   async login(

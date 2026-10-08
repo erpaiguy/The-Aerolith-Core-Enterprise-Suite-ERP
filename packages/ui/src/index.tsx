@@ -1,4 +1,5 @@
-// Small UI kit on Tailwind. Colours come from CSS variables in styles.css so light and dark themes stay in one place.
+// Small UI kit on Tailwind, shared by the tenant app and the owner console. Colours come from CSS variables in
+// tokens.css so light and dark themes stay in one place.
 import {
   cloneElement,
   useId,
@@ -9,7 +10,8 @@ import {
 } from 'react';
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react';
 
-const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
+export const cx = (...parts: (string | false | null | undefined)[]) =>
+  parts.filter(Boolean).join(' ');
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -190,10 +192,12 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
 export function AuthLayout({
   title,
   subtitle,
+  footer = 'Aerolith Core · Construction ERP',
   children,
 }: {
   title: string;
   subtitle?: ReactNode;
+  footer?: string;
   children: ReactNode;
 }) {
   return (
@@ -207,7 +211,7 @@ export function AuthLayout({
           {subtitle && <p className="mt-1 text-sm text-fg-muted">{subtitle}</p>}
         </div>
         <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">{children}</div>
-        <p className="mt-6 text-center text-xs text-fg-subtle">Aerolith Core · Construction ERP</p>
+        <p className="mt-6 text-center text-xs text-fg-subtle">{footer}</p>
       </div>
     </main>
   );

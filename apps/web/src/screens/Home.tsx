@@ -6,7 +6,7 @@ import type { Inbox, InboxItem, OwnerNotice } from '../api/types';
 import { daysUntil, errorMessage, formatDate, formatDateTime } from '../lib/format';
 import { apiBase } from '../platform';
 import { useSession } from '../session/session';
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '../ui/kit';
+import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
 
 function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => void }) {
   const unread = !item.readAt;

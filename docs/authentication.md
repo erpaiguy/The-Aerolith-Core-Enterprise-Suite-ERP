@@ -6,7 +6,7 @@ Code: `apps/api/src/auth`. Migrations: `control-plane/0003_auth.sql`, `tenant/00
 
 | Who | Identity stored in | Sign-in | Second factor | Forgot password |
 |-----|--------------------|---------|---------------|-----------------|
-| Platform operator (you, owner console) | Control plane `core.operator` | Email + password | **TOTP, mandatory** | Another operator, or the CLI (single-owner: keep the recovery codes) |
+| Platform operator (you, owner console) | Control plane `core.operator` | Email + password | **TOTP, mandatory** | Server command `reset-operator` (owner-console.md §4) |
 | Tenant admin | Control plane `core.owner_account` | Email + password, on a device activated with the licence key | **TOTP, mandatory** | Email link, valid 30 minutes |
 | Staff (manager, worker) | Tenant's own database `platform.user` | Username + password, on an activated device | None | Request to the admin, who issues a one-time password |
 
@@ -73,9 +73,9 @@ deactivate users but cannot add or reactivate them.
 | GET/POST | `/tenant/users`, `/tenant/users/:id/{deactivate,reactivate,role}` | Tenant admin |
 | GET/POST | `/tenant/password-resets`, `/tenant/password-resets/:id/{issue,dismiss}` | Tenant admin |
 | GET | `/tenant/notifications` | Signed-in user (the basic pending inbox) |
-| POST | `/owner/auth/login`, `/owner/auth/refresh`, `/owner/auth/change-password`, `/owner/auth/logout` | Operators |
+| POST | `/owner/auth/login`, `/owner/auth/refresh`, `/owner/auth/change-password`, `/owner/auth/logout` | Operators. The owner console sends `client: "browser"` and keeps the refresh token in the `aerolith_ort` cookie (owner-console.md §3) |
 
 ## Not yet built
 
-Email delivery (the outbox fills; the sender comes with the email worker), the web/desktop screens, MFA reset by
+MFA reset by
 support (docs/09-security.md §3.4 checklist), custom roles beyond manager/worker, and a remote breached-password check.

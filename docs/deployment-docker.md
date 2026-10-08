@@ -80,7 +80,7 @@ Example: `gpg -c deploy/.env` produces `deploy/.env.gpg`. Copy it to a USB drive
 docker compose -f deploy/docker-compose.yml exec api node dist/cli/create-operator.js --email you@<your-domain> --name "Your Name"
 ```
 
-It prints a one-time password. Sign in against the owner listener, `http://127.0.0.1:8081/api/owner/auth/login`, then enrol your authenticator and change the password as described in [authentication.md](authentication.md). The owner-console screens come later; until then use `curl` from this PC.
+It prints a one-time password. Open the owner console at `http://127.0.0.1:8081`, sign in, set up your authenticator, save the recovery codes and choose your own password ([owner-console.md](owner-console.md)). Lost phone and codes: `reset-operator.js` (owner-console.md §4).
 
 ## 4. Everyday commands
 
@@ -135,7 +135,7 @@ The address must forward to `127.0.0.1:8080`, **never** `:8081`.
 | **Port forwarding + dynamic DNS** | Yes | Free | [Likely] Often impossible on Indian ISPs (CGNAT). It also breaks the §10.1 rule "no inbound ports". Not recommended |
 | Cloudflare Tunnel | Yes, but [Likely] only if the domain's DNS moves to Cloudflare | Free | You chose not to use Cloudflare |
 
-**Recommendation.** The app goes public only after v1, so no tunnel is needed today.
+**Decision (owner, step 7): VM directly for tenants.** The PC is never published. The app goes public only after v1, so no tunnel is needed today.
 - **For the deferred Supabase OAuth test:** use Tailscale Funnel's `ts.net` address as `PUBLIC_API_URL`/`WEBSITE_URL` and as the registered callback, for a few hours.
 - **For real tenants:** go straight to the VM (stage 1) with `app.<your-domain>`.
   - The custom domain matters: Supabase's registered callback URL and every emailed link contain the hostname.

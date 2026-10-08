@@ -1,6 +1,8 @@
-import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, Res, UseGuards } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { clearedOperatorRefreshCookie } from './cookie.js';
 import { AllowWhilePasswordChangeRequired, Auth, OperatorGuard, SelfService } from './guards.js';
 import { OperatorAuthService } from './operator-auth.service.js';
 import { RateLimit } from './rate-limit.js';
@@ -37,7 +39,11 @@ export class OperatorSessionController {
 
   @Post('logout')
   @HttpCode(204)
-  async logout(@Auth() claims: OperatorClaims): Promise<void> {
+  async logout(
+    @Auth() claims: OperatorClaims,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
     await this.operators.logout(claims.sid);
+    reply.header('set-cookie', clearedOperatorRefreshCookie());
   }
 }

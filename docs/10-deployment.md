@@ -12,7 +12,7 @@ must change for commercial.
 | DNS | GoDaddy (current) | Already paid |
 | Licence and notification email | GoDaddy mailbox via SMTP, behind `EmailAdapter` | Already paid |
 | Control plane | Supabase, **owner's** organisation, Mumbai, schema `core` not exposed, keep-alive ping | Free tier |
-| **API + workers** (NestJS, BullMQ, Valkey) | **Stage 0: owner's PC (Docker) behind an outbound tunnel; Stage 1: free VM in India.** Docker Compose + Caddy (Apache-2.0) | See §2 and §10.1 |
+| **API + workers** (NestJS, BullMQ, Valkey) | **Owner's PC (Docker) for local testing only; tenants are served from a free VM in India.** Docker Compose + Caddy (Apache-2.0) | See §2 and §10.1 |
 | Browser app (SPA) | Static files served by Caddy on the same VM at `app.<domain>` | Included |
 | Tenant databases and files | **Each tenant's own Supabase organisation/project**, created via OAuth at signup | Tenant's free tier |
 | Desktop installers and auto-update | **Public releases-only GitHub repo** (source stays private) | Free |
@@ -100,8 +100,14 @@ encrypted dumps of the control plane with monthly restore tests (infra §3.10).
    - [Likely] Windows code-signing certificates now require the private key on a hardware token or cloud HSM, which affects how CI signs. Cloud signing services are an option; [Guessing] check eligibility for an Indian private limited company. Decide the provider before the first public installer.
 2. **Desktop platform at trial launch: Windows only.** The CI builds Windows installers only; macOS/Linux build jobs are added later without code changes (Electron is cross-platform).
 3. **API server: Docker on the owner's PC first, then a free VM if available.**
+   **Revised (owner decision, Wave 0 step 7):** the PC is for local testing only and is never published to the internet.
+   Tenants are served directly from the VM at `app.<domain>`, so Supabase's callback URL and emailed links never change
+   hostname. A temporary tunnel is acceptable only for the one-off Supabase OAuth test (deployment-docker.md §6).
 
 ### 10.1 Owner-PC hosting: stage 0 rules
+
+**Superseded for tenants by decision 3 (revised):** no tenant is ever served from the PC. These rules still apply
+whenever the PC holds real secrets (for example during the Supabase OAuth test) and apply unchanged to the VM.
 
 [Certain] The owner's PC becomes the server every tenant depends on and the place where the master key for all tenant
 database credentials lives (09 §1). Rules while it is the server:

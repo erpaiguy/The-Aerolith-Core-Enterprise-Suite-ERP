@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import { errorMessage } from '../lib/format';
 import { useSession } from '../session/session';
-import { Alert, AuthLayout, Button, Field, Input } from '../ui/kit';
+import { Alert, AuthLayout, Button, Field, Input } from '@aerolith/ui';
 
 function useSubmit() {
   const [error, setError] = useState<string | null>(null);

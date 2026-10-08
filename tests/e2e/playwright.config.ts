@@ -7,6 +7,7 @@ import {
   ENC_KEY,
   EXTERNAL,
   MAIL_DIR,
+  OWNER_PORT,
   WEB_PORT,
 } from './env.js';
 
@@ -54,6 +55,13 @@ export default defineConfig({
           command: `pnpm --filter @aerolith/web exec vite preview --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
           env: { API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}` },
           url: `http://127.0.0.1:${WEB_PORT}`,
+          reuseExistingServer: false,
+          timeout: 60_000,
+        },
+        {
+          command: `pnpm --filter @aerolith/owner exec vite preview --host 127.0.0.1 --port ${OWNER_PORT} --strictPort`,
+          env: { API_PROXY_TARGET: `http://127.0.0.1:${API_PORT}` },
+          url: `http://127.0.0.1:${OWNER_PORT}`,
           reuseExistingServer: false,
           timeout: 60_000,
         },

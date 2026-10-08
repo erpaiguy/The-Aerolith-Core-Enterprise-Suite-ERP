@@ -15,7 +15,7 @@ import { api } from '../api/client';
 import type { Inbox } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
 import { useSession } from '../session/session';
-import { Badge } from '../ui/kit';
+import { Badge } from '@aerolith/ui';
 
 function NavItem({
   to,

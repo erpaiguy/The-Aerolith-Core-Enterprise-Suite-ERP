@@ -5,7 +5,7 @@ import { api, ApiError } from '../api/client';
 import type { ResetRequest, TenantUser } from '../api/types';
 import { errorMessage, formatDateTime } from '../lib/format';
 import { useSession } from '../session/session';
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '../ui/kit';
+import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
 
 /** Shown once: the admin passes this to the user, who must replace it at first sign-in. */
 function OneTimePassword({

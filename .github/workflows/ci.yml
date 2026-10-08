@@ -113,12 +113,14 @@ jobs:
         run: |
           mkdir -p "$E2E_MAIL_DIR" && chmod 777 "$E2E_MAIL_DIR"
           $COMPOSE -f deploy/docker-compose.e2e.yml up -d --build --wait
-      - name: Owner routes are not public
+      - name: Owner console and routes are not public
         run: |
           curl -fsS http://127.0.0.1:8080/api/health
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/owner/tenants)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8081/api/owner/tenants)" = 401
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8081/api/auth/login)" = 404
+          curl -fsS http://127.0.0.1:8081/ | grep -q '<title>Aerolith Owner Console</title>'
+          ! curl -fsS http://127.0.0.1:8080/ | grep -q 'Owner Console'
       - name: Install Chromium for Playwright
         timeout-minutes: 5
         run: pnpm --filter @aerolith/e2e exec playwright install chromium

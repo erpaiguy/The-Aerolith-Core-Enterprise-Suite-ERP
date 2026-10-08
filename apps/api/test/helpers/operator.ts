@@ -2,18 +2,19 @@
 // TOTP sign-in -> mandatory password change. Returns an access token for the owner routes.
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { randomUUID } from 'node:crypto';
-import { OperatorAuthService } from '../../src/auth/operator-auth.service.js';
+import { OperatorAuthService, type OperatorRole } from '../../src/auth/operator-auth.service.js';
 import { timeStep, totpCode } from '../../src/auth/totp.js';
 
 export async function signInOperator(
   app: NestFastifyApplication,
   email = `owner-${randomUUID().slice(0, 8)}@aerolith.test`,
+  role: OperatorRole = 'owner',
 ) {
   const post = (url: string, payload: object, headers: Record<string, string> = {}) =>
     app.inject({ method: 'POST', url: `/api${url}`, payload, headers });
   const { temporaryPassword } = await app
     .get(OperatorAuthService)
-    .createOperator(email, 'Owner', 'owner');
+    .createOperator(email, 'Owner', role);
 
   const first = (await post('/owner/auth/login', { email, password: temporaryPassword })).json<{
     enrollmentToken: string;

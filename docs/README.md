@@ -59,7 +59,7 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 
 | Security | MFA mandatory for all tenant admins and owner; idle timeout 30 min browser / 12 h desktop; single owner with break-glass codes |
 
-| Deployment | Windows-only desktop, Windows code signing; API in Docker on owner's PC behind a tunnel (stage 0), then a free VM |
+| Deployment | Windows-only desktop, Windows code signing; API in Docker: owner's PC for local testing only, tenants served directly from a free VM (revised in step 7) |
 
 **All 10 planning phases are locked.**
 
@@ -74,4 +74,5 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 5 | Auth: login, mandatory admin MFA, staff reset requests, roles | **Done** ([details](authentication.md)). Interim owner token removed |
 | 6 | Electron + browser shells; notifications/reminders/pending inbox | **Done** ([details](app-shells.md)). Browser journey covered end to end; Windows installer built in CI (unsigned) |
 | 6b | Email worker: SMTP delivery, retries, suppression, owner controls | **Done** ([details](email.md)). Check your GoDaddy mailbox type before December 2026 |
-| 7 | Docker Compose stack for the owner PC with tunnel | **Done** ([details](deployment-docker.md)). Browser journey runs through the stack in CI; owner routes unreachable from the public port. Tunnel choice pending |
+| 7 | Docker Compose stack for the owner PC with tunnel | **Done** ([details](deployment-docker.md)). Browser journey runs through the stack in CI; owner routes unreachable from the public port. Decision: tenants go straight to a VM |
+| 8 | Owner console: tenants, licences, databases, email, migrations, audit | **Done** ([details](owner-console.md)). Served only on the loopback owner port; break-glass reset by server command |

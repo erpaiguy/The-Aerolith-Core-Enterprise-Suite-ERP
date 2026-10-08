@@ -17,8 +17,10 @@ import { z } from 'zod';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import {
   CLIENT_HEADER,
+  OPERATOR_REFRESH_COOKIE,
   REFRESH_COOKIE,
   clearedRefreshCookie,
+  operatorRefreshCookie,
   readCookie,
   refreshCookie,
 } from './cookie.js';
@@ -45,7 +47,7 @@ const loginSchema = z.object({
   client: z.enum(['browser', 'desktop']),
 });
 const refreshSchema = z.object({ refreshToken: z.string().min(10).max(512).optional() });
-const operatorRefreshSchema = z.object({ refreshToken: z.string().min(10).max(512) });
+const operatorRefreshSchema = z.object({ refreshToken: z.string().min(10).max(512).optional() });
 const changePasswordSchema = z.object({ currentPassword: password, newPassword: password });
 const resetRequestSchema = z.object({
   entitlementToken: z.string().min(10).max(4096),
@@ -69,6 +71,8 @@ const operatorLoginSchema = z.object({
   email: z.string().email().max(254),
   password,
   code: z.string().trim().max(20).optional(),
+  /** `browser`: the owner console. The refresh token goes into an HttpOnly cookie instead of the body. */
+  client: z.enum(['browser', 'cli']).default('cli'),
 });
 
 /** Sign-in for tenant admins and staff (desktop and browser app). */
@@ -274,14 +278,34 @@ export class OperatorAuthController {
   @Post('login')
   @HttpCode(200)
   @RateLimit(10)
-  login(@Body(new ZodPipe(operatorLoginSchema)) body: z.infer<typeof operatorLoginSchema>) {
-    return this.operators.login(body.email, body.password, body.code);
+  async login(
+    @Body(new ZodPipe(operatorLoginSchema)) body: z.infer<typeof operatorLoginSchema>,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.operators.login(body.email, body.password, body.code);
+    if (result.status !== 'ok' || body.client !== 'browser') return result;
+    reply.header('set-cookie', operatorRefreshCookie(result.refreshToken));
+    const { refreshToken: _refreshToken, ...rest } = result;
+    return rest;
   }
 
+  /** Scripts send the refresh token in the body; the owner console uses the cookie plus the client header. */
   @Post('refresh')
   @HttpCode(200)
   @RateLimit(60)
-  refresh(@Body(new ZodPipe(operatorRefreshSchema)) body: z.infer<typeof operatorRefreshSchema>) {
-    return this.operators.refresh(body.refreshToken);
+  async refresh(
+    @Body(new ZodPipe(operatorRefreshSchema)) body: z.infer<typeof operatorRefreshSchema>,
+    @Headers('cookie') cookie: string | undefined,
+    @Headers(CLIENT_HEADER) client: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    if (body.refreshToken) return this.operators.refresh(body.refreshToken);
+    const fromCookie = readCookie(cookie, OPERATOR_REFRESH_COOKIE);
+    if (!fromCookie || client !== 'browser')
+      throw new BadRequestException({ code: 'refresh_token_missing' });
+    const result = await this.operators.refresh(fromCookie);
+    reply.header('set-cookie', operatorRefreshCookie(result.refreshToken));
+    const { refreshToken: _refreshToken, ...rest } = result;
+    return rest;
   }
 }

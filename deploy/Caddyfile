@@ -1,10 +1,22 @@
 # Two listeners (docs/deployment-docker.md):
 #   :8080  public site: browser app + API, owner-console routes refused. A tunnel or proxy points here.
-#   :8081  owner console API only. Published on the PC's 127.0.0.1, never reachable from outside.
+#   :8081  owner console (its own front-end + owner API). Published on 127.0.0.1 only, never reachable from outside;
+#          on a VM, reach it through an SSH tunnel.
 # Plain HTTP inside the PC: TLS is terminated by whatever sits in front (tunnel, reverse proxy, VM load balancer).
 {
 	admin off
 	auto_https off
+}
+
+(spa) {
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	try_files {path} /index.html
+	file_server
+}
+
+(csp) {
+	header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 }
 
 (security_headers) {
@@ -20,7 +32,7 @@
 :8080 {
 	encode zstd gzip
 	import security_headers
-	header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+	import csp
 
 	handle /api/owner* {
 		respond "Not found" 404
@@ -31,16 +43,16 @@
 	}
 
 	handle {
-		root * /srv
-		@assets path /assets/*
-		header @assets Cache-Control "public, max-age=31536000, immutable"
-		try_files {path} /index.html
-		file_server
+		root * /srv/web
+		import spa
 	}
 }
 
 :8081 {
+	encode zstd gzip
 	import security_headers
+	import csp
+	header X-Robots-Tag "noindex, nofollow"
 	handle /api/owner* {
 		reverse_proxy api:3000
 	}
@@ -50,5 +62,12 @@
 	handle /api/health {
 		reverse_proxy api:3000
 	}
-	respond "Not found" 404
+	# Tenant-app API routes are not served here.
+	handle /api/* {
+		respond "Not found" 404
+	}
+	handle {
+		root * /srv/owner
+		import spa
+	}
 }

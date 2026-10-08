@@ -387,6 +387,23 @@ export class LicensingService {
     return open(row.key_cipher, this.config.controlPlaneEncKey);
   }
 
+  /** Emails the key again to the tenant's admin address. Preferred over revealKey: the key never reaches the console. */
+  async resendKey(licenceId: string, actor: string) {
+    return this.sql.begin(async (tx) => {
+      const [row] = await tx<{ email: string; name: string; ends_at: Date }[]>`
+        SELECT o.email, t.name, l.ends_at FROM core.licence l
+        JOIN core.tenant t ON t.id = l.tenant_id JOIN core.owner_account o ON o.id = t.owner_account_id
+        WHERE l.id = ${licenceId}`;
+      if (!row) throw new NotFoundException({ code: 'licence_not_found' });
+      await tx`INSERT INTO core.email_outbox (to_email, template, data)
+        VALUES (${row.email}, 'licence_key', ${tx.json({ licenceId, tenantName: row.name, endsAt: row.ends_at.toISOString() })})`;
+      await tx`INSERT INTO core.licence_event (licence_id, kind, actor, data)
+        VALUES (${licenceId}, 'resent', ${actor}, ${tx.json({ to: row.email })})`;
+      await this.audit(tx, 'licence.resend_key', `licence:${licenceId}`, { to: row.email }, actor);
+      return { licenceId, sentTo: row.email };
+    });
+  }
+
   async recordDownload(d: {
     email: string;
     kind: 'trial' | 'paid';
