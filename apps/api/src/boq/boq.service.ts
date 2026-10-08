@@ -96,8 +96,10 @@ function hiddenBy(key: string, collapsed: Set<string>): string | null {
 
 @Injectable()
 export class BoqService {
-  /** Time budget for the stop-early search plan before falling back (see `search`). Tests lower it. */
-  searchBudgetMs = 300;
+  /** Time budget for the tree-order search strategy before falling back (see `search`). Tests lower it. */
+  searchBudgetMs = 150;
+  /** Lines read per chunk by the tree-order strategy. Tests lower it. */
+  searchChunk = 4000;
   /** How often the fallback plan ran (a sign that a tenant needs a search index). */
   searchFallbacks = 0;
 
@@ -261,14 +263,17 @@ export class BoqService {
   }
 
   /**
-   * Lines whose code or description contains `q`, in tree order, paged by `after`.
+   * Lines whose code or description contains `q`, in tree order, paged by `after`. Two strategies, because neither
+   * wins everywhere (measured on 1M lines):
    *
-   * Two plans, because neither wins everywhere (measured on 1M lines):
-   * - walking lines in tree order and stopping at the first page of matches is instant for common words, but reads
-   *   every line when the term is rare or absent (3.4 s);
-   * - filtering text first, then ordering the matches, costs ~0.6 s whatever the term, but is slow when almost
-   *   everything matches.
-   * So the first plan gets a short time budget and the second runs only when it runs out.
+   * 1. Walk the BOQ in tree order in fixed chunks and keep the matches, stopping at a full page. Instant for common
+   *    words, but reads everything when the term is rare. It gets a short time budget.
+   * 2. When the budget runs out: filter with the trigram indexes (migration 0006), then order the matches. Fast for
+   *    rare and absent terms, slow when almost everything matches. It continues from where (1) stopped.
+   *
+   * Why chunks instead of one query: tables have row-level security, and Postgres then refuses to use column
+   * statistics to estimate LIKE filters (estimates could leak data). It guesses ~0.5% matches for every term and
+   * picks a bad plan for common words (measured: 13 s). Each chunk query has one obvious plan whatever the estimate.
    */
   async search(
     claims: TenantClaims,
@@ -279,24 +284,37 @@ export class BoqService {
     const db = await this.tenants.forTenant(claims.ten);
     await this.mustExist(db, boqId);
     const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    const after = opts.after ? db`AND n.sort_key > ${opts.after}` : db``;
-    let rows: BoqRow[];
-    try {
-      rows = await db.begin(async (tx) => {
-        await tx.unsafe(
-          `SET LOCAL statement_timeout = ${Math.max(1, Math.floor(this.searchBudgetMs))}`,
-        );
-        return tx<BoqRow[]>`
-          SELECT ${tx.unsafe(ROW)}
-          FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
-          WHERE n.boq_id = ${boqId} AND (t.description ILIKE ${pattern} OR n.code ILIKE ${pattern})
-            ${opts.after ? tx`AND n.sort_key > ${opts.after}` : tx``}
-          ORDER BY n.sort_key LIMIT ${opts.limit + 1}`;
-      });
-    } catch (err) {
-      if ((err as { code?: string }).code !== '57014') throw err; // query_canceled: the budget ran out
+    const want = opts.limit + 1; // one extra row tells us whether more exist
+    const found: BoqRow[] = [];
+    let cursor = opts.after ?? null;
+    let done = false;
+    const deadline = performance.now() + this.searchBudgetMs;
+
+    while (!done && found.length < want && performance.now() < deadline) {
+      const [end] = await db<{ sort_key: string }[]>`
+        SELECT sort_key FROM est.boq_node
+        WHERE boq_id = ${boqId} ${cursor === null ? db`` : db`AND sort_key > ${cursor}`}
+        ORDER BY sort_key OFFSET ${this.searchChunk - 1} LIMIT 1`;
+      const upTo = end?.sort_key ?? null;
+      const matches = await db<BoqRow[]>`
+        WITH c AS MATERIALIZED (
+          SELECT id FROM est.boq_node
+          WHERE boq_id = ${boqId} ${cursor === null ? db`` : db`AND sort_key > ${cursor}`}
+            ${upTo === null ? db`` : db`AND sort_key <= ${upTo}`}
+        )
+        SELECT ${db.unsafe(ROW)}
+        FROM c JOIN est.boq_node n ON n.boq_id = ${boqId} AND n.id = c.id
+        JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
+        WHERE t.description ILIKE ${pattern} OR n.code ILIKE ${pattern}
+        ORDER BY n.sort_key LIMIT ${want - found.length}`;
+      found.push(...matches);
+      if (upTo === null) done = true;
+      cursor = upTo;
+    }
+
+    if (!done && found.length < want) {
       this.searchFallbacks++;
-      rows = await db<BoqRow[]>`
+      const rest = await db<BoqRow[]>`
         WITH m AS MATERIALIZED (
           SELECT node_id AS id FROM est.boq_node_text WHERE boq_id = ${boqId} AND description ILIKE ${pattern}
           UNION
@@ -305,10 +323,11 @@ export class BoqService {
         SELECT ${db.unsafe(ROW)}
         FROM m JOIN est.boq_node n ON n.boq_id = ${boqId} AND n.id = m.id
         JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
-        WHERE true ${after}
-        ORDER BY n.sort_key LIMIT ${opts.limit + 1}`;
+        WHERE true ${cursor === null ? db`` : db`AND n.sort_key > ${cursor}`}
+        ORDER BY n.sort_key LIMIT ${want - found.length}`;
+      found.push(...rest);
     }
-    return { rows: rows.slice(0, opts.limit), hasMore: rows.length > opts.limit };
+    return { rows: found.slice(0, opts.limit), hasMore: found.length > opts.limit };
   }
 
   // --- editing ---

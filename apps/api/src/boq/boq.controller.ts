@@ -11,7 +11,8 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
-import { Auth, RequiresFeatures, Roles, TenantAuthGuard } from '../auth/guards.js';
+import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
+import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { BoqService, type Op } from './boq.service.js';
 
@@ -107,11 +108,11 @@ const headerBody = z.object({
 });
 
 /**
- * BOQ engine (docs/wave1-plan.md step 2). Everyone signed in can read; admins and managers edit while the BOQ is a
- * draft and the licence allows changes.
+ * BOQ engine (docs/wave1-plan.md step 2). Everyone signed in can read; editing needs the `boq.edit` permission (admin-configurable per
+ * role), a draft BOQ and a licence that allows changes.
  */
 @Controller('tenant')
-@UseGuards(TenantAuthGuard)
+@UseGuards(TenantAuthGuard, PermissionGuard)
 export class BoqController {
   constructor(private readonly boqs: BoqService) {}
 
@@ -121,7 +122,7 @@ export class BoqController {
   }
 
   @Post('tenders/:id/boqs')
-  @Roles('admin', 'manager')
+  @RequiresPermission('boq.edit')
   @RequiresFeatures()
   create(
     @Auth() c: TenantClaims,
@@ -138,7 +139,7 @@ export class BoqController {
 
   @Post('boqs/:id')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @RequiresPermission('boq.edit')
   @RequiresFeatures()
   updateHeader(
     @Auth() c: TenantClaims,
@@ -177,7 +178,7 @@ export class BoqController {
 
   @Post('boqs/:id/changes')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @RequiresPermission('boq.edit')
   @RequiresFeatures()
   changes(
     @Auth() c: TenantClaims,

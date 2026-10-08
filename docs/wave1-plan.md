@@ -119,8 +119,7 @@ Each step ships with API tests and a browser test of the main journey, like Wave
   - Atomic, and serialised per BOQ, which also rules out deadlocks.
   - A batch can refer to lines it inserted earlier through `tempId`s, so pasting a section with its children is one request.
   - A stale `rowVersion` returns 409 `stale_row` with the failing `opIndex`, and nothing in the batch is applied.
-- **Who can edit:** admins and managers, while the BOQ is a draft and the licence allows changes. Workers can read.
-  **Decision to confirm:** junior estimators may have the worker role. Should workers be allowed to edit BOQ lines?
+- **Who can edit:** set per role by the tenant admin (owner decision; see "Owner decisions after step 3" below).
 
 | Method | Path (under `/api/tenant`) | Notes |
 |--------|----------------------------|-------|
@@ -219,3 +218,46 @@ Each step ships with API tests and a browser test of the main journey, like Wave
   - jumping to the end, folding, a search jump, outdent, and a reload;
   - the 3,000-line scroll test.
 - The API's randomised invariant run now includes shifts.
+
+## Owner decisions after step 3
+
+### 1. Trigram search index for every tenant
+
+- **Migration:** `0006_boq_search_index.sql` creates `pg_trgm` and `btree_gin`.
+  - [Certain] Both are *trusted* extensions, so the least-privilege migration role can install them. Tests do exactly that.
+  - A project that already has them is reused.
+  - Indexes are `(boq_id, description)` and `(boq_id, code)`.
+- **Storage:** a database with one 1,002,200-line BOQ now measures **584 MB**. [Likely] A ~500 MB free Supabase
+  project therefore holds roughly 800k lines in total.
+- **[Certain] Search has two strategies, and the first must not depend on the query planner.**
+  - Tenant tables have row-level security. Postgres then refuses to use column statistics to estimate `LIKE`
+    (estimates could leak data), so it guesses ~0.5% matches for every term.
+  - With real statistics this produced 13 s for a common word.
+  - So the tree-order strategy walks the BOQ in 4,000-line chunks, each with one obvious plan, for up to 150 ms.
+  - After that, the trigram index filters the rest.
+- **Measured** through the HTTP API as the app role, 1,002,200 lines, real statistics:
+
+  | Search | Before the index | Now |
+  |--------|------------------|-----|
+  | Common word | 9 ms | 34 ms |
+  | Word on 1% of lines | 74 ms | 169 ms |
+  | Rare code near the end | 1,822 ms | 190 ms |
+  | No match | 3,774 ms | 180 ms |
+
+- **Lesson:** the step 2 numbers were taken without table statistics. Measurements from now on gather statistics first,
+  as the import does.
+
+### 2. Who may edit: configured by the admin per role
+
+- **Where:** a **"What each role can do"** panel on the Users page. Admins always have every permission.
+- **Permissions so far:**
+  - `tender.edit`: tenders, clients, status, bid decisions.
+  - `boq.edit`: create BOQs and edit lines.
+- **Defaults (today's behaviour):** managers yes, workers no. Only the admin's changes are stored
+  (`platform.role_permission`), so permissions added later get their defaults without a data migration.
+- **[Certain] Enforcement:** the server checks every write.
+  - The check is cached per tenant for 30 s and dropped immediately when the admin changes something.
+  - Each change is written to the tenant's audit log.
+- **API:**
+  - `GET /api/tenant/permissions/mine`: what I may do.
+  - `GET/POST /api/tenant/permissions`: admin only.

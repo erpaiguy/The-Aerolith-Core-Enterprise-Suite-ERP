@@ -12,6 +12,8 @@ import { AuthService } from './auth.service.js';
 import { MfaService } from './mfa.service.js';
 import { OperatorAuthService } from './operator-auth.service.js';
 import { OperatorSessionController } from './operator-session.controller.js';
+import { PermissionsController } from './permissions.controller.js';
+import { PermissionGuard, PermissionsService } from './permissions.js';
 import { UsersService } from './users.service.js';
 
 @Module({
@@ -22,8 +24,17 @@ import { UsersService } from './users.service.js';
     OperatorAuthController,
     OperatorSessionController,
     InboxController,
+    PermissionsController,
   ],
-  providers: [AuthService, UsersService, MfaService, OperatorAuthService, InboxService],
-  exports: [OperatorAuthService],
+  providers: [
+    AuthService,
+    UsersService,
+    MfaService,
+    OperatorAuthService,
+    InboxService,
+    PermissionsService,
+    PermissionGuard,
+  ],
+  exports: [OperatorAuthService, PermissionsService, PermissionGuard],
 })
 export class AuthModule {}

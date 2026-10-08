@@ -48,6 +48,113 @@ function OneTimePassword({
   );
 }
 
+interface PermissionMatrix {
+  roles: ('manager' | 'worker')[];
+  permissions: { key: string; label: string }[];
+  grants: Record<'manager' | 'worker', Record<string, boolean>>;
+}
+
+/** "What each role can do": admins always can; managers and workers as set here. The server enforces it. */
+function RolePermissions({ readOnly }: { readOnly: boolean }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  // Clicked values shown at once, before the server answers (a controlled checkbox would otherwise snap back).
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const matrix = useQuery({
+    queryKey: ['permissions'],
+    queryFn: () => api.request<PermissionMatrix>('/api/tenant/permissions'),
+  });
+  const set = useMutation({
+    mutationFn: (b: { role: 'manager' | 'worker'; permission: string; granted: boolean }) =>
+      api.request('/api/tenant/permissions', { method: 'POST', body: b }),
+    // Tick the box at once; roll back if the server refuses.
+    onMutate: (b) => {
+      const before = qc.getQueryData<PermissionMatrix>(['permissions']);
+      if (before)
+        qc.setQueryData<PermissionMatrix>(['permissions'], {
+          ...before,
+          grants: {
+            ...before.grants,
+            [b.role]: { ...before.grants[b.role], [b.permission]: b.granted },
+          },
+        });
+      return { before };
+    },
+    onSuccess: () => {
+      setError(null);
+      void qc.invalidateQueries({ queryKey: ['my-permissions'] });
+    },
+    onError: (err, _b, ctx) => {
+      if (ctx?.before) qc.setQueryData(['permissions'], ctx.before);
+      setError(errorMessage(err instanceof ApiError ? err.code : undefined));
+    },
+    onSettled: async (_r, _e, b) => {
+      await qc.invalidateQueries({ queryKey: ['permissions'] });
+      setPending(({ [`${b.role}:${b.permission}`]: _done, ...rest }) => rest);
+    },
+  });
+  return (
+    <Card title="What each role can do">
+      {matrix.isPending ? (
+        <Spinner />
+      ) : matrix.isError ? (
+        <Alert tone="danger">{errorMessage(undefined)}</Alert>
+      ) : (
+        <>
+          <p className="mb-3 text-sm text-fg-muted">
+            Everyone can view tenders and BOQs. Admins can always change everything. Changes apply
+            at once for new actions.
+          </p>
+          <div className="-mx-5 overflow-x-auto">
+            <table className="w-full min-w-[32rem] text-left text-sm [&_td]:px-5 [&_td]:py-2.5 [&_th]:px-5 [&_th]:pb-2 [&_th]:text-xs [&_th]:font-medium [&_th]:text-fg-muted">
+              <thead>
+                <tr>
+                  <th>Permission</th>
+                  <th className="text-center">Admin</th>
+                  <th className="text-center">Manager</th>
+                  <th className="text-center">Worker</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matrix.data.permissions.map((p) => (
+                  <tr key={p.key} className="border-t border-line">
+                    <td>{p.label}</td>
+                    <td className="text-center">
+                      <input type="checkbox" checked disabled aria-label={`Admin: ${p.label}`} />
+                    </td>
+                    {matrix.data.roles.map((role) => (
+                      <td key={role} className="text-center">
+                        <input
+                          type="checkbox"
+                          aria-label={`${role === 'manager' ? 'Manager' : 'Worker'}: ${p.label}`}
+                          checked={
+                            pending[`${role}:${p.key}`] ?? matrix.data.grants[role][p.key] ?? false
+                          }
+                          disabled={readOnly}
+                          onChange={(e) => {
+                            const granted = e.target.checked;
+                            setPending((m) => ({ ...m, [`${role}:${p.key}`]: granted }));
+                            set.mutate({ role, permission: p.key, granted });
+                          }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {error && (
+            <div className="mt-3">
+              <Alert tone="danger">{error}</Alert>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 export function UsersScreen() {
   const session = useSession();
   const qc = useQueryClient();
@@ -230,6 +337,7 @@ export function UsersScreen() {
           </div>
         )}
       </Card>
+      <RolePermissions readOnly={Boolean(readOnly)} />
     </div>
   );
 }

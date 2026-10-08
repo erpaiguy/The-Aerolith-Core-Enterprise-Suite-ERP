@@ -6,7 +6,7 @@ import { useDeferredValue, useState } from 'react';
 import { api } from '../api/client';
 import type { TenderDetail, TenderStatus, TenderSummary } from '../api/types';
 import { daysUntil, describeError, formatDate, formatInrShort } from '../lib/format';
-import { useSession } from '../session/session';
+import { usePermission } from '../session/permissions';
 import { TenderForm } from './TenderForm';
 
 export const STATUS_LABEL: Record<TenderStatus, string> = {
@@ -34,13 +34,8 @@ export const statusTone = (
           ? 'danger'
           : 'neutral';
 
-/** Admins and managers change tenders, while the licence allows changes. */
-export function useCanEditTenders(): boolean {
-  const { user, licence } = useSession();
-  return (
-    (user?.role === 'admin' || user?.role === 'manager') && licence?.featuresUnlocked !== false
-  );
-}
+/** Changing tenders and clients needs the `tender.edit` permission (set per role by the admin). */
+export const useCanEditTenders = (): boolean => usePermission('tender.edit');
 
 /** "in 5 days", "today", "2 days late". Open tenders only; closed ones show the plain date. */
 export function DueLabel({

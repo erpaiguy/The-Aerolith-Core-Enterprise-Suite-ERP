@@ -11,7 +11,8 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
-import { Auth, RequiresFeatures, Roles, TenantAuthGuard } from '../auth/guards.js';
+import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
+import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { TENDER_STATUSES } from './tender-rules.js';
 import { TenderService } from './tender.service.js';
@@ -174,9 +175,9 @@ const decideBody = z.object({
 
 type Claims = TenantClaims;
 
-/** Tender register and the party master (docs/wave1-plan.md step 1). Workers may read; changes need admin/manager. */
+/** Tender register and the party master (docs/wave1-plan.md step 1). Everyone may read; changes need the `tender.edit` permission (admin-configurable per role). */
 @Controller('tenant')
-@UseGuards(TenantAuthGuard)
+@UseGuards(TenantAuthGuard, PermissionGuard)
 export class TenderController {
   constructor(private readonly tenders: TenderService) {}
 
@@ -186,7 +187,7 @@ export class TenderController {
   }
 
   @Post('parties')
-  @Roles('admin', 'manager')
+  @RequiresPermission('tender.edit')
   @RequiresFeatures()
   createParty(@Auth() c: Claims, @Body(new ZodPipe(partyCreate)) b: z.infer<typeof partyCreate>) {
     return this.tenders.createParty(c, b);
@@ -194,7 +195,7 @@ export class TenderController {
 
   @Post('parties/:id')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @RequiresPermission('tender.edit')
   @RequiresFeatures()
   updateParty(
     @Auth() c: Claims,
@@ -221,7 +222,7 @@ export class TenderController {
   }
 
   @Post('tenders')
-  @Roles('admin', 'manager')
+  @RequiresPermission('tender.edit')
   @RequiresFeatures()
   create(@Auth() c: Claims, @Body(new ZodPipe(tenderCreate)) b: z.infer<typeof tenderCreate>) {
     return this.tenders.create(c, b);
@@ -229,7 +230,7 @@ export class TenderController {
 
   @Post('tenders/:id')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @RequiresPermission('tender.edit')
   @RequiresFeatures()
   update(
     @Auth() c: Claims,
@@ -242,7 +243,7 @@ export class TenderController {
 
   @Post('tenders/:id/status')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @RequiresPermission('tender.edit')
   @RequiresFeatures()
   move(
     @Auth() c: Claims,
@@ -254,7 +255,7 @@ export class TenderController {
 
   @Post('tenders/:id/decision')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @RequiresPermission('tender.edit')
   @RequiresFeatures()
   decide(
     @Auth() c: Claims,

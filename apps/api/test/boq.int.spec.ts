@@ -664,7 +664,8 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ engine (integration)', () => {
           await get(`/tenant/boqs/${boqId}/search?limit=7&q=${q}${after ? `&after=${after}` : ''}`)
         ).json<{ rows: BoqRow[]; hasMore: boolean }>();
       const fast = [await ask('vitrified'), await ask('tile 1'), await ask('nothing-here')];
-      service.searchBudgetMs = 1; // every fast attempt now times out
+      service.searchBudgetMs = 1; // the tree-order walk stops after its first chunk
+      service.searchChunk = 50;
       const before = service.searchFallbacks;
       try {
         const slow = [await ask('vitrified'), await ask('tile 1'), await ask('nothing-here')];
@@ -673,7 +674,8 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ engine (integration)', () => {
         const page2 = await ask('vitrified', fast[0]!.rows.at(-1)!.sortKey);
         expect(page2.rows[0]!.sortKey > fast[0]!.rows.at(-1)!.sortKey).toBe(true);
       } finally {
-        service.searchBudgetMs = 300;
+        service.searchBudgetMs = 150;
+        service.searchChunk = 4000;
       }
     });
 

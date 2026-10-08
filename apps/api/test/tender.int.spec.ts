@@ -340,4 +340,87 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
       await expect(tenantDb`DELETE FROM tender.tender`).rejects.toThrow(/permission denied/);
     });
   });
+
+  describe('role permissions (admin-configurable)', () => {
+    it('reports what each user may do', async () => {
+      expect((await get('/tenant/permissions/mine', worker)).json()).toEqual([]);
+      expect((await get('/tenant/permissions/mine', manager)).json()).toEqual([
+        'tender.edit',
+        'boq.edit',
+      ]);
+      expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
+        'tender.edit',
+        'boq.edit',
+      ]);
+      expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
+      const all = (await get('/tenant/permissions', t.admin)).json<{
+        grants: Record<string, Record<string, boolean>>;
+      }>();
+      expect(all.grants).toEqual({
+        manager: { 'tender.edit': true, 'boq.edit': true },
+        worker: { 'tender.edit': false, 'boq.edit': false },
+      });
+    });
+
+    it('lets the admin allow workers to edit BOQs, and only that', async () => {
+      const tenderId = (await get('/tenant/tenders', t.admin)).json<{ items: { id: string }[] }>()
+        .items[0]!.id;
+      expect(
+        (await post(`/tenant/tenders/${tenderId}/boqs`, { name: 'Worker BOQ' }, worker)).statusCode,
+      ).toBe(403);
+      const set = await post(
+        '/tenant/permissions',
+        { role: 'worker', permission: 'boq.edit', granted: true },
+        t.admin,
+      );
+      expect(set.json()).toMatchObject({ grants: { worker: { 'boq.edit': true } } });
+      expect((await get('/tenant/permissions/mine', worker)).json()).toEqual(['boq.edit']);
+      expect(
+        (await post(`/tenant/tenders/${tenderId}/boqs`, { name: 'Worker BOQ' }, worker)).statusCode,
+      ).toBe(201);
+      expect(
+        (await post('/tenant/tenders', { title: 'Still not allowed' }, worker)).statusCode,
+      ).toBe(403);
+    });
+
+    it('lets the admin take a permission away from managers, with an audit record', async () => {
+      await post(
+        '/tenant/permissions',
+        { role: 'manager', permission: 'tender.edit', granted: false },
+        t.admin,
+      );
+      const denied = await post('/tenant/tenders', { title: 'Manager blocked' }, manager);
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json()).toMatchObject({ code: 'forbidden', permission: 'tender.edit' });
+      const [row] = await tenantDb<{ data: { permission: string; granted: boolean } }[]>`
+        SELECT data FROM platform.audit_log WHERE action = 'permission.set' AND entity_id = 'manager'`;
+      expect(row!.data).toEqual({ permission: 'tender.edit', granted: false });
+      await post(
+        '/tenant/permissions',
+        { role: 'manager', permission: 'tender.edit', granted: true },
+        t.admin,
+      );
+      expect((await post('/tenant/tenders', { title: 'Manager again' }, manager)).statusCode).toBe(
+        201,
+      );
+    });
+
+    it('rejects unknown permissions and non-admins', async () => {
+      const bad = await post(
+        '/tenant/permissions',
+        { role: 'worker', permission: 'boq.delete_everything', granted: true },
+        t.admin,
+      );
+      expect(bad.statusCode).toBe(400);
+      expect(
+        (
+          await post(
+            '/tenant/permissions',
+            { role: 'worker', permission: 'tender.edit', granted: true },
+            manager,
+          )
+        ).statusCode,
+      ).toBe(403);
+    });
+  });
 });

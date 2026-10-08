@@ -77,4 +77,17 @@ test('a tender goes from lead through a scored bid decision to a recorded loss',
   await page.getByLabel('Search tenders').fill('cpwd');
   await expect(page.getByRole('link', { name: 'G+4 hostel block, Pune campus' })).toBeVisible();
   await page.screenshot(shot('tender-03-register'));
+
+  // 6. The admin lets workers edit BOQs; the setting is saved.
+  await nav('Users');
+  const workerBoq = page.getByRole('checkbox', {
+    name: 'Worker: Create BOQs and edit their lines',
+  });
+  await expect(workerBoq).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /^Admin: Create BOQs/ })).toBeDisabled();
+  await workerBoq.check();
+  await page.reload();
+  await expect(
+    page.getByRole('checkbox', { name: 'Worker: Create BOQs and edit their lines' }),
+  ).toBeChecked();
 });

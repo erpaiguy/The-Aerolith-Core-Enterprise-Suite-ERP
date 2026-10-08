@@ -7,8 +7,7 @@ import { api } from '../api/client';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
 import { formatAmount, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatInr } from '../lib/format';
-import { useSession } from '../session/session';
-import { useCanEditTenders } from './Tenders';
+import { usePermission } from '../session/permissions';
 
 /** Sections (outline) or search results; clicking one opens the grid at that line. */
 function SidePanel({ boqId, onJump }: { boqId: string; onJump: (key: string) => void }) {
@@ -107,8 +106,7 @@ function SidePanel({ boqId, onJump }: { boqId: string; onJump: (key: string) => 
 
 export function BoqScreen({ boqId }: { boqId: string }) {
   const qc = useQueryClient();
-  const session = useSession();
-  const canEditTenders = useCanEditTenders();
+  const canEditBoq = usePermission('boq.edit');
   const grid = useRef<GridHandle>(null);
   const [saving, setSaving] = useState(0);
   // The outline takes width the grid needs on laptop screens; open by default only on wide ones.
@@ -130,8 +128,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
   if (header.isPending) return <Spinner />;
   if (header.isError) return <Alert tone="danger">{describeError(header.error)}</Alert>;
   const h = header.data;
-  const canEdit =
-    canEditTenders && h.status === 'draft' && session.licence?.featuresUnlocked !== false;
+  const canEdit = canEditBoq && h.status === 'draft';
 
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] min-h-[34rem] flex-col gap-3">
