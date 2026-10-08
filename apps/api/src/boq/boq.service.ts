@@ -37,7 +37,11 @@ export type Op =
     } & LineFields)
   | ({ op: 'update'; id: string; rowVersion: number } & LineFields)
   | { op: 'delete'; id: string; rowVersion: number }
-  | { op: 'move'; id: string; rowVersion: number; parentId: string | null; afterId: string | null };
+  | { op: 'move'; id: string; rowVersion: number; parentId: string | null; afterId: string | null }
+  | { op: 'shift'; id: string; rowVersion: number; direction: ShiftDirection };
+
+/** Relative moves the server resolves, because the client may not have far-away siblings or parents loaded. */
+export type ShiftDirection = 'up' | 'down' | 'in' | 'out';
 
 export const MAX_DEPTH = 30;
 const MAX_TOUCHED_ROWS = 1000;
@@ -167,6 +171,8 @@ export class BoqService {
     boqId: string,
     opts: {
       after?: string | undefined;
+      /** Like `after`, but including the row at this key (open the grid at a line). */
+      from?: string | undefined;
       before?: string | undefined;
       end?: boolean | undefined;
       limit: number;
@@ -186,9 +192,13 @@ export class BoqService {
     );
     const backward = opts.before !== undefined || opts.end === true;
     const out: BoqRow[] = [];
-    let cursor: string | null = backward ? (opts.before ?? null) : (opts.after ?? null);
-    // A collapsed section the client stopped on: continue after its hidden rows.
-    if (!backward && cursor !== null && collapsed.has(cursor)) cursor += SUBTREE_END;
+    let cursor: string | null = backward
+      ? (opts.before ?? null)
+      : (opts.from ?? opts.after ?? null);
+    let inclusive = !backward && opts.from !== undefined;
+    // A collapsed section the client stopped on (`after`): continue after its hidden rows. With `from` the section
+    // itself is the first row to show, so the jump happens when it is read.
+    if (!backward && !inclusive && cursor !== null && collapsed.has(cursor)) cursor += SUBTREE_END;
     let exhausted = false;
     for (let guard = 0; out.length < opts.limit && guard < opts.limit * 2 + 10; guard++) {
       const want = opts.limit - out.length + 1; // one extra row tells us whether more exist
@@ -196,9 +206,18 @@ export class BoqService {
         SELECT ${db.unsafe(ROW)}
         FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
         WHERE n.boq_id = ${boqId}
-          ${cursor === null ? db`` : backward ? db`AND n.sort_key < ${cursor}` : db`AND n.sort_key > ${cursor}`}
+          ${
+            cursor === null
+              ? db``
+              : backward
+                ? db`AND n.sort_key < ${cursor}`
+                : inclusive
+                  ? db`AND n.sort_key >= ${cursor}`
+                  : db`AND n.sort_key > ${cursor}`
+          }
         ORDER BY n.sort_key ${backward ? db`DESC` : db`ASC`}
         LIMIT ${want}`;
+      inclusive = false;
       if (rows.length === 0) {
         exhausted = true;
         break;
@@ -320,7 +339,8 @@ export class BoqService {
           if (op.op === 'insert') await this.insert(ctx, op);
           else if (op.op === 'update') await this.update(ctx, op);
           else if (op.op === 'delete') await this.remove(ctx, op);
-          else await this.move(ctx, op);
+          else if (op.op === 'move') await this.move(ctx, op);
+          else await this.shift(ctx, op);
         } catch (err) {
           // Tell the client which op failed; the whole batch rolls back.
           const r = (err as { response?: Record<string, unknown> }).response;
@@ -433,15 +453,53 @@ export class BoqService {
   }
 
   private async move(ctx: BatchContext, op: Extract<Op, { op: 'move' }>) {
-    const { tx, boqId } = ctx;
     const node = await this.lockNode(ctx, op.id, op.rowVersion);
     const parent = await this.parentNode(ctx, op.parentId);
+    await this.relocate(ctx, node, parent, op.afterId);
+  }
+
+  private async shift(ctx: BatchContext, op: Extract<Op, { op: 'shift' }>) {
+    const node = await this.lockNode(ctx, op.id, op.rowVersion);
+    const parentKey = splitKey(node.sort_key).parent;
+    const parent = parentKey ? await this.nodeByKey(ctx, parentKey) : null;
+    const cannot = () => new BadRequestException({ code: 'cannot_shift', direction: op.direction });
+    if (op.direction === 'up') {
+      const prev = await this.siblingKey(ctx, node.sort_key, 'prev');
+      if (!prev) throw cannot();
+      const before = await this.siblingKey(ctx, prev, 'prev');
+      const after = before ? (await this.nodeByKey(ctx, before)).id : null;
+      await this.relocate(ctx, node, parent, after);
+    } else if (op.direction === 'down') {
+      const next = await this.siblingKey(ctx, node.sort_key, 'next');
+      if (!next) throw cannot();
+      await this.relocate(ctx, node, parent, (await this.nodeByKey(ctx, next)).id);
+    } else if (op.direction === 'in') {
+      const prev = await this.siblingKey(ctx, node.sort_key, 'prev');
+      const target = prev ? await this.nodeByKey(ctx, prev) : null;
+      if (!target || target.node_type !== 'section') throw cannot();
+      await this.relocate(ctx, node, target, 'last');
+    } else {
+      if (!parent) throw cannot();
+      const grandKey = splitKey(parent.sort_key).parent;
+      const grand = grandKey ? await this.nodeByKey(ctx, grandKey) : null;
+      await this.relocate(ctx, node, grand, parent.id);
+    }
+  }
+
+  /** Moves `node` (and its subtree) under `parent`, after sibling `afterId` (null = first, 'last' = last). */
+  private async relocate(
+    ctx: BatchContext,
+    node: NodeRef,
+    parent: NodeRef | null,
+    afterId: string | null | 'last',
+  ) {
+    const { tx, boqId } = ctx;
     if (
       parent &&
       (parent.sort_key === node.sort_key || parent.sort_key.startsWith(node.sort_key + '!'))
     )
       throw new BadRequestException({ code: 'move_into_self' });
-    const newKey = await this.keyFor(ctx, parent, op.afterId, node.id);
+    const newKey = await this.keyFor(ctx, parent, afterId, node.id);
     const newDepth = parent ? parent.depth + 1 : 0;
     const shift = newDepth - node.depth;
     const [sub] = await tx<{ deepest: number }[]>`
@@ -530,11 +588,29 @@ export class BoqService {
   private async keyFor(
     ctx: BatchContext,
     parent: NodeRef | null,
-    rawAfterId: string | null,
+    rawAfterId: string | null | 'last',
     moving: string | null,
   ): Promise<string> {
     const { tx, boqId } = ctx;
     const parentKey = parent?.sort_key ?? '';
+    const notMoving = moving
+      ? tx`AND NOT (sort_key >= (SELECT sort_key FROM est.boq_node WHERE boq_id = ${boqId} AND id = ${moving})
+             AND sort_key < (SELECT sort_key FROM est.boq_node WHERE boq_id = ${boqId} AND id = ${moving}) || ${SUBTREE_END})`
+      : tx``;
+    if (rawAfterId === 'last') {
+      // The last key in the parent's range belongs to its last child (or that child's last descendant).
+      const [last] = await tx<{ sort_key: string }[]>`
+        SELECT sort_key FROM est.boq_node
+        WHERE boq_id = ${boqId} ${parent ? tx`AND sort_key > ${parentKey + '!'} AND sort_key < ${parentKey + SUBTREE_END}` : tx``}
+          ${notMoving}
+        ORDER BY sort_key DESC LIMIT 1`;
+      const rest = last
+        ? parent
+          ? last.sort_key.slice(parentKey.length + 1)
+          : last.sort_key
+        : null;
+      return childKey(parentKey, midpoint(rest ? rest.split('!')[0]! : '', null));
+    }
     let lower = '';
     let from: string; // the next row after this key is the candidate upper neighbour
     if (rawAfterId !== null) {
@@ -552,17 +628,46 @@ export class BoqService {
     }
     const neighbours = await tx<{ sort_key: string; id: string }[]>`
       SELECT sort_key, id::text FROM est.boq_node
-      WHERE boq_id = ${boqId} AND sort_key > ${from}
-        ${
-          moving
-            ? tx`AND NOT (sort_key >= (SELECT sort_key FROM est.boq_node WHERE boq_id = ${boqId} AND id = ${moving})
-                       AND sort_key < (SELECT sort_key FROM est.boq_node WHERE boq_id = ${boqId} AND id = ${moving}) || ${SUBTREE_END})`
-            : tx``
-        }
+      WHERE boq_id = ${boqId} AND sort_key > ${from} ${notMoving}
       ORDER BY sort_key LIMIT 1`;
     const next = neighbours[0] ? splitKey(neighbours[0].sort_key) : null;
     const upper = next && next.parent === parentKey ? next.segment : null;
     return childKey(parentKey, midpoint(lower, upper));
+  }
+
+  private async nodeByKey(ctx: BatchContext, key: string): Promise<NodeRef> {
+    const [n] = await ctx.tx<NodeRef[]>`
+      SELECT id::text, parent_id::text, sort_key, depth, node_type, code, unit, qty::text, rate::text,
+        amount::text, subtotal::text, row_version
+      FROM est.boq_node WHERE boq_id = ${ctx.boqId} AND sort_key = ${key}`;
+    if (!n) throw new NotFoundException({ code: 'line_not_found' });
+    return n;
+  }
+
+  /** Key of the previous or next sibling of the line at `key`, if any. */
+  private async siblingKey(
+    ctx: BatchContext,
+    key: string,
+    which: 'prev' | 'next',
+  ): Promise<string | null> {
+    const { tx, boqId } = ctx;
+    const parentKey = splitKey(key).parent;
+    const depth = key.split('!').length;
+    if (which === 'prev') {
+      // The row just before this one, within the parent, is the previous sibling or its last descendant.
+      const [r] = await tx<{ sort_key: string }[]>`
+        SELECT sort_key FROM est.boq_node
+        WHERE boq_id = ${boqId} AND sort_key < ${key} ${parentKey ? tx`AND sort_key > ${parentKey + '!'}` : tx``}
+        ORDER BY sort_key DESC LIMIT 1`;
+      return r ? r.sort_key.split('!').slice(0, depth).join('!') : null;
+    }
+    // The first row after this line's subtree, within the parent, is the next sibling itself.
+    const [r] = await tx<{ sort_key: string }[]>`
+      SELECT sort_key FROM est.boq_node
+      WHERE boq_id = ${boqId} AND sort_key > ${key + SUBTREE_END}
+        ${parentKey ? tx`AND sort_key < ${parentKey + SUBTREE_END}` : tx``}
+      ORDER BY sort_key LIMIT 1`;
+    return r ? r.sort_key : null;
   }
 
   private async mustExist(db: Sql, boqId: string) {

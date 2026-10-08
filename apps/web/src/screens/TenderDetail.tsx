@@ -6,6 +6,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
 import type { Criterion, TenderDetail, TenderStatus } from '../api/types';
 import { describeError, formatDate, formatDateTime, formatInr } from '../lib/format';
+import { TenderBoqs } from './Boq';
 import { SOURCES, TenderForm, VERTICALS } from './TenderForm';
 import { DueLabel, STATUS_LABEL, statusTone, useCanEditTenders } from './Tenders';
 
@@ -363,6 +364,7 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
           {canEdit && <StatusActions tender={t} onChanged={refresh} />}
           <div className="grid gap-5 xl:grid-cols-[1fr_26rem]">
             <div className="space-y-5">
+              <TenderBoqs tenderId={t.id} canEdit={canEdit} />
               <Card title="Dates">
                 <dl className="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
                   <Row label="Submission due">

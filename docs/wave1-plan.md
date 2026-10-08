@@ -29,7 +29,7 @@ approves again (supabase-oauth-setup.md Part B).
 |---|------|----------|-------|
 | 1 | **Tender register** | Clients (party master), tender numbering, tender register and pipeline, bid/no-bid scoring, status flow, deadline reminders, activity log | **Done** (see below) |
 | 2 | BOQ engine (API) | `est` schema, partitioned lines, fractional sort keys, windowed reads with collapsed sections, ancestor total deltas, row-version conflicts | The benchmark design (05-database.md §4) made real |
-| 3 | BOQ grid (UI) | Virtualised grid, keyboard editing, insert/indent/move/delete, collapse, search | Hardest UI in the product |
+| 3 | BOQ grid (UI) | Virtualised grid, keyboard editing, insert/indent/move/delete, collapse, search | **Done** (see below) |
 | 4 | Import/export | Units master, Excel/CSV import with mapping, dry run and error report, `COPY` staging; Excel/CSV export | Library must pass the licence gate. [Certain] The app role cannot `ANALYZE` (Postgres skips it with a warning), so after a bulk load the import must analyze through the migration role or plans run blind until autovacuum |
 | 5 | Rate library + rate analysis | Resources and rates with effective dates; analyses (resources × productivity + wastage + overheads + profit) feeding BOQ rates | E1, E2 |
 | 6 | Measurement + pricing | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | E4, E5 |
@@ -161,3 +161,61 @@ Each step ships with API tests and a browser test of the main journey, like Wave
   - windows forward, backward and with collapsed sections over 3,040 lines, plus search and outline;
   - the search fallback returning the same results as the fast plan;
   - a randomised run of 60 batches of mixed edits that checks every stored invariant after each batch.
+
+## Step 3 delivered: BOQ grid
+
+**Where:** Tender page → **BOQs** card → open or create a BOQ (`/boqs/:id`). Code: `apps/web/src/boq/` and
+`apps/web/src/screens/Boq.tsx`.
+
+**[Certain] How a 1M-line BOQ is shown:**
+- The grid holds a contiguous slice of at most 2,400 lines and renders only the ~30 on screen.
+- Scrolling near either end reads the next window and drops the far end, keeping the lines on screen still.
+- Large BOQs are navigated with the **outline** (sections), **search**, and **Ctrl+Home/End**.
+- A browser test scrolls a 3,000-line BOQ down and back up through the trim point, and checks that every rendered
+  line is in order with no gaps.
+
+**Not built: dragging the scrollbar to an arbitrary line of a 1M-line BOQ.**
+- That needs row positions, which cost a full count or break on every insert.
+- The scrollbar covers the loaded slice; the outline covers the whole BOQ.
+- Revisit if the pilot finds this limiting.
+
+**Deviation from 03 §13:** the grid uses DOM virtualisation, not a canvas grid.
+- About 30 rows are rendered at a time, which is fast enough.
+- It keeps native text, focus, screen-reader roles (`treegrid`, `aria-level`, `aria-expanded`) and copy/paste.
+- Canvas stays an option for the Gantt (step 11).
+
+**Editing:**
+
+| Action | How |
+|--------|-----|
+| Move | Arrows, Tab / Shift+Tab, PageUp/Down, Ctrl+Home/End |
+| Edit | Type, Enter or F2; Enter saves and moves down, Tab saves and moves right, Esc cancels. Double-click works too |
+| Numbers | `1,250.5` and formulas like `=12*3.5+(2/4)` are accepted; only the result is stored. Bad input is explained and not saved |
+| Add | Ctrl+Enter item, Ctrl+Shift+Enter section, toolbar for notes. A new line goes inside an open section, otherwise below the current line |
+| Structure | Alt+Shift+→ indent into the section above, ← outdent, ↑/↓ move. The server resolves these, so far-away siblings need not be loaded |
+| Delete | Ctrl+Delete or toolbar, with a confirmation that says when a whole section goes |
+| Undo | Ctrl+Z undoes cell edits and newly added lines. Moves are reversed with the opposite shortcut; deletes are confirmed instead |
+| Fold | Click the arrow or press Space on a section; Collapse/Expand all. Folded sections are remembered per BOQ on this device |
+| Paste | Rows copied from Excel/Sheets are added below the current line. Columns map from the current column onward (code, description, unit, qty, rate). Up to 5,000 lines; larger files go through import (step 4) |
+
+**Display:**
+- The Amount column stays pinned on the right when the grid scrolls sideways on laptop screens.
+- The outline panel can be hidden; it is hidden by default below 1280 px.
+
+**Saving:**
+- Each change is saved in order as soon as it is made.
+- The BOQ total and section subtotals shown always come from the server after the save.
+- If a save fails (for example someone else changed the line), the message is shown and the grid re-reads the lines on screen.
+
+**API additions:**
+- `rows?from=<key>` opens a window *at* a line.
+- The `shift` operation (`up` / `down` / `in` / `out`) for relative moves.
+- Opening at a folded section now shows the section itself. A browser test found this bug; an API test now covers it.
+
+**Tests:**
+- `apps/web/src/boq/model.test.ts`: number entry, formulas, formatting, window merge and trim, paste parsing.
+- `tests/e2e/tests/boq.spec.ts`:
+  - typing sections and items, a formula, a rejected value, undo, and a 300-line paste;
+  - jumping to the end, folding, a search jump, outdent, and a reload;
+  - the 3,000-line scroll test.
+- The API's randomised invariant run now includes shifts.

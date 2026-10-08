@@ -423,6 +423,114 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ engine (integration)', () => {
     });
   });
 
+  describe('relative shifts and opening at a line', () => {
+    let boqId: string;
+    const codes = async () => (await allRows(boqId)).map((r) => `${'  '.repeat(r.depth)}${r.code}`);
+    const shift = async (code: string, direction: string) => {
+      const row = (await allRows(boqId)).find((r) => r.code === code)!;
+      return post(`/tenant/boqs/${boqId}/changes`, {
+        ops: [{ op: 'shift', id: row.id, rowVersion: row.rowVersion, direction }],
+      });
+    };
+
+    beforeAll(async () => {
+      boqId = await newBoq('Shifts');
+      await change(boqId, [
+        { op: 'insert', tempId: 'tX', parentId: null, afterId: null, type: 'section', code: 'X' },
+        {
+          op: 'insert',
+          tempId: 'tx1',
+          parentId: 'tX',
+          afterId: null,
+          type: 'item',
+          code: 'x1',
+          qty: '1',
+          rate: '100',
+        },
+        {
+          op: 'insert',
+          tempId: 'tx2',
+          parentId: 'tX',
+          afterId: 'tx1',
+          type: 'section',
+          code: 'x2',
+        },
+        {
+          op: 'insert',
+          tempId: 'tx2a',
+          parentId: 'tx2',
+          afterId: null,
+          type: 'item',
+          code: 'x2a',
+          qty: '1',
+          rate: '10',
+        },
+        {
+          op: 'insert',
+          tempId: 'tx3',
+          parentId: 'tX',
+          afterId: 'tx2',
+          type: 'item',
+          code: 'x3',
+          qty: '1',
+          rate: '1',
+        },
+        { op: 'insert', tempId: 'tY', parentId: null, afterId: 'tX', type: 'section', code: 'Y' },
+      ]);
+    });
+
+    it('moves a line up and down among its siblings, with its subtree', async () => {
+      expect((await shift('x2', 'up')).statusCode).toBe(200);
+      expect(await codes()).toEqual(['X', '  x2', '    x2a', '  x1', '  x3', 'Y']);
+      expect((await shift('x2', 'down')).statusCode).toBe(200);
+      expect(await codes()).toEqual(['X', '  x1', '  x2', '    x2a', '  x3', 'Y']);
+      expect(await invariants(boqId)).toEqual([]);
+    });
+
+    it('indents into the previous section as its last child, and outdents back after it', async () => {
+      expect((await shift('x3', 'in')).statusCode).toBe(200);
+      expect(await codes()).toEqual(['X', '  x1', '  x2', '    x2a', '    x3', 'Y']);
+      const x2 = (await allRows(boqId)).find((r) => r.code === 'x2')!;
+      expect(x2.subtotal).toBe('11.00');
+      expect((await shift('x3', 'out')).statusCode).toBe(200);
+      expect(await codes()).toEqual(['X', '  x1', '  x2', '    x2a', '  x3', 'Y']);
+      expect(await invariants(boqId)).toEqual([]);
+    });
+
+    it('refuses shifts with nowhere to go', async () => {
+      for (const [code, direction] of [
+        ['x1', 'up'],
+        ['x1', 'in'],
+        ['Y', 'down'],
+        ['X', 'out'],
+        ['x2', 'in'],
+        ['x2a', 'down'],
+      ] as const) {
+        expect((await shift(code, direction)).json(), `${code} ${direction}`).toMatchObject({
+          code: 'cannot_shift',
+          direction,
+        });
+      }
+    });
+
+    it('opens a window at a line, including that line', async () => {
+      const all = await allRows(boqId);
+      const x2 = all.find((r) => r.code === 'x2')!;
+      const page = (
+        await get(`/tenant/boqs/${boqId}/rows?limit=3&from=${encodeURIComponent(x2.sortKey)}`)
+      ).json<{ rows: BoqRow[]; hasMore: boolean }>();
+      expect(page.rows.map((r) => r.code)).toEqual(['x2', 'x2a', 'x3']);
+      expect(page.hasMore).toBe(true);
+      // Opening at a collapsed section shows the section, then what follows its hidden lines.
+      const folded = (
+        await get(
+          `/tenant/boqs/${boqId}/rows?limit=3&from=${encodeURIComponent(x2.sortKey)}&collapsed=${x2.id}`,
+        )
+      ).json<{ rows: BoqRow[] }>();
+      expect(folded.rows.map((r) => r.code)).toEqual(['x2', 'x3', 'Y']);
+    });
+  });
+
   describe('windows over a larger BOQ', { timeout: 30_000 }, () => {
     let boqId: string;
     const SECTIONS = 20;
@@ -669,9 +777,22 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ engine (integration)', () => {
       await change(boqId, ops);
       const problems = await invariants(boqId);
       expect(problems, `after round ${round}: ${JSON.stringify(ops)}`).toEqual([]);
+
+      // A relative shift on its own; "nothing to shift into" is a valid refusal.
+      const now = await allRows(boqId);
+      if (now.length) {
+        const target = pick(now);
+        const direction = pick(['up', 'down', 'in', 'out']);
+        const res = await post(`/tenant/boqs/${boqId}/changes`, {
+          ops: [{ op: 'shift', id: target.id, rowVersion: target.rowVersion, direction }],
+        });
+        if (res.statusCode === 200) seen.shift = (seen.shift ?? 0) + 1;
+        else expect(res.json(), `shift ${direction}`).toMatchObject({ code: 'cannot_shift' });
+        expect(await invariants(boqId), `after shift ${direction} in round ${round}`).toEqual([]);
+      }
     }
     // Every kind of edit was exercised, many times.
-    for (const kind of ['insert', 'update', 'delete', 'move'])
+    for (const kind of ['insert', 'update', 'delete', 'move', 'shift'])
       expect(seen[kind] ?? 0).toBeGreaterThan(5);
   }, 120_000);
 });

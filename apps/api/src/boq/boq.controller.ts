@@ -54,6 +54,12 @@ const opSchema = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('delete'), id: lineRef, rowVersion: z.number().int().positive() }),
   z.object({
+    op: z.literal('shift'),
+    id: lineRef,
+    rowVersion: z.number().int().positive(),
+    direction: z.enum(['up', 'down', 'in', 'out']),
+  }),
+  z.object({
     op: z.literal('move'),
     id: lineRef,
     rowVersion: z.number().int().positive(),
@@ -66,6 +72,7 @@ const changesBody = z.object({ ops: z.array(opSchema).min(1).max(MAX_OPS) });
 const windowQuery = z
   .object({
     after: sortKey.optional(),
+    from: sortKey.optional(),
     before: sortKey.optional(),
     /** Read backwards from the last row (jump to the end of the BOQ). */
     end: z
@@ -80,8 +87,8 @@ const windowQuery = z
       .transform((v) => (v ? v.split(',').filter(Boolean) : []))
       .pipe(z.array(lineId).max(2000)),
   })
-  .refine((q) => [q.after, q.before, q.end || undefined].filter(Boolean).length <= 1, {
-    message: 'Use one of after, before or end',
+  .refine((q) => [q.after, q.from, q.before, q.end || undefined].filter(Boolean).length <= 1, {
+    message: 'Use one of after, from, before or end',
   });
 const searchQuery = z.object({
   q: z.string().trim().min(2).max(200),

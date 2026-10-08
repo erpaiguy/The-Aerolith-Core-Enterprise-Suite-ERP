@@ -13,6 +13,7 @@ import { AppShell } from './screens/AppShell';
 import { HomeScreen } from './screens/Home';
 import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
+import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
@@ -55,6 +56,15 @@ const tenderRoute = createRoute({
   },
 });
 
+const boqRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/boqs/$boqId',
+  component: function BoqPage() {
+    const { boqId } = boqRoute.useParams();
+    return <BoqScreen key={boqId} boqId={boqId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -65,6 +75,7 @@ const routeTree = rootRoute.addChildren([
       component: NewTenderScreen,
     }),
     tenderRoute,
+    boqRoute,
     createRoute({ getParentRoute: () => appLayout, path: '/clients', component: ClientsScreen }),
     createRoute({
       getParentRoute: () => appLayout,
