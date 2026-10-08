@@ -1,0 +1,18 @@
+# Keep the build context small and free of secrets.
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+**/.mail-outbox
+apps/desktop/release
+apps/desktop/resources/app-config.json
+tests/e2e/test-results
+tests/e2e/screenshots
+tests/e2e/.mail
+deploy/.env
+deploy/data
+deploy/backups
+.git

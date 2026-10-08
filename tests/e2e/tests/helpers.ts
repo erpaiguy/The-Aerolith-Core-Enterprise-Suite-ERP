@@ -3,9 +3,14 @@ import { createHmac } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { simpleParser } from 'mailparser';
-import { API_PORT, CONTROL_URL, MAIL_DIR } from '../env.js';
-
-const API = `http://127.0.0.1:${API_PORT}/api`;
+import {
+  CONTROL_URL,
+  INBOX_DIR,
+  OPERATOR_CMD,
+  OPERATOR_CWD,
+  OWNER_API,
+  PUBLIC_API,
+} from '../env.js';
 
 // --- TOTP (RFC 6238), same algorithm as the API ---
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -46,10 +51,10 @@ export async function waitForEmail(
 ): Promise<Email> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (existsSync(MAIL_DIR)) {
-      for (const file of readdirSync(MAIL_DIR).sort().reverse()) {
+    if (existsSync(INBOX_DIR)) {
+      for (const file of readdirSync(INBOX_DIR).sort().reverse()) {
         if (!file.endsWith(`-${to.toLowerCase()}.eml`)) continue;
-        const mail = await simpleParser(readFileSync(join(MAIL_DIR, file)));
+        const mail = await simpleParser(readFileSync(join(INBOX_DIR, file)));
         if (mail.subject === subject) return { subject, text: mail.text ?? '' };
       }
     }
@@ -71,7 +76,10 @@ export const licenceKeyIn = (email: Email): string => {
 };
 
 async function call<T>(path: string, body?: unknown, token?: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
+  // Owner-console routes (and operator MFA) go to the owner listener; everything else to the public site.
+  const base =
+    path.startsWith('/owner') || (path.startsWith('/auth/mfa') && !token) ? OWNER_API : PUBLIC_API;
+  const res = await fetch(`${base}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       'content-type': 'application/json',
@@ -91,12 +99,14 @@ async function call<T>(path: string, body?: unknown, token?: string): Promise<T>
 export async function createTenant(
   adminEmail: string,
 ): Promise<{ licenceKey: string; tenantId: string }> {
-  const env = { ...process.env, CONTROL_DATABASE_URL: CONTROL_URL };
   const operatorEmail = `owner-${Date.now()}@aerolith.test`;
-  const out = execFileSync(
-    'node',
-    ['../../apps/api/dist/cli/create-operator.js', '--email', operatorEmail, '--name', 'E2E Owner'],
-    { env },
+  const args = ['--email', operatorEmail, '--name', 'E2E Owner'];
+  const out = (
+    OPERATOR_CMD
+      ? execFileSync(OPERATOR_CMD[0]!, [...OPERATOR_CMD.slice(1), ...args], { cwd: OPERATOR_CWD })
+      : execFileSync('node', ['../../apps/api/dist/cli/create-operator.js', ...args], {
+          env: { ...process.env, CONTROL_DATABASE_URL: CONTROL_URL },
+        })
   ).toString();
   const tempPassword = /One-time password: (\S+)/.exec(out)![1]!;
 

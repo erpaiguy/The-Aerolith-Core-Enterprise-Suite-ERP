@@ -100,7 +100,10 @@ export interface AppConfig {
  * app runs out of the box; anything signed or encrypted with them is useless after a restart.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  const e = envSchema.parse(env);
+  // An empty value (`SMTP_HOST=` copied from .env.example) means "not set", not "set to an invalid value".
+  const e = envSchema.parse(
+    Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== '')),
+  );
   const ephemeral: string[] = [];
   const required = <T>(name: string, value: T | undefined, make: () => T): T => {
     if (value !== undefined) return value;

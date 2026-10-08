@@ -1,0 +1,9 @@
+# Test-only override: the API writes emails into a host folder the e2e suite reads as an inbox.
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.yml -f deploy/docker-compose.e2e.yml up -d
+services:
+  api:
+    environment:
+      EMAIL_TRANSPORT: file
+      RATE_LIMIT_SCALE: '10'
+    volumes:
+      - ${E2E_MAIL_DIR:?set E2E_MAIL_DIR to an absolute host folder}:/app/.mail-outbox

@@ -12,15 +12,15 @@ Supabase changes its dashboard often. If a label differs from what is written he
 
 | # | What | Why |
 |---|------|-----|
-| A1 | **A public HTTPS address for the API**, e.g. `https://api.<your-domain>`. During the owner-PC stage this is the Cloudflare Tunnel hostname pointing at the API on your PC (docs/10-deployment.md §10.1) | Supabase sends the tenant's browser back to this address after consent. It must be reachable from the internet and must be HTTPS |
-| A2 | **Decide the exact callback URL now:** `https://api.<your-domain>/api/onboarding/supabase/callback` | [Certain] The redirect URI sent during login must match a registered one exactly. Our API builds it from `PUBLIC_API_URL` + `/api/onboarding/supabase/callback`, so the two must agree character for character (no trailing slash, same host, `https`) |
+| A1 | **A public HTTPS address for the API**, e.g. `https://app.<your-domain>` (called `<public origin>` below). For the test in Part D a temporary Tailscale Funnel address is enough; for real tenants use the VM's `app.<your-domain>` ([deployment-docker.md](deployment-docker.md) §6) | Supabase sends the tenant's browser back to this address after consent. It must be reachable from the internet and must be HTTPS |
+| A2 | **Decide the exact callback URL now:** `https://<public origin>/api/onboarding/supabase/callback` | [Certain] The redirect URI sent during login must match a registered one exactly. Our API builds it from `PUBLIC_API_URL` + `/api/onboarding/supabase/callback`, so the two must agree character for character (no trailing slash, same host, `https`) |
 | A3 | MFA enabled on your Supabase account | This OAuth app can create projects in customers' organisations. Your Supabase login protects it (docs/09-security.md §7) |
 | A4 | A **second Supabase account** (different email) to act as a test tenant | Proves that an organisation which is *not yours* can authorise the app (Part D) |
-| A5 | The API built and its secrets generated: `pnpm --filter @aerolith/api build` then `pnpm --filter @aerolith/api secrets:generate` | The `.env` file in Part C needs them |
+| A5 | The Docker stack running with its secrets: `bash deploy/scripts/init-env.sh`, then `docker compose -f deploy/docker-compose.yml up -d --build` ([deployment-docker.md](deployment-docker.md) §3) | Part C edits that `deploy/.env` |
 
-**Protect the owner routes before you open the tunnel.** The tunnel makes the whole API public, including `/api/owner/*`,
-which require an operator sign-in with mandatory MFA. Still, block `/api/owner/*` from the internet at whatever
-tunnel or proxy you use, and call those routes only from your PC via `http://127.0.0.1:3000`.
+**Owner routes stay private.** With the Docker stack ([deployment-docker.md](deployment-docker.md)) the public port
+`:8080` answers 404 to every `/api/owner/*` request, and the owner listener `:8081` exists only on `127.0.0.1`. Point the
+tunnel at `127.0.0.1:8080` and call owner routes from the server machine via `http://127.0.0.1:8081`.
 
 ---
 
@@ -36,7 +36,7 @@ tunnel or proxy you use, and call those routes only from your PC via `http://127
    | Application name | `Aerolith Core` (tenants see this on the consent screen) |
    | Website URL | `https://<your-domain>` |
    | Icon / logo (if offered) | Your app logo. It appears on the consent screen and builds trust |
-   | Authorization callback URL(s) / Redirect URI(s) | `https://api.<your-domain>/api/onboarding/supabase/callback` |
+   | Authorization callback URL(s) / Redirect URI(s) | `https://<public origin>/api/onboarding/supabase/callback` |
    | Scopes / permissions | See the table below. Tick **only** these |
 
    **Scopes (least privilege)** [Certain that scopes exist per area with read/write; Likely on the exact mapping]:
@@ -59,39 +59,22 @@ tunnel or proxy you use, and call those routes only from your PC via `http://127
 
 ## Part C. Apply the settings to the API
 
-The API reads `apps/api/.env` on start (`pnpm --filter @aerolith/api start`). On the owner PC, keep this file in the
-separate Windows user / WSL environment that runs the server (docs/10-deployment.md §10.1).
+The Docker stack reads `deploy/.env` ([deployment-docker.md](deployment-docker.md) §3; `init-env.sh` already filled the
+secrets). It lives in the separate Windows user / WSL environment that runs the server (docs/10-deployment.md §10.1).
 
-1. Create `apps/api/.env` from `apps/api/.env.example`.
-2. Paste the four secrets printed by `secrets:generate` (`SESSION_SIGNING_KEY`, `LICENCE_KEY_PEPPER`,
-   `CONTROL_PLANE_ENC_KEY`, `ENTITLEMENT_PRIVATE_KEY_PEM`).
-3. Set these values:
+1. Set these values in `deploy/.env` (the public origin is the one the tunnel or VM gives you):
 
    ```env
-   NODE_ENV=production
-   PORT=3000
-   HOST=127.0.0.1
-   CONTROL_DATABASE_URL=<control-plane connection string, your Supabase project>
-   PUBLIC_API_URL=https://api.<your-domain>
-   WEBSITE_URL=https://<your-domain>
-   SUPABASE_API_URL=https://api.supabase.com
+   PUBLIC_API_URL=https://<public origin>
+   WEBSITE_URL=https://<public origin>
    SUPABASE_OAUTH_CLIENT_ID=<from Part B>
    SUPABASE_OAUTH_CLIENT_SECRET=<from Part B>
-   TENANT_DB_REGION=ap-south-1
    ```
 
-   `HOST=127.0.0.1` keeps the API off your local network; only the tunnel reaches it.
-4. Restrict the file so only the server account can read it (WSL/Linux: `chmod 600 apps/api/.env`).
-5. Apply the control-plane migrations, then start:
-
-   ```sh
-   pnpm --filter @aerolith/api build
-   pnpm --filter @aerolith/api migrate:control
-   pnpm --filter @aerolith/api start
-   ```
-
-6. Check: `https://api.<your-domain>/api/health` returns `"status":"ok"`, and the start-up log does **not** say
-   "Using throwaway secrets". With `NODE_ENV=production` the API refuses to start if any secret is missing.
+   `SUPABASE_API_URL` (`https://api.supabase.com`) and `TENANT_DB_REGION` (`ap-south-1`) already default correctly.
+2. Apply: `docker compose -f deploy/docker-compose.yml up -d api`.
+3. Check: `https://<public origin>/api/health` returns `"status":"ok"`. With `NODE_ENV=production` (the stack's default)
+   the API refuses to start if any secret is missing.
 
 ---
 
@@ -104,7 +87,7 @@ owner console (`POST /api/owner/auth/login` with email, password and authenticat
 1. **Create a trial tenant** using the second account's email:
 
    ```sh
-   curl -s -X POST http://127.0.0.1:3000/api/owner/tenants \
+   curl -s -X POST http://127.0.0.1:8081/api/owner/tenants \
      -H "Authorization: Bearer $OWNER" -H "Content-Type: application/json" \
      -d '{"email":"test-tenant@example.com","tenantName":"Test Builders"}'
    ```
@@ -113,26 +96,26 @@ owner console (`POST /api/owner/auth/login` with email, password and authenticat
 2. **Create the onboarding link:**
 
    ```sh
-   curl -s -X POST http://127.0.0.1:3000/api/owner/tenants/<tenantId>/onboarding-link -H "Authorization: Bearer $OWNER"
+   curl -s -X POST http://127.0.0.1:8081/api/owner/tenants/<tenantId>/onboarding-link -H "Authorization: Bearer $OWNER"
    ```
    The response contains `url` with `?token=...`. Copy the token.
 
 3. **Start the consent.** The website's onboarding page does not exist yet, so open this API address directly in a
    browser where you are signed in to Supabase as the **test** account (a private window is easiest):
 
-   `https://api.<your-domain>/api/onboarding/supabase/authorize?token=<token>`
+   `https://<public origin>/api/onboarding/supabase/authorize?token=<token>`
 
 4. Supabase shows the consent screen for "Aerolith Core". Check the permissions match Part B, then approve.
-5. You are sent to `https://<your-domain>/onboarding/status`. The page itself will be missing until the website is built;
+5. You are sent to `https://<public origin>/onboarding/status`. The page itself will be missing until the website is built;
    what matters is the address: **no `?error=` in it** means the connection worked.
 6. **Check progress:**
 
    ```sh
-   curl -s "https://api.<your-domain>/api/onboarding/status?token=<token>"
+   curl -s "https://<public origin>/api/onboarding/status?token=<token>"
    ```
    - `awaiting_org` with a list of organisations: choose one:
      ```sh
-     curl -s -X POST https://api.<your-domain>/api/onboarding/supabase/organisation \
+     curl -s -X POST https://<public origin>/api/onboarding/supabase/organisation \
        -H "Content-Type: application/json" -d '{"token":"<token>","organisationId":"<id from the list>"}'
      ```
    - `creating`: the project is being made. New Supabase projects usually take a few minutes.
@@ -140,7 +123,7 @@ owner console (`POST /api/owner/auth/login` with email, password and authenticat
 7. **Wait for `ready`:**
 
    ```sh
-   curl -s http://127.0.0.1:3000/api/owner/tenants/<tenantId>/database -H "Authorization: Bearer $OWNER"
+   curl -s http://127.0.0.1:8081/api/owner/tenants/<tenantId>/database -H "Authorization: Bearer $OWNER"
    ```
    Expected: `"status":"ready"`, `"schemaVersion"` = the newest file in `apps/api/migrations/tenant/`, `"lastError":null`.
 
@@ -173,7 +156,7 @@ owner console (`POST /api/owner/auth/login` with email, password and authenticat
 - **Tenants can revoke access** at any time in their own organisation settings. Our stored refresh token then stops
   working (HTTP 401). Their existing database keeps working, because the app connects with its own database roles, but
   new projects or status checks need them to reconnect.
-- **Rotating the client secret:** generate a new one in Part B, update `.env`, restart.
+- **Rotating the client secret:** generate a new one in Part B, update `deploy/.env`, restart the API.
 - **Never** register `http://` callback URLs for production.
 
 ## What changed in the code while preparing this guide

@@ -1,0 +1,62 @@
+# Aerolith Core on one machine (stage 0: the owner's PC; stage 1: a VM). docs/deployment-docker.md
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
+name: aerolith
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aerolith}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: aerolith_control
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Not published: only the API container can reach it.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-aerolith} -d aerolith_control']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    image: aerolith/api:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      HOST: 0.0.0.0
+      PORT: '3000'
+      # Control plane: the local Postgres by default; point at the owner's Supabase project to move it.
+      CONTROL_DATABASE_URL: ${CONTROL_DATABASE_URL:-postgres://${POSTGRES_USER:-aerolith}:${POSTGRES_PASSWORD}@postgres:5432/aerolith_control}
+      # Stand-in tenant databases on the same Postgres (stage 0). Leave empty to disable.
+      LOCAL_PG_ADMIN_URL: ${LOCAL_PG_ADMIN_URL-postgres://${POSTGRES_USER:-aerolith}:${POSTGRES_PASSWORD}@postgres:5432/postgres}
+      # The tunnel/proxy in front sets X-Forwarded-For; Caddy passes it on.
+      TRUST_PROXY: 'true'
+    volumes:
+      - mail-outbox:/app/.mail-outbox
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    image: aerolith/web:local
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      # Public site (browser app + API). 127.0.0.1 = this PC only; a tunnel points here.
+      - '${BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080'
+      # Owner console API: always this PC only.
+      - '127.0.0.1:${OWNER_PORT:-8081}:8081'
+
+volumes:
+  pgdata:
+  mail-outbox:

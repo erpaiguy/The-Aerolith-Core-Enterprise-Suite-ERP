@@ -89,6 +89,52 @@ jobs:
           path: tests/e2e/test-results
           retention-days: 7
 
+  docker-stack:
+    # Builds the owner-PC Docker images, starts the stack and runs the same journey through Caddy (docs/deployment-docker.md).
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE: docker compose --env-file deploy/.env -f deploy/docker-compose.yml
+      E2E_BASE_URL: http://127.0.0.1:8080
+      E2E_OWNER_URL: http://127.0.0.1:8081
+      E2E_OPERATOR_CMD: docker compose --env-file deploy/.env -f deploy/docker-compose.yml exec -T api node dist/cli/create-operator.js
+      E2E_MAIL_DIR: /tmp/aerolith-mail
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate deploy/.env
+        run: bash deploy/scripts/init-env.sh
+      - name: Build and start the stack
+        run: |
+          mkdir -p "$E2E_MAIL_DIR" && chmod 777 "$E2E_MAIL_DIR"
+          $COMPOSE -f deploy/docker-compose.e2e.yml up -d --build --wait
+      - name: Owner routes are not public
+        run: |
+          curl -fsS http://127.0.0.1:8080/api/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/owner/tenants)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8081/api/owner/tenants)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8081/api/auth/login)" = 404
+      - name: Install Chromium for Playwright
+        timeout-minutes: 5
+        run: pnpm --filter @aerolith/e2e exec playwright install chromium
+      - name: Browser end-to-end against the stack
+        env:
+          E2E_OPERATOR_CWD: ${{ github.workspace }}
+        run: pnpm --filter @aerolith/e2e e2e
+      - if: failure()
+        run: $COMPOSE logs --no-color --tail 200
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-stack-e2e-results
+          path: tests/e2e/test-results
+          retention-days: 7
+
   desktop-windows:
     # Proves the Windows installer packages. Unsigned until code signing is set up (docs/10-deployment.md §10).
     runs-on: windows-latest

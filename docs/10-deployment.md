@@ -108,7 +108,7 @@ database credentials lives (09 §1). Rules while it is the server:
 
 | Risk | Mitigation (required) |
 |------|------------------------|
-| Exposing a home connection to the internet; [Likely] Indian ISPs often use CGNAT/dynamic IPs, so port forwarding may not even work | **No inbound ports.** Publish `api.`/`app.` through an outbound tunnel (e.g. Cloudflare Tunnel, free) |
+| Exposing a home connection to the internet; [Likely] Indian ISPs often use CGNAT/dynamic IPs, so port forwarding may not even work | **No inbound ports.** Publish through an outbound tunnel only; options without Cloudflare and the recommendation are in [deployment-docker.md](deployment-docker.md) §6 |
 | Master key on a daily-use machine (browsing, email, downloads) | Run the stack under a **separate Windows user or WSL2/VM**; full-disk encryption (BitLocker); master key in a file readable only by that user, never in the repo; no other software in the server environment |
 | PC off, asleep, rebooting for updates, power cuts | Tenants are down during those times. Disable sleep, auto-start Docker and the stack on boot, UPS if possible. **Tell trial tenants this is a beta with possible downtime** |
 | Disk failure | Control-plane data is on Supabase, not the PC. Keep an encrypted offline copy of the master key and `.env`. Losing the master key means re-issuing every tenant's database credential |

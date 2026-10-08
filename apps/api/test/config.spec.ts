@@ -17,4 +17,16 @@ describe('loadConfig', () => {
     );
     expect(config.trialDays).toBe(120);
   });
+
+  it('treats empty values from a copied .env.example as not set', () => {
+    const config = loadConfig({
+      NODE_ENV: 'development',
+      SMTP_HOST: '',
+      SUPPORT_EMAIL: '',
+      EMAIL_FROM: '  ',
+      TRIAL_DAYS: '',
+    });
+    expect(config.email).toMatchObject({ transport: 'file', supportEmail: null, smtp: null });
+    expect(config.trialDays).toBe(120);
+  });
 });
