@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useRouter } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import type { Inbox, InboxItem, OwnerNotice } from '../api/types';
@@ -9,6 +9,7 @@ import { useSession } from '../session/session';
 import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
 
 function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => void }) {
+  const router = useRouter();
   const unread = !item.readAt;
   return (
     <li className="flex items-start gap-3 py-3">
@@ -20,6 +21,7 @@ function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => v
         <div className="flex flex-wrap items-center gap-2">
           <span className={`text-sm ${unread ? 'font-semibold' : ''}`}>{item.title}</span>
           {item.kind === 'reminder' && <Badge tone="warning">Reminder</Badge>}
+          {item.kind === 'tender_deadline' && <Badge tone="warning">Tender deadline</Badge>}
         </div>
         {item.body && <p className="mt-0.5 text-sm text-fg-muted">{item.body}</p>}
         <p className="mt-0.5 text-xs text-fg-subtle">
@@ -27,9 +29,14 @@ function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => v
         </p>
       </div>
       {item.link && item.link.startsWith('/') && (
-        <a href={item.link} className="text-sm text-accent hover:underline">
+        // In-app navigation: a full page load would restart the app (and the desktop shell).
+        <button
+          type="button"
+          className="text-sm text-accent hover:underline"
+          onClick={() => router.history.push(item.link!)}
+        >
           Open
-        </a>
+        </button>
       )}
       {unread && onRead && (
         <button

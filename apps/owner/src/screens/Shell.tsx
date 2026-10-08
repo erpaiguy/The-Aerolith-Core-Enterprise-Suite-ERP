@@ -88,44 +88,4 @@ export function Shell() {
   );
 }
 
-/** Page title row with optional actions on the right. */
-export function PageHeader({ title, actions }: { title: ReactNode; actions?: ReactNode }) {
-  return (
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      {actions}
-    </div>
-  );
-}
-
-/** Responsive table wrapper: scrolls sideways inside its card instead of widening the page. */
-export function Table({ children }: { children: ReactNode }) {
-  return (
-    <div className="-mx-5 overflow-x-auto">
-      <table className="w-full min-w-[40rem] text-left text-sm [&_td]:px-5 [&_td]:py-2.5 [&_th]:px-5 [&_th]:pb-2 [&_th]:text-xs [&_th]:font-medium [&_th]:text-fg-muted [&_tbody_tr]:border-t [&_tbody_tr]:border-line">
-        {children}
-      </table>
-    </div>
-  );
-}
-
-export function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: ReactNode;
-  tone?: 'danger' | 'warning';
-}) {
-  return (
-    <div className="rounded-lg border border-line bg-surface p-4">
-      <div className="text-xs text-fg-muted">{label}</div>
-      <div
-        className={`mt-1 text-2xl font-semibold tabular-nums ${tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : ''}`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
+export { PageHeader, Stat, Table } from '@aerolith/ui';

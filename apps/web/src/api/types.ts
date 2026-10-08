@@ -86,3 +86,97 @@ export interface ResetRequest {
   username: string;
   displayName: string;
 }
+
+// --- Tenders (docs/wave1-plan.md step 1) ---
+
+export const TENDER_STATUSES = [
+  'lead',
+  'evaluating',
+  'bidding',
+  'submitted',
+  'won',
+  'lost',
+  'no_bid',
+  'withdrawn',
+  'cancelled',
+] as const;
+export type TenderStatus = (typeof TENDER_STATUSES)[number];
+
+export interface Party {
+  id: string;
+  name: string;
+  isClient: boolean;
+  isVendor: boolean;
+  isSubcontractor: boolean;
+  gstin: string | null;
+  pan: string | null;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  notes: string;
+  rowVersion: number;
+}
+
+export interface Person {
+  id: string;
+  displayName: string;
+  role: Role;
+}
+
+export interface TenderSummary {
+  id: string;
+  number: string;
+  title: string;
+  status: TenderStatus;
+  clientRef: string | null;
+  vertical: string;
+  location: string | null;
+  estimatedValue: string | null;
+  submissionDueAt: string | null;
+  updatedAt: string;
+  client: { id: string; name: string } | null;
+  owner: { id: string; displayName: string } | null;
+  latestScore: string | null;
+}
+
+export interface Criterion {
+  key: string;
+  label: string;
+  weight: number;
+  score: number;
+}
+
+export interface TenderDetail extends TenderSummary {
+  source: string;
+  portalUrl: string | null;
+  emdAmount: string | null;
+  tenderFee: string | null;
+  publishedOn: string | null;
+  prebidAt: string | null;
+  openingAt: string | null;
+  bidValidityDays: number | null;
+  statusReason: string | null;
+  description: string;
+  createdAt: string;
+  rowVersion: number;
+  allowedMoves: TenderStatus[];
+  canDecide: boolean;
+  defaultCriteria: Omit<Criterion, 'score'>[];
+  decisions: {
+    id: string;
+    criteria: Criterion[];
+    score: string;
+    decision: 'bid' | 'no_bid';
+    reason: string;
+    decidedAt: string;
+    decidedBy: string;
+  }[];
+  events: {
+    id: string;
+    kind: string;
+    data: Record<string, unknown>;
+    createdAt: string;
+    actor: string | null;
+  }[];
+}

@@ -76,3 +76,10 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 6b | Email worker: SMTP delivery, retries, suppression, owner controls | **Done** ([details](email.md)). Check your GoDaddy mailbox type before December 2026 |
 | 7 | Docker Compose stack for the owner PC with tunnel | **Done** ([details](deployment-docker.md)). Browser journey runs through the stack in CI; owner routes unreachable from the public port. Decision: tenants go straight to a VM |
 | 8 | Owner console: tenants, licences, databases, email, migrations, audit | **Done** ([details](owner-console.md)). Served only on the loopback owner port; break-glass reset by server command |
+
+## Wave 1 build progress ([plan](wave1-plan.md))
+
+| Step | What | Status |
+|------|------|--------|
+| 1 | Tender register: clients, numbering, pipeline, bid/no-bid scoring, reminders | **Done** |
+| 2 | BOQ engine (API) | Next |

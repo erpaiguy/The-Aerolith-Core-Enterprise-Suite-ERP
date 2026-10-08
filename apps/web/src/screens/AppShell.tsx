@@ -2,7 +2,9 @@ import { Link, Outlet } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
+  BriefcaseBusiness,
   Building2,
+  Contact,
   FileStack,
   Gauge,
   KeyRound,
@@ -129,12 +131,18 @@ export function AppShell() {
               </>
             )}
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-              Modules
+              Pre-construction
             </div>
+            <NavItem to="/tenders" icon={<ScrollText className="size-4" />}>
+              Tenders
+            </NavItem>
+            <NavItem to="/clients" icon={<Contact className="size-4" />}>
+              Clients
+            </NavItem>
             <Upcoming icon={<Gauge className="size-4" />}>Estimation</Upcoming>
-            <Upcoming icon={<ScrollText className="size-4" />}>Tenders</Upcoming>
             <Upcoming icon={<FileStack className="size-4" />}>Documents</Upcoming>
             <Upcoming icon={<Building2 className="size-4" />}>Projects</Upcoming>
+            <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>
           </nav>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Page } from '@playwright/test';
 import { simpleParser } from 'mailparser';
 import {
   CONTROL_URL,
@@ -112,6 +113,7 @@ export function createOperator(): { email: string; tempPassword: string } {
  */
 export async function createTenant(
   adminEmail: string,
+  tenantName = 'Sharma Builders',
 ): Promise<{ licenceKey: string; tenantId: string }> {
   const { email: operatorEmail, tempPassword } = createOperator();
 
@@ -140,7 +142,7 @@ export async function createTenant(
 
   const trial = await call<{ tenantId: string; licenceKey: string }>(
     '/owner/tenants',
-    { email: adminEmail, tenantName: 'Sharma Builders' },
+    { email: adminEmail, tenantName },
     accessToken,
   );
   await call(
@@ -159,4 +161,40 @@ export async function createTenant(
     await new Promise((r) => setTimeout(r, 1000));
   }
   throw new Error('provisioning timed out');
+}
+
+/**
+ * A brand-new tenant admin, signed in on `page`: trial + database via the owner API, password from the emailed setup
+ * link, device activated with the emailed key, authenticator enrolled in the UI.
+ */
+export async function signInNewAdmin(
+  page: Page,
+  adminEmail: string,
+  password: string,
+  tenantName: string,
+): Promise<void> {
+  await createTenant(adminEmail, tenantName);
+  const key = licenceKeyIn(await waitForEmail(adminEmail, 'Your Aerolith Core licence key'));
+  const link = new URL(
+    linkIn(await waitForEmail(adminEmail, 'Set your Aerolith Core admin password')),
+  );
+  await call('/auth/admin/set-password', {
+    token: link.searchParams.get('token'),
+    newPassword: password,
+  });
+
+  await page.goto('/');
+  await page.getByLabel('Licence key').fill(key);
+  await page.getByRole('button', { name: 'Activate' }).click();
+  await page.getByLabel('Username or admin email').fill(adminEmail);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  const secret = (await page.getByTestId('totp-secret').textContent())!.trim();
+  const step = timeStep();
+  await page.getByLabel('6-digit code').fill(totp(secret, step));
+  await page.getByRole('button', { name: 'Confirm' }).click();
+  await page.getByRole('button', { name: /continue to sign in/ }).click();
+  await page.getByLabel('Authenticator code').fill(totp(secret, step + 1));
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await page.getByRole('link', { name: 'Home' }).waitFor();
 }

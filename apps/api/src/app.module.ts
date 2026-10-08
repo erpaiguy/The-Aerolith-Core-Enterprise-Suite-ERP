@@ -8,9 +8,18 @@ import { EmailModule } from './email/email.module.js';
 import { HealthController } from './health/health.controller.js';
 import { LicensingModule } from './licensing/licensing.module.js';
 import { ProvisioningModule } from './provisioning/provisioning.module.js';
+import { TenderModule } from './tender/tender.module.js';
 
 @Module({
-  imports: [ConfigModule, DbModule, ProvisioningModule, LicensingModule, AuthModule, EmailModule],
+  imports: [
+    ConfigModule,
+    DbModule,
+    ProvisioningModule,
+    LicensingModule,
+    AuthModule,
+    EmailModule,
+    TenderModule,
+  ],
   controllers: [HealthController],
   // Runs before route guards; only acts on routes marked with @RateLimit.
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],

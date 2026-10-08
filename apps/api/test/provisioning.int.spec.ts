@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap.js';
 import { open, seal } from '../src/crypto/secretbox.js';
-import { migrate, TENANT_MIGRATIONS } from '../src/db/migrate.js';
+import { migrate, migrationFiles, TENANT_MIGRATIONS } from '../src/db/migrate.js';
 import { ProvisioningService } from '../src/provisioning/provisioning.service.js';
 import { signInOperator } from './helpers/operator.js';
 
@@ -154,7 +154,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     const settled = await provisioning().runUntilSettled(tenantA);
     expect(settled).toMatchObject({
       status: 'ready',
-      schemaVersion: '0002_sessions.sql',
+      schemaVersion: migrationFiles(TENANT_MIGRATIONS).at(-1),
       lastError: null,
     });
     expect((await get(`/owner/tenants/${tenantA}/database`, owner)).json()).toMatchObject({

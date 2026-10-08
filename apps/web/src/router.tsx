@@ -13,6 +13,9 @@ import { AppShell } from './screens/AppShell';
 import { HomeScreen } from './screens/Home';
 import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
+import { ClientsScreen } from './screens/Clients';
+import { TenderDetailScreen } from './screens/TenderDetail';
+import { NewTenderScreen, TendersScreen } from './screens/Tenders';
 import { Spinner } from '@aerolith/ui';
 
 /** Pages opened from email links: usable in any browser, with or without an activated licence or session. */
@@ -43,9 +46,26 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
 const rootRoute = createRootRoute({ component: Root });
 const appLayout = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: AppShell });
 
+const tenderRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/tenders/$tenderId',
+  component: function TenderPage() {
+    const { tenderId } = tenderRoute.useParams();
+    return <TenderDetailScreen key={tenderId} tenderId={tenderId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
+    createRoute({ getParentRoute: () => appLayout, path: '/tenders', component: TendersScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/tenders/new',
+      component: NewTenderScreen,
+    }),
+    tenderRoute,
+    createRoute({ getParentRoute: () => appLayout, path: '/clients', component: ClientsScreen }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/users',

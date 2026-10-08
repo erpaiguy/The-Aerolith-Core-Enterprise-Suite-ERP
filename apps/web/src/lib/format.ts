@@ -1,3 +1,5 @@
+import { ApiError } from '../api/client';
+
 export const daysUntil = (iso: string, now = new Date()): number =>
   Math.ceil((new Date(iso).getTime() - now.getTime()) / 86_400_000);
 
@@ -39,7 +41,59 @@ export function errorMessage(
     invalid_username: 'Use 3-40 letters, digits, dots, dashes or underscores.',
     tenant_db_not_ready: 'Your company database is still being set up. Try again in a few minutes.',
     password_change_required: 'Set a new password to continue.',
+    party_name_taken: 'A party with this name already exists.',
+    stale_row: 'Someone else changed this record. Reload to see their changes, then edit again.',
+    invalid_status_change: 'That status change is not allowed from the current status.',
+    reason_required: 'Give a short reason.',
+    decision_not_allowed: 'A bid/no-bid decision cannot be recorded at this stage.',
+    client_not_found: 'Choose a client from the list.',
+    tender_not_found: 'Tender not found.',
+    forbidden: 'Your role cannot do this.',
     network_error: 'Cannot reach the server. Check your internet connection.',
   };
   return (code && messages[code]) || fallback;
 }
+
+/** Like errorMessage, but also explains form validation errors from the API ("Field: problem"). */
+export function describeError(err: unknown): string {
+  if (err instanceof ApiError && err.code === 'invalid_request' && Array.isArray(err.body.issues)) {
+    const first = err.body.issues[0] as { path?: string; message?: string } | undefined;
+    if (first?.message)
+      return first.path ? `${labelFor(first.path)}: ${first.message}` : first.message;
+  }
+  return errorMessage(err instanceof ApiError ? err.code : 'network_error');
+}
+
+const labelFor = (path: string) =>
+  path.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+
+const INR = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0,
+});
+
+/** ₹1,25,00,000 (Indian grouping). Decimal strings from the API, never floats in storage. */
+export const formatInr = (value: string | null | undefined): string =>
+  value === null || value === undefined || value === '' ? '-' : INR.format(Number(value));
+
+/** ₹12.5 Cr / ₹45 L / ₹80,000: compact amounts for lists. */
+export function formatInrShort(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '-';
+  const n = Number(value);
+  if (n >= 1e7) return `₹${trim(n / 1e7)} Cr`;
+  if (n >= 1e5) return `₹${trim(n / 1e5)} L`;
+  return INR.format(n);
+}
+const trim = (n: number) => (n >= 100 ? n.toFixed(0) : n.toFixed(2).replace(/\.?0+$/, ''));
+
+/** <input type="datetime-local"> value in the user's time zone. */
+export function toLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export const fromLocalInput = (value: string): string | null =>
+  value ? new Date(value).toISOString() : null;
