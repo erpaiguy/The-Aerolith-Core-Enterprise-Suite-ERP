@@ -18,3 +18,4 @@ export function buildHealthReport(
 }
 
 export * from './licence-key.js';
+export * from './sort-key.js';

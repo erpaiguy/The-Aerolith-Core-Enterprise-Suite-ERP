@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Wave 0 performance benchmark: 1M-line BOQ and 50k-activity schedule (docs/03-architecture.md §13)",
+  "description": "Wave 0 performance benchmark: 1M-line BOQ and 50k-activity schedule (docs/03-architecture.md \u00a713)",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -13,6 +13,7 @@
     "bench": "node dist/main.js"
   },
   "dependencies": {
+    "@aerolith/shared": "workspace:*",
     "postgres": "^3.4.9"
   },
   "devDependencies": {

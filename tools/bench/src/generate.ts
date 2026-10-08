@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Sql } from 'postgres';
-import { childKey, segmentFor } from './sortkey.js';
+import { childKey, segmentFor } from '@aerolith/shared';
 import { one } from './stats.js';
 
 /** Small deterministic PRNG (mulberry32) so runs are repeatable. */

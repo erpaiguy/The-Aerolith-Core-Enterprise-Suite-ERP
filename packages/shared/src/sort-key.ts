@@ -1,4 +1,4 @@
-// Hierarchical fractional sort keys (docs/05-database.md §4).
+// Hierarchical fractional sort keys for BOQ lines (docs/05-database.md §4). Used by the API and the benchmark.
 //
 // A node's key is its parent's key + SEPARATOR + its own segment. Segments are base-36 digit strings compared
 // byte-wise (COLLATE "C"). The separator sorts below every digit, so `ORDER BY sort_key` yields depth-first
@@ -52,4 +52,10 @@ export function splitKey(key: string): { parent: string; segment: string } {
   return i < 0
     ? { parent: '', segment: key }
     : { parent: key.slice(0, i), segment: key.slice(i + 1) };
+}
+
+/** Every ancestor key of `key`, root first: 'a!b!c' -> ['a', 'a!b']. */
+export function ancestorKeys(key: string): string[] {
+  const parts = key.split(SEPARATOR);
+  return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join(SEPARATOR));
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { childKey, midpoint, segmentFor, splitKey, SUBTREE_END } from '../src/sortkey.js';
+import { ancestorKeys, childKey, midpoint, segmentFor, splitKey, SUBTREE_END } from './sort-key.js';
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0); // byte order, like COLLATE "C"
 
@@ -41,5 +41,12 @@ describe('hierarchical keys', () => {
     for (const k of [a1, a1x, a2]) expect(k < a + SUBTREE_END).toBe(true);
     expect(between > a + SUBTREE_END).toBe(true);
     expect(splitKey(a1x)).toEqual({ parent: a1, segment: segmentFor(7) });
+  });
+});
+
+describe('ancestorKeys', () => {
+  it('lists every ancestor, root first', () => {
+    expect(ancestorKeys('a!b!c')).toEqual(['a', 'a!b']);
+    expect(ancestorKeys('a')).toEqual([]);
   });
 });

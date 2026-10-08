@@ -2,7 +2,7 @@
 import type { Sql } from 'postgres';
 import { computeCpm, type Relation, type RelationType } from './cpm.js';
 import { rng } from './generate.js';
-import { midpoint, splitKey, SUBTREE_END } from './sortkey.js';
+import { midpoint, splitKey, SUBTREE_END } from '@aerolith/shared';
 import { one, sample, timeIt, type Timing } from './stats.js';
 
 export const WINDOW = 200;
