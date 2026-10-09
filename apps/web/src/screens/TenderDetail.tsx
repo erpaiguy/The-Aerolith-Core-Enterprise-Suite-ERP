@@ -349,6 +349,12 @@ function describeEvent(e: TenderDetail['events'][number]): string {
       return `Bids recorded: ${String(d.bidders)} bidders${d.ourRank ? `, we were L${String(d.ourRank)}` : ''}`;
     case 'result':
       return `Result: ${String(d.outcome)}${d.category ? ` (${String(d.category)})` : ''}`;
+    case 'programme_created':
+      return `Programme started: ${String(d.name ?? '')}`;
+    case 'programme_archived':
+      return `Programme archived: ${String(d.name ?? '')}`;
+    case 'programme_restored':
+      return `Programme restored: ${String(d.name ?? '')}`;
     case 'rfq_created':
       return `${String(d.number)} started: ${String(d.title ?? '')}`;
     case 'rfq_status':

@@ -9,6 +9,7 @@ import { EmailModule } from './email/email.module.js';
 import { HealthController } from './health/health.controller.js';
 import { LicensingModule } from './licensing/licensing.module.js';
 import { ProvisioningModule } from './provisioning/provisioning.module.js';
+import { ScheduleModule } from './schedule/schedule.module.js';
 import { TenderModule } from './tender/tender.module.js';
 
 @Module({
@@ -21,6 +22,7 @@ import { TenderModule } from './tender/tender.module.js';
     EmailModule,
     TenderModule,
     DocumentsModule,
+    ScheduleModule,
   ],
   controllers: [HealthController],
   // Runs before route guards; only acts on routes marked with @RateLimit.

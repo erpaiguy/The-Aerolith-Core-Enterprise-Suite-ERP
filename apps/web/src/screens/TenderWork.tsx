@@ -41,6 +41,7 @@ import {
 import { usePermission } from '../session/permissions';
 import { useSession } from '../session/session';
 import { TenderDocuments } from './Documents';
+import { TenderProgrammes } from './Programme';
 import { TenderRfqs } from './Rfq';
 
 export const useTenderWork = (tenderId: string) =>
@@ -1490,7 +1491,14 @@ export function TenderWorkTabs({
   const qc = useQueryClient();
   const work = useTenderWork(tender.id);
   const [tab, setTab] = useState<
-    'overview' | 'documents' | 'queries' | 'securities' | 'checklist' | 'rfqs' | 'submission'
+    | 'overview'
+    | 'documents'
+    | 'programme'
+    | 'queries'
+    | 'securities'
+    | 'checklist'
+    | 'rfqs'
+    | 'submission'
   >('overview');
   const changed = () => {
     void qc.invalidateQueries({ queryKey: ['tender-work', tender.id] });
@@ -1501,6 +1509,7 @@ export function TenderWorkTabs({
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'documents', label: 'Documents' },
+    { key: 'programme', label: 'Programme' },
     {
       key: 'queries',
       label: `Queries & addenda${w ? ` (${w.queries.length + w.addenda.length})` : ''}`,
@@ -1542,6 +1551,8 @@ export function TenderWorkTabs({
         overview
       ) : tab === 'documents' ? (
         <TenderDocuments tenderId={tender.id} />
+      ) : tab === 'programme' ? (
+        <TenderProgrammes tenderId={tender.id} />
       ) : tab === 'rfqs' ? (
         <TenderRfqs tenderId={tender.id} />
       ) : work.isPending ? (

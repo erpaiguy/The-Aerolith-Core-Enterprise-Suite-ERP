@@ -37,7 +37,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 8 | **Tender management detail** | Pre-bid queries, addenda (with importing a revised BOQ into a revision, moved from step 7), EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | **Done** (see below) |
 | 9 | **RFQs** | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** (see below) |
 | 10 | **Tender documents** | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | **Done** (see below; Supabase Storage not built) |
-| 11 | Tender programme | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | E9. Second-hardest UI |
+| 11 | **Tender programme** | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | Part 1 **Done** (see below); MSPDI/XER next |
 | 12 | Reports + dashboard | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel | E11, 08-dashboard.md §2.3-2.4 |
 
 Each step ships with API tests and a browser test of the main journey, like Wave 0.
@@ -778,3 +778,66 @@ tests (standard folders and restriction; versions and unchanged re-uploads; down
 upload; restricted documents hidden from a worker everywhere; the size limit and an infected file refused; rename,
 tags, move, trash and restore; ZIPs read back; search; a new version by document; the permission and the database
 refusing deletes; a Supabase tenant refused). A browser test of the journey.
+
+## Step 11 delivered (part 1): the tender programme
+
+**Journey** (the tender page gains a **Programme** tab; each programme has its own page):
+1. **New programme** with its data date. It starts with two calendars: **Site (Mon–Sat)** (the default) and **Office
+   (Mon–Fri)**, each with India's fixed national holidays (26 Jan, 15 Aug, 2 Oct) for six years.
+2. **Type the programme in the grid**: Activity and Milestone add rows (IDs come as A1000, A1010…, editable); click a
+   cell to change the ID, name, duration (working days) or **predecessors**, typed as `A1010, A1020SS+2, A1030FF-1`.
+   Indent a row under the one above it and that row becomes a **summary** (its span is its rows'); outdent, move up
+   and down, delete. Keys: Insert adds, Delete removes, Alt+Shift+→/← indent and outdent, ↑/↓ move the selection.
+3. Every change is **recalculated at once** by the critical path method: early and late dates, total and free float,
+   the critical path in red. A change that would close a **loop of links** is refused, naming the activities in it,
+   and nothing is saved.
+4. **The bar chart** beside the grid: bars, float, milestones, summaries, links, non-working days shaded, the data
+   date; zoom by days, weeks or months; long programmes scroll without slowing down (only what is in view is drawn).
+5. Select a row for its dates and floats, and to give it **its own calendar**, a **constraint** (start/finish no
+   earlier/later than, must start/finish on) or notes. **Calendars** edits working weekdays, holidays and extra
+   working days; **Settings** the name, data date and default calendar.
+6. **Print / PDF**: A3 landscape pages with a title block, the activity table and the bars on one time scale, page
+   numbers and a legend; the browser's "Save as PDF" makes the PDF.
+
+**Decisions made while building (change any you disagree with):**
+- **One engine for tender programmes and, later, project schedules** (`packages/shared/src/schedule.ts`). It counts
+  each calendar's working days, so links between activities on the same calendar are plain arithmetic, and a link
+  between two calendars goes through the real day between (an office task finishing Friday lets a site task start
+  Saturday). [Certain] On a 7-day calendar it gives exactly the Wave 0 benchmark engine's dates and floats on a
+  random 5,000-activity network with every link type; on 50,000 activities with two calendars it computes in about
+  0.3 s (the target is 3 s including load and save).
+- **[Guessing] Lags count working days of the successor's calendar.** MS Project and Primavera each offer choices
+  here; this is the common case. Tell me if your planners expect otherwise.
+- **Summaries take no links** (Primavera's rule; MS Project allows them). Links on summaries are the usual source of
+  dates nobody can explain. A task with links cannot become a summary until its links are removed.
+- **Milestones** show the day that finished before them (a milestone after a task finishing Friday shows Friday);
+  one with nothing before it shows its start.
+- **Constraints can make float negative**; the programme shows it rather than hiding the miss.
+- **The whole programme is edited and recalculated at once** (up to 20,000 activities). Measured on 5,000 activities:
+  an edit that moves every date takes about 0.5 s round trip. Project schedules (Wave 2a) will need the windowed reads
+  the BOQ uses.
+- **Printing goes through the browser** (no PDF library): the pages are drawn as SVG, so they print sharp; the time
+  scale fits the page width, so a very long programme prints compressed. [Guessing] the desktop app prints the same
+  way.
+- **The programme does not freeze when the bid is submitted** (BOQs do). It is a document; archive it instead of
+  changing it after submission, or tell me to freeze it with the BOQs.
+- **Who may do what**: everyone reads; the new `programme.edit` (managers yes, workers no by default) changes.
+
+**Not built yet:** MS Project XML and Primavera XER import and export, and Excel export (part 2); resources,
+baselines and progress (Wave 2a, which needs them); dragging bars on the chart; undo; copying a programme.
+
+**API** (under `/api/tenant`; changes need `programme.edit`):
+- `GET /tenders/:id/programmes`, `POST /tenders/:id/programmes`, `GET /programmes/:id` (calendars, activities in
+  order with their dates and floats, links)
+- `POST /programmes/:id/changes` (`rowVersion`, `ops`: insert, update, move, delete, link, unlink; temporary ids
+  "t…" for new rows, answered with their real ids and the recalculated plan)
+- `POST /programmes/:id` (name, data date, default calendar, notes), `POST /programmes/:id/archive`
+- `POST /programmes/:id/calendars`, `POST /programmes/:id/calendars/:calendarId`
+
+**Tests:** 9 engine tests (calendars with a holiday and an extra working day; a chain over a weekend and a holiday
+with float worked by hand; SS, FF and SF with lags and leads; a link across two calendars; constraints and negative
+float; nested summaries; loops; parity with the benchmark engine and 50,000 activities under 3 s); 4 tests of typed
+predecessors; 9 API integration tests (calendars at creation; a programme built by edits with hand-worked dates; a
+loop and links on summaries refused with nothing saved; recalculation and a stale edit; a holiday and a second
+calendar moving dates; indent, move and delete; IDs swapped in one edit; permissions and archiving; 5,000
+activities). A browser test of the journey, the bar chart and the print view.

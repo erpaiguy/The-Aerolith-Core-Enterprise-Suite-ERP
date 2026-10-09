@@ -38,6 +38,10 @@ export const PERMISSIONS = {
       'Upload, organise and remove tender documents (restricted folders also need the pricing permission)',
     defaults: { manager: true, worker: true },
   },
+  'programme.edit': {
+    label: 'Create and edit tender programmes: activities, links, calendars',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

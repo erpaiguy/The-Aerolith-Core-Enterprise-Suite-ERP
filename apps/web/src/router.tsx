@@ -20,6 +20,7 @@ import { BoqPricingScreen } from './screens/Pricing';
 import { BoqVersionsScreen } from './screens/Versions';
 import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
 import { ResourcesScreen } from './screens/Resources';
+import { ProgrammePrint, ProgrammeScreen } from './screens/Programme';
 import { RfqScreen } from './screens/Rfq';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
@@ -108,6 +109,25 @@ const rfqRoute = createRoute({
   },
 });
 
+const programmeRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/programmes/$planId',
+  component: function ProgrammePage() {
+    const { planId } = programmeRoute.useParams();
+    return <ProgrammeScreen key={planId} planId={planId} />;
+  },
+});
+
+/** The print view has no menus around it: it is the paper. */
+const programmePrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/programmes/$planId/print',
+  component: function ProgrammePrintPage() {
+    const { planId } = programmePrintRoute.useParams();
+    return <ProgrammePrint planId={planId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -139,6 +159,7 @@ const routeTree = rootRoute.addChildren([
     pricingRoute,
     versionsRoute,
     rfqRoute,
+    programmeRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/documents',
@@ -168,6 +189,7 @@ const routeTree = rootRoute.addChildren([
       component: () => <ChangePasswordScreen forced={false} />,
     }),
   ]),
+  programmePrintRoute,
   createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInScreen }),
   createRoute({
     getParentRoute: () => rootRoute,
