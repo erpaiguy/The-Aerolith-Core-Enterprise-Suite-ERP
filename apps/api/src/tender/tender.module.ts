@@ -9,6 +9,8 @@ import { ImportService } from '../boq/import/import.service.js';
 import { PricingModule } from '../pricing/pricing.module.js';
 import { ProvisioningModule } from '../provisioning/provisioning.module.js';
 import { RatesModule } from '../rates/rates.module.js';
+import { RfqController } from '../rfq/rfq.controller.js';
+import { RfqService } from '../rfq/rfq.service.js';
 import { TenderWorkController } from './tender-work.controller.js';
 import { TenderWorkService } from './tender-work.service.js';
 import { TenderController } from './tender.controller.js';
@@ -16,7 +18,13 @@ import { TenderService } from './tender.service.js';
 
 @Module({
   imports: [ProvisioningModule, AuthModule, RatesModule, PricingModule],
-  controllers: [TenderController, TenderWorkController, BoqController, ImportController],
+  controllers: [
+    TenderController,
+    TenderWorkController,
+    BoqController,
+    ImportController,
+    RfqController,
+  ],
   providers: [
     TenderService,
     TenderWorkService,
@@ -24,6 +32,7 @@ import { TenderService } from './tender.service.js';
     ImportService,
     ExportService,
     RevisionService,
+    RfqService,
   ],
 })
 export class TenderModule {}

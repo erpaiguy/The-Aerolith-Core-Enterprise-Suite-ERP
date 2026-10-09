@@ -89,4 +89,5 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 6 | Measurement sheets; bid pricing: scenarios, markups, GST, % against estimate, quoted rates, bid summary | **Done** |
 | 7 | Revisions: copy-on-write versions, freeze on submission, compare, version export, archiving | **Done** |
 | 8 | Tender management detail: pre-bid queries, addenda (with revised-BOQ import), EMD/BG, checklist, win/loss | **Done** |
-| 9 | RFQs: enquiry packs to vendors, quotes, comparative statement, price into the estimate | Next |
+| 9 | RFQs: enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** |
+| 10 | Tender documents: storage, per-tender vault, folders, versions, search, preview | Next |

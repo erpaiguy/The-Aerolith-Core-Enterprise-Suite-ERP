@@ -349,6 +349,14 @@ function describeEvent(e: TenderDetail['events'][number]): string {
       return `Bids recorded: ${String(d.bidders)} bidders${d.ourRank ? `, we were L${String(d.ourRank)}` : ''}`;
     case 'result':
       return `Result: ${String(d.outcome)}${d.category ? ` (${String(d.category)})` : ''}`;
+    case 'rfq_created':
+      return `${String(d.number)} started: ${String(d.title ?? '')}`;
+    case 'rfq_status':
+      return `${String(d.number)}: ${String(d.from)} → ${String(d.to)}`;
+    case 'rfq_quote':
+      return `Quote from ${String(d.vendor)} on ${String(d.number)} (${String(d.lines)} rates${d.source === 'file' ? ', from their workbook' : ''})`;
+    case 'rfq_applied':
+      return `Rates from ${String(d.number)} put into the estimate: ${String(d.items)} BOQ item(s), ${String(d.resources)} resource(s)`;
     default:
       return e.kind;
   }

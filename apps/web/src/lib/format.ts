@@ -54,6 +54,11 @@ export function errorMessage(
     decision_not_allowed: 'A bid/no-bid decision cannot be recorded at this stage.',
     client_not_found: 'Choose a client from the list.',
     tender_not_found: 'Tender not found.',
+    rfq_not_found: 'RFQ not found.',
+    boq_not_on_tender: 'Choose a BOQ of this tender.',
+    vendor_not_on_rfq: 'That vendor is not on this RFQ.',
+    party_not_found: 'Choose a vendor from the list.',
+    name_required: "Give the vendor's name.",
     forbidden: 'Your role cannot do this.',
     network_error: 'Cannot reach the server. Check your internet connection.',
   };
@@ -67,7 +72,13 @@ export function describeError(err: unknown): string {
     if (first?.message)
       return first.path ? `${labelFor(first.path)}: ${first.message}` : first.message;
   }
-  return errorMessage(err instanceof ApiError ? err.code : 'network_error');
+  if (!(err instanceof ApiError)) return errorMessage('network_error');
+  // A code without its own sentence here shows the server's message, which says what to do (e.g. "Version 2 is
+  // frozen; start revision 3 to price it.").
+  return errorMessage(
+    err.code,
+    typeof err.body.message === 'string' && err.body.message ? err.body.message : undefined,
+  );
 }
 
 const labelFor = (path: string) =>

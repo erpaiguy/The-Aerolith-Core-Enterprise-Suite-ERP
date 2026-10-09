@@ -266,6 +266,9 @@ importers:
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.5
+      exceljs:
+        specifier: 4.4.0
+        version: 4.4.0
       mailparser:
         specifier: ^3.9.36
         version: 3.9.36

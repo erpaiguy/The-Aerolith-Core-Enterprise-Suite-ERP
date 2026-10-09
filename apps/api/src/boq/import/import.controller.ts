@@ -66,7 +66,7 @@ const unitBody = z.object({
   aliases: z.array(unitText).max(20).default([]),
 });
 
-const attachment = (fileName: string) =>
+export const attachment = (fileName: string) =>
   `attachment; filename="${fileName.replace(/[^\x20-\x7e]|"/g, '_')}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 
 /**

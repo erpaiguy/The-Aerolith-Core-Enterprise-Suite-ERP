@@ -35,7 +35,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 6 | **Measurement + pricing** | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | **Done** (see below) |
 | 7 | **Revisions** | Copy-on-write versions, compare two versions, lock on submission | **Done** (see below) |
 | 8 | **Tender management detail** | Pre-bid queries, addenda (with importing a revised BOQ into a revision, moved from step 7), EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | **Done** (see below) |
-| 9 | RFQs | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | E8 |
+| 9 | **RFQs** | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** (see below) |
 | 10 | Tender documents | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | E10, P8 |
 | 11 | Tender programme | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | E9. Second-hardest UI |
 | 12 | Reports + dashboard | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel | E11, 08-dashboard.md §2.3-2.4 |
@@ -643,3 +643,77 @@ changed lines, the usual addendum, apply in seconds at any size up to the cap.
 dropped sections, swaps, blank cells, measured quantities, totals); 3 API integration tests (the same file again
 changes nothing; a corrigendum into revision 2 with rates kept, a measured quantity released, compare and the frozen
 export intact; a check the BOQ has outrun is refused); a browser test of the journey.
+
+## Step 9 delivered: RFQs
+
+**Journey** (the tender page gains an **RFQs** tab; each RFQ has its own page):
+1. **New RFQ** on a tender: a title, **work** (subcontractors price BOQ items) or **materials** (suppliers quote
+   resources), the date quotes are due and the terms printed on the enquiry. Numbered `RFQ/2026-27/0001` per entity.
+2. **Lines**: for work, tick BOQ sections or search for items (a section brings every item under it, with its
+   quantity); for materials, tick resources. A line not in the BOQ or the library can be added by hand. Nothing is
+   asked twice.
+3. **Subcontractors / suppliers**: chosen from the party master or typed as a new name (added to the party master as
+   a subcontractor or vendor). For each, **Enquiry** downloads an Excel workbook made for them (yellow cells for their
+   rates, remarks, quote reference, validity and GST), which you send from your own email; **Mark sent** records the
+   date.
+4. **Quotes**: **Import quote** reads the filled workbook back; **Type quote** is for quotes that come on paper or as
+   PDF. Each quote says whether its rates are **plus GST, include GST, or are GST-exempt**, and at what rate.
+5. **Comparative statement**: every vendor's rate and amount per line **before GST**, the lowest (L1) marked, each
+   vendor's total before GST, GST and total, and a rank among the quotes that price every line. Above it: the lowest on
+   every line added up (the "L1 split"), what the chosen vendors add up to, and our estimate for the same quantities.
+6. **Choose** per line, or **Choose the lowest on every line**, or **give everything to** one vendor.
+7. **Put the chosen rates into the estimate**: each chosen BOQ item gets the vendor's rate before GST, as an edit in
+   the BOQ (so a revision keeps only what changed); each chosen resource gets a new rate from the quote's date in the
+   rate library. The result says what changed per BOQ.
+8. **Close** an RFQ when it is done (nothing on it changes, rates can still be applied) or **cancel** it. RFQs are never
+   deleted.
+
+**Decisions made while building (change any you disagree with):**
+- **The enquiry goes out as Excel from your own email, not from the app.** The system mailbox is the platform's
+  (60 emails an hour, shared), vendors cannot sign in, and a reply from the estimator's own address is what vendors
+  answer. A hidden sheet in the workbook names the RFQ and the vendor, so a file imported under the wrong vendor or
+  RFQ is refused; lines are matched by their number, so a vendor who copies the rows into a new file is still read.
+  Any unreadable rate stops the import and says which line.
+- **[Likely] Quotes are compared before GST**, because a GST-registered contractor (regular scheme) takes the vendor's
+  GST as input credit: it is not a cost. A quote that includes GST is divided back (413 at 18 % is 350). **A contractor
+  on the composition scheme cannot take the credit**: for them the "Total with GST" row is the real comparison. Tell me
+  if any pilot customer is on the composition scheme and I will make the basis a company setting.
+- **A tie for L1 names nobody**: "Choose the lowest" leaves tied lines for the estimator; the statement shows both as L1.
+- **Only quotes that price every line are ranked overall**; a partial quote shows "2 of 3 lines" instead of a rank,
+  because its lower total would mislead.
+- **The rate put into the BOQ is before GST, rounded to the paisa.** The BOQ rate is our cost to the client before the
+  bid's own markups and GST (step 6), so the vendor's GST must not be counted twice.
+- **A frozen BOQ is left alone**: the result says "Version 1 is frozen; start revision 2 to price it." Archived BOQs
+  are skipped too.
+- **A resource's new rate is dated the day the quote was received.** [Certain] A BOQ prices analyses as on its own
+  rate date (step 5), so a BOQ whose rate date is before the quote keeps the old rate until its rate date is moved.
+- **A revised quote replaces the first one.** The activity log records each quote (who, how many rates, typed or
+  from a file), but the earlier rates are not kept. Negotiation rounds are not built (see below).
+- **Who may do what**: everyone reads RFQs; changes need the new `rfq.edit` right (managers yes, workers no by
+  default; the admin can change it). Putting rates into a BOQ also needs `boq.edit`, into the rate library
+  `rates.edit`.
+
+**Not built yet:** negotiation rounds with the history of each vendor's rates; reminders for quotes due; quote PDFs
+attached to the RFQ (that needs tender documents, step 10); an RFQ PDF (the Excel enquiry prints well enough); a
+vendor portal.
+
+**API** (under `/api/tenant`; changes need `rfq.edit`):
+- `GET /tenders/:id/rfqs`, `POST /tenders/:id/rfqs`, `GET /rfqs/:id` (lines, vendors, quotes and the comparative
+  statement), `POST /rfqs/:id` (title, due date, terms, status; `rowVersion`)
+- `POST /rfqs/:id/lines` (`boqId` + `nodeIds`, `resourceIds`, or `free`), `POST /rfq-lines/:id`,
+  `POST /rfq-lines/:id/delete`
+- `POST /rfqs/:id/vendors` (`partyId`, or `name` + `email`), `POST /rfqs/:id/vendors/:partyId` (status, sent date,
+  notes), `POST /rfqs/:id/vendors/:partyId/delete` (not once they quoted)
+- `GET /rfqs/:id/vendors/:partyId/pack` (the Excel enquiry)
+- `POST /rfqs/:id/vendors/:partyId/quote` (typed), `POST /rfqs/:id/quotes/import?partyId=` (the filled workbook,
+  multipart, up to 5 MB)
+- `POST /rfqs/:id/select` (`lines`, `award`, or `lowest`), `POST /rfqs/:id/apply`
+
+**Tests:** 5 unit tests of the comparative statement worked by hand (GST extra, included and exempt; a tie; a line
+without quantity; a partial quote); 3 unit tests of reading filled workbooks (blank answers, rows copied into a new
+file with rates as text and a totals row, unreadable rates and dates); 8 API integration tests (a work RFQ from a BOQ
+section; vendors and their workbooks; importing a filled workbook and refusing the wrong vendor or bad rates; the
+statement; choosing the lowest, ties and refusals; rates into the BOQ and a frozen BOQ skipped; closing and
+reopening; a materials RFQ pricing a resource from the quote date). A browser test of the journey: two
+subcontractors, one workbook filled and imported, one quote typed with GST included, a tie chosen by hand, the BOQ
+total changing.

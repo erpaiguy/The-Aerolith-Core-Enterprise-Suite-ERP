@@ -654,3 +654,139 @@ export interface VersionCompare {
   rows: VersionChange[];
   hasMore: boolean;
 }
+
+// --- RFQs (apps/api/src/rfq) ---
+
+export type RfqKind = 'work' | 'material';
+export type RfqStatus = 'draft' | 'sent' | 'closed' | 'cancelled';
+/** How a vendor's rates treat GST (not the bid's GST: see GstMode). */
+export type QuoteGstMode = 'extra' | 'included' | 'exempt';
+export type RfqVendorStatus = 'invited' | 'sent' | 'quoted' | 'declined';
+
+export interface RfqSummary {
+  id: string;
+  number: string;
+  title: string;
+  kind: RfqKind;
+  dueOn: string | null;
+  status: RfqStatus;
+  lines: number;
+  vendors: number;
+  quotes: number;
+}
+
+export interface RfqCell {
+  /** As quoted (with GST when the quote includes it). */
+  rate: string;
+  /** Before GST. */
+  basic: string;
+  amount: string | null;
+  /** 1 = lowest on the line; equal rates share a rank. */
+  rank: number;
+  remark: string;
+}
+
+export interface RfqLine {
+  id: string;
+  seq: number;
+  boqId: string | null;
+  boqName: string | null;
+  resourceId: string | null;
+  code: string | null;
+  description: string;
+  unit: string | null;
+  qty: string | null;
+  selectedPartyId: string | null;
+  selectionNote: string;
+  /** The estimate's current rate for the item or resource. */
+  ourRate: string | null;
+  ourAmount: string | null;
+  /** The BOQ item was deleted since it was asked for. */
+  gone: boolean;
+  cells: Record<string, RfqCell>;
+  /** The single lowest vendor; null when nobody quoted or two tie. */
+  l1: string | null;
+  lowest: string | null;
+  selected: { partyId: string; basic: string; amount: string | null } | null;
+}
+
+export interface RfqQuote {
+  receivedOn: string;
+  validUntil: string | null;
+  reference: string | null;
+  gstMode: QuoteGstMode;
+  gstPct: string;
+  terms: string;
+  source: 'typed' | 'file';
+  fileName: string | null;
+}
+
+export interface RfqVendor {
+  partyId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  status: RfqVendorStatus;
+  sentOn: string | null;
+  notes: string;
+  quote: RfqQuote | null;
+}
+
+export interface RfqVendorTotal {
+  partyId: string;
+  name: string;
+  gstMode: QuoteGstMode;
+  gstPct: string;
+  linesQuoted: number;
+  /** Priced every line: only complete quotes are ranked. */
+  complete: boolean;
+  linesL1: number;
+  basicTotal: string;
+  gst: string;
+  total: string;
+  rank: number | null;
+}
+
+export interface RfqDetail {
+  id: string;
+  tenderId: string;
+  number: string;
+  title: string;
+  kind: RfqKind;
+  dueOn: string | null;
+  status: RfqStatus;
+  terms: string;
+  rowVersion: number;
+  tender: { id: string; number: string; title: string };
+  lines: RfqLine[];
+  vendors: RfqVendor[];
+  cs: {
+    vendors: RfqVendorTotal[];
+    totals: {
+      splitL1: string;
+      selected: string;
+      linesSelected: number;
+      estimate: string;
+      linesUnpriced: number;
+    };
+  };
+}
+
+export interface RfqApplyResult {
+  boqs: {
+    boqId: string;
+    name: string;
+    updated: number;
+    unchanged: number;
+    skipped: string | null;
+  }[];
+  resources: number;
+  rfq: RfqDetail;
+}
+
+export interface RfqQuoteImport {
+  rfq: RfqDetail;
+  lines: number;
+  skipped: number;
+  issues: string[];
+}

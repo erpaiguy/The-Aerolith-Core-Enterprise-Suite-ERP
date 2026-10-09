@@ -19,6 +19,7 @@ import { BoqPricingScreen } from './screens/Pricing';
 import { BoqVersionsScreen } from './screens/Versions';
 import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
 import { ResourcesScreen } from './screens/Resources';
+import { RfqScreen } from './screens/Rfq';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
 import { WinLossScreen } from './screens/TenderInsights';
@@ -97,6 +98,15 @@ const analysisRoute = createRoute({
   },
 });
 
+const rfqRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/rfqs/$rfqId',
+  component: function RfqPage() {
+    const { rfqId } = rfqRoute.useParams();
+    return <RfqScreen key={rfqId} rfqId={rfqId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -127,6 +137,7 @@ const routeTree = rootRoute.addChildren([
     analysisRoute,
     pricingRoute,
     versionsRoute,
+    rfqRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/users',

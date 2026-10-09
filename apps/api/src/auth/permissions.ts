@@ -28,6 +28,11 @@ export const PERMISSIONS = {
     label: 'See and change bid pricing: markups, profit, GST, scenarios and quoted rates',
     defaults: { manager: true, worker: false },
   },
+  'rfq.edit': {
+    label:
+      'Run enquiries to vendors: RFQs, quotes, comparative statements and the choice of vendor',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
