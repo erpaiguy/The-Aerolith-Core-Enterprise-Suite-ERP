@@ -499,8 +499,10 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
                   </Card>
                 </div>
                 <div className="space-y-5">
+                  {/* Reset the scores only when a decision is recorded: any other change to the tender (a status
+                      move, an edit) refetches it, and remounting then would drop scores being clicked. */}
                   <BidDecision
-                    key={t.rowVersion}
+                    key={t.decisions[0]?.id ?? 'none'}
                     tender={t}
                     canEdit={canEdit}
                     onChanged={refresh}
