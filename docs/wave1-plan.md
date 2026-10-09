@@ -38,7 +38,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 9 | **RFQs** | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** (see below) |
 | 10 | **Tender documents** | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | **Done** (see below; Supabase Storage not built) |
 | 11 | **Tender programme** | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | **Done** (see below) |
-| 12 | **Reports + dashboard** | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel (E11, 08-dashboard.md §2.3-2.4) | **Part 1 done** (reports, see below); part 2 (dashboards) next |
+| 12 | **Reports + dashboard** | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel (E11, 08-dashboard.md §2.3-2.4) | **Done** (reports and dashboards, see below) |
 
 Each step ships with API tests and a browser test of the main journey, like Wave 0.
 
@@ -100,7 +100,7 @@ Each step ships with API tests and a browser test of the main journey, like Wave
 **Known gaps (later steps):**
 - The tenant admin's display name is their email address.
 - There is no way to edit the bid/no-bid criteria per company yet.
-- There is no tender dashboard yet (step 12 part 2).
+- The tender dashboard came in step 12 (part 2).
 
 ## Step 2 delivered: BOQ engine (API)
 
@@ -942,5 +942,61 @@ users only, analyses without rates named, the analysis report line by line, the 
 stage with each filter, bid values hidden, and the Excel files). The browser test prints the cost summary, opens
 the analysis report, downloads the unpriced BOQ and filters and downloads the pipeline.
 
-**Part 2 (next):** the tender and bid dashboard and the estimation dashboard (docs/08-dashboard.md §2.3, §2.4) with
-charts, the KPI picker (§2.6), drill-down and export.
+## Step 12 delivered (part 2): dashboards
+
+**Journey:** **Dashboards** in the menu opens **Tenders and bids**; a tab switches to **Estimation**. Each shows when it
+was read ("as of"), can be filtered by financial year, vertical and owner, read again (**Refresh**), downloaded as
+**Excel** (the tiles, then one sheet per chart), or printed (the menus are left off the paper; "Save as PDF" makes
+the PDF).
+
+**Tenders and bids** (docs/08-dashboard.md §2.3):
+- Headline numbers (fixed, as decided in §4.1): **submissions due in 14 days** (red when the next is within 3 days),
+  **pipeline value** (the client's estimates of open tenders), **EMD/BG expiring in 30 days** (with the amount; red
+  when one has already expired).
+- Charts: pipeline by stage (count and estimate), bids and results by quarter of the year, open/won/lost by
+  vertical; the next 30 days (submissions, pre-bid meetings, query deadlines, openings, guarantee expiries); the
+  enquiries awaiting quotes (quotes in of vendors asked).
+
+**Estimation** (§2.4): headline **BOQs in progress** (draft BOQs of open tenders), **value being estimated**, **items
+not priced**; charts: BOQs and unpriced items by estimator (the tender's owner), the largest BOQs in progress, what
+they are made of (material, labour, equipment, subcontract, lump sums, overheads and profit in rates, not analysed:
+the step 12 part 1 split, across all of them), revisions (first frozen value against today's), and resource rates
+entered in the last 30 days with their change.
+
+**My tiles (the KPI picker, §2.6):** **Tiles** opens the catalogue of the dashboard: add, put in order, remove, save.
+Saved per user and per dashboard; nobody else sees them. Catalogue: open tenders, bids being prepared, pre-bid
+meetings in 14 days, unanswered queries, EMD to get back, bids submitted this year, win rate this year, work won this
+year, value bid this year (pricing only), enquiries awaiting quotes; rates added, analyses changed, resources without
+a rate, versions frozen, vendor quotes received (30 days each).
+
+**Drill-down:** a tile or a bar opens what it counts: the pipeline report filtered by stage, year, vertical or owner
+(the report now takes its filters from the address), the BOQ, the RFQ, the tender, the win/loss analysis.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] Tiles are built-in queries in code** (`apps/api/src/dashboard/tiles.ts`); only each user's chosen keys
+  are stored. No formulas, as §2.6 says. A tile retired later just stops showing.
+- **[Certain] Bid values stay pricing-only:** "value bid this year" is offered only to users with `pricing.edit`,
+  and a saved one is dropped for a user who loses the permission. Award values (the client's) and estimates are not
+  treated as pricing.
+- **"This year" is the financial year chosen**, by the date of the first submission (submissions) or the result
+  date (wins, losses); quarters are April-June first, in IST.
+- **Estimator = the tender's owner.** BOQs have no owner of their own.
+- **The 300 ms rule, measured** on 5,000 tenders and 300 BOQs in progress with 300,000 lines: tenders and bids 35-70 ms;
+  estimation 160 ms. Adding up every line of every BOQ in progress took 210 ms alone, so each BOQ's amounts by rate
+  analysis are kept in a small cache table (`est.boq_cost_mix`), recomputed only for BOQs changed since (every write
+  to a BOQ's lines changes its header, which the cache is checked against). **[Likely] The first view after every
+  BOQ changed at once is slower:** 0.9 s with all 300 recomputed. Each dashboard reports its time (`tookMs`).
+- **Charts are Apache ECharts** (Apache-2.0, renderer BSD-3-Clause), only bar, line and pie, loaded when a dashboard
+  opens so the app does not grow for everyone (the dashboard chunk is 187 kB gzipped).
+
+**API** (under `/api/tenant/dashboards`, reading, also on a read-only licence): `GET /tender`, `GET /estimation`
+(`?fy&vertical&owner`), each with `/export` for Excel; `POST /:name/tiles` (`{tiles: [...]}`, the user's own; a
+preference, so no permission needed). Migration `0015_dashboard.sql`: `platform.dashboard_layout`,
+`est.boq_cost_mix`, and a partial index for unpriced items.
+
+**Tests:** 3 unit tests (quarters of the Indian financial year in IST, year bounds, the fixed tiles); 8 API
+integration tests (both dashboards worked by hand on five tenders, a guarantee, an enquiry and a BOQ from an analysis:
+headline numbers, every chart, the filters, each user's tiles with pricing tiles refused to a worker, a cached cost mix
+used while current and recomputed after an edit, the Excel file, the time). The browser test reads the headline
+numbers, adds and orders two tiles that survive a reload, drills from the pipeline value into the report, opens the
+estimation dashboard and downloads the Excel file.

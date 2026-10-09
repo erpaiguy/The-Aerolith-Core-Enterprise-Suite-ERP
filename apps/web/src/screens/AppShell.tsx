@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
   ChartColumn,
+  LayoutDashboard,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -101,9 +102,11 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
-      <LicenceBanner />
+      <div className="print:hidden">
+        <LicenceBanner />
+      </div>
       <div className="flex flex-1 flex-col md:flex-row">
-        <aside className="border-b border-line bg-surface md:w-60 md:shrink-0 md:border-b-0 md:border-r">
+        <aside className="print:hidden border-b border-line bg-surface md:w-60 md:shrink-0 md:border-b-0 md:border-r">
           <div className="flex items-center gap-2.5 px-4 py-4">
             <div className="flex size-8 items-center justify-center rounded-md bg-accent text-sm font-bold text-accent-fg">
               A
@@ -136,6 +139,9 @@ export function AppShell() {
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               Pre-construction
             </div>
+            <NavItem to="/dashboards/tender" icon={<LayoutDashboard className="size-4" />}>
+              Dashboards
+            </NavItem>
             <NavItem to="/tenders" icon={<ScrollText className="size-4" />}>
               Tenders
             </NavItem>
@@ -159,7 +165,7 @@ export function AppShell() {
           </nav>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">
+          <header className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">
             <div className="min-w-0 text-sm">
               <span className="font-medium">{session.user?.displayName}</span>{' '}
               <Badge>{session.user?.role}</Badge>

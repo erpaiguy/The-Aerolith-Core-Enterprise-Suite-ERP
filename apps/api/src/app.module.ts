@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { RateLimitGuard } from './auth/rate-limit.js';
 import { ConfigModule } from './config/config.module.js';
 import { DbModule } from './db/db.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { EmailModule } from './email/email.module.js';
 import { HealthController } from './health/health.controller.js';
@@ -25,6 +26,7 @@ import { TenderModule } from './tender/tender.module.js';
     DocumentsModule,
     ScheduleModule,
     ReportsModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
   // Runs before route guards; only acts on routes marked with @RateLimit.

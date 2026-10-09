@@ -975,3 +975,93 @@ export interface Pipeline {
   };
   pricingHidden: boolean;
 }
+
+// --- dashboards (step 12 part 2) ---
+
+export type DashboardName = 'tender' | 'estimation';
+
+export interface DashboardTile {
+  key: string;
+  label: string;
+  hint: string;
+  value: string;
+  kind: 'count' | 'money' | 'pct';
+  detail?: string;
+  tone?: 'danger' | 'warning';
+  link?: string;
+}
+
+interface DashboardCommon {
+  asOf: string;
+  filter: { fy: string; vertical?: string; ownerId?: string };
+  years: string[];
+  owners: { id: string; name: string }[];
+  fixed: DashboardTile[];
+  tiles: DashboardTile[];
+  catalogue: { key: string; label: string; hint: string }[];
+  tookMs: number;
+}
+
+export interface TenderDashboardData extends DashboardCommon {
+  dashboard: 'tender';
+  charts: {
+    stages: { status: TenderStatus; count: number; estimatedValue: string }[];
+    quarters: { quarter: string; submitted: number; won: number; lost: number; wonValue: string }[];
+    verticals: { vertical: string; open: number; won: number; lost: number }[];
+    upcoming: {
+      at: string;
+      kind: 'submission' | 'prebid' | 'queries' | 'opening' | 'security';
+      label: string;
+      tender: { id: string; number: string; title: string };
+    }[];
+    rfqs: {
+      id: string;
+      number: string;
+      title: string;
+      dueOn: string | null;
+      vendors: number;
+      quoted: number;
+      tender: { id: string; number: string };
+    }[];
+  };
+}
+
+export interface EstimationDashboardData extends DashboardCommon {
+  dashboard: 'estimation';
+  charts: {
+    estimators: {
+      id: string | null;
+      name: string;
+      boqs: number;
+      value: string;
+      unpriced: number;
+    }[];
+    topBoqs: {
+      id: string;
+      name: string;
+      total: string;
+      versionNo: number;
+      tender: { id: string; number: string; title: string };
+    }[];
+    revisions: {
+      id: string;
+      name: string;
+      tenderNumber: string;
+      versions: number;
+      first: string;
+      latest: string;
+      current: string;
+      changePct: string | null;
+    }[];
+    breakdown: CostSummary['breakdown'];
+    rateChanges: {
+      code: string;
+      name: string;
+      unit: string;
+      rate: string;
+      previous: string | null;
+      effectiveFrom: string;
+      changePct: string | null;
+    }[];
+  };
+}

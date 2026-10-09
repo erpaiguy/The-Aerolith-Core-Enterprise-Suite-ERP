@@ -32,6 +32,12 @@ import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
 import { WinLossScreen } from './screens/TenderInsights';
 import { Spinner } from '@aerolith/ui';
+import { lazy, Suspense } from 'react';
+
+// Charts (ECharts) load only when a dashboard is opened, not with the app.
+const DashboardScreen = lazy(() =>
+  import('./screens/Dashboards').then((m) => ({ default: m.DashboardScreen })),
+);
 
 /** Pages opened from email links: usable in any browser, with or without an activated licence or session. */
 const PUBLIC_PATHS = ['/account/set-password', '/account/reset-password'];
@@ -134,6 +140,21 @@ const programmePrintRoute = createRoute({
   },
 });
 
+const dashboardRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/dashboards/$name',
+  component: function DashboardPage() {
+    const { name } = dashboardRoute.useParams();
+    return name === 'tender' || name === 'estimation' ? (
+      <Suspense fallback={<Spinner />}>
+        <DashboardScreen key={name} name={name} />
+      </Suspense>
+    ) : (
+      <Navigate to="/dashboards/$name" params={{ name: 'tender' }} replace />
+    );
+  },
+});
+
 /** Reports are paper too: a toolbar that does not print, and the page. */
 const costSummaryRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -186,6 +207,7 @@ const routeTree = rootRoute.addChildren([
     rfqRoute,
     programmeRoute,
     createRoute({ getParentRoute: () => appLayout, path: '/reports', component: ReportsScreen }),
+    dashboardRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/documents',

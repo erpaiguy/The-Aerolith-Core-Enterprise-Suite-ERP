@@ -23,6 +23,9 @@ The CI licence gate (`pnpm licenses:check`) checks transitive dependencies autom
 | exceljs | MIT | api | BOQ import/export: streaming .xlsx reader and writer, so a million-line workbook never sits in memory. **pnpm override `exceljs>unzipper: 0.12.5`**: exceljs pins unzipper 0.10, whose dependencies `buffers` (no licence at all) and `chainsaw` ("MIT/X11") fail the licence gate; 0.12.5 drops both and passes the import tests, including a 993k-row workbook |
 | csv-parse | MIT | api | BOQ import from CSV (quoted multi-line cells, byte-order mark, `;`/tab delimiters) |
 | @fastify/multipart | MIT | api | File upload for imports; streams to disk with a size limit |
+| archiver | MIT | api | Tender documents downloaded as one ZIP, streamed (step 10) |
+| saxes | ISC | api | Streaming XML parser for MS Project XML programme files (step 11); already in the tree under exceljs, declared directly |
+| echarts (with zrender) | Apache-2.0 (zrender BSD-3-Clause) | web | Dashboard charts (08-dashboard.md §1); only bar, line and pie are imported, and the dashboard screen loads on demand. Its NOTICE ("Apache ECharts, Copyright 2017-2025 The Apache Software Foundation") must travel in THIRD_PARTY_NOTICES |
 
 ## Development only
 

@@ -534,10 +534,12 @@ export function AnalysisReportPrint({ boqId }: { boqId: string }) {
 // --- bid pipeline ---
 
 export function PipelineReport() {
-  const [fy, setFy] = useState('');
-  const [status, setStatus] = useState('all');
-  const [vertical, setVertical] = useState('');
-  const [owner, setOwner] = useState('');
+  // Dashboards open this report already filtered (drill-down): the address carries the filters.
+  const [initial] = useState(() => new URLSearchParams(window.location.search));
+  const [fy, setFy] = useState(initial.get('fy') ?? '');
+  const [status, setStatus] = useState(initial.get('status') ?? 'all');
+  const [vertical, setVertical] = useState(initial.get('vertical') ?? '');
+  const [owner, setOwner] = useState(initial.get('owner') ?? '');
   const qs = new URLSearchParams(
     Object.entries({ fy, status, vertical, owner }).filter(([, v]) => v !== ''),
   ).toString();
