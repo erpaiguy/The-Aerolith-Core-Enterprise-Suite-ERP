@@ -360,6 +360,27 @@ export interface ImportIssue {
   message: string;
 }
 
+export interface ImportRevision {
+  before: number;
+  matchedByCode: number;
+  matchedByDescription: number;
+  unchanged: number;
+  changed: number;
+  moved: number;
+  added: number;
+  removed: number;
+  measuredOverridden: number;
+  ratesKept: number;
+  ratesFromFile: number;
+  total: string;
+  samples: {
+    change: 'added' | 'removed' | 'changed' | 'moved';
+    code: string | null;
+    description: string;
+    detail: string;
+  }[];
+}
+
 export interface ImportJob {
   id: string;
   boqId: string;
@@ -399,6 +420,8 @@ export interface ImportJob {
     issues: ImportIssue[];
     moreIssues: number;
     unknownUnits: { unit: string; rows: number }[];
+    /** Into a BOQ that has lines: what the revised file changes. */
+    revision?: ImportRevision;
     result?: { nodeCount: number; itemCount: number; total: string; seconds: number };
   } | null;
   progress: number;

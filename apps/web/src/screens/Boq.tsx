@@ -242,9 +242,10 @@ export function BoqScreen({ boqId }: { boqId: string }) {
           <RatesBar header={h} canEdit={canEdit && !running} onRefreshed={reload} />
         </div>
         <div className="flex items-end gap-4">
-          {canEdit && h.nodeCount === 0 && !wizard && (
+          {canEdit && !wizard && (
             <Button variant="secondary" onClick={() => setWizard(true)}>
-              <FileUp className="size-4" aria-hidden /> Import
+              <FileUp className="size-4" aria-hidden />{' '}
+              {h.nodeCount === 0 ? 'Import' : 'Import revised BOQ'}
             </Button>
           )}
           {canEditBoq && h.status === 'draft' && !archived && !wizard && (
@@ -316,7 +317,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
       )}
       {running && !wizard && importJob && <ImportBanner job={importJob} />}
       {wizard ? (
-        <ImportWizard boqId={boqId} onClose={() => setWizard(false)} />
+        <ImportWizard boqId={boqId} revising={h.nodeCount > 0} onClose={() => setWizard(false)} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
           {panel && <SidePanel boqId={boqId} onJump={(key) => grid.current?.jumpTo(key)} />}

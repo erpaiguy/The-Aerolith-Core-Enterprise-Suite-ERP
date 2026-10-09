@@ -18,7 +18,8 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { measuredQty, sumQty, type MeasurementInput } from '../pricing/pricing.js';
 import { RatesService } from '../rates/rates.service.js';
 import { refuseArchived } from './archived.js';
-import { importRunning } from './import/import.service.js';
+import type { FieldChange } from './import/revise.js';
+import { importRunning } from './import/jobs.js';
 import { loadUnitMap, sameUnit } from './units.js';
 
 export type NodeType = 'section' | 'item' | 'note';
@@ -440,6 +441,75 @@ export class BoqService {
     });
   }
 
+  /**
+   * Turns a draft into a revised BOQ file (import, step 8). The planned inserts, moves and deletes go through the same
+   * steps as edits in the grid (keys, pre-images, counts); field changes go in one statement per chunk; subtotals
+   * and the total are worked out once at the end. Runs in the import's transaction with the BOQ row locked.
+   */
+  async applyRevision(
+    tx: TransactionSql,
+    boq: { id: string; version: number; rateDate: string },
+    plan: { ops: Op[]; fields: FieldChange[] },
+    progress: (done: number, of: number) => Promise<void>,
+  ) {
+    const ctx: BatchContext = {
+      tx,
+      boqId: boq.id,
+      rateDate: boq.rateDate,
+      version: boq.version,
+      units: null,
+      idMap: new Map(),
+      touched: new Set(),
+      deleted: new Set(),
+      reload: true,
+      importing: true,
+    };
+    const steps = plan.ops.length + plan.fields.length;
+    for (const [i, op] of plan.ops.entries()) {
+      if (op.op === 'insert') await this.insert(ctx, op);
+      else if (op.op === 'move') await this.move(ctx, op);
+      else if (op.op === 'delete') await this.remove(ctx, op);
+      if (i % 25 === 0) await progress(i, steps);
+    }
+    const rev = { tx, boqId: boq.id, version: boq.version };
+    for (let i = 0; i < plan.fields.length; i += 5000) {
+      const chunk = plan.fields.slice(i, i + 5000);
+      const text = chunk.filter((f) => f.textChanged).map((f) => f.id);
+      if (text.length) await preImage(rev, tx`n.id = ANY(${text}::bigint[])`, true);
+      await preImage(rev, tx`n.id = ANY(${chunk.map((f) => f.id)}::bigint[])`);
+      // A rate from the file unlinks the analysis; no rate keeps both.
+      await tx`
+        WITH x AS (
+          SELECT * FROM jsonb_to_recordset(${tx.json(
+            chunk.map((f) => ({
+              id: f.id,
+              code: f.code,
+              unit: f.unit,
+              qty: f.qty,
+              rate: f.rate,
+              unmeasure: f.unmeasure,
+            })),
+          )}) AS x(id bigint, code text, unit text, qty numeric, rate numeric, unmeasure boolean)
+        )
+        UPDATE est.boq_node n SET code = x.code, unit = x.unit, qty = x.qty, rate = coalesce(x.rate, n.rate),
+          rate_analysis_id = CASE WHEN x.rate IS NULL THEN n.rate_analysis_id END,
+          amount = CASE WHEN n.node_type = 'item' THEN round(x.qty * coalesce(x.rate, n.rate), 2) END,
+          measured = n.measured AND NOT x.unmeasure, row_version = n.row_version + 1
+        FROM x WHERE n.boq_id = ${boq.id} AND n.id = x.id`;
+      const texts = chunk.filter((f) => f.textChanged);
+      if (texts.length)
+        await tx`
+          UPDATE est.boq_node_text t SET description = x.description, notes = x.notes
+          FROM jsonb_to_recordset(${tx.json(
+            texts.map((f) => ({ id: f.id, description: f.description, notes: f.notes })),
+          )}) AS x(id bigint, description text, notes text)
+          WHERE t.boq_id = ${boq.id} AND t.node_id = x.id`;
+      await progress(plan.ops.length + i, steps);
+    }
+    await preImage(rev, tx`n.node_type = 'section'`);
+    await recomputeTotals(tx, boq.id);
+  }
+
   private async insert(ctx: BatchContext, op: Extract<Op, { op: 'insert' }>) {
     const { tx, boqId } = ctx;
     if (ctx.idMap.has(op.tempId)) throw new BadRequestException({ code: 'duplicate_temp_id' });
@@ -644,7 +714,7 @@ export class BoqService {
 
   /** Adds `sign × delta` to every ancestor's subtotal and to the BOQ total. */
   private async propagate(ctx: BatchContext, key: string, delta: string, sign: 1 | -1 = 1) {
-    if (/^-?0+(\.0+)?$/.test(delta)) return;
+    if (ctx.importing || /^-?0+(\.0+)?$/.test(delta)) return;
     if (sign === -1) delta = delta.startsWith('-') ? delta.slice(1) : `-${delta}`;
     const { tx, boqId } = ctx;
     const ancestors = ancestorKeys(key);
@@ -670,7 +740,7 @@ export class BoqService {
       FROM est.boq_node WHERE boq_id = ${ctx.boqId} AND id = ${id} FOR UPDATE`;
     if (!n) throw new NotFoundException({ code: 'line_not_found', id: rawId });
     // Rows inserted earlier in this batch have no version on the client yet.
-    if (!ctx.idMap.has(rawId) && n.row_version !== rowVersion)
+    if (!ctx.importing && !ctx.idMap.has(rawId) && n.row_version !== rowVersion)
       throw new ConflictException({
         code: 'stale_row',
         id: rawId,
@@ -1011,6 +1081,11 @@ interface BatchContext {
   reload: boolean;
   /** Set by setMeasurements: the one place allowed to change a measured item's quantity. */
   measuring?: boolean;
+  /**
+   * Set by a revised-BOQ import: the BOQ is locked for the whole import, so row versions need no checking, and
+   * totals are worked out once at the end instead of per line.
+   */
+  importing?: boolean;
 }
 
 /** What a line contributes to its ancestors' subtotals. */

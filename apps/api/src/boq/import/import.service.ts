@@ -28,11 +28,14 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { childKey, segmentFor } from '@aerolith/shared';
-import type { Sql } from 'postgres';
+import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../../auth/auth.service.js';
 import { APP_CONFIG, type AppConfig } from '../../config/config.js';
 import { TenantConnections } from '../../provisioning/tenant-connections.js';
 import { refuseArchived } from '../archived.js';
+import { BoqService } from '../boq.service.js';
+import { STALE_MINUTES } from './jobs.js';
+import { planRevision, type Existing, type Mapped, type RevisionSummary } from './revise.js';
 import {
   LineBuilder,
   detectSettings,
@@ -52,8 +55,8 @@ const PREVIEW_ROWS = 50;
 const PREVIEW_SHEETS = 10;
 const PREVIEW_CELL = 120;
 const ISSUES_KEPT = 500;
-/** A job that has not reported progress for this long was interrupted (server restart). */
-const STALE_MINUTES = 15;
+/** A revised BOQ is matched in memory: up to this many lines in the BOQ it revises. */
+const MAX_REVISE_LINES = 200_000;
 const FILE_TTL_MS = 24 * 3600_000;
 const INSERT_ROWS = 2000;
 const INSERT_BYTES = 4 * 1024 * 1024;
@@ -112,6 +115,11 @@ export interface Summary {
   /** Issues beyond those listed (all of them are in the issues report). */
   moreIssues: number;
   unknownUnits: { unit: string; rows: number }[];
+  /** Importing into a BOQ that has lines: what the revised file changes (see revise.ts). */
+  revision?: RevisionSummary & {
+    /** The BOQ as checked; the import refuses to run if it changed since. */
+    boqUpdatedAt: string;
+  };
   result?: {
     nodeCount: number;
     itemCount: number;
@@ -158,6 +166,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly tenants: TenantConnections,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly boqs: BoqService,
   ) {}
 
   onModuleInit() {
@@ -482,6 +491,13 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
         .slice(0, 50)
         .map(([unit, rows]) => ({ unit, rows })),
     };
+    // Into a BOQ that has lines: the file is a revised BOQ; work out what it changes.
+    const [boq] = await db<{ node_count: number; updated_at: Date }[]>`
+      SELECT node_count, updated_at FROM est.boq WHERE id = ${job.target_id}`;
+    if (boq && boq.node_count > 0) {
+      const plan = await this.revisionPlan(db, job.target_id, path, job, settings);
+      summary.revision = { ...plan.summary, boqUpdatedAt: boq.updated_at.toISOString() };
+    }
     await db`UPDATE platform.import_job SET status = 'validated', progress = 100,
         summary = ${db.json(JSON.parse(JSON.stringify(summary)))}, updated_at = now()
       WHERE id = ${jobId} AND status = 'validating'`;
@@ -495,6 +511,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
     settings: Settings,
     tick: Tick,
   ) {
+    if (job.summary?.revision) return this.runRevision(claims, db, job, path, settings, tick);
     const started = Date.now();
     const boqId = job.target_id;
     const expected = job.summary!.lines;
@@ -646,6 +663,133 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
     await rm(path, { force: true });
   }
 
+  // --- revised BOQ (step 8) ---
+
+  /** The BOQ's lines and the file's, matched and planned (revise.ts). Reads the whole BOQ into memory. */
+  private async revisionPlan(
+    db: Sql | TransactionSql,
+    boqId: string,
+    path: string,
+    job: JobRow,
+    settings: Settings,
+  ) {
+    const existing = await db<Existing[]>`
+      SELECT n.id::text, n.parent_id::text AS "parentId", n.sort_key AS "sortKey", n.node_type AS type, n.code,
+        t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate, n.measured
+      FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
+      WHERE n.boq_id = ${boqId} ORDER BY n.sort_key LIMIT ${MAX_REVISE_LINES + 1}`;
+    if (existing.length > MAX_REVISE_LINES)
+      throw new ImportProblem(
+        `A revised BOQ can be imported into a BOQ of up to ${MAX_REVISE_LINES.toLocaleString('en-IN')} lines. ` +
+          'Import it as a new BOQ instead, and compare the two by exporting them.',
+      );
+    const b = new LineBuilder(settings, await loadUnitMap(db));
+    const lines: Line[] = [];
+    for await (const r of readRows(path, job.file_type)) {
+      if (r.sheet < settings.sheet) continue;
+      if (r.sheet > settings.sheet) break;
+      const { line } = b.push(r.rowNo, r.cells);
+      if (line) lines.push(line);
+    }
+    const m = settings.mapping;
+    const mapped: Mapped = {
+      code: m.code !== undefined,
+      description: m.description !== undefined,
+      notes: m.notes !== undefined,
+      unit: m.unit !== undefined,
+      qty: m.qty !== undefined,
+      rate: m.rate !== undefined,
+    };
+    return planRevision([...existing], lines, mapped);
+  }
+
+  /**
+   * Applies a revised BOQ to a draft that has lines, as checked: if the BOQ changed since the check, nothing happens.
+   * Copy-on-write keeps the frozen version intact (step 7), so compare shows exactly what the revision changed.
+   */
+  private async runRevision(
+    claims: TenantClaims,
+    db: Sql,
+    job: JobRow,
+    path: string,
+    settings: Settings,
+    tick: Tick,
+  ) {
+    const started = Date.now();
+    const boqId = job.target_id;
+    const checked = job.summary!.revision!;
+    const result = await db.begin(async (tx) => {
+      const [boq] = await tx<
+        {
+          status: string;
+          archived: boolean;
+          tender_id: string;
+          version_no: number;
+          rate_date: string;
+          updated_at: Date;
+        }[]
+      >`
+        SELECT status, archived_at IS NOT NULL AS archived, tender_id, version_no, rate_date::text, updated_at
+        FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      if (!boq) throw new ImportProblem('The BOQ no longer exists.');
+      if (boq.archived) throw new ImportProblem('The BOQ was archived meanwhile.');
+      if (boq.status !== 'draft') throw new ImportProblem('The BOQ is no longer a draft.');
+      if (boq.updated_at.toISOString() !== checked.boqUpdatedAt)
+        throw new ImportProblem('The BOQ was changed since the check. Run the check again.');
+      const plan = await this.revisionPlan(tx, boqId, path, job, settings);
+      const s = plan.summary;
+      if (
+        s.added !== checked.added ||
+        s.removed !== checked.removed ||
+        s.changed !== checked.changed ||
+        s.moved !== checked.moved
+      )
+        throw new ImportProblem(
+          'The file or the BOQ changed since the check. Run the check again.',
+        );
+      await tick(5, true);
+      await this.boqs.applyRevision(
+        tx,
+        { id: boqId, version: boq.version_no, rateDate: boq.rate_date },
+        plan,
+        (done, of) => tick(5 + Math.floor((done / Math.max(1, of)) * 90)),
+      );
+      const [after] = await tx<{ node_count: number; item_count: number; total: string }[]>`
+        UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub}, row_version = row_version + 1
+        WHERE id = ${boqId} RETURNING node_count, item_count, total::text`;
+      const data = {
+        boqId,
+        jobId: job.id,
+        file: job.file_name,
+        mode: 'revision',
+        version: boq.version_no,
+        added: s.added,
+        removed: s.removed,
+        changed: s.changed,
+        moved: s.moved,
+        total: after!.total,
+      };
+      await tx`INSERT INTO tender.tender_event (tender_id, kind, data, actor_id)
+        VALUES (${boq.tender_id}, 'boq_imported', ${tx.json(data)}, ${claims.sub})`;
+      await tx`INSERT INTO platform.audit_log (actor_id, action, entity, entity_id, data)
+        VALUES (${claims.sub}, 'boq.import_revision', 'boq', ${boqId}, ${tx.json(data)})`;
+      await tick(99, true);
+      return { nodeCount: after!.node_count, itemCount: after!.item_count, total: after!.total };
+    });
+    const summary: Summary = {
+      ...job.summary!,
+      result: {
+        ...result,
+        seconds: Math.round((Date.now() - started) / 100) / 10,
+        analyzed: false,
+      },
+    };
+    await db`UPDATE platform.import_job SET status = 'imported', progress = 100, finished_at = now(),
+        updated_at = now(), summary = ${db.json(JSON.parse(JSON.stringify(summary)))}
+      WHERE id = ${job.id}`;
+    await rm(path, { force: true });
+  }
+
   // --- plumbing ---
 
   /**
@@ -722,18 +866,13 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
     return path;
   }
 
-  /** Imports go into an empty draft BOQ only (importing a revised BOQ into a revision comes with addenda, step 8). */
+  /** Imports go into a draft: an empty one (a new BOQ), or one with lines (a revised BOQ, step 8). */
   private async importableBoq(db: Sql, boqId: string) {
     const [b] = await db<{ status: string; archived: boolean; node_count: number }[]>`
       SELECT status, archived_at IS NOT NULL AS archived, node_count FROM est.boq WHERE id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
     refuseArchived(b);
     if (b.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
-    if (b.node_count > 0)
-      throw new ConflictException({
-        code: 'boq_not_empty',
-        message: 'Import goes into an empty BOQ. Create a new BOQ for this file.',
-      });
   }
 
   private tooLarge() {
@@ -763,13 +902,6 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
 }
 
 type Tick = (progress: number, force?: boolean) => Promise<void>;
-
-/** True while an import into this BOQ is running (interactive edits are refused meanwhile). */
-export async function importRunning(db: Sql, boqId: string): Promise<boolean> {
-  const [r] = await db`SELECT 1 FROM platform.import_job WHERE kind = 'boq' AND target_id = ${boqId}
-    AND status = 'importing' AND updated_at > now() - make_interval(mins => ${STALE_MINUTES})`;
-  return Boolean(r);
-}
 
 export function csvCell(v: unknown): string {
   let s = v === null || v === undefined ? '' : String(v);

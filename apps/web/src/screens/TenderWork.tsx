@@ -391,6 +391,13 @@ export function QueriesAndAddenda({
                   </label>
                 </div>
                 <p className="whitespace-pre-wrap">{x.summary}</p>
+                {x.affectsBoq && (
+                  <p className="text-xs text-fg-muted">
+                    To bring the client&apos;s revised BOQ in: open the BOQ, start a revision if it
+                    is frozen, and use Import revised BOQ. Compare then shows what this addendum
+                    changed.
+                  </p>
+                )}
                 {x.dueAfter && (
                   <p className="text-xs text-fg-muted">
                     Submission moved{x.dueBefore ? ` from ${formatDateTime(x.dueBefore)}` : ''} to{' '}

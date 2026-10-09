@@ -5,7 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, FileSpreadsheet, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { api, saveFile } from '../api/client';
-import type { ImportField, ImportJob, ImportSettings, ImportStructure } from '../api/types';
+import type {
+  ImportField,
+  ImportJob,
+  ImportRevision,
+  ImportSettings,
+  ImportStructure,
+} from '../api/types';
 import { describeError, formatInr } from '../lib/format';
 
 const RUNNING: ImportJob['status'][] = ['scanning', 'validating', 'importing'];
@@ -302,6 +308,77 @@ function SettingsForm({
   );
 }
 
+const CHANGE_TONE = {
+  added: 'success',
+  removed: 'danger',
+  changed: 'warning',
+  moved: 'neutral',
+} as const;
+
+/** What a revised BOQ file changes in this draft, before anything is saved. */
+function RevisionSummary({ r }: { r: ImportRevision }) {
+  return (
+    <div className="space-y-3" data-testid="revision-summary">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+        <Stat
+          label="Matched"
+          value={(r.matchedByCode + r.matchedByDescription).toLocaleString('en-IN')}
+        />
+        <Stat label="Changed" value={r.changed.toLocaleString('en-IN')} />
+        <Stat label="Moved" value={r.moved.toLocaleString('en-IN')} />
+        <Stat label="Added" value={r.added.toLocaleString('en-IN')} />
+        <Stat
+          label="Removed"
+          value={r.removed.toLocaleString('en-IN')}
+          tone={r.removed > 0 ? 'warning' : undefined}
+        />
+        <Stat label="Total after" value={formatInr(r.total)} />
+      </div>
+      <ul className="list-disc space-y-0.5 pl-5 text-sm text-fg-muted">
+        <li>
+          Lines are matched by item code ({r.matchedByCode.toLocaleString('en-IN')}), then by
+          description ({r.matchedByDescription.toLocaleString('en-IN')}). A line matched wrongly
+          shows as removed and added.
+        </li>
+        {r.ratesKept > 0 && (
+          <li>
+            {r.ratesKept.toLocaleString('en-IN')} items have no rate in the file and keep this
+            BOQ&apos;s rate
+            {r.ratesFromFile > 0 &&
+              `; ${r.ratesFromFile.toLocaleString('en-IN')} take the file's rate`}
+            .
+          </li>
+        )}
+        {r.measuredOverridden > 0 && (
+          <li className="text-warning">
+            {r.measuredOverridden.toLocaleString('en-IN')} measured items get the file&apos;s
+            quantity; their measurement sheets are kept but no longer set the quantity.
+          </li>
+        )}
+        <li>Blank cells in the file never clear what the BOQ has.</li>
+      </ul>
+      {r.samples.length > 0 && (
+        <div className="max-h-64 overflow-auto rounded border border-line">
+          <table className="w-full text-xs" aria-label="Changes">
+            <tbody>
+              {r.samples.map((c, n) => (
+                <tr key={n} className="border-t border-line first:border-t-0">
+                  <td className="w-20 px-2 py-1">
+                    <Badge tone={CHANGE_TONE[c.change]}>{c.change}</Badge>
+                  </td>
+                  <td className="w-20 px-2 py-1 font-mono">{c.code ?? ''}</td>
+                  <td className="px-2 py-1">{c.description}</td>
+                  <td className="px-2 py-1 text-fg-muted">{c.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Summary({
   job,
   skipErrors,
@@ -327,13 +404,20 @@ function Summary({
     }
   };
   const errors = s.counts.errors;
+  // The result of the check is below the settings: bring it into view.
+  const top = useRef<HTMLDivElement>(null);
+  useEffect(() => top.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), []);
   return (
-    <div className="space-y-3" data-testid="import-summary">
+    <div ref={top} className="scroll-mt-4 space-y-3" data-testid="import-summary">
+      {s.revision && <RevisionSummary r={s.revision} />}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Stat label="Lines to import" value={s.lines.toLocaleString('en-IN')} />
+        <Stat
+          label={s.revision ? 'Lines in the file' : 'Lines to import'}
+          value={s.lines.toLocaleString('en-IN')}
+        />
         <Stat label="Sections" value={s.counts.sections.toLocaleString('en-IN')} />
         <Stat label="Items" value={s.counts.items.toLocaleString('en-IN')} />
-        <Stat label="Total" value={formatInr(s.total)} />
+        <Stat label={s.revision ? "File's total" : 'Total'} value={formatInr(s.total)} />
         <Stat
           label="Errors · warnings"
           value={`${errors.toLocaleString('en-IN')} · ${s.counts.warnings.toLocaleString('en-IN')}`}
@@ -430,7 +514,16 @@ export function ImportBanner({ job }: { job: ImportJob }) {
 }
 
 /** The import wizard, shown in place of the grid while open. */
-export function ImportWizard({ boqId, onClose }: { boqId: string; onClose: () => void }) {
+export function ImportWizard({
+  boqId,
+  onClose,
+  revising = false,
+}: {
+  boqId: string;
+  onClose: () => void;
+  /** The BOQ has lines: the file is a revised BOQ (step 8). */
+  revising?: boolean;
+}) {
   const qc = useQueryClient();
   const latest = useLatestImport(boqId, true);
   const setJob = (job: ImportJob) => qc.setQueryData(['boq-import', boqId], { job });
@@ -463,7 +556,20 @@ export function ImportWizard({ boqId, onClose }: { boqId: string; onClose: () =>
   let body;
   if (latest.isPending) body = <Spinner />;
   else if (latest.isError) body = <Alert tone="danger">{describeError(latest.error)}</Alert>;
-  else if (!job) body = <FilePicker boqId={boqId} onJob={setJob} />;
+  else if (!job)
+    body = (
+      <div className="space-y-3">
+        {revising && (
+          <Alert tone="info">
+            The file is the client&apos;s revised BOQ. Its lines are matched to this draft&apos;s by
+            item code, then by description; checking it lists what changes, is added, moved or
+            removed before anything is saved. Rates the file leaves blank are kept, so a client BOQ
+            without rates keeps your pricing.
+          </Alert>
+        )}
+        <FilePicker boqId={boqId} onJob={setJob} />
+      </div>
+    );
   else if (job.status === 'scanning')
     body = <Progress label="Reading the file" value={job.progress} />;
   else if (job.status === 'importing')
@@ -510,7 +616,9 @@ export function ImportWizard({ boqId, onClose }: { boqId: string; onClose: () =>
                 disabled={job.summary.lines === 0 || (job.summary.counts.errors > 0 && !skipErrors)}
                 onClick={() => act.mutate('start')}
               >
-                Import {job.summary.lines.toLocaleString('en-IN')} lines
+                {job.summary.revision
+                  ? 'Apply the revision'
+                  : `Import ${job.summary.lines.toLocaleString('en-IN')} lines`}
               </Button>
             </div>
           </>
@@ -537,7 +645,7 @@ export function ImportWizard({ boqId, onClose }: { boqId: string; onClose: () =>
   return (
     <Card
       className="min-h-0 flex-1 overflow-auto"
-      title="Import from Excel or CSV"
+      title={revising ? 'Import a revised BOQ' : 'Import from Excel or CSV'}
       actions={
         <Button variant="ghost" onClick={onClose} aria-label="Close import">
           <X className="size-4" aria-hidden />

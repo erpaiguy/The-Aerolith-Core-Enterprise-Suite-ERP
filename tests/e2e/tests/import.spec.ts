@@ -76,7 +76,9 @@ test('an estimator imports a BOQ from a spreadsheet and exports it back', async 
   await expect(page.getByTestId('boq-total')).toHaveText('₹4,29,995');
   await expect(grid(page).getByRole('row').filter({ hasText: 'Backfilling' })).toContainText('cum');
   await expect(grid(page).getByRole('row').filter({ hasText: 'RCC M25' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Import' })).toHaveCount(0); // only into an empty BOQ
+  // With lines in it, the BOQ takes a revised BOQ instead (step 8).
+  await expect(page.getByRole('button', { name: 'Import', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Import revised BOQ' })).toBeVisible();
   await page.screenshot(shot('import-03-imported'));
 
   // 4. Export to Excel and import that file into a second BOQ: same lines, same total.

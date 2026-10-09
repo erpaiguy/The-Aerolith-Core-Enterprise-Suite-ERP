@@ -327,6 +327,10 @@ function describeEvent(e: TenderDetail['events'][number]): string {
       return `BOQ ${String(d.name ?? '')} archived`;
     case 'boq_restored':
       return `BOQ ${String(d.name ?? '')} restored`;
+    case 'boq_imported':
+      return d.mode === 'revision'
+        ? `Revised BOQ imported into version ${String(d.version)} from ${String(d.file ?? '')}: ${String(d.changed)} changed, ${String(d.added)} added, ${String(d.removed)} removed, ${String(d.moved)} moved`
+        : `BOQ imported from ${String(d.file ?? '')} (${String(d.lines ?? '')} lines)`;
     case 'addendum':
       return `Addendum ${String(d.ref ?? '')} recorded${d.dueAfter ? `; submission moved to ${formatDateTime(String(d.dueAfter))}` : ''}`;
     case 'query_added':

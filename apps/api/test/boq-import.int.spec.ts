@@ -305,10 +305,18 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ import and export (integration)',
       expect(events).toHaveLength(1);
     });
 
-    it('refuses a second import into a BOQ that has lines', async () => {
-      const res = await upload(boqId, 'again.xlsx', await tenderWorkbook());
-      expect(res.statusCode).toBe(409);
-      expect(res.json()).toMatchObject({ code: 'boq_not_empty' });
+    it('checks a second file into a BOQ that has lines as a revised BOQ: the same file changes nothing', async () => {
+      const again = await validated(await uploaded(boqId, 'again.xlsx', await tenderWorkbook()));
+      expect(again.summary!.revision).toMatchObject({
+        before: 13,
+        unchanged: 13,
+        added: 0,
+        removed: 0,
+        changed: 0,
+        moved: 0,
+        total: '3143728.00',
+      });
+      expect((await post(`/tenant/imports/${again.id}/cancel`)).statusCode).toBe(200);
     });
 
     it('exports to Excel and imports back unchanged', async () => {
@@ -382,6 +390,123 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ import and export (integration)',
       expect(j.status).toBe('imported');
       expect(shape(await allRows(copy))).toEqual(shape(await allRows(boqId)));
       expect(await boqInvariants(db, copy)).toEqual([]);
+    });
+  });
+
+  describe("a client's revised BOQ, imported into a revision", () => {
+    const v1 =
+      'Code,Description,Unit,Qty,Rate\r\n' +
+      '1,Earthwork,,,\r\n' +
+      '1.1,Excavation in ordinary soil,cum,100,350\r\n' +
+      '1.2,Backfilling in layers,cum,40,210\r\n' +
+      '2,Concrete,,,\r\n' +
+      '2.1,PCC 1:4:8 below footings,cum,12,5200\r\n' +
+      '2.2,RCC M25 in footings,cum,30,7400\r\n';
+    // The client's corrigendum: no rates; 1.1 up, 1.3 new, 2.1 dropped, 2.2 up, backfilling moved to 2.3.
+    const v2 =
+      'Code,Description,Unit,Qty\r\n' +
+      '1,Earthwork,,\r\n' +
+      '1.1,Excavation in ordinary soil,cum,120\r\n' +
+      '1.3,Anti-termite treatment,sqm,200\r\n' +
+      '2,Concrete,,\r\n' +
+      '2.2,RCC M25 in footings,cum,32\r\n' +
+      '2.3,Backfilling in layers,cum,40\r\n';
+    let boqId: string;
+    let frozenCsv: string;
+
+    it('checks the revised file against the BOQ: matched, changed, moved, added, removed, rates kept', async () => {
+      boqId = await newBoq('Revised by corrigendum');
+      await imported(await validated(await uploaded(boqId, 'v1.csv', v1)));
+      // 2.2 was measured on site: 1 × 30.
+      const rcc = (await allRows(boqId)).find((r) => r.code === '2.2')!;
+      const m = await post(`/tenant/boqs/${boqId}/lines/${rcc.id}/measurements`, {
+        rowVersion: rcc.rowVersion,
+        rows: [
+          {
+            description: 'Footings',
+            nos: '1',
+            length: '30',
+            breadth: null,
+            height: null,
+            deduct: false,
+          },
+        ],
+      });
+      expect(m.statusCode).toBe(200);
+      frozenCsv = (await get(`/tenant/boqs/${boqId}/export?format=csv`)).body;
+      expect(
+        (await post(`/tenant/boqs/${boqId}/freeze`, { kind: 'submitted', label: 'R0' })).statusCode,
+      ).toBe(200);
+      // A frozen BOQ takes no import; a revision does.
+      expect((await upload(boqId, 'v2.csv', v2)).json()).toMatchObject({ code: 'boq_locked' });
+      expect((await post(`/tenant/boqs/${boqId}/revise`)).statusCode).toBe(200);
+
+      const job = await validated(await uploaded(boqId, 'v2.csv', v2));
+      expect(job.status).toBe('validated');
+      expect(job.summary!.revision).toMatchObject({
+        before: 6,
+        matchedByCode: 4,
+        matchedByDescription: 1,
+        changed: 3,
+        moved: 1,
+        added: 1,
+        removed: 1,
+        measuredOverridden: 1,
+        ratesKept: 3,
+        // 120 × 350 + 32 × 7400 + 40 × 210; the new item has no rate yet.
+        total: '287200.00',
+      });
+
+      const done = await imported(job);
+      expect(done).toMatchObject({ status: 'imported', error: null });
+      const rows = await allRows(boqId);
+      expect(rows.map((r) => [r.depth, r.code, r.qty, r.rate, r.measured])).toEqual([
+        [0, '1', null, null, false],
+        [1, '1.1', '120.0000', '350.0000', false],
+        [1, '1.3', '200.0000', null, false],
+        [0, '2', null, null, false],
+        [1, '2.2', '32.0000', '7400.0000', false],
+        [1, '2.3', '40.0000', '210.0000', false],
+      ]);
+      expect(await header(boqId)).toMatchObject({ total: '287200.00', nodeCount: 6, itemCount: 4 });
+      expect(await boqInvariants(db, boqId)).toEqual([]);
+    });
+
+    it('compares as a revision (changed, not removed and re-added) and keeps the frozen version intact', async () => {
+      const c = (await get(`/tenant/boqs/${boqId}/compare?from=1&to=2`)).json<{
+        summary: Record<string, unknown>;
+        rows: { change: string; codeA: string | null; codeB: string | null; moved: boolean }[];
+      }>();
+      expect(c.summary).toEqual({ added: 1, removed: 1, changed: 3, itemsDelta: '-40600.00' });
+      expect(c.rows.map((r) => [r.change, r.codeA ?? r.codeB, r.codeB, r.moved])).toEqual(
+        expect.arrayContaining([
+          ['changed', '1.1', '1.1', false],
+          ['added', '1.3', '1.3', false],
+          ['removed', '2.1', null, false],
+          ['changed', '2.2', '2.2', false],
+          ['changed', '1.2', '2.3', true],
+        ]),
+      );
+      expect((await get(`/tenant/boqs/${boqId}/export?format=csv&version=1`)).body).toBe(frozenCsv);
+      const events = await db<{ data: { mode: string; added: number } }[]>`
+        SELECT data FROM tender.tender_event WHERE tender_id = ${tenderId} AND kind = 'boq_imported'
+        ORDER BY id DESC LIMIT 1`;
+      expect(events[0]!.data).toMatchObject({ mode: 'revision', added: 1 });
+    });
+
+    it('refuses to apply a check that the BOQ has outrun', async () => {
+      const again =
+        'Code,Description,Unit,Qty\r\n1,Earthwork,,\r\n1.1,Excavation in ordinary soil,cum,125\r\n';
+      const job = await validated(await uploaded(boqId, 'v3.csv', again));
+      const row = (await allRows(boqId)).find((r) => r.code === '1.3')!;
+      const edit = await post(`/tenant/boqs/${boqId}/changes`, {
+        ops: [{ op: 'update', id: row.id, rowVersion: row.rowVersion, rate: '45' }],
+      });
+      expect(edit.statusCode).toBe(200);
+      const done = await imported(job);
+      expect(done.status).toBe('failed');
+      expect(done.error).toContain('changed since the check');
+      expect((await allRows(boqId)).find((r) => r.code === '1.1')!.qty).toBe('120.0000');
     });
   });
 

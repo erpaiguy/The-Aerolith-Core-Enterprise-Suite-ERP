@@ -34,7 +34,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 5 | **Rate library + rate analysis** | Resources and rates with effective dates; analyses (resources × productivity + wastage + overheads + profit) feeding BOQ rates | **Done** (see below) |
 | 6 | **Measurement + pricing** | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | **Done** (see below) |
 | 7 | **Revisions** | Copy-on-write versions, compare two versions, lock on submission | **Done** (see below) |
-| 8 | Tender management detail | Pre-bid queries, addenda (with importing a revised BOQ into a revision, moved from step 7), EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | E7 |
+| 8 | **Tender management detail** | Pre-bid queries, addenda (with importing a revised BOQ into a revision, moved from step 7), EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | **Done** (see below) |
 | 9 | RFQs | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | E8 |
 | 10 | Tender documents | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | E10, P8 |
 | 11 | Tender programme | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | E9. Second-hardest UI |
@@ -285,7 +285,8 @@ cannot disagree):
   (100 MB, about two million lines).
 
 **Decisions made while building (change any you disagree with):**
-- **Import only into an empty BOQ.** Merging into an existing BOQ belongs with revisions (moved to step 8, with addenda).
+- **Import only into an empty BOQ.** Merging into an existing BOQ belongs with revisions (built in step 8: a file
+  imported into a BOQ that has lines is a revised BOQ).
 - **Rows with errors block the import** until the user ticks "import without the rows that have errors".
 - **[Certain] No `COPY` staging, unlike the plan.** Postgres refuses `COPY FROM` on tables with row-level security
   ("COPY FROM not supported with row-level security"), and every tenant table has it. The upload waits on the API
@@ -486,6 +487,7 @@ never the whole BOQ. History is append-only for the app's database role.
 - **Importing a revised BOQ into a revision is not built yet.** Step 4 said merging into an existing BOQ belongs with
   revisions; it moves to step 8 with addenda, because the matching rule (by item code, by description, or both) should
   be decided on a pilot contractor's real addendum files. A wrong rule makes every line show as removed and re-added.
+  (Built in step 8 with a rule chosen without those files; see there.)
 - **Compare lists a line as changed only when something visible changed** (code, unit, quantity, rate, amount,
   description, notes, position): text edited and edited back is no change. The counts are exactly the lines listed.
   Section subtotals are not listed; the value change is over items.
@@ -589,3 +591,55 @@ guarantee expiry reminders at 09:00 IST and the bid-validity warning; the standa
 and reminders; submission freezing the BOQs and a revised offer, values hidden from workers; ranking at the opening
 and new competitors; a loss with the EMD return reminder; the agenda; win/loss figures by financial year, worked by
 hand). A browser test of the whole journey; the step 1 browser test now submits and loses through the forms.
+
+## Step 8 delivered (part 2): importing a revised BOQ into a revision
+
+**Journey:** the client's corrigendum comes with a revised BOQ, usually without rates. Open the BOQ, start a revision
+if it is frozen, and choose **Import revised BOQ**. The same wizard reads the file; **Check file** then lists what the
+file changes in the draft: lines matched, changed (with what: "qty 100 → 120"), moved, added, removed, and the BOQ's
+total afterwards. Nothing is saved until **Apply the revision**. Compare then shows the revision against the
+submitted version: changed lines as changed, not as removed and re-added.
+
+**How lines are matched** (`apps/api/src/boq/import/revise.ts`), in order:
+1. **Item code**, when the code is unique on both sides (ignoring case, spaces and a trailing dot).
+2. **Description among the children of a matched section**, when unique there (renumbered items).
+3. **Description and unit anywhere**, for items with a description of 12 characters or more (an item moved to
+   another section under a new code).
+
+Anything else is added or removed. Duplicates are never guessed between.
+
+**Decisions made while building (change any you disagree with):**
+- **[Guessing] The matching rule was chosen without a pilot contractor's real addendum files**, which step 7 said
+  should decide it. The check shows the matches before anything is saved, so a wrong match is visible (as a line
+  removed and the same line added); test it on real files first and tell me where it guesses wrong.
+- **A blank cell in the file never clears what the BOQ has.** A revised client BOQ has no rates, so the estimator's
+  rates (and their links to rate analyses) stay; a rate in the file replaces the BOQ's and unlinks its analysis.
+- **The file's quantity wins over a measurement sheet.** The sheet is kept but no longer sets the quantity; the check
+  counts how many such items there are.
+- **The least change**: lines still under the same section in the same order keep their place (longest run in order);
+  the rest move. Changes go through the BOQ engine like edits in the grid, so a revision keeps only what changed.
+- **The check is binding**: if the BOQ was edited (or the file differs) between the check and the import, the import
+  stops and asks for a new check.
+- **Up to 200,000 lines** in the BOQ being revised: matching happens in memory. Above that, import the revised file
+  as a new BOQ.
+
+**Measured** (sandbox; client file without rates, 2 % of quantities changed, 1 % of items removed, 1 % added):
+
+| BOQ size | Check the file (match and plan) | Apply the revision | Compare 1 → 2 | Kept in history |
+|----------|---------------------------------|--------------------|---------------|-----------------|
+| 50,000 lines (990 changed, 495 removed, 495 added) | 1.4 s | 7.3 s | 0.07 s | 1,985 rows |
+| 200,000 lines (3,960 changed, 1,980 removed, 1,980 added) | 7.8 s | 42 s | 3.1 s | 7,940 rows |
+
+Every count matched the generator's exactly; every stored invariant held afterwards. The history holds only the
+changed and removed lines plus the sections (whose subtotals are recomputed), not a copy of the BOQ.
+[Certain] The API process peaked at 733 MB during the 200,000-line check (the test's own generated files included):
+matching runs in memory, so a revision at the cap needs a server with that much to spare. [Likely] a few hundred
+changed lines, the usual addendum, apply in seconds at any size up to the cap.
+
+**API:** unchanged routes. `POST /api/tenant/boqs/:id/imports` now accepts a draft that has lines; the job's
+`summary.revision` has the matching and the changes, and starting the job applies them.
+
+**Tests:** 12 unit tests of the matching and the plan (codes, renumbered items, moved items, duplicates, new and
+dropped sections, swaps, blank cells, measured quantities, totals); 3 API integration tests (the same file again
+changes nothing; a corrigendum into revision 2 with rates kept, a measured quantity released, compare and the frozen
+export intact; a check the BOQ has outrun is refused); a browser test of the journey.

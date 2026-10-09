@@ -16,7 +16,7 @@ import type { TenantClaims } from '../auth/auth.service.js';
 import { priceBid, type GstMode, type Markup } from '../pricing/pricing.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { refuseArchived } from './archived.js';
-import { importRunning } from './import/import.service.js';
+import { importRunning } from './import/jobs.js';
 
 type Db = Sql | TransactionSql;
 export type FreezeKind = 'submitted' | 'internal';

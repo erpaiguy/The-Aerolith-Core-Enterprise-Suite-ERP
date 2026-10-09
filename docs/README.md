@@ -88,4 +88,5 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 5 | Rate library + rate analysis: resources with dated rates, price books, analyses, BOQ rates from analyses | **Done** |
 | 6 | Measurement sheets; bid pricing: scenarios, markups, GST, % against estimate, quoted rates, bid summary | **Done** |
 | 7 | Revisions: copy-on-write versions, freeze on submission, compare, version export, archiving | **Done** |
-| 8 | Tender management detail: pre-bid queries, addenda (with revised-BOQ import), EMD/BG, checklist, win/loss | **In progress**: all but the revised-BOQ import done |
+| 8 | Tender management detail: pre-bid queries, addenda (with revised-BOQ import), EMD/BG, checklist, win/loss | **Done** |
+| 9 | RFQs: enquiry packs to vendors, quotes, comparative statement, price into the estimate | Next |
