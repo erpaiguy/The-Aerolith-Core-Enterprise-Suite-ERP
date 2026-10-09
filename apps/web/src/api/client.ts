@@ -53,8 +53,11 @@ export class ApiClient {
   }
 
   /** Fetches a file the API streams (exports, reports), with the name the server suggests. */
-  async download(path: string): Promise<{ blob: Blob; fileName: string }> {
-    const res = await this.authed(path, {});
+  async download(
+    path: string,
+    init: { method?: string; body?: unknown } = {},
+  ): Promise<{ blob: Blob; fileName: string }> {
+    const res = await this.authed(path, init);
     if (!res.ok) throw await this.toError(res);
     return { blob: await res.blob(), fileName: fileNameOf(res) ?? 'download' };
   }

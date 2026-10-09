@@ -31,6 +31,10 @@ const envSchema = z.object({
   MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
   IMPORT_DIR: z.string().optional(),
   IMPORT_MAX_MB: z.coerce.number().int().positive().max(1024).default(100),
+  DOCUMENT_DIR: z.string().min(1).optional(),
+  DOCUMENT_MAX_MB: z.coerce.number().int().positive().max(2048).default(200),
+  CLAMD_HOST: z.string().min(1).optional(),
+  CLAMD_PORT: z.coerce.number().int().positive().max(65535).default(3310),
   RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
   CORS_ORIGINS: z.string().default('app://aerolith'),
@@ -73,6 +77,11 @@ export interface AppConfig {
   /** Where uploaded import files wait while the user maps columns (docs/wave1-plan.md step 4). */
   importDir: string;
   importMaxBytes: number;
+  /**
+   * Tender documents (docs/wave1-plan.md step 10): where the files of tenants on our own Postgres are kept (one
+   * folder per tenant), the largest file accepted, and the optional ClamAV daemon that scans each upload.
+   */
+  documents: { dir: string; maxBytes: number; clamd: { host: string; port: number } | null };
   /** Multiplies every rate limit (tests raise it). */
   rateLimitScale: number;
   /** Trust X-Forwarded-For (only behind a proxy/tunnel that sets it). */
@@ -172,6 +181,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     maxTenantPools: e.MAX_TENANT_POOLS,
     importDir: e.IMPORT_DIR ?? join(tmpdir(), 'aerolith-imports'),
     importMaxBytes: e.IMPORT_MAX_MB * 1024 * 1024,
+    documents: documentsConfig(e),
     rateLimitScale: e.RATE_LIMIT_SCALE,
     trustProxy: e.TRUST_PROXY === 'true',
     corsOrigins: e.CORS_ORIGINS.split(',')
@@ -180,6 +190,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     email: emailConfig(e),
     secureCookies: e.PUBLIC_API_URL.startsWith('https://'),
     ephemeralSecrets: ephemeral,
+  };
+}
+
+/**
+ * Documents: production must name the folder (a Docker volume), so files never land in a container's own disk and
+ * vanish with it. Development keeps them under the working directory.
+ */
+function documentsConfig(e: z.infer<typeof envSchema>): AppConfig['documents'] {
+  if (!e.DOCUMENT_DIR && e.NODE_ENV === 'production')
+    throw new Error('DOCUMENT_DIR must be set in production (a persistent volume)');
+  return {
+    dir: e.DOCUMENT_DIR ?? join(process.cwd(), '.documents'),
+    maxBytes: e.DOCUMENT_MAX_MB * 1024 * 1024,
+    clamd: e.CLAMD_HOST ? { host: e.CLAMD_HOST, port: e.CLAMD_PORT } : null,
   };
 }
 

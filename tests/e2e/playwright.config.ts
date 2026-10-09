@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
 import {
   ADMIN_URL,
@@ -22,6 +24,7 @@ const apiEnv = [
   `WEBSITE_URL=http://127.0.0.1:${WEB_PORT}`,
   'RATE_LIMIT_SCALE=10',
   'EMAIL_TRANSPORT=file',
+  `DOCUMENT_DIR=${join(tmpdir(), 'aerolith-e2e-documents')}`,
   `EMAIL_FILE_DIR=${MAIL_DIR}`,
   `EMAIL_FROM='Aerolith Core <no-reply@aerolith.test>'`,
 ].join(' ');

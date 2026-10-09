@@ -147,7 +147,9 @@ export function AppShell() {
             <NavItem to="/rate-analyses" icon={<Calculator className="size-4" />}>
               Rate analyses
             </NavItem>
-            <Upcoming icon={<FileStack className="size-4" />}>Documents</Upcoming>
+            <NavItem to="/documents" icon={<FileStack className="size-4" />}>
+              Documents
+            </NavItem>
             <Upcoming icon={<Building2 className="size-4" />}>Projects</Upcoming>
             <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>
           </nav>

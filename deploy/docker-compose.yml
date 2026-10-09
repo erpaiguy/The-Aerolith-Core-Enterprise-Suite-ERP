@@ -39,8 +39,11 @@ services:
       LOCAL_PG_ADMIN_URL: ${LOCAL_PG_ADMIN_URL-postgres://${POSTGRES_USER:-aerolith}:${POSTGRES_PASSWORD}@postgres:5432/postgres}
       # The tunnel/proxy in front sets X-Forwarded-For; Caddy passes it on.
       TRUST_PROXY: 'true'
+      # Tender documents of tenants on this Postgres. Back this volume up with the database (docs/deployment-docker.md).
+      DOCUMENT_DIR: /app/documents
     volumes:
       - mail-outbox:/app/.mail-outbox
+      - documents:/app/documents
 
   web:
     build:
@@ -60,3 +63,4 @@ services:
 volumes:
   pgdata:
   mail-outbox:
+  documents:

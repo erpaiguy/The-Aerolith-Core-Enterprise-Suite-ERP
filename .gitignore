@@ -17,3 +17,6 @@ tests/e2e/screenshots/
 # Development email output (EMAIL_TRANSPORT=file)
 .mail-outbox/
 tests/e2e/.mail/
+
+# Tender documents in development (DOCUMENT_DIR unset)
+.documents/

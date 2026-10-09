@@ -54,7 +54,7 @@ least-recently-used order, and closes the oldest above `MAX_TENANT_POOLS`. Used 
 1. **Supabase client is unverified against the live API.** Setup and verification steps: [supabase-oauth-setup.md](supabase-oauth-setup.md). Endpoint paths and payloads follow the public Management
    API docs. Verify once the OAuth app is registered: consent, organisation list, project creation, pooler config,
    role login through the pooler (`<role>.<project-ref>`).
-2. **Storage bucket** creation for documents is not done yet. It is needed in Wave 1 (tender documents).
+2. **Document storage for Supabase tenants** is not built: tenants on our Postgres keep files in `DOCUMENT_DIR` (Wave 1 step 10); a Supabase-hosted tenant's uploads are refused with `storage_not_available` until the Storage adapter is built and verified together with gap 1.
 3. A provisioning step holds a control-plane row lock while it calls the provider. Fine at trial scale; move slow
    external calls outside the transaction if many tenants sign up at once.
 4. The website pages (`/onboarding`, `/onboarding/status`) don't exist yet; the API redirects to them.

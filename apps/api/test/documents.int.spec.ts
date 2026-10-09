@@ -1,0 +1,541 @@
+// Tender documents in a real tenant database (docs/wave1-plan.md step 10): the standard folders, uploads and their
+// versions, folder uploads, restricted folders hidden from roles without pricing, downloads, ZIPs, the trash,
+// search, the size limit, virus scanning (a fake clamd) and what the database itself refuses.
+import 'reflect-metadata';
+import { randomBytes } from 'node:crypto';
+import { mkdtemp, readdir } from 'node:fs/promises';
+import { createServer, type Server } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { inflateRawSync } from 'node:zlib';
+import { Test } from '@nestjs/testing';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import postgres, { type Sql } from 'postgres';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AppModule } from '../src/app.module.js';
+import { configureApp } from '../src/bootstrap.js';
+import { migrate } from '../src/db/migrate.js';
+import { DocumentsService } from '../src/documents/documents.service.js';
+import { TenantConnections } from '../src/provisioning/tenant-connections.js';
+import { readyTenant } from './helpers/tenant.js';
+
+const controlUrl = process.env.TEST_CONTROL_DATABASE_URL;
+const adminUrl = process.env.TEST_LOCAL_PG_ADMIN_URL;
+if (process.env.CI && (!controlUrl || !adminUrl))
+  throw new Error('TEST_CONTROL_DATABASE_URL and TEST_LOCAL_PG_ADMIN_URL are required in CI');
+
+const ENC = randomBytes(32);
+const MB = 1024 * 1024;
+const pdf = (text: string, pad = 0) =>
+  Buffer.concat([Buffer.from(`%PDF-1.7\n${text}\n`), Buffer.alloc(pad, 32)]);
+
+interface Folder {
+  id: string;
+  parentId: string | null;
+  name: string;
+  restricted: boolean;
+  rowVersion: number;
+}
+interface Doc {
+  id: string;
+  folderId: string | null;
+  name: string;
+  tags: string[];
+  versionNo: number;
+  rowVersion: number;
+  size: number;
+  mime: string;
+  scanStatus: string;
+}
+interface Vault {
+  folders: Folder[];
+  documents: Doc[];
+  trashCount: number;
+  canSeeRestricted: boolean;
+}
+
+/** Entry names and contents of a ZIP, read from its central directory. */
+function unzip(buf: Buffer): Map<string, Buffer> {
+  const out = new Map<string, Buffer>();
+  let eocd = buf.length - 22;
+  while (buf.readUInt32LE(eocd) !== 0x06054b50) eocd--;
+  let p = buf.readUInt32LE(eocd + 16);
+  for (let i = 0; i < buf.readUInt16LE(eocd + 10); i++) {
+    const method = buf.readUInt16LE(p + 10);
+    const size = buf.readUInt32LE(p + 20);
+    const nameLen = buf.readUInt16LE(p + 28);
+    const skip = nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
+    const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8');
+    const local = buf.readUInt32LE(p + 42);
+    const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    const data = buf.subarray(start, start + size);
+    out.set(name, method === 8 ? inflateRawSync(data) : Buffer.from(data));
+    p += 46 + skip;
+  }
+  return out;
+}
+
+describe.skipIf(!controlUrl || !adminUrl)('tender documents (integration)', () => {
+  let app: NestFastifyApplication;
+  let control: Sql;
+  let server: Sql;
+  let db: Sql;
+  let clamd: Server;
+  let docDir: string;
+  let t: Awaited<ReturnType<typeof readyTenant>>;
+  let worker: Record<string, string>;
+  let tenderId: string;
+  let otherTenderId: string;
+  let vault: Vault;
+
+  const post = (url: string, payload: object = {}, headers: Record<string, string> = t.admin) =>
+    app.inject({ method: 'POST', url: `/api${url}`, payload, headers });
+  const get = (url: string, headers: Record<string, string> = t.admin) =>
+    app.inject({ method: 'GET', url: `/api${url}`, headers });
+  const ok = async <T>(p: Promise<{ statusCode: number; body: string; json: <U>() => U }>) => {
+    const res = await p;
+    if (res.statusCode >= 300) throw new Error(`${res.statusCode} ${res.body}`);
+    return res.json<T>();
+  };
+  const upload = (
+    tender: string,
+    name: string,
+    body: Buffer,
+    query: Record<string, string> = {},
+    headers: Record<string, string> = t.admin,
+  ) => {
+    const boundary = `----aerolith${randomBytes(6).toString('hex')}`;
+    const payload = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\n` +
+          'Content-Type: application/octet-stream\r\n\r\n',
+      ),
+      body,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const qs = new URLSearchParams(query).toString();
+    return app.inject({
+      method: 'POST',
+      url: `/api/tenant/tenders/${tender}/documents/upload${qs ? `?${qs}` : ''}`,
+      payload,
+      headers: { ...headers, 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+  };
+  const uploaded = async (...args: Parameters<typeof upload>) =>
+    ok<{ outcome: string; document: { id: string; folderId: string | null; versionNo: number } }>(
+      upload(...args),
+    );
+  const folderNamed = (name: string, v: Vault = vault) => v.folders.find((f) => f.name === name)!;
+
+  async function staff(username: string, role: 'manager' | 'worker') {
+    const created = (
+      await post('/tenant/users', { username, displayName: username, role }, t.admin)
+    ).json<{ temporaryPassword: string }>();
+    const login = (password: string) =>
+      post(
+        '/auth/login',
+        { entitlementToken: t.entitlement, identifier: username, password, client: 'desktop' },
+        {},
+      ).then((r) => r.json<{ accessToken: string }>().accessToken);
+    const first = await login(created.temporaryPassword);
+    await post(
+      '/auth/change-password',
+      { currentPassword: created.temporaryPassword, newPassword: 'Bar-Bending-Yard-44' },
+      { authorization: `Bearer ${first}` },
+    );
+    return { authorization: `Bearer ${await login('Bar-Bending-Yard-44')}` };
+  }
+
+  beforeAll(async () => {
+    // A stand-in for ClamAV's daemon: anything containing the EICAR test string is "infected".
+    clamd = createServer((socket) => {
+      const parts: Buffer[] = [];
+      socket.on('data', (d) => {
+        parts.push(d);
+        const all = Buffer.concat(parts);
+        if (all.length >= 14 && all.subarray(-4).equals(Buffer.alloc(4)))
+          socket.end(
+            all.includes(Buffer.from('EICAR-STANDARD-ANTIVIRUS-TEST-FILE'))
+              ? 'stream: Win.Test.EICAR_HDB-1 FOUND\0'
+              : 'stream: OK\0',
+          );
+      });
+    });
+    await new Promise<void>((r) => clamd.listen(0, '127.0.0.1', r));
+    control = postgres(controlUrl!, { onnotice: () => {} });
+    server = postgres(adminUrl!, { max: 1, onnotice: () => {} });
+    for (const { datname } of await server<
+      { datname: string }[]
+    >`SELECT datname FROM pg_database WHERE datname LIKE 'tenant\\_t%'`) {
+      await server.unsafe(`DROP DATABASE "${datname}" WITH (FORCE)`);
+    }
+    await control`DROP SCHEMA IF EXISTS core CASCADE`;
+    await control`DROP SCHEMA IF EXISTS aerolith_meta CASCADE`;
+    await migrate(control);
+    docDir = await mkdtemp(join(tmpdir(), 'aerolith-documents-test-'));
+    Object.assign(process.env, {
+      CONTROL_DATABASE_URL: controlUrl,
+      CONTROL_PLANE_ENC_KEY: ENC.toString('base64'),
+      LOCAL_PG_ADMIN_URL: adminUrl,
+      RATE_LIMIT_SCALE: '50',
+      PUBLIC_API_URL: 'https://api.example.in',
+      DOCUMENT_DIR: docDir,
+      DOCUMENT_MAX_MB: '2',
+      // Smaller than the document limit: the upload route sets its own limit.
+      IMPORT_MAX_MB: '1',
+      CLAMD_HOST: '127.0.0.1',
+      CLAMD_PORT: String((clamd.address() as { port: number }).port),
+    });
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = configureApp(
+      moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter()),
+    );
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+    t = await readyTenant(app, control, ENC, 'docs-admin@example.in');
+    worker = await staff('ganesh', 'worker');
+    db = await app.get(TenantConnections).forTenant(t.tenantId);
+    tenderId = (
+      await ok<{ id: string }>(post('/tenant/tenders', { title: 'District hospital, Washim' }))
+    ).id;
+    otherTenderId = (
+      await ok<{ id: string }>(post('/tenant/tenders', { title: 'ITI workshop, Akola' }))
+    ).id;
+  }, 90_000);
+
+  afterAll(async () => {
+    for (const k of [
+      'DOCUMENT_DIR',
+      'DOCUMENT_MAX_MB',
+      'IMPORT_MAX_MB',
+      'CLAMD_HOST',
+      'CLAMD_PORT',
+    ])
+      delete process.env[k];
+    await app?.close();
+    await control?.end();
+    await server?.end();
+    await new Promise<void>((r) => clamd?.close(() => r()));
+  });
+
+  it('adds the standard folders; sub-folders inherit a restriction; workers never see restricted ones', async () => {
+    vault = await ok<Vault>(post(`/tenant/tenders/${tenderId}/folders/standard`));
+    expect(vault.folders.map((f) => f.name)).toHaveLength(9);
+    expect(folderNamed('06 Our financial bid').restricted).toBe(true);
+    // Twice changes nothing.
+    vault = await ok<Vault>(post(`/tenant/tenders/${tenderId}/folders/standard`));
+    expect(vault.folders).toHaveLength(9);
+
+    vault = await ok<Vault>(
+      post(`/tenant/tenders/${tenderId}/folders`, {
+        parentId: folderNamed('06 Our financial bid').id,
+        name: 'Price bid workings',
+      }),
+    );
+    expect(folderNamed('Price bid workings').restricted).toBe(true);
+    const dup = await post(`/tenant/tenders/${tenderId}/folders`, { name: '02 drawings' });
+    expect(dup.statusCode).toBe(409);
+    expect(dup.json()).toMatchObject({ code: 'folder_exists' });
+    expect(
+      (await post(`/tenant/tenders/${tenderId}/folders`, { name: '../x' })).json(),
+    ).toMatchObject({ code: 'bad_name' });
+
+    const seen = await ok<Vault>(get(`/tenant/tenders/${tenderId}/documents`, worker));
+    expect(seen.canSeeRestricted).toBe(false);
+    expect(seen.folders.map((f) => f.name)).not.toContain('06 Our financial bid');
+    expect(seen.folders.map((f) => f.name)).not.toContain('Price bid workings');
+    expect(seen.folders).toHaveLength(7);
+    const restrictIt = await post(
+      `/tenant/folders/${folderNamed('08 Correspondence').id}`,
+      { rowVersion: 1, restricted: true },
+      worker,
+    );
+    expect(restrictIt.statusCode).toBe(403);
+    // Lifting the restriction of a folder inside a restricted one is refused.
+    const lift = await post(`/tenant/folders/${folderNamed('Price bid workings').id}`, {
+      rowVersion: 1,
+      restricted: false,
+    });
+    expect(lift.json()).toMatchObject({ code: 'parent_restricted' });
+  });
+
+  it('keeps uploads as versions: same name is a new version, same content changes nothing', async () => {
+    const drawings = folderNamed('02 Drawings').id;
+    const v1 = await uploaded(tenderId, 'GA plan.pdf', pdf('rev A'), { folderId: drawings });
+    expect(v1).toMatchObject({
+      outcome: 'created',
+      document: { folderId: drawings, versionNo: 1 },
+    });
+    const v2 = await uploaded(tenderId, 'ga PLAN.pdf', pdf('rev B'), {
+      folderId: drawings,
+      note: 'Rev B',
+    });
+    expect(v2).toMatchObject({
+      outcome: 'new_version',
+      document: { id: v1.document.id, versionNo: 2 },
+    });
+    const same = await uploaded(tenderId, 'GA plan.pdf', pdf('rev B'), { folderId: drawings });
+    expect(same).toMatchObject({ outcome: 'unchanged', document: { versionNo: 2 } });
+    // The same file at the top level is another document; its bytes are kept once.
+    await uploaded(tenderId, 'GA plan.pdf', pdf('rev B'));
+
+    const doc = await ok<{
+      name: string;
+      path: { name: string }[];
+      versions: {
+        versionNo: number;
+        note: string;
+        scanStatus: string;
+        mime: string;
+        uploadedBy: string;
+      }[];
+    }>(get(`/tenant/documents/${v1.document.id}`));
+    expect(doc.name).toBe('GA plan.pdf');
+    expect(doc.path.map((p) => p.name)).toEqual(['02 Drawings']);
+    expect(doc.versions).toEqual([
+      expect.objectContaining({
+        versionNo: 2,
+        note: 'Rev B',
+        scanStatus: 'clean',
+        mime: 'application/pdf',
+      }),
+      expect.objectContaining({ versionNo: 1, note: '' }),
+    ]);
+    const files = (await readdir(join(docDir, t.tenantId), { recursive: true })).filter((f) =>
+      /[0-9a-f]{64}$/.test(f),
+    );
+    expect(files).toHaveLength(2);
+  });
+
+  it('downloads any version as a file the browser will not render on our origin', async () => {
+    const id = vault.documents.length
+      ? vault.documents[0]!.id
+      : (await ok<Vault>(get(`/tenant/tenders/${tenderId}/documents`))).documents.find(
+          (d) => d.folderId !== null,
+        )!.id;
+    const latest = await get(`/tenant/documents/${id}/file`);
+    expect(latest.statusCode).toBe(200);
+    expect(latest.rawPayload.equals(pdf('rev B'))).toBe(true);
+    expect(latest.headers).toMatchObject({
+      'content-type': 'application/pdf',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "sandbox; default-src 'none'",
+    });
+    expect(latest.headers['content-disposition']).toContain('attachment; filename="GA plan.pdf"');
+    const first = await get(`/tenant/documents/${id}/file?version=1`, worker);
+    expect(first.rawPayload.equals(pdf('rev A'))).toBe(true);
+    expect(first.headers['content-disposition']).toContain('GA plan (v1).pdf');
+    expect((await get(`/tenant/documents/${id}/file?version=9`)).statusCode).toBe(404);
+  });
+
+  it('uploads a folder with its sub-folders; restricted documents stay hidden everywhere', async () => {
+    const tech = folderNamed('05 Our technical bid').id;
+    const cert = await uploaded(tenderId, 'Turnover CA certificate.pdf', pdf('ca'), {
+      folderId: tech,
+      path: 'Qualification/Financial',
+    });
+    vault = await ok<Vault>(get(`/tenant/tenders/${tenderId}/documents`));
+    const financial = folderNamed('Financial');
+    expect(folderNamed('Qualification').parentId).toBe(tech);
+    expect(financial.parentId).toBe(folderNamed('Qualification').id);
+    expect(cert.document.folderId).toBe(financial.id);
+    expect((await upload(tenderId, 'x.pdf', pdf('x'), { path: 'a/../b' })).json()).toMatchObject({
+      code: 'bad_path',
+    });
+
+    // Workers may upload (documents.edit is theirs by default), but not into a folder they cannot see.
+    const price = folderNamed('Price bid workings').id;
+    const secret = await uploaded(tenderId, 'Rate build-up.pdf', pdf('margins'), {
+      folderId: price,
+    });
+    expect(
+      (await upload(tenderId, 'x.pdf', pdf('x'), { folderId: price }, worker)).statusCode,
+    ).toBe(404);
+    await uploaded(
+      tenderId,
+      'Site photo.jpg',
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]),
+      {},
+      worker,
+    );
+    expect((await get(`/tenant/documents/${secret.document.id}`, worker)).statusCode).toBe(404);
+    expect((await get(`/tenant/documents/${secret.document.id}/file`, worker)).statusCode).toBe(
+      404,
+    );
+    const workerView = await ok<Vault>(get(`/tenant/tenders/${tenderId}/documents`, worker));
+    expect(workerView.documents.map((d) => d.name)).not.toContain('Rate build-up.pdf');
+    expect(
+      (await ok<{ items: Doc[] }>(get('/tenant/documents?q=rate', worker))).items,
+    ).toHaveLength(0);
+    expect((await ok<{ items: Doc[] }>(get('/tenant/documents?q=rate'))).items).toHaveLength(1);
+  });
+
+  it('refuses a file over the limit and an infected file, keeping neither', async () => {
+    const before = await readdir(join(docDir, t.tenantId), { recursive: true });
+    // Over IMPORT_MAX_MB, under DOCUMENT_MAX_MB: accepted.
+    const big = await upload(tenderId, 'Tender drawings set.pdf', pdf('big', Math.round(1.5 * MB)));
+    expect(big.statusCode).toBe(200);
+    const huge = await upload(tenderId, 'Too big.pdf', pdf('huge', 2 * MB + 10));
+    expect(huge.statusCode).toBe(413);
+    expect(huge.json()).toMatchObject({ code: 'file_too_large' });
+    const bad = await upload(
+      tenderId,
+      'invoice.pdf',
+      Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'),
+    );
+    expect(bad.statusCode).toBe(422);
+    expect(bad.json()).toMatchObject({ code: 'file_infected' });
+    const after = await readdir(join(docDir, t.tenantId), { recursive: true });
+    expect(after.filter((f) => !before.includes(f) && /[0-9a-f]{64}$/.test(f))).toHaveLength(1);
+    expect(await readdir(join(docDir, t.tenantId, '.tmp'))).toEqual([]);
+    const [audit] = await db<{ data: { signature: string } }[]>`
+      SELECT data FROM platform.audit_log WHERE action = 'document.infected'`;
+    expect(audit!.data.signature).toBe('Win.Test.EICAR_HDB-1');
+  });
+
+  it('renames, tags, moves, and puts documents in the trash and back', async () => {
+    vault = await ok<Vault>(get(`/tenant/tenders/${tenderId}/documents`));
+    const top = vault.documents.find((d) => d.name === 'GA plan.pdf' && d.folderId === null)!;
+    const clash = await post(`/tenant/documents/${top.id}`, {
+      rowVersion: top.rowVersion,
+      folderId: folderNamed('02 Drawings').id,
+    });
+    expect(clash.json()).toMatchObject({ code: 'document_exists' });
+    const moved = await ok<{
+      name: string;
+      tags: string[];
+      rowVersion: number;
+      path: { name: string }[];
+    }>(
+      post(`/tenant/documents/${top.id}`, {
+        rowVersion: top.rowVersion,
+        name: 'GA plan (client copy).pdf',
+        tags: ['Architectural', ' architectural ', 'Rev B'],
+        folderId: folderNamed('02 Drawings').id,
+      }),
+    );
+    expect(moved).toMatchObject({
+      name: 'GA plan (client copy).pdf',
+      tags: ['Architectural', 'Rev B'],
+    });
+    expect(moved.path.map((p) => p.name)).toEqual(['02 Drawings']);
+    expect(
+      (
+        await post(`/tenant/documents/${top.id}`, { rowVersion: top.rowVersion, description: 'x' })
+      ).json(),
+    ).toMatchObject({ code: 'stale_row' });
+
+    await ok(post(`/tenant/documents/${top.id}/delete`, {}, worker));
+    const afterDelete = await ok<Vault>(get(`/tenant/tenders/${tenderId}/documents`));
+    expect(afterDelete.documents.map((d) => d.id)).not.toContain(top.id);
+    expect(afterDelete.trashCount).toBe(1);
+    const trash = await ok<Doc[]>(get(`/tenant/tenders/${tenderId}/documents/trash`));
+    expect(trash.map((d) => d.name)).toEqual(['GA plan (client copy).pdf']);
+    // A new document takes the name meanwhile; restoring the old one is refused until one is renamed.
+    await uploaded(tenderId, 'GA plan (client copy).pdf', pdf('newer'), {
+      folderId: folderNamed('02 Drawings').id,
+    });
+    expect((await post(`/tenant/documents/${top.id}/restore`)).json()).toMatchObject({
+      code: 'document_exists',
+    });
+
+    // An empty folder can go; one with documents cannot.
+    expect(
+      (await post(`/tenant/folders/${folderNamed('02 Drawings').id}/delete`)).json(),
+    ).toMatchObject({
+      code: 'folder_not_empty',
+    });
+    vault = await ok<Vault>(post(`/tenant/folders/${folderNamed('09 Site visit').id}/delete`));
+    expect(vault.folders.map((f) => f.name)).not.toContain('09 Site visit');
+  });
+
+  it('zips a folder with its sub-folders, or the vault, leaving out what the user cannot see', async () => {
+    const res = await post(`/tenant/tenders/${tenderId}/documents/zip`, {
+      folderId: folderNamed('05 Our technical bid').id,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('application/zip');
+    const entries = unzip(res.rawPayload);
+    expect([...entries.keys()]).toEqual([
+      '05 Our technical bid/Qualification/Financial/Turnover CA certificate.pdf',
+    ]);
+    expect(entries.values().next().value!.equals(pdf('ca'))).toBe(true);
+
+    const all = unzip((await post(`/tenant/tenders/${tenderId}/documents/zip`)).rawPayload);
+    expect([...all.keys()]).toContain('06 Our financial bid/Price bid workings/Rate build-up.pdf');
+    expect([...all.keys()]).toContain('02 Drawings/GA plan.pdf');
+    const theirs = unzip(
+      (await post(`/tenant/tenders/${tenderId}/documents/zip`, {}, worker)).rawPayload,
+    );
+    expect([...theirs.keys()].some((k) => k.startsWith('06 '))).toBe(false);
+    expect(theirs.size).toBe(all.size - 1);
+    expect((await post(`/tenant/tenders/${otherTenderId}/documents/zip`)).json()).toMatchObject({
+      code: 'nothing_to_zip',
+    });
+  });
+
+  it('searches across tenders by name, description or tag', async () => {
+    await uploaded(otherTenderId, 'Workshop GA plan.pdf', pdf('iti'));
+    const hits = await ok<{ items: { name: string; tender: { title: string } }[] }>(
+      get('/tenant/documents?q=ga%20plan'),
+    );
+    expect(hits.items.map((h) => h.tender.title)).toEqual(
+      expect.arrayContaining(['District hospital, Washim', 'ITI workshop, Akola']),
+    );
+    const one = await ok<{ items: { name: string }[] }>(
+      get(`/tenant/documents?q=ga%20plan&tenderId=${otherTenderId}`),
+    );
+    expect(one.items.map((h) => h.name)).toEqual(['Workshop GA plan.pdf']);
+    const tagged = await ok<{ items: { name: string }[] }>(get('/tenant/documents?tag=rev%20b'));
+    expect(tagged.items).toHaveLength(0); // the tagged document is in the trash
+    expect(await ok<string[]>(get('/tenant/document-tags'))).toEqual([]);
+  });
+
+  it('takes a new version of a chosen document whatever the new file is called', async () => {
+    vault = await ok<Vault>(get(`/tenant/tenders/${tenderId}/documents`));
+    const ga = vault.documents.find(
+      (d) => d.name === 'GA plan.pdf' && d.folderId === folderNamed('02 Drawings').id,
+    )!;
+    const res = await uploaded(tenderId, 'GA plan rev C.pdf', pdf('rev C'), { documentId: ga.id });
+    expect(res).toMatchObject({
+      outcome: 'new_version',
+      document: { id: ga.id, name: 'GA plan.pdf', versionNo: 3 },
+    });
+    const doc = await ok<{ versions: { versionNo: number; originalName: string }[] }>(
+      get(`/tenant/documents/${ga.id}`),
+    );
+    expect(doc.versions[0]).toMatchObject({ versionNo: 3, originalName: 'GA plan rev C.pdf' });
+    expect((await upload(otherTenderId, 'x.pdf', pdf('x'), { documentId: ga.id })).statusCode).toBe(
+      404,
+    );
+  });
+
+  it('enforces the documents permission, and the database refuses deletes', async () => {
+    await ok(
+      post('/tenant/permissions', { role: 'worker', permission: 'documents.edit', granted: false }),
+    );
+    const res = await upload(tenderId, 'note.txt', Buffer.from('hello'), {}, worker);
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ permission: 'documents.edit' });
+    // Reading stays open.
+    expect((await get(`/tenant/tenders/${tenderId}/documents`, worker)).statusCode).toBe(200);
+    await expect(db`DELETE FROM doc.document`).rejects.toThrow(/permission denied/);
+    await expect(db`UPDATE doc.document_version SET note = 'x'`).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+
+  it('refuses storage for a tenant whose database is in their own Supabase project', async () => {
+    const svc = app.get(DocumentsService);
+    await control`UPDATE core.tenant_db SET provider = 'supabase' WHERE tenant_id = ${t.tenantId}`;
+    (svc as unknown as { providers: Map<string, string> }).providers.clear();
+    try {
+      const res = await upload(tenderId, 'x.pdf', pdf('x'));
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toMatchObject({ code: 'storage_not_available' });
+    } finally {
+      await control`UPDATE core.tenant_db SET provider = 'local_postgres' WHERE tenant_id = ${t.tenantId}`;
+      (svc as unknown as { providers: Map<string, string> }).providers.clear();
+    }
+  });
+});

@@ -93,6 +93,7 @@ All commands use `docker compose -f deploy/docker-compose.yml` (shortened to `dc
 | Update to new code | `git pull && dc up -d --build`. Control-plane migrations run on API start; tenant databases follow through the owner endpoint `POST /api/owner/migrations/rollout` |
 | Read file-transport emails | `dc cp api:/app/.mail-outbox ./mail` |
 | Back up the control plane | `dc exec -T postgres pg_dump -U aerolith -Fc aerolith_control > control-$(date +%F).dump`. Tenant credentials in it stay encrypted; the dump is useless without `deploy/.env` |
+| Back up tender documents | `docker run --rm -v aerolith_documents:/d -v "$PWD":/b alpine tar czf /b/documents-$(date +%F).tgz -C /d .`. The tenant databases point at these files by their SHA-256: back up both, the same day |
 | Remove everything **including data** | `dc down -v` (asks nothing; only for test machines) |
 
 **Auto-start.**

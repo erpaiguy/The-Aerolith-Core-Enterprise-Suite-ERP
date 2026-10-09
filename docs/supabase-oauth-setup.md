@@ -46,7 +46,12 @@ tunnel at `127.0.0.1:8080` and call owner routes from the server machine via `ht
    | Organizations | **Read** | Listing the tenant's organisations so they can choose one |
    | Projects | **Read** and **Write** | Creating the tenant's project and checking when it is ready |
    | Database | **Read** | Reading the project's connection-pooler settings |
-   | Everything else | none | Not used. Storage will be needed in Wave 1 for tender documents; adding a scope later means tenants approve again |
+   | Storage | **Read** and **Write** | Tender documents (Wave 1 step 10) kept in the tenant's own project: creating the private bucket |
+   | Secrets (API keys) | **Read** | [Guessing] the server needs the project's secret key to put files into Storage; tick it if the form offers it |
+   | Everything else | none | Not used |
+
+   [Certain] Tick Storage and Secrets **now**, even though document storage in Supabase is not built yet: a scope
+   added after tenants have connected makes every tenant approve again. [Guessing] on the exact names the form uses.
 
    If the form has no scope section, it grants full Management API access. Note that and tell me.
 

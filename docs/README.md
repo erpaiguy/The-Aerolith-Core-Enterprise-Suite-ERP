@@ -90,4 +90,5 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 7 | Revisions: copy-on-write versions, freeze on submission, compare, version export, archiving | **Done** |
 | 8 | Tender management detail: pre-bid queries, addenda (with revised-BOQ import), EMD/BG, checklist, win/loss | **Done** |
 | 9 | RFQs: enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** |
-| 10 | Tender documents: storage, per-tender vault, folders, versions, search, preview | Next |
+| 10 | Tender documents: storage, per-tender vault, folders, versions, search, preview | **Done** (Supabase Storage not built) |
+| 11 | Tender programme: CPM engine, Gantt, calendars, PDF, MSPDI/XER | Next |

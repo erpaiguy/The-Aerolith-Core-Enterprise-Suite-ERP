@@ -343,13 +343,14 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
 
   describe('role permissions (admin-configurable)', () => {
     it('reports what each user may do', async () => {
-      expect((await get('/tenant/permissions/mine', worker)).json()).toEqual([]);
+      expect((await get('/tenant/permissions/mine', worker)).json()).toEqual(['documents.edit']);
       expect((await get('/tenant/permissions/mine', manager)).json()).toEqual([
         'tender.edit',
         'boq.edit',
         'rates.edit',
         'pricing.edit',
         'rfq.edit',
+        'documents.edit',
       ]);
       expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
         'tender.edit',
@@ -357,6 +358,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'rates.edit',
         'pricing.edit',
         'rfq.edit',
+        'documents.edit',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
       const all = (await get('/tenant/permissions', t.admin)).json<{
@@ -369,6 +371,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'rates.edit': true,
           'pricing.edit': true,
           'rfq.edit': true,
+          'documents.edit': true,
         },
         worker: {
           'tender.edit': false,
@@ -376,6 +379,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'rates.edit': false,
           'pricing.edit': false,
           'rfq.edit': false,
+          'documents.edit': true,
         },
       });
     });
@@ -392,7 +396,10 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         t.admin,
       );
       expect(set.json()).toMatchObject({ grants: { worker: { 'boq.edit': true } } });
-      expect((await get('/tenant/permissions/mine', worker)).json()).toEqual(['boq.edit']);
+      expect((await get('/tenant/permissions/mine', worker)).json()).toEqual([
+        'boq.edit',
+        'documents.edit',
+      ]);
       expect(
         (await post(`/tenant/tenders/${tenderId}/boqs`, { name: 'Worker BOQ' }, worker)).statusCode,
       ).toBe(201);

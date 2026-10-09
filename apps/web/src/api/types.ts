@@ -790,3 +790,73 @@ export interface RfqQuoteImport {
   skipped: number;
   issues: string[];
 }
+
+// --- Tender documents (apps/api/src/documents) ---
+
+export interface DocFolder {
+  id: string;
+  parentId: string | null;
+  name: string;
+  /** Visible only to roles that see bid pricing. */
+  restricted: boolean;
+  rowVersion: number;
+}
+
+export interface DocItem {
+  id: string;
+  folderId: string | null;
+  name: string;
+  description: string;
+  tags: string[];
+  versionNo: number;
+  rowVersion: number;
+  size: number;
+  mime: string;
+  scanStatus: 'clean' | 'not_scanned';
+  uploadedAt: string;
+  uploadedBy: string | null;
+  deletedAt: string | null;
+}
+
+export interface DocVault {
+  folders: DocFolder[];
+  documents: DocItem[];
+  trashCount: number;
+  canSeeRestricted: boolean;
+  maxBytes: number;
+}
+
+export interface DocDetail {
+  id: string;
+  tenderId: string;
+  tender: { number: string; title: string };
+  folderId: string | null;
+  name: string;
+  description: string;
+  tags: string[];
+  versionNo: number;
+  rowVersion: number;
+  deletedAt: string | null;
+  path: { id: string; name: string }[];
+  versions: {
+    versionNo: number;
+    size: number;
+    mime: string;
+    originalName: string;
+    note: string;
+    scanStatus: 'clean' | 'not_scanned';
+    uploadedAt: string;
+    uploadedBy: string | null;
+  }[];
+}
+
+export interface DocUploadResult {
+  outcome: 'created' | 'new_version' | 'unchanged';
+  document: { id: string; name: string; folderId: string | null; versionNo: number };
+}
+
+export interface DocSearchHit extends DocItem {
+  tenderId: string;
+  tender: { number: string; title: string };
+  folder: string | null;
+}

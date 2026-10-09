@@ -33,6 +33,11 @@ export const PERMISSIONS = {
       'Run enquiries to vendors: RFQs, quotes, comparative statements and the choice of vendor',
     defaults: { manager: true, worker: false },
   },
+  'documents.edit': {
+    label:
+      'Upload, organise and remove tender documents (restricted folders also need the pricing permission)',
+    defaults: { manager: true, worker: true },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

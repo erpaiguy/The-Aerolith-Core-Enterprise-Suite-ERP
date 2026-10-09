@@ -8,7 +8,9 @@ export const contentSecurityPolicy = (apiBaseUrl: string): string =>
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    // blob: = documents previewed inside the app (fetched by our own code, typed by the server's check of the bytes).
+    "img-src 'self' data: blob:",
+    'frame-src blob:',
     "font-src 'self'",
     `connect-src 'self' ${apiBaseUrl}`,
     "object-src 'none'",

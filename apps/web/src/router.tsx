@@ -15,6 +15,7 @@ import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens
 import { SignInScreen } from './screens/SignIn';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
+import { DocumentsScreen } from './screens/Documents';
 import { BoqPricingScreen } from './screens/Pricing';
 import { BoqVersionsScreen } from './screens/Versions';
 import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
@@ -138,6 +139,11 @@ const routeTree = rootRoute.addChildren([
     pricingRoute,
     versionsRoute,
     rfqRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/documents',
+      component: DocumentsScreen,
+    }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/users',

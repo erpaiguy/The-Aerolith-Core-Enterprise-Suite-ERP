@@ -36,7 +36,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 7 | **Revisions** | Copy-on-write versions, compare two versions, lock on submission | **Done** (see below) |
 | 8 | **Tender management detail** | Pre-bid queries, addenda (with importing a revised BOQ into a revision, moved from step 7), EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | **Done** (see below) |
 | 9 | **RFQs** | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** (see below) |
-| 10 | Tender documents | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | E10, P8 |
+| 10 | **Tender documents** | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | **Done** (see below; Supabase Storage not built) |
 | 11 | Tender programme | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | E9. Second-hardest UI |
 | 12 | Reports + dashboard | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel | E11, 08-dashboard.md §2.3-2.4 |
 
@@ -717,3 +717,64 @@ statement; choosing the lowest, ties and refusals; rates into the BOQ and a froz
 reopening; a materials RFQ pricing a resource from the quote date). A browser test of the journey: two
 subcontractors, one workbook filled and imported, one quote typed with GST included, a tie chosen by hand, the BOQ
 total changing.
+
+## Step 10 delivered: tender documents
+
+**Journey** (the tender page gains a **Documents** tab; **Documents** in the main menu searches every tender):
+1. **Add the standard folders** (nine, from tender notice and drawings to our financial bid and vendor quotes), or
+   make your own, up to 8 levels deep.
+2. **Upload files** (several at once, or drop them on the list) or **upload a folder** with its sub-folders. A file
+   with the name of a document already in that folder becomes its **next version**; the same file again changes
+   nothing. **Upload new version** on a document takes a file of any name ("GA plan rev C.pdf").
+3. Open a document: **preview** (PDFs, images, text), every **version** with who uploaded it and when (each
+   downloadable, older ones named "GA plan (v1).pdf"), **tags**, description, rename, move to another folder.
+4. **Move to trash** keeps every version; the trash restores it. Nothing is deleted for good by the app.
+5. **Download** a folder (with its sub-folders), chosen documents, or the whole vault as one **ZIP**.
+6. **Restricted folders** (our financial bid, vendor quotes, or any folder a pricing role restricts) and everything
+   in them are visible only to roles with `pricing.edit`; to everyone else they do not exist, in lists, search,
+   ZIPs and downloads.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] The plan said documents live in the tenant's own Supabase Storage; that part is not built.** No tenant
+  can be on Supabase until the OAuth app is registered and the Supabase connection is verified (tenant-provisioning
+  known gap 1), and a Storage adapter written against an API we cannot call would ship unverified. Today every tenant
+  on our Postgres keeps files in a folder on the server (`DOCUMENT_DIR`, the `documents` Docker volume), one
+  sub-folder per tenant. A Supabase-hosted tenant's uploads are refused with a clear message rather than kept
+  somewhere they did not choose. **Register the OAuth app with the Storage scopes now** (supabase-oauth-setup.md):
+  adding them later makes every tenant approve again.
+- **Files are named by their SHA-256**: a version row points at its exact bytes, the same file is kept once, and a
+  file is written before its row, so a row never points at a missing file. **Back up the documents volume with the
+  database** (deployment-docker.md); one without the other is incomplete.
+- **Production refuses to start without `DOCUMENT_DIR`**, so files never land inside a container and vanish with it.
+- **Up to 200 MB per file** (`DOCUMENT_MAX_MB`, up to 2 GB). Uploads stream to disk; memory does not grow with size.
+  [Likely] a Cloudflare tunnel's free plan caps requests at 100 MB; the VM decision avoids it.
+- **Virus scanning is a hook**: set `CLAMD_HOST` to a ClamAV daemon (free, its own container) and every upload is
+  scanned; an infected file is refused and logged. Without a scanner, or when it cannot answer (down, or a file over
+  its own size limit, [Likely] 25 MB by default), files are kept and marked "not scanned" rather than blocking the team.
+- **Previews only for PDFs, images and text, recognised by their bytes**, never by name; HTML and SVG are only ever
+  downloaded, so an uploaded file cannot run script in the app. Files are served as downloads with `nosniff` and a
+  sandbox policy. [Guessing] the desktop app's PDF viewer is off, so PDFs there open by download until checked.
+- **Workers may upload and organise documents by default** (`documents.edit`, the admin can change it): collecting
+  certificates is often their job, and nothing they do is permanent (versions and the trash keep everything).
+- **Uploads are in the audit log, not the tender's activity**: a 200-file folder upload would bury the activity.
+
+**Not built yet:** Supabase Storage (above); search inside PDFs (names, descriptions and tags only); linking a
+document to a checklist item, addendum or RFQ quote; per-company folder templates; folders moved between parents
+(documents move; folders are renamed); purging the trash; thumbnails.
+
+**API** (under `/api/tenant`; changes need `documents.edit`):
+- `GET /tenders/:id/documents` (folders, documents, trash count), `GET /tenders/:id/documents/trash`
+- `POST /tenders/:id/folders`, `POST /tenders/:id/folders/standard`, `POST /folders/:id` (name, restricted),
+  `POST /folders/:id/delete` (empty only)
+- `POST /tenders/:id/documents/upload?folderId=&path=&documentId=&note=` (multipart, one file per request)
+- `GET /documents/:id`, `POST /documents/:id` (name, description, tags, folderId), `POST /documents/:id/delete`,
+  `POST /documents/:id/restore`, `GET /documents/:id/file?version=`
+- `POST /tenders/:id/documents/zip` (`folderId`, `documentIds`, or neither), `GET /documents?q=&tag=&tenderId=`,
+  `GET /document-tags`
+
+**Tests:** 9 unit tests (the store: content names, the size limit, nothing half-written left behind, path safety,
+the sweep of interrupted uploads; type recognition; the clamd protocol against a fake daemon); 11 API integration
+tests (standard folders and restriction; versions and unchanged re-uploads; downloads and their headers; a folder
+upload; restricted documents hidden from a worker everywhere; the size limit and an infected file refused; rename,
+tags, move, trash and restore; ZIPs read back; search; a new version by document; the permission and the database
+refusing deletes; a Supabase tenant refused). A browser test of the journey.

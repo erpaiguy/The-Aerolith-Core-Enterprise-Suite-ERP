@@ -25,8 +25,9 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
-# Development email output (EMAIL_TRANSPORT=file) goes to a volume mounted here.
-RUN mkdir -p /app/.mail-outbox && chown node:node /app/.mail-outbox
+# Development email output (EMAIL_TRANSPORT=file) and tender documents go to volumes mounted here. A new named volume
+# takes the folder's owner from the image, so the app (user node) can write to it.
+RUN mkdir -p /app/.mail-outbox /app/documents && chown node:node /app/.mail-outbox /app/documents
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
