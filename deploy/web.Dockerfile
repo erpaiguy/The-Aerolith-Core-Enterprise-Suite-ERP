@@ -1,7 +1,10 @@
-# syntax=docker/dockerfile:1
 # Web image: the browser app and the owner console served by Caddy (Apache-2.0), which also proxies /api to the API
 # container. The two front-ends live in separate folders and are served on separate listeners (see Caddyfile).
-FROM node:22-bookworm-slim AS build
+# Base images overridable (CI pulls them through a mirror of Docker Hub); the defaults are the official images.
+ARG NODE_IMAGE=node:22-bookworm-slim
+ARG CADDY_IMAGE=caddy:2-alpine
+
+FROM ${NODE_IMAGE} AS build
 WORKDIR /repo
 # Optional: behind a TLS-inspecting proxy, pass its CA with `--secret id=extra_ca,src=<file>`. Unused when absent.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -23,7 +26,7 @@ RUN pnpm install --offline --frozen-lockfile --filter @aerolith/web... --filter 
  && pnpm --filter @aerolith/web build \
  && pnpm --filter @aerolith/owner build
 
-FROM caddy:2-alpine
+FROM ${CADDY_IMAGE}
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /repo/apps/web/dist /srv/web
 COPY --from=build /repo/apps/owner/dist /srv/owner

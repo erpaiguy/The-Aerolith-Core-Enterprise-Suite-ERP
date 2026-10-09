@@ -1,9 +1,11 @@
-# syntax=docker/dockerfile:1
 # API image: NestJS API + email worker + provisioning worker (docs/deployment-docker.md).
 # Build stage compiles the workspace; `pnpm deploy` then produces a standalone folder with production dependencies
 # only (workspace packages included), so the runtime image has no compilers, dev tools or source.
 
-FROM node:22-bookworm-slim AS build
+# Base image overridable (CI pulls it through a mirror of Docker Hub); the default is the official image.
+ARG NODE_IMAGE=node:22-bookworm-slim
+
+FROM ${NODE_IMAGE} AS build
 WORKDIR /repo
 # Optional: behind a TLS-inspecting proxy, pass its CA with `--secret id=extra_ca,src=<file>`. Unused when absent.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -21,7 +23,7 @@ RUN pnpm install --offline --frozen-lockfile --filter @aerolith/api... \
  && pnpm --filter @aerolith/api build \
  && pnpm --filter @aerolith/api deploy --prod --legacy /out
 
-FROM node:22-bookworm-slim AS runtime
+FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
