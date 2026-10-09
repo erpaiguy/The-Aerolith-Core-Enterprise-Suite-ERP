@@ -99,4 +99,30 @@ test('an estimator builds the tender programme, sees the critical path and print
   await expect(print.getByText('Page 1 of 1')).toBeVisible();
   await expect(print.getByText('Tahsil office building, Daryapur')).toBeVisible();
   await print.screenshot({ path: 'screenshots/programme-02-print.png' });
+  await print.close();
+
+  // 5. Out to MS Project and Primavera, and each file back in as a new programme with the same dates.
+  for (const [button, ext, from] of [
+    ['MS Project', 'xml', 'MS Project'],
+    ['Primavera', 'xer', 'Primavera P6'],
+  ] as const) {
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('group', { name: 'Export' }).getByRole('button', { name: button }).click();
+    const file = await downloading;
+    expect(file.suggestedFilename()).toMatch(new RegExp(`Submission programme\\.${ext}$`));
+    const path = await file.path();
+    await page.getByRole('link', { name: /Tahsil office building, Daryapur/ }).click();
+    await page
+      .getByRole('tablist', { name: 'Tender sections' })
+      .getByRole('tab', { name: 'Programme' })
+      .click();
+    await page.getByLabel('Programme file to import').setInputFiles(path);
+    const result = page.getByRole('status').filter({ hasText: 'Imported' });
+    await expect(result).toContainText(`from ${from}: 4 activities, 2 links`);
+    await expect(result).toContainText('It finishes 11 Nov 26, as the file said.');
+    await result.getByRole('link').click();
+    await expect(page.getByTestId('programme-summary')).toContainText(
+      '2 Nov 26 to 11 Nov 26 · 9 working days',
+    );
+  }
 });

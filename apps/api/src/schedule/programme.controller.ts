@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,12 +7,18 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
+  Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
+import { Readable } from 'node:stream';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
+import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { ProgrammeService } from './programme.service.js';
 
@@ -82,6 +89,8 @@ const calendar = z.object({
   workingDays: z.array(date).max(2000).default([]),
 });
 const archive = z.object({ archived: z.boolean() });
+const exportQuery = z.object({ format: z.enum(['mspdi', 'xer', 'xlsx']) });
+const IMPORT_MAX_BYTES = 20 * 1024 * 1024;
 
 type Claims = TenantClaims;
 
@@ -105,6 +114,46 @@ export class ProgrammeController {
     @Body(new ZodPipe(create)) b: z.infer<typeof create>,
   ) {
     return this.programmes.create(c, id, b);
+  }
+
+  /** multipart/form-data, field `file`: an MS Project XML or Primavera XER file, imported as a new programme. */
+  @Post('tenders/:id/programmes/import')
+  @HttpCode(200)
+  @RequiresPermission('programme.edit')
+  @RequiresFeatures()
+  async importFile(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    if (!req.isMultipart())
+      throw new BadRequestException({
+        code: 'not_multipart',
+        message: 'Send the file as form data.',
+      });
+    const file = await req.file({ limits: { fileSize: IMPORT_MAX_BYTES, files: 1 } });
+    if (!file) throw new BadRequestException({ code: 'no_file', message: 'No file was sent.' });
+    const buffer = await file.toBuffer().catch(() => null);
+    if (!buffer || file.file.truncated)
+      throw new BadRequestException({
+        code: 'file_too_large',
+        message: 'A programme file is at most 20 MB.',
+      });
+    return this.programmes.importFile(c, id, { name: file.filename, buffer });
+  }
+
+  /** The programme as MS Project XML, Primavera XER or Excel. Reading, so open on a read-only licence too. */
+  @Get('programmes/:id/export')
+  async exportFile(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(exportQuery)) q: z.infer<typeof exportQuery>,
+  ) {
+    const out = await this.programmes.exportFile(c, id, q.format);
+    return new StreamableFile(Readable.from(out.body), {
+      type: out.type,
+      disposition: attachment(out.fileName),
+    });
   }
 
   @Get('programmes/:id')

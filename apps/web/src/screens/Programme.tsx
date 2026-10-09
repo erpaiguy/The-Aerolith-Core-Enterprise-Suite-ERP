@@ -24,12 +24,14 @@ import {
   ChevronDown,
   ChevronRight,
   Diamond,
+  Download,
   IndentDecrease,
   IndentIncrease,
   Plus,
   Printer,
   Settings,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import {
   useEffect,
@@ -40,7 +42,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { api, ApiError } from '../api/client';
+import { api, ApiError, saveFile } from '../api/client';
 import { describeError, formatDate } from '../lib/format';
 import { Gantt, HEAD_H, ROW_H, type Zoom } from '../schedule/Gantt';
 import {
@@ -82,6 +84,25 @@ export function TenderProgrammes({ tenderId }: { tenderId: string }) {
     queryKey: ['programmes', tenderId],
     queryFn: () => api.request<ProgrammeSummary[]>(`/api/tenant/tenders/${tenderId}/programmes`),
   });
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [report, setReport] = useState<ImportReport | null>(null);
+  const importFile = async (file: File) => {
+    setBusy(true);
+    setError(null);
+    setReport(null);
+    try {
+      const r = await api.upload<{ plan: ProgrammeDetail; report: ImportReport['report'] }>(
+        `/api/tenant/tenders/${tenderId}/programmes/import`,
+        file,
+      );
+      setReport({ planId: r.plan.id, name: r.plan.name, report: r.report });
+      void list.refetch();
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
   const create = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -103,15 +124,35 @@ export function TenderProgrammes({ tenderId }: { tenderId: string }) {
       actions={
         canEdit &&
         !adding && (
-          <Button variant="secondary" onClick={() => setAdding(true)}>
-            <Plus className="size-4" aria-hidden /> New programme
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" busy={busy} onClick={() => fileInput.current?.click()}>
+              <Upload className="size-4" aria-hidden /> Import file
+            </Button>
+            <Button variant="secondary" onClick={() => setAdding(true)}>
+              <Plus className="size-4" aria-hidden /> New programme
+            </Button>
+          </div>
         )
       }
     >
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".xml,.xer"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Programme file to import"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (f) void importFile(f);
+        }}
+      />
+      {report && <ImportResult result={report} />}
       <p className="mb-3 text-sm text-fg-muted">
         The programme submitted with the bid: activities, links, calendars and the critical path. It
-        is a document of the tender; winning does not turn it into a project schedule.
+        is a document of the tender; winning does not turn it into a project schedule. Import one
+        from MS Project (saved as XML) or Primavera P6 (XER) as a new programme.
       </p>
       {adding && (
         <form
@@ -177,6 +218,55 @@ export function TenderProgrammes({ tenderId }: { tenderId: string }) {
         </ul>
       )}
     </Card>
+  );
+}
+
+interface ImportReport {
+  planId: string;
+  name: string;
+  report: {
+    format: 'mspdi' | 'xer';
+    activities: number;
+    links: number;
+    calendars: number;
+    fileFinish: string | null;
+    finish: string | null;
+    warnings: string[];
+  };
+}
+
+/** What an import brought in, what it could not, and whether the finish agrees with the file's own. */
+function ImportResult({ result: { planId, name, report: r } }: { result: ImportReport }) {
+  const differs = r.fileFinish && r.finish && r.fileFinish !== r.finish;
+  return (
+    <div className="mb-4">
+      <Alert tone={r.warnings.length || differs ? 'warning' : 'success'}>
+        <p>
+          Imported{' '}
+          <Link to="/programmes/$planId" params={{ planId }} className="font-medium underline">
+            {name}
+          </Link>{' '}
+          from {r.format === 'xer' ? 'Primavera P6' : 'MS Project'}: {r.activities} activities,{' '}
+          {r.links} links, {r.calendars} calendar{r.calendars === 1 ? '' : 's'}.
+        </p>
+        {differs ? (
+          <p className="mt-1">
+            Recalculated here it finishes {shortDate(r.finish)}; the file said{' '}
+            {shortDate(r.fileFinish)}. The difference usually comes from hours-based durations,
+            progress, or settings in the file that this programme does not use (see below).
+          </p>
+        ) : (
+          r.finish && <p className="mt-1">It finishes {shortDate(r.finish)}, as the file said.</p>
+        )}
+        {r.warnings.length > 0 && (
+          <ul className="mt-1 list-disc pl-5">
+            {r.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        )}
+      </Alert>
+    </div>
   );
 }
 
@@ -459,6 +549,7 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
               <Settings className="size-4" aria-hidden /> Settings
             </Button>
           )}
+          <ExportMenu planId={planId} onError={setError} />
           <Link
             to="/programmes/$planId/print"
             params={{ planId }}
@@ -724,6 +815,44 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
           onSave={(op) => void edit([op])}
         />
       )}
+    </div>
+  );
+}
+
+function ExportMenu({ planId, onError }: { planId: string; onError: (e: string | null) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const download = async (format: 'mspdi' | 'xer' | 'xlsx') => {
+    setBusy(format);
+    onError(null);
+    try {
+      const { blob, fileName } = await api.download(
+        `/api/tenant/programmes/${planId}/export?format=${format}`,
+      );
+      saveFile(blob, fileName);
+    } catch (err) {
+      onError(describeError(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div
+      className="flex items-center gap-1 rounded-md border border-line bg-surface-2 px-1"
+      role="group"
+      aria-label="Export"
+    >
+      <Download className="ml-2 size-4 text-fg-muted" aria-hidden />
+      {(
+        [
+          ['mspdi', 'MS Project'],
+          ['xer', 'Primavera'],
+          ['xlsx', 'Excel'],
+        ] as const
+      ).map(([f, label]) => (
+        <Button key={f} variant="ghost" busy={busy === f} onClick={() => void download(f)}>
+          {label}
+        </Button>
+      ))}
     </div>
   );
 }

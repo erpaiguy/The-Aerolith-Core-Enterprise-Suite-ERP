@@ -13,6 +13,10 @@ import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit, event } from '../tender/tender-records.js';
+import { writeProgrammeXlsx } from './interchange/excel.js';
+import { toOps, type ImportedPlan } from './interchange/imported.js';
+import { readMspdi, writeMspdi } from './interchange/mspdi.js';
+import { readXer, writeXer } from './interchange/xer.js';
 import {
   MAX_ACTIVITIES,
   Programme,
@@ -227,6 +231,146 @@ export class ProgrammeService {
       );
     });
     return this.get(claims, planId);
+  }
+
+  // --- other tools' files ---
+
+  /**
+   * Reads an MS Project XML or Primavera XER file into a new programme of the tender (an import never changes an
+   * existing one), recalculates it here, and reports what could not be carried over and how the finish compares
+   * with the file's own.
+   */
+  async importFile(claims: TenantClaims, tenderId: string, file: { name: string; buffer: Buffer }) {
+    const content = file.buffer.toString('utf8').replace(/^\uFEFF/, '');
+    let parsed: ImportedPlan;
+    try {
+      if (content.startsWith('ERMHDR')) parsed = readXer(content);
+      else if (content.trimStart().startsWith('<')) parsed = readMspdi(content);
+      else
+        throw new Error(
+          'Choose an MS Project XML file (.xml) or a Primavera XER file (.xer). An .mpp file must first be saved as XML in MS Project.',
+        );
+    } catch (err) {
+      throw new BadRequestException({
+        code: 'unreadable_programme',
+        message: (err as Error).message,
+      });
+    }
+    if (parsed.activities.length === 0)
+      throw new BadRequestException({
+        code: 'empty_programme',
+        message: 'The file holds no activities.',
+      });
+    if (parsed.activities.length > MAX_ACTIVITIES)
+      throw new BadRequestException({
+        code: 'too_many',
+        message: `A programme holds up to ${MAX_ACTIVITIES} activities; this file has ${parsed.activities.length}.`,
+      });
+    const db = await this.tenants.forTenant(claims.ten);
+    const warnings = [...parsed.warnings];
+    const planId = await db.begin(async (tx) => {
+      const [t] = await tx`SELECT 1 FROM tender.tender WHERE id = ${tenderId}`;
+      if (!t) throw new NotFoundException({ code: 'tender_not_found' });
+      const [p] = await tx<{ id: string }[]>`
+        INSERT INTO sched.plan (tender_id, name, start_on, notes, created_by, updated_by)
+        VALUES (${tenderId}, ${parsed.name}, ${parsed.startOn},
+          ${`Imported from ${file.name.slice(-200)}`}, ${claims.sub}, ${claims.sub}) RETURNING id`;
+      const calendars =
+        parsed.calendars.length > 0
+          ? parsed.calendars
+          : [
+              {
+                key: '',
+                name: 'Standard (Mon–Fri)',
+                workWeek: OFFICE_WEEK,
+                holidays: [],
+                workingDays: [],
+              },
+            ];
+      const ids = new Map<string, string>();
+      const names = new Set<string>();
+      for (const c of calendars) {
+        let name = c.name.trim() || 'Calendar';
+        for (let n = 2; names.has(name.toLowerCase()); n++) name = `${c.name} (${n})`;
+        names.add(name.toLowerCase());
+        let week = c.workWeek;
+        if (week === 0 && c.workingDays.length === 0) {
+          warnings.push(`Calendar "${name}" has no working days; Mon–Fri is used.`);
+          week = OFFICE_WEEK;
+        }
+        const [row] = await tx<{ id: string }[]>`
+          INSERT INTO sched.calendar (plan_id, name, work_week, holidays, working_days)
+          VALUES (${p!.id}, ${name}, ${week}, ${c.holidays.slice(0, 2000)}::date[],
+            ${c.workingDays.slice(0, 2000)}::date[]) RETURNING id`;
+        ids.set(c.key, row!.id);
+      }
+      const defaultId = ids.get(parsed.defaultCalendarKey ?? '') ?? [...ids.values()][0]!;
+      await tx`UPDATE sched.plan SET calendar_id = ${defaultId} WHERE id = ${p!.id}`;
+      const built = toOps(parsed, ids);
+      warnings.push(...built.warnings);
+      const before = await this.read(tx, p!.id);
+      const model = new Programme([], []);
+      try {
+        model.apply(built.ops);
+      } catch (err) {
+        toHttp(err);
+      }
+      await this.save(
+        tx,
+        { id: p!.id, start_on: parsed.startOn, calendar_id: defaultId },
+        before,
+        model,
+        before.calendars,
+      );
+      await event(
+        tx,
+        tenderId,
+        'programme_imported',
+        { name: parsed.name, format: parsed.format, activities: parsed.activities.length },
+        claims.sub,
+      );
+      await audit(tx, claims.sub, 'programme.import', 'plan', p!.id, {
+        file: file.name,
+        warnings: warnings.length,
+      });
+      return p!.id;
+    });
+    const plan = await this.get(claims, planId);
+    return {
+      plan,
+      report: {
+        format: parsed.format,
+        activities: plan.activities.length,
+        links: plan.links.length,
+        calendars: plan.calendars.length,
+        fileFinish: parsed.fileFinish,
+        finish: plan.finishOn,
+        warnings,
+      },
+    };
+  }
+
+  /** The programme as MS Project XML, Primavera XER or Excel. */
+  async exportFile(claims: TenantClaims, planId: string, format: 'mspdi' | 'xer' | 'xlsx') {
+    const plan = await this.get(claims, planId);
+    const base = fileSafe(`${plan.tender.number} ${plan.name}`);
+    if (format === 'mspdi')
+      return {
+        body: Buffer.from(writeMspdi(plan), 'utf8'),
+        type: 'application/xml',
+        fileName: `${base}.xml`,
+      };
+    if (format === 'xer')
+      return {
+        body: Buffer.from(writeXer(plan), 'utf8'),
+        type: 'text/plain',
+        fileName: `${base}.xer`,
+      };
+    return {
+      body: await writeProgrammeXlsx(plan),
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      fileName: `${base}.xlsx`,
+    };
   }
 
   // --- calendars ---
@@ -481,3 +625,6 @@ export class ProgrammeService {
 }
 
 export { MAX_ACTIVITIES };
+export type ProgrammeView = Awaited<ReturnType<ProgrammeService['get']>>;
+
+const fileSafe = (s: string) => s.replace(/[^\w.\- ()&]+/g, '_').trim();

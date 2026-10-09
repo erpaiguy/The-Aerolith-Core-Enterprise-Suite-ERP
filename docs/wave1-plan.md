@@ -37,7 +37,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 8 | **Tender management detail** | Pre-bid queries, addenda (with importing a revised BOQ into a revision, moved from step 7), EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | **Done** (see below) |
 | 9 | **RFQs** | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** (see below) |
 | 10 | **Tender documents** | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | **Done** (see below; Supabase Storage not built) |
-| 11 | **Tender programme** | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | Part 1 **Done** (see below); MSPDI/XER next |
+| 11 | **Tender programme** | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | **Done** (see below) |
 | 12 | Reports + dashboard | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel | E11, 08-dashboard.md §2.3-2.4 |
 
 Each step ships with API tests and a browser test of the main journey, like Wave 0.
@@ -841,3 +841,52 @@ predecessors; 9 API integration tests (calendars at creation; a programme built 
 loop and links on summaries refused with nothing saved; recalculation and a stale edit; a holiday and a second
 calendar moving dates; indent, move and delete; IDs swapped in one edit; permissions and archiving; 5,000
 activities). A browser test of the journey, the bar chart and the print view.
+
+## Step 11 delivered (part 2): MS Project and Primavera files
+
+**Journey:**
+1. **Import file** on the tender's Programme tab takes an MS Project file saved as **XML** (File → Save As → XML
+   Format) or a Primavera P6 **XER** export, and makes it a **new programme** of the tender (an import never changes
+   an existing one). The result says what came in (activities, links, calendars), what could not be carried over,
+   and whether the finish recalculated here agrees with the finish the file states.
+2. **Export** on the programme page: **MS Project** (XML), **Primavera** (XER) or **Excel** (every row with dates,
+   float and predecessors as typed, critical rows in red; the calendars on a second sheet).
+
+**What is carried over:** activities with their IDs, names, durations, calendars and the six date constraints;
+the outline (MS Project) or WBS (P6) as summary rows; links with their types and lags; calendars with working
+weekdays, holidays (MS Project's date ranges too) and worked days off; P6 calendars from its nested calendar text;
+MS Project calendars derived from a base calendar.
+
+**What is not, and is said so in the result:**
+- **Links on summary rows** (MS Project allows them) are left out: summaries take no links here (part 1).
+- **Durations that are not whole days** are rounded (programmes here count whole working days).
+- **"As late as possible"** activities become as early as possible; **lags in percent** become no lag; links to
+  **other projects** are left out.
+- **P6 progress** (actual dates) is not carried: a tender programme has none; original durations are used.
+  **Level-of-effort** and **WBS-summary** activities become ordinary tasks. A file with **several projects**: the
+  first is imported.
+- Resources, costs, baselines, notebooks and codes in the files are not read.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] Both formats are read and written by our own code from their public structure, and were tested with
+  files written by hand to match what MS Project 2016 and P6 save, and by round trips** (export, import, same
+  activities, links and dates). **No real file from a contractor has been tried yet.** Real files are where this
+  breaks, if it breaks: send me two or three from the pilot (any size) before relying on it.
+- **[Guessing] MS Project and P6 open our exports.** They are written to each format's published layout with 8-hour
+  days; neither program was available to check them. Our IDs travel in MS Project's Text1 field (named "Activity
+  ID"); in P6 they are the activity IDs, and summaries become WBS nodes.
+- **.mpp is not read.** It is a closed binary format; MS Project saves the same programme as XML. The plan's LGPL
+  reader for .mpp (docs/04-features.md §X) is not built.
+- **An import recalculates with our engine.** Dates can differ from the file's where the file relied on hours, progress or settings
+  we do not have; the result names the file's finish beside ours so the difference is seen, not discovered later.
+- Files up to 20 MB and 20,000 activities.
+
+**API** (under `/api/tenant`): `POST /tenders/:id/programmes/import` (multipart, `programme.edit`; answers with the
+new programme and the report), `GET /programmes/:id/export?format=mspdi|xer|xlsx`.
+
+**Tests:** 11 unit tests (an MS Project 2016-style file: outline, durations rounded, link types and lags, percent lag,
+"as late as possible", a holiday range, a derived calendar, links on summaries dropped; a P6-style XER: nested
+calendar text with a holiday and a worked Sunday, the WBS as summaries, a level-of-effort activity, progress, lags in
+hours; files that are neither refused; both exports read back unchanged; the Excel export); 2 API integration tests
+(each format exported and imported back with the same activities, links and dates; a file that is neither, and one
+whose links loop, refused with nothing created). The browser test exports both formats and imports each back.

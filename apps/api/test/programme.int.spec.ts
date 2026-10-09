@@ -399,4 +399,71 @@ describe.skipIf(!controlUrl || !adminUrl)('tender programmes (integration)', () 
     );
     expect(editMs).toBeLessThan(5000);
   }, 120_000);
+
+  const uploadFile = (name: string, body: string) => {
+    const boundary = `----aerolith${randomBytes(6).toString('hex')}`;
+    const payload = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\n` +
+          'Content-Type: application/octet-stream\r\n\r\n',
+      ),
+      Buffer.from(body),
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    return app.inject({
+      method: 'POST',
+      url: `/api/tenant/tenders/${tenderId}/programmes/import`,
+      payload,
+      headers: { ...t.admin, 'content-type': `multipart/form-data; boundary=${boundary}` },
+    });
+  };
+
+  it('exports a programme as MS Project XML, XER and Excel, and imports each file back as a new programme', async () => {
+    const source = await ok<Plan>(get(`/tenant/programmes/${plan.id}`));
+    for (const [format, type, ext] of [
+      ['mspdi', 'application/xml', 'xml'],
+      ['xer', 'text/plain', 'xer'],
+      ['xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx'],
+    ] as const) {
+      const res = await get(`/tenant/programmes/${plan.id}/export?format=${format}`);
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain(type);
+      expect(res.headers['content-disposition']).toContain(`Submission programme.${ext}`);
+      if (format === 'xlsx') continue;
+      const r = await ok<{
+        plan: Plan;
+        report: { warnings: string[]; finish: string; fileFinish: string };
+      }>(uploadFile(`back.${ext}`, res.body));
+      // The same activities, links and dates, recalculated here.
+      expect(r.report.warnings).toEqual([]);
+      expect(r.report.finish).toBe(source.finishOn);
+      expect(r.report.fileFinish).toBe(source.finishOn);
+      const rows = (p: Plan) =>
+        [...p.activities]
+          .map((a) => [a.code, a.kind, a.duration, a.earlyStart, a.earlyFinish, a.totalFloat])
+          .sort((x, y) => String(x[0]).localeCompare(String(y[0])));
+      expect(rows(r.plan)).toEqual(rows(source));
+      expect(r.plan.links).toHaveLength(source.links.length);
+    }
+  });
+
+  it('refuses a file that is neither, and one whose links loop, creating nothing', async () => {
+    const before = (await ok<unknown[]>(get(`/tenant/tenders/${tenderId}/programmes`))).length;
+    const bad = await uploadFile('plan.mpp', 'binary stuff');
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json()).toMatchObject({ code: 'unreadable_programme' });
+    const loop = `<?xml version="1.0"?><Project xmlns="http://schemas.microsoft.com/project">
+      <StartDate>2026-11-02T08:00:00</StartDate><MinutesPerDay>480</MinutesPerDay><Tasks>
+      <Task><UID>1</UID><ID>1</ID><Name>A</Name><OutlineLevel>1</OutlineLevel><Duration>PT8H0M0S</Duration>
+        <PredecessorLink><PredecessorUID>2</PredecessorUID><Type>1</Type></PredecessorLink></Task>
+      <Task><UID>2</UID><ID>2</ID><Name>B</Name><OutlineLevel>1</OutlineLevel><Duration>PT8H0M0S</Duration>
+        <PredecessorLink><PredecessorUID>1</PredecessorUID><Type>1</Type></PredecessorLink></Task>
+      </Tasks></Project>`;
+    const looped = await uploadFile('loop.xml', loop);
+    expect(looped.statusCode).toBe(422);
+    expect(looped.json()).toMatchObject({ code: 'link_loop' });
+    expect((await ok<unknown[]>(get(`/tenant/tenders/${tenderId}/programmes`))).length).toBe(
+      before,
+    );
+  });
 });
