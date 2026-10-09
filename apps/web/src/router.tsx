@@ -21,6 +21,7 @@ import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
 import { ResourcesScreen } from './screens/Resources';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
+import { WinLossScreen } from './screens/TenderInsights';
 import { Spinner } from '@aerolith/ui';
 
 /** Pages opened from email links: usable in any browser, with or without an activated licence or session. */
@@ -104,6 +105,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/tenders/new',
       component: NewTenderScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/tenders/win-loss',
+      component: WinLossScreen,
     }),
     tenderRoute,
     boqRoute,

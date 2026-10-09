@@ -18,7 +18,7 @@ import { TENDER_STATUSES } from './tender-rules.js';
 import { TenderService } from './tender.service.js';
 
 // Optional text: trimmed, and an empty string means "clear it".
-const text = (max: number) =>
+export const text = (max: number) =>
   z
     .string()
     .trim()
@@ -26,24 +26,25 @@ const text = (max: number) =>
     .nullable()
     .transform((v) => (v ? v : null));
 // Money as a decimal string, never a float (docs/05-database.md §1).
-const money = z
+export const money = z
   .union([z.string().trim(), z.number()])
   .transform((v) => String(v))
   .refine((v) => /^\d{1,18}(\.\d{1,2})?$/.test(v), {
     message: 'Up to 2 decimal places, not negative',
   })
   .nullable();
-const instant = z.iso
+export const instant = z.iso
   .datetime({ offset: true })
   .transform((v) => new Date(v))
   .nullable();
-const day = z.iso.date().nullable();
+export const day = z.iso.date().nullable();
 
 const partyFields = {
   name: z.string().trim().min(2).max(200),
   isClient: z.boolean(),
   isVendor: z.boolean(),
   isSubcontractor: z.boolean(),
+  isCompetitor: z.boolean(),
   gstin: z
     .string()
     .trim()
@@ -76,6 +77,7 @@ const partyCreate = z.object({
   isClient: partyFields.isClient.default(true),
   isVendor: partyFields.isVendor.default(false),
   isSubcontractor: partyFields.isSubcontractor.default(false),
+  isCompetitor: partyFields.isCompetitor.default(false),
   gstin: partyFields.gstin.default(null),
   pan: partyFields.pan.default(null),
   contactName: partyFields.contactName.default(null),
@@ -90,7 +92,7 @@ const partyUpdate = z
   .extend({ rowVersion: z.number().int().positive() });
 const partyQuery = z.object({
   q: z.string().max(200).optional(),
-  kind: z.enum(['client', 'vendor', 'subcontractor']).optional(),
+  kind: z.enum(['client', 'vendor', 'subcontractor', 'competitor']).optional(),
 });
 
 const tenderFields = {
@@ -119,6 +121,7 @@ const tenderFields = {
   prebidAt: instant,
   submissionDueAt: instant,
   openingAt: instant,
+  queriesDueAt: instant,
   bidValidityDays: z.number().int().min(1).max(730).nullable(),
   ownerId: z.uuid().nullable(),
   description: z.string().trim().max(10_000),
@@ -138,6 +141,7 @@ const tenderCreate = z.object({
   prebidAt: tenderFields.prebidAt.default(null),
   submissionDueAt: tenderFields.submissionDueAt.default(null),
   openingAt: tenderFields.openingAt.default(null),
+  queriesDueAt: tenderFields.queriesDueAt.default(null),
   bidValidityDays: tenderFields.bidValidityDays.default(null),
   ownerId: tenderFields.ownerId.default(null),
   description: tenderFields.description.default(''),

@@ -90,7 +90,13 @@ export interface ReminderPlan {
 
 /** Deadline reminders for an open tender. Reminders whose time has already passed are skipped. */
 export function deadlineReminders(
-  t: { number: string; title: string; submissionDueAt: Date | null; prebidAt: Date | null },
+  t: {
+    number: string;
+    title: string;
+    submissionDueAt: Date | null;
+    prebidAt: Date | null;
+    queriesDueAt?: Date | null;
+  },
   now: Date,
 ): ReminderPlan[] {
   const out: ReminderPlan[] = [];
@@ -109,5 +115,136 @@ export function deadlineReminders(
       title: `Pre-bid meeting tomorrow for tender ${t.number}: ${t.title}`,
     });
   }
+  if (t.queriesDueAt) {
+    out.push({
+      dueAt: new Date(t.queriesDueAt.getTime() - day),
+      title: `Last day for pre-bid queries tomorrow, tender ${t.number}: ${t.title}`,
+    });
+  }
   return out.filter((r) => r.dueAt > now);
 }
+
+// --- step 8: tender management detail ---
+
+/** 09:00 in India on a calendar date ("YYYY-MM-DD"), `daysBefore` days earlier. Date-only deadlines remind then. */
+export function istMorning(date: string, daysBefore = 0): Date {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d - daysBefore, 3, 30));
+}
+
+/** Instruments that run out: their expiry needs watching while the client holds them (or before they go in). */
+export const EXPIRING_FORMS: readonly string[] = ['bank_guarantee', 'fdr', 'insurance_bond'];
+export const LIVE_SECURITY: readonly string[] = ['issued', 'submitted'];
+
+/** Expiry reminders for a bank guarantee (or FDR, bond): 30 and 7 days before it runs out, at 09:00 IST. */
+export function securityReminders(
+  s: {
+    form: string;
+    status: string;
+    validUntil: string | null;
+    amount: string;
+    bank: string | null;
+  },
+  tender: { number: string },
+  now: Date,
+): ReminderPlan[] {
+  if (!s.validUntil || !EXPIRING_FORMS.includes(s.form) || !LIVE_SECURITY.includes(s.status))
+    return [];
+  const what = `${s.form === 'bank_guarantee' ? 'Bank guarantee' : s.form === 'fdr' ? 'FDR' : 'Insurance bond'}${s.bank ? ` (${s.bank})` : ''} for tender ${tender.number}`;
+  return [30, 7]
+    .map((days) => ({
+      dueAt: istMorning(s.validUntil!, days),
+      title: `${what} expires in ${days} days, on ${s.validUntil}: extend it or ask for its return`,
+    }))
+    .filter((r) => r.dueAt > now);
+}
+
+/**
+ * The last day a bid security must stay valid: the bid validity counted from the submission date. Clients usually
+ * ask for some days more (often 45), so a guarantee expiring before this is certainly short.
+ */
+export function bidValidityEnd(submissionDueAt: Date | null, validityDays: number | null) {
+  if (!submissionDueAt || !validityDays) return null;
+  const ist = new Date(submissionDueAt.getTime() + 330 * 60_000);
+  ist.setUTCDate(ist.getUTCDate() + validityDays);
+  return ist.toISOString().slice(0, 10);
+}
+
+/** Tender statuses after which an EMD still with the client should come back. */
+export const EMD_RETURN_DUE: readonly TenderStatus[] = ['lost', 'cancelled', 'withdrawn', 'no_bid'];
+
+/** Bids ranked as at an opening: qualified bids with a value, lowest first (L1); equal values share a rank. */
+export function rankBids<T extends { quotedValue: string | null; qualified: boolean }>(
+  bids: readonly T[],
+): (T & { rank: number | null })[] {
+  const ranked = bids
+    .filter((b) => b.qualified && b.quotedValue !== null)
+    .map((b) => Number(b.quotedValue))
+    .sort((a, b) => a - b);
+  return bids.map((b) => ({
+    ...b,
+    rank: b.qualified && b.quotedValue !== null ? ranked.indexOf(Number(b.quotedValue)) + 1 : null,
+  }));
+}
+
+export type Envelope = 'technical' | 'financial' | 'other';
+
+/**
+ * Documents most Indian works tenders ask for (CPWD/state PWD style). Added on request and editable per tender;
+ * items that only apply sometimes are not required.
+ */
+export const CHECKLIST_TEMPLATE: readonly {
+  envelope: Envelope;
+  title: string;
+  required: boolean;
+}[] = [
+  { envelope: 'technical', title: 'Tender fee paid (receipt)', required: true },
+  {
+    envelope: 'technical',
+    title: 'EMD / bid security, or MSE exemption certificate',
+    required: true,
+  },
+  {
+    envelope: 'technical',
+    title: 'Tender document signed on every page, with all addenda',
+    required: true,
+  },
+  { envelope: 'technical', title: 'Letter of bid on letterhead', required: true },
+  {
+    envelope: 'technical',
+    title: 'Power of attorney / authorisation of the signatory',
+    required: true,
+  },
+  { envelope: 'technical', title: 'PAN card', required: true },
+  { envelope: 'technical', title: 'GST registration certificate', required: true },
+  {
+    envelope: 'technical',
+    title: 'Contractor registration (class / category), if asked',
+    required: false,
+  },
+  {
+    envelope: 'technical',
+    title: 'Udyam (MSE) certificate, if claiming exemption or preference',
+    required: false,
+  },
+  { envelope: 'technical', title: 'Completion certificates of similar works', required: true },
+  {
+    envelope: 'technical',
+    title: 'Annual turnover: CA certificate or audited accounts, last 3 years',
+    required: true,
+  },
+  { envelope: 'technical', title: 'Income tax returns, last 3 years', required: true },
+  { envelope: 'technical', title: 'Bank solvency certificate', required: false },
+  {
+    envelope: 'technical',
+    title: 'Affidavit: not blacklisted, no abandoned works',
+    required: true,
+  },
+  { envelope: 'technical', title: 'Integrity pact, if applicable', required: false },
+  { envelope: 'technical', title: 'Plant and equipment list', required: false },
+  { envelope: 'technical', title: 'Key staff with CVs', required: false },
+  { envelope: 'technical', title: 'Construction methodology and work programme', required: false },
+  { envelope: 'technical', title: 'EPF / ESI registration and labour licence', required: false },
+  { envelope: 'financial', title: 'Priced BOQ / financial bid', required: true },
+  { envelope: 'financial', title: 'Rate analysis of major items, if asked', required: false },
+];

@@ -524,3 +524,68 @@ four revisions (inserts, quantity, rate, text and notes edits, moves, deletes) w
 byte, and every compare's counts, listed lines and value change agreeing with each other and with the totals;
 submitting a tender freezes its BOQs; archiving (read only, out of the bid and of the freeze, refused for a submitted
 BOQ, restore). A browser test of the whole journey, archiving included.
+
+## Step 8 delivered (part 1): tender management detail
+
+**Journey** (the tender page now has tabs: Overview, Queries & addenda, EMD & guarantees, Checklist, Submission &
+result):
+1. **Pre-bid queries**, numbered Q1, Q2… per tender, with the clause or BOQ item they are about: drafted, marked sent,
+   answered (the client's reply is kept) or withdrawn. A **last day for queries** on the tender reminds the owner the
+   day before.
+2. **Addenda / corrigenda** with the client's number and what they change. One that **moves the submission date**
+   moves the tender's date and its reminders, and records both dates. Each is ticked "acknowledged in the bid".
+3. **EMD and bank guarantees**: form (BG, DD, FDR, online, surety bond, or **MSE / Udyam exemption**), amount, bank,
+   number, validity and status (to arrange → with us → with the client → returned / adjusted / forfeited). Reminders
+   **30 and 7 days before a guarantee expires**; a warning when it **expires before the bid's validity ends**; when the
+   tender is lost, cancelled, withdrawn or not bid, a reminder to **ask for the EMD back**.
+4. **Submission checklist**: one click adds the documents most Indian works tenders ask for (21: tender fee, EMD,
+   signed tender with addenda, PAN, GST, experience and turnover certificates, ITRs, affidavits, priced BOQ…), each
+   editable, assignable with a due date (reminder the day before). **The person an item is assigned to can mark it
+   ready** without the right to edit the tender.
+5. **Mark submitted** opens a form that lists what is still missing (required documents not ready, addenda not
+   acknowledged, no EMD, unanswered queries), then records when, how (portal / by hand / email), the acknowledgement
+   number and the bid value. It freezes the BOQs (step 7). A **revised offer** after negotiation is recorded too.
+6. **Bids at the opening**: every bidder's value, ours included, ranked automatically (L1, L2…); new competitors join
+   the party master. "We were L2 of 3 bidders, 1.97 % above L1."
+7. **Mark won / lost** records the main reason (price, technical, qualification, documents, scope, client decision),
+   the contract value or the winning bid, and who won (defaults to L1).
+8. **Agenda** (Tenders → Agenda): the next 7 / 30 / 90 days across open tenders: submissions, pre-bid meetings,
+   query deadlines, openings, expiring guarantees (also ones already expired while still with the client) and
+   checklist items due.
+9. **Win / loss** (Tenders → Win / loss, for pricing roles): by Indian financial year of submission: bids, won, lost,
+   win rate by count and by value, average distance above L1, by client, by vertical, why we lost, and each
+   competitor head to head (met, below us, above us, won, their price against ours).
+
+**Decisions made while building (change any you disagree with):**
+- **Ranks are computed, never typed**: lowest qualified value is L1; equal values share a rank; disqualified bidders
+  have none.
+- **Submission and result go through forms**, not a bare status change, so every tender submitted in the app has a
+  submission record and every result a reason. (The status API still accepts a plain move, for integrations.)
+- **Bid values are pricing data**: submission values are hidden from roles without `pricing.edit`, and the win/loss
+  analysis needs it. The bids read out at the opening are public anyway, so everyone sees them.
+- **Records stay**: addenda, EMD/BG and submissions are never deleted by the app (database privileges); a sent query
+  can only be withdrawn. Checklist items can be removed (it is a working list).
+- **A guarantee short of the bid validity is a warning, not a block**: clients ask for different margins (often 45
+  days beyond validity), so the app compares against the validity itself and says so.
+- **Submitting with documents missing is allowed** (the form warns): some tenders are handed in off-system, and a hard
+  block would push people to tick boxes untruthfully.
+- **Not built yet:** per-company checklist templates (the standard list is in code), performance guarantees after a
+  win (the instrument records them; the workflow belongs with Wave 2 projects), and a calendar grid (the agenda list
+  comes first; the dashboard is step 12).
+
+**API** (under `/api/tenant`; changes need `tender.edit` unless noted):
+- `GET /tenders/:id/work`: queries, addenda, securities, checklist, submissions, ranked bids, readiness
+- `POST /tenders/:id/queries`, `POST /queries/:id`, `POST /queries/:id/delete` (drafts only)
+- `POST /tenders/:id/addenda` (`newSubmissionDueAt` moves the due date), `POST /addenda/:id`
+- `POST /tenders/:id/securities`, `POST /securities/:id`
+- `POST /tenders/:id/checklist`, `POST /tenders/:id/checklist/standard`, `POST /checklist/:id` (the assignee may set
+  status and notes), `POST /checklist/:id/delete`
+- `POST /tenders/:id/submissions`, `POST /tenders/:id/bids`, `POST /tenders/:id/result`
+- `GET /tender-agenda?days=`, `GET /tender-analysis?fy=` (`pricing.edit`)
+- Parties gain `isCompetitor` (`?kind=competitor`); tenders gain `queriesDueAt` and the result fields.
+
+**Tests:** 9 API integration tests (queries and their moves; an addendum moving the due date and the reminders;
+guarantee expiry reminders at 09:00 IST and the bid-validity warning; the standard checklist, the assignee's rights
+and reminders; submission freezing the BOQs and a revised offer, values hidden from workers; ranking at the opening
+and new competitors; a loss with the EMD return reminder; the agenda; win/loss figures by financial year, worked by
+hand). A browser test of the whole journey; the step 1 browser test now submits and loses through the forms.

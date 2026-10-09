@@ -22,6 +22,9 @@ function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => v
           <span className={`text-sm ${unread ? 'font-semibold' : ''}`}>{item.title}</span>
           {item.kind === 'reminder' && <Badge tone="warning">Reminder</Badge>}
           {item.kind === 'tender_deadline' && <Badge tone="warning">Tender deadline</Badge>}
+          {item.kind === 'security_expiry' && <Badge tone="warning">EMD / BG expiry</Badge>}
+          {item.kind === 'security_return' && <Badge tone="warning">EMD to recover</Badge>}
+          {item.kind === 'checklist_due' && <Badge tone="warning">Document due</Badge>}
         </div>
         {item.body && <p className="mt-0.5 text-sm text-fg-muted">{item.body}</p>}
         <p className="mt-0.5 text-xs text-fg-subtle">

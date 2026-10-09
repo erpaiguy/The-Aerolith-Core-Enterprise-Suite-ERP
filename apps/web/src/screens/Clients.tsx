@@ -26,6 +26,7 @@ const blank: Values = {
   isClient: true,
   isVendor: false,
   isSubcontractor: false,
+  isCompetitor: false,
   gstin: '',
   pan: '',
   contactName: '',
@@ -54,14 +55,20 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
   const [busy, setBusy] = useState(false);
   const set = (k: keyof Values) => (e: { target: { value: string } }) =>
     setV((s) => ({ ...s, [k]: e.target.value }));
-  const flag = (k: 'isClient' | 'isVendor' | 'isSubcontractor') => (
+  const flag = (k: 'isClient' | 'isVendor' | 'isSubcontractor' | 'isCompetitor') => (
     <label className="flex items-center gap-2 text-sm">
       <input
         type="checkbox"
         checked={v[k]}
         onChange={(e) => setV((s) => ({ ...s, [k]: e.target.checked }))}
       />
-      {k === 'isClient' ? 'Client' : k === 'isVendor' ? 'Vendor' : 'Subcontractor'}
+      {k === 'isClient'
+        ? 'Client'
+        : k === 'isVendor'
+          ? 'Vendor'
+          : k === 'isSubcontractor'
+            ? 'Subcontractor'
+            : 'Competitor'}
     </label>
   );
 
@@ -96,6 +103,7 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
               {flag('isClient')}
               {flag('isVendor')}
               {flag('isSubcontractor')}
+              {flag('isCompetitor')}
             </div>
           </fieldset>
           <Field label="GSTIN" hint="15 characters; leave empty if not registered.">
@@ -208,6 +216,7 @@ export function ClientsScreen() {
                       {p.isClient && <Badge tone="accent">client</Badge>}
                       {p.isVendor && <Badge>vendor</Badge>}
                       {p.isSubcontractor && <Badge>subcontractor</Badge>}
+                      {p.isCompetitor && <Badge tone="warning">competitor</Badge>}
                     </span>
                   </td>
                   <td className="font-mono text-xs">{p.gstin ?? '-'}</td>

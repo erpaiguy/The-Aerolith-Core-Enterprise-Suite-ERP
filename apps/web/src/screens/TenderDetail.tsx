@@ -10,10 +10,13 @@ import { usePermission } from '../session/permissions';
 import { TenderBoqs } from './Boq';
 import { TenderBidSummaryCard } from './Pricing';
 import { SOURCES, TenderForm, VERTICALS } from './TenderForm';
+import { ResultForm, SubmissionForm, TenderWorkTabs } from './TenderWork';
 import { DueLabel, STATUS_LABEL, statusTone, useCanEditTenders } from './Tenders';
 
 const OPEN: TenderStatus[] = ['lead', 'evaluating', 'bidding', 'submitted'];
 const NEEDS_REASON: TenderStatus[] = ['lost', 'withdrawn', 'cancelled'];
+/** Moves that record more than a status: the submission, and the result. */
+const WITH_FORM: TenderStatus[] = ['submitted', 'won', 'lost'];
 
 /** Button labels for each manual status move. */
 const MOVE_LABEL: Record<TenderStatus, string> = {
@@ -77,6 +80,10 @@ function StatusActions({ tender, onChanged }: { tender: TenderDetail; onChanged:
     }
   };
 
+  const done = () => {
+    setPending(null);
+    onChanged();
+  };
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -86,13 +93,32 @@ function StatusActions({ tender, onChanged }: { tender: TenderDetail; onChanged:
             type="button"
             variant={to === 'won' ? 'primary' : NEEDS_REASON.includes(to) ? 'ghost' : 'secondary'}
             busy={busy && pending === to}
-            onClick={() => (NEEDS_REASON.includes(to) ? setPending(to) : void move(to))}
+            onClick={() =>
+              NEEDS_REASON.includes(to) || WITH_FORM.includes(to) ? setPending(to) : void move(to)
+            }
           >
             {MOVE_LABEL[to]}
           </Button>
         ))}
       </div>
-      {pending && (
+      {pending === 'submitted' && (
+        <SubmissionForm
+          tender={tender}
+          revised={false}
+          onDone={done}
+          onCancel={() => setPending(null)}
+        />
+      )}
+      {(pending === 'won' || pending === 'lost') && (
+        <ResultForm
+          key={pending}
+          tender={tender}
+          outcome={pending}
+          onDone={done}
+          onCancel={() => setPending(null)}
+        />
+      )}
+      {pending && !WITH_FORM.includes(pending) && (
         <div className="space-y-3 rounded-md border border-line bg-surface-2 p-3">
           <Field
             label={`Reason (${STATUS_LABEL[pending].toLowerCase()})`}
@@ -301,6 +327,24 @@ function describeEvent(e: TenderDetail['events'][number]): string {
       return `BOQ ${String(d.name ?? '')} archived`;
     case 'boq_restored':
       return `BOQ ${String(d.name ?? '')} restored`;
+    case 'addendum':
+      return `Addendum ${String(d.ref ?? '')} recorded${d.dueAfter ? `; submission moved to ${formatDateTime(String(d.dueAfter))}` : ''}`;
+    case 'query_added':
+      return `Query Q${String(d.seq)} drafted`;
+    case 'query_sent':
+    case 'query_answered':
+    case 'query_withdrawn':
+      return `Query Q${String(d.seq)} ${e.kind.slice(6)}`;
+    case 'security':
+      return `${String(d.purpose ?? '').toUpperCase()} ${String(d.form ?? '').replace('_', ' ')} of ${formatInr(String(d.amount ?? ''))} recorded`;
+    case 'security_status':
+      return `EMD/BG status: ${String(d.from)} → ${String(d.to)}`;
+    case 'submission':
+      return `${d.kind === 'revised' ? 'Revised offer' : 'Bid'} submitted (${String(d.mode)}${d.reference ? `, ${String(d.reference)}` : ''})`;
+    case 'opening':
+      return `Bids recorded: ${String(d.bidders)} bidders${d.ourRank ? `, we were L${String(d.ourRank)}` : ''}`;
+    case 'result':
+      return `Result: ${String(d.outcome)}${d.category ? ` (${String(d.category)})` : ''}`;
     default:
       return e.kind;
   }
@@ -320,6 +364,8 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
     void qc.invalidateQueries({ queryKey: ['tender', tenderId] });
     void qc.invalidateQueries({ queryKey: ['tenders'] });
     void qc.invalidateQueries({ queryKey: ['inbox'] });
+    void qc.invalidateQueries({ queryKey: ['tender-work', tenderId] });
+    void qc.invalidateQueries({ queryKey: ['tender-boqs'] });
   };
 
   if (tender.isPending) return <Spinner />;
@@ -374,76 +420,95 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
       ) : (
         <>
           {canEdit && <StatusActions tender={t} onChanged={refresh} />}
-          <div className="grid gap-5 xl:grid-cols-[1fr_26rem]">
-            <div className="space-y-5">
-              <TenderBoqs tenderId={t.id} canEdit={canEditBoq} />
-              {canPrice && <TenderBidSummaryCard tenderId={t.id} />}
-              <Card title="Dates">
-                <dl className="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
-                  <Row label="Submission due">
-                    {t.submissionDueAt ? (
-                      <>
-                        {formatDateTime(t.submissionDueAt)}{' '}
-                        <DueLabel iso={t.submissionDueAt} open={open} relativeOnly />
-                      </>
-                    ) : (
-                      '-'
+          <TenderWorkTabs
+            tender={t}
+            canEdit={canEdit}
+            onChanged={refresh}
+            overview={
+              <div className="grid gap-5 xl:grid-cols-[1fr_26rem]">
+                <div className="space-y-5">
+                  <TenderBoqs tenderId={t.id} canEdit={canEditBoq} />
+                  {canPrice && <TenderBidSummaryCard tenderId={t.id} />}
+                  <Card title="Dates">
+                    <dl className="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
+                      <Row label="Submission due">
+                        {t.submissionDueAt ? (
+                          <>
+                            {formatDateTime(t.submissionDueAt)}{' '}
+                            <DueLabel iso={t.submissionDueAt} open={open} relativeOnly />
+                          </>
+                        ) : (
+                          '-'
+                        )}
+                      </Row>
+                      <Row label="Pre-bid meeting">
+                        {t.prebidAt ? formatDateTime(t.prebidAt) : '-'}
+                      </Row>
+                      <Row label="Last day for queries">
+                        {t.queriesDueAt ? formatDateTime(t.queriesDueAt) : '-'}
+                      </Row>
+                      <Row label="Bid opening">
+                        {t.openingAt ? formatDateTime(t.openingAt) : '-'}
+                      </Row>
+                      <Row label="Published">{t.publishedOn ? formatDate(t.publishedOn) : '-'}</Row>
+                      <Row label="Bid validity">
+                        {t.bidValidityDays ? `${t.bidValidityDays} days` : '-'}
+                      </Row>
+                    </dl>
+                  </Card>
+                  <Card title="Details">
+                    <dl className="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
+                      <Row label="Estimated value">{formatInr(t.estimatedValue)}</Row>
+                      <Row label="EMD">{formatInr(t.emdAmount)}</Row>
+                      <Row label="Tender fee">{formatInr(t.tenderFee)}</Row>
+                      <Row label="Client's number">{t.clientRef ?? '-'}</Row>
+                      <Row label="Source">{SOURCES[t.source] ?? t.source}</Row>
+                      <Row label="Vertical">{VERTICALS[t.vertical] ?? t.vertical}</Row>
+                      <Row label="Location">{t.location ?? '-'}</Row>
+                      <Row label="Owner">{t.owner?.displayName ?? '-'}</Row>
+                      {t.portalUrl && (
+                        <Row label="Notice">
+                          <a
+                            href={t.portalUrl}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="inline-flex items-center gap-1 text-accent hover:underline"
+                          >
+                            Open link <ExternalLink className="size-3.5" aria-hidden />
+                          </a>
+                        </Row>
+                      )}
+                    </dl>
+                    {t.description && (
+                      <p className="mt-4 whitespace-pre-wrap border-t border-line pt-4 text-sm">
+                        {t.description}
+                      </p>
                     )}
-                  </Row>
-                  <Row label="Pre-bid meeting">{t.prebidAt ? formatDateTime(t.prebidAt) : '-'}</Row>
-                  <Row label="Bid opening">{t.openingAt ? formatDateTime(t.openingAt) : '-'}</Row>
-                  <Row label="Published">{t.publishedOn ? formatDate(t.publishedOn) : '-'}</Row>
-                  <Row label="Bid validity">
-                    {t.bidValidityDays ? `${t.bidValidityDays} days` : '-'}
-                  </Row>
-                </dl>
-              </Card>
-              <Card title="Details">
-                <dl className="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
-                  <Row label="Estimated value">{formatInr(t.estimatedValue)}</Row>
-                  <Row label="EMD">{formatInr(t.emdAmount)}</Row>
-                  <Row label="Tender fee">{formatInr(t.tenderFee)}</Row>
-                  <Row label="Client's number">{t.clientRef ?? '-'}</Row>
-                  <Row label="Source">{SOURCES[t.source] ?? t.source}</Row>
-                  <Row label="Vertical">{VERTICALS[t.vertical] ?? t.vertical}</Row>
-                  <Row label="Location">{t.location ?? '-'}</Row>
-                  <Row label="Owner">{t.owner?.displayName ?? '-'}</Row>
-                  {t.portalUrl && (
-                    <Row label="Notice">
-                      <a
-                        href={t.portalUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="inline-flex items-center gap-1 text-accent hover:underline"
-                      >
-                        Open link <ExternalLink className="size-3.5" aria-hidden />
-                      </a>
-                    </Row>
-                  )}
-                </dl>
-                {t.description && (
-                  <p className="mt-4 whitespace-pre-wrap border-t border-line pt-4 text-sm">
-                    {t.description}
-                  </p>
-                )}
-              </Card>
-            </div>
-            <div className="space-y-5">
-              <BidDecision key={t.rowVersion} tender={t} canEdit={canEdit} onChanged={refresh} />
-              <Card title="Activity">
-                <ol className="space-y-2 text-sm">
-                  {t.events.map((e) => (
-                    <li key={e.id}>
-                      <div>{describeEvent(e)}</div>
-                      <div className="text-xs text-fg-subtle">
-                        {e.actor ?? 'System'}, {formatDateTime(e.createdAt)}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </Card>
-            </div>
-          </div>
+                  </Card>
+                </div>
+                <div className="space-y-5">
+                  <BidDecision
+                    key={t.rowVersion}
+                    tender={t}
+                    canEdit={canEdit}
+                    onChanged={refresh}
+                  />
+                  <Card title="Activity">
+                    <ol className="space-y-2 text-sm">
+                      {t.events.map((e) => (
+                        <li key={e.id}>
+                          <div>{describeEvent(e)}</div>
+                          <div className="text-xs text-fg-subtle">
+                            {e.actor ?? 'System'}, {formatDateTime(e.createdAt)}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </Card>
+                </div>
+              </div>
+            }
+          />
         </>
       )}
     </div>

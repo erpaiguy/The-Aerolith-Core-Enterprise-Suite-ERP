@@ -1,13 +1,14 @@
 import { Alert, Badge, Button, Card, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Plus, Search } from 'lucide-react';
+import { CalendarDays, List, Plus, Search, TrendingUp } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import { api } from '../api/client';
 import type { TenderDetail, TenderStatus, TenderSummary } from '../api/types';
 import { daysUntil, describeError, formatDate, formatInrShort } from '../lib/format';
 import { usePermission } from '../session/permissions';
 import { TenderForm } from './TenderForm';
+import { TenderAgenda } from './TenderInsights';
 
 export const STATUS_LABEL: Record<TenderStatus, string> = {
   lead: 'Lead',
@@ -77,7 +78,9 @@ const FILTERS: { key: string; label: string }[] = [
 
 export function TendersScreen() {
   const canEdit = useCanEditTenders();
+  const canPrice = usePermission('pricing.edit');
   const navigate = useNavigate();
+  const [view, setView] = useState<'list' | 'agenda'>('list');
   const [filter, setFilter] = useState('open');
   const [search, setSearch] = useState('');
   const q = useDeferredValue(search.trim());
@@ -110,104 +113,138 @@ export function TendersScreen() {
       <PageHeader
         title="Tenders"
         actions={
-          canEdit && (
-            <Button onClick={() => void navigate({ to: '/tenders/new' })}>
-              <Plus className="size-4" aria-hidden /> New tender
-            </Button>
-          )
-        }
-      />
-      <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by status">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            aria-pressed={filter === f.key}
-            onClick={() => setFilter(f.key)}
-            className={`rounded-md px-2.5 py-1.5 text-sm ${filter === f.key ? 'bg-surface-3 font-medium text-fg' : 'text-fg-muted hover:bg-surface-2'}`}
-          >
-            {f.label} <span className="tabular-nums text-fg-subtle">{count(f.key)}</span>
-          </button>
-        ))}
-      </div>
-      <Card>
-        <div className="relative mb-4 max-w-sm">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
-            aria-hidden
-          />
-          <Input
-            aria-label="Search tenders"
-            placeholder="Title, number, client, location"
-            className="pl-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        {tenders.isPending ? (
-          <Spinner />
-        ) : tenders.isError ? (
-          <Alert tone="danger">{describeError(tenders.error)}</Alert>
-        ) : tenders.data.items.length === 0 ? (
-          <div className="py-8 text-center text-sm text-fg-muted">
-            {q || filter !== 'open' ? (
-              'No tenders match.'
-            ) : canEdit ? (
-              <>
-                No open tenders.{' '}
-                <Link to="/tenders/new" className="text-accent hover:underline">
-                  Add the first one
-                </Link>
-                .
-              </>
-            ) : (
-              'No open tenders.'
+          <div className="flex flex-wrap gap-2">
+            <div className="flex rounded-md border border-line" role="group" aria-label="View">
+              <Button
+                variant={view === 'list' ? 'secondary' : 'ghost'}
+                aria-pressed={view === 'list'}
+                onClick={() => setView('list')}
+              >
+                <List className="size-4" aria-hidden /> List
+              </Button>
+              <Button
+                variant={view === 'agenda' ? 'secondary' : 'ghost'}
+                aria-pressed={view === 'agenda'}
+                onClick={() => setView('agenda')}
+              >
+                <CalendarDays className="size-4" aria-hidden /> Agenda
+              </Button>
+            </div>
+            {canPrice && (
+              <Link
+                to="/tenders/win-loss"
+                className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3"
+              >
+                <TrendingUp className="size-4" aria-hidden /> Win / loss
+              </Link>
+            )}
+            {canEdit && (
+              <Button onClick={() => void navigate({ to: '/tenders/new' })}>
+                <Plus className="size-4" aria-hidden /> New tender
+              </Button>
             )}
           </div>
-        ) : (
-          <Table minWidth="48rem">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Tender</th>
-                <th>Due</th>
-                <th className="text-right">Value</th>
-                <th>Status</th>
-                <th>Owner</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenders.data.items.map((t) => (
-                <tr key={t.id}>
-                  <td className="whitespace-nowrap font-mono text-xs text-fg-muted">{t.number}</td>
-                  <td className="max-w-[24rem]">
-                    <Link
-                      to="/tenders/$tenderId"
-                      params={{ tenderId: t.id }}
-                      className="font-medium text-accent hover:underline"
-                    >
-                      {t.title}
+        }
+      />
+      {view === 'agenda' ? (
+        <TenderAgenda />
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by status">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                aria-pressed={filter === f.key}
+                onClick={() => setFilter(f.key)}
+                className={`rounded-md px-2.5 py-1.5 text-sm ${filter === f.key ? 'bg-surface-3 font-medium text-fg' : 'text-fg-muted hover:bg-surface-2'}`}
+              >
+                {f.label} <span className="tabular-nums text-fg-subtle">{count(f.key)}</span>
+              </button>
+            ))}
+          </div>
+          <Card>
+            <div className="relative mb-4 max-w-sm">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
+                aria-hidden
+              />
+              <Input
+                aria-label="Search tenders"
+                placeholder="Title, number, client, location"
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {tenders.isPending ? (
+              <Spinner />
+            ) : tenders.isError ? (
+              <Alert tone="danger">{describeError(tenders.error)}</Alert>
+            ) : tenders.data.items.length === 0 ? (
+              <div className="py-8 text-center text-sm text-fg-muted">
+                {q || filter !== 'open' ? (
+                  'No tenders match.'
+                ) : canEdit ? (
+                  <>
+                    No open tenders.{' '}
+                    <Link to="/tenders/new" className="text-accent hover:underline">
+                      Add the first one
                     </Link>
-                    <div className="truncate text-xs text-fg-muted">
-                      {[t.client?.name, t.location].filter(Boolean).join(' · ') || '-'}
-                    </div>
-                  </td>
-                  <td>
-                    <DueLabel iso={t.submissionDueAt} open={OPEN.includes(t.status)} />
-                  </td>
-                  <td className="whitespace-nowrap text-right tabular-nums">
-                    {formatInrShort(t.estimatedValue)}
-                  </td>
-                  <td>
-                    <Badge tone={statusTone(t.status)}>{STATUS_LABEL[t.status]}</Badge>
-                  </td>
-                  <td className="text-fg-muted">{t.owner?.displayName ?? '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </Card>
+                    .
+                  </>
+                ) : (
+                  'No open tenders.'
+                )}
+              </div>
+            ) : (
+              <Table minWidth="48rem">
+                <thead>
+                  <tr>
+                    <th>Number</th>
+                    <th>Tender</th>
+                    <th>Due</th>
+                    <th className="text-right">Value</th>
+                    <th>Status</th>
+                    <th>Owner</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenders.data.items.map((t) => (
+                    <tr key={t.id}>
+                      <td className="whitespace-nowrap font-mono text-xs text-fg-muted">
+                        {t.number}
+                      </td>
+                      <td className="max-w-[24rem]">
+                        <Link
+                          to="/tenders/$tenderId"
+                          params={{ tenderId: t.id }}
+                          className="font-medium text-accent hover:underline"
+                        >
+                          {t.title}
+                        </Link>
+                        <div className="truncate text-xs text-fg-muted">
+                          {[t.client?.name, t.location].filter(Boolean).join(' · ') || '-'}
+                        </div>
+                      </td>
+                      <td>
+                        <DueLabel iso={t.submissionDueAt} open={OPEN.includes(t.status)} />
+                      </td>
+                      <td className="whitespace-nowrap text-right tabular-nums">
+                        {formatInrShort(t.estimatedValue)}
+                      </td>
+                      <td>
+                        <Badge tone={statusTone(t.status)}>{STATUS_LABEL[t.status]}</Badge>
+                      </td>
+                      <td className="text-fg-muted">{t.owner?.displayName ?? '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </Card>
+        </>
+      )}
     </div>
   );
 }

@@ -108,6 +108,7 @@ export interface Party {
   isClient: boolean;
   isVendor: boolean;
   isSubcontractor: boolean;
+  isCompetitor: boolean;
   gstin: string | null;
   pan: string | null;
   contactName: string | null;
@@ -155,11 +156,16 @@ export interface TenderDetail extends TenderSummary {
   publishedOn: string | null;
   prebidAt: string | null;
   openingAt: string | null;
+  queriesDueAt: string | null;
   bidValidityDays: number | null;
   statusReason: string | null;
   description: string;
   createdAt: string;
   rowVersion: number;
+  resultOn: string | null;
+  resultCategory: ResultCategory | null;
+  awardedValue: string | null;
+  awardedTo: { id: string; name: string } | null;
   allowedMoves: TenderStatus[];
   canDecide: boolean;
   defaultCriteria: Omit<Criterion, 'score'>[];
@@ -178,6 +184,158 @@ export interface TenderDetail extends TenderSummary {
     data: Record<string, unknown>;
     createdAt: string;
     actor: string | null;
+  }[];
+}
+
+// --- Tender management detail (apps/api/src/tender/tender-work.service.ts, step 8) ---
+
+export type ResultCategory =
+  'price' | 'technical' | 'qualification' | 'documents' | 'scope' | 'client' | 'other';
+export type QueryStatus = 'draft' | 'sent' | 'answered' | 'withdrawn';
+export type SecurityStatus =
+  'planned' | 'issued' | 'submitted' | 'returned' | 'adjusted' | 'forfeited' | 'cancelled';
+export type SecurityForm =
+  'bank_guarantee' | 'demand_draft' | 'fdr' | 'online' | 'insurance_bond' | 'exempt';
+
+export interface TenderQuery {
+  id: string;
+  seq: number;
+  reference: string;
+  question: string;
+  status: QueryStatus;
+  sentOn: string | null;
+  answer: string;
+  answeredOn: string | null;
+  addendumId: string | null;
+  rowVersion: number;
+}
+
+export interface Addendum {
+  id: string;
+  ref: string;
+  issuedOn: string;
+  summary: string;
+  dueBefore: string | null;
+  dueAfter: string | null;
+  affectsBoq: boolean;
+  acknowledged: boolean;
+  rowVersion: number;
+}
+
+export interface SecurityInstrument {
+  id: string;
+  purpose: 'emd' | 'performance' | 'other';
+  form: SecurityForm;
+  amount: string;
+  bank: string | null;
+  instrumentNo: string | null;
+  issuedOn: string | null;
+  validUntil: string | null;
+  claimUntil: string | null;
+  status: SecurityStatus;
+  returnedOn: string | null;
+  notes: string;
+  shortOfValidity: boolean;
+  rowVersion: number;
+}
+
+export interface ChecklistItem {
+  id: string;
+  seq: number;
+  envelope: 'technical' | 'financial' | 'other';
+  title: string;
+  required: boolean;
+  status: 'pending' | 'ready' | 'not_applicable';
+  assigneeId: string | null;
+  assignee: string | null;
+  dueOn: string | null;
+  notes: string;
+  doneAt: string | null;
+  rowVersion: number;
+}
+
+export interface Submission {
+  id: string;
+  kind: 'original' | 'revised';
+  submittedAt: string;
+  mode: 'portal' | 'physical' | 'email' | 'other';
+  reference: string | null;
+  /** Hidden (null) from roles without the pricing permission. */
+  bidValue: string | null;
+  notes: string;
+  by: string | null;
+}
+
+export interface OpenedBid {
+  id: string;
+  partyId: string | null;
+  name: string | null;
+  us: boolean;
+  quotedValue: string | null;
+  qualified: boolean;
+  notes: string;
+  rank: number | null;
+}
+
+export interface TenderWork {
+  queries: TenderQuery[];
+  addenda: Addendum[];
+  securities: SecurityInstrument[];
+  checklist: ChecklistItem[];
+  submissions: Submission[];
+  bids: OpenedBid[];
+  opening: {
+    bidders: number;
+    ourRank: number | null;
+    l1: { name: string | null; value: string | null; us: boolean } | null;
+    aboveL1Pct: number | null;
+  } | null;
+  bidValidityEnd: string | null;
+  readiness: {
+    checklistRequired: number;
+    checklistPending: string[];
+    addendaUnacknowledged: number;
+    emdRequired: boolean;
+    emdCovered: boolean;
+    queriesUnanswered: number;
+  };
+}
+
+export interface AgendaItem {
+  at: string;
+  allDay: boolean;
+  kind: 'submission' | 'prebid' | 'queries' | 'opening' | 'security_expiry' | 'checklist';
+  label: string;
+  tender: { id: string; number: string; title: string };
+}
+
+export interface WinLossTally {
+  submitted: number;
+  won: number;
+  lost: number;
+  pending: number;
+  winRatePct: number | null;
+  bidValue: string;
+  wonValue: string;
+  winRateByValuePct: number | null;
+}
+
+export interface WinLoss {
+  years: string[];
+  fy: string | null;
+  totals: WinLossTally;
+  byClient: (WinLossTally & { name: string })[];
+  byVertical: (WinLossTally & { name: string })[];
+  lossReasons: { category: ResultCategory | 'not_recorded'; count: number }[];
+  position: { opened: number; l1: number; avgAboveL1Pct: number | null };
+  competitors: {
+    id: string;
+    name: string;
+    met: number;
+    beatUs: number;
+    weBeat: number;
+    won: number;
+    avgGapPct: number | null;
   }[];
 }
 

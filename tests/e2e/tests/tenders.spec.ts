@@ -60,6 +60,8 @@ test('a tender goes from lead through a scored bid decision to a recorded loss',
 
   // 4. Submit, then lose with a reason. Lost is final.
   await page.getByRole('button', { name: 'Mark submitted' }).click();
+  await expect(page.getByText('No EMD arranged (or exemption recorded)')).toBeVisible();
+  await page.getByRole('button', { name: 'Record submission' }).click();
   await page.getByRole('button', { name: 'Mark lost' }).click();
   await page.getByLabel(/Reason \(lost\)/).fill('L2 by 1.8%');
   await page.getByRole('button', { name: 'Mark lost' }).last().click();

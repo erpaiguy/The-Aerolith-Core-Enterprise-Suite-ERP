@@ -38,6 +38,7 @@ interface Values {
   prebidAt: string;
   submissionDueAt: string;
   openingAt: string;
+  queriesDueAt: string;
   bidValidityDays: string;
   ownerId: string;
   description: string;
@@ -58,6 +59,7 @@ const fromTender = (t: TenderDetail | undefined): Values => ({
   prebidAt: toLocalInput(t?.prebidAt ?? null),
   submissionDueAt: toLocalInput(t?.submissionDueAt ?? null),
   openingAt: toLocalInput(t?.openingAt ?? null),
+  queriesDueAt: toLocalInput(t?.queriesDueAt ?? null),
   bidValidityDays: t?.bidValidityDays ? String(t.bidValidityDays) : '',
   ownerId: t?.owner?.id ?? '',
   description: t?.description ?? '',
@@ -78,6 +80,7 @@ const toBody = (v: Values) => ({
   prebidAt: fromLocalInput(v.prebidAt),
   submissionDueAt: fromLocalInput(v.submissionDueAt),
   openingAt: fromLocalInput(v.openingAt),
+  queriesDueAt: fromLocalInput(v.queriesDueAt),
   bidValidityDays: v.bidValidityDays ? Number(v.bidValidityDays) : null,
   ownerId: v.ownerId || null,
   description: v.description,
@@ -292,6 +295,14 @@ export function TenderForm({
             type="datetime-local"
             value={v.openingAt}
             onChange={set('openingAt')}
+          />
+        </Field>
+        <Field label="Last day for queries">
+          <Input
+            name="queriesDueAt"
+            type="datetime-local"
+            value={v.queriesDueAt}
+            onChange={set('queriesDueAt')}
           />
         </Field>
         <Field label="Published on">

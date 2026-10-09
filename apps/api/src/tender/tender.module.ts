@@ -9,12 +9,21 @@ import { ImportService } from '../boq/import/import.service.js';
 import { PricingModule } from '../pricing/pricing.module.js';
 import { ProvisioningModule } from '../provisioning/provisioning.module.js';
 import { RatesModule } from '../rates/rates.module.js';
+import { TenderWorkController } from './tender-work.controller.js';
+import { TenderWorkService } from './tender-work.service.js';
 import { TenderController } from './tender.controller.js';
 import { TenderService } from './tender.service.js';
 
 @Module({
   imports: [ProvisioningModule, AuthModule, RatesModule, PricingModule],
-  controllers: [TenderController, BoqController, ImportController],
-  providers: [TenderService, BoqService, ImportService, ExportService, RevisionService],
+  controllers: [TenderController, TenderWorkController, BoqController, ImportController],
+  providers: [
+    TenderService,
+    TenderWorkService,
+    BoqService,
+    ImportService,
+    ExportService,
+    RevisionService,
+  ],
 })
 export class TenderModule {}
