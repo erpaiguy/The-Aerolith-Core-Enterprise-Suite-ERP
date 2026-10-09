@@ -21,6 +21,12 @@ import { BoqVersionsScreen } from './screens/Versions';
 import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
 import { ResourcesScreen } from './screens/Resources';
 import { ProgrammePrint, ProgrammeScreen } from './screens/Programme';
+import {
+  AnalysisReportPrint,
+  CostSummaryReport,
+  PipelineReport,
+  ReportsScreen,
+} from './screens/Reports';
 import { RfqScreen } from './screens/Rfq';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
@@ -128,6 +134,25 @@ const programmePrintRoute = createRoute({
   },
 });
 
+/** Reports are paper too: a toolbar that does not print, and the page. */
+const costSummaryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/boqs/$boqId/cost-summary',
+  component: function CostSummaryPage() {
+    const { boqId } = costSummaryRoute.useParams();
+    return <CostSummaryReport key={boqId} boqId={boqId} />;
+  },
+});
+
+const analysisReportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/boqs/$boqId/analysis-report',
+  component: function AnalysisReportPage() {
+    const { boqId } = analysisReportRoute.useParams();
+    return <AnalysisReportPrint key={boqId} boqId={boqId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -160,6 +185,7 @@ const routeTree = rootRoute.addChildren([
     versionsRoute,
     rfqRoute,
     programmeRoute,
+    createRoute({ getParentRoute: () => appLayout, path: '/reports', component: ReportsScreen }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/documents',
@@ -190,6 +216,13 @@ const routeTree = rootRoute.addChildren([
     }),
   ]),
   programmePrintRoute,
+  costSummaryRoute,
+  analysisReportRoute,
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/reports/pipeline',
+    component: PipelineReport,
+  }),
   createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInScreen }),
   createRoute({
     getParentRoute: () => rootRoute,

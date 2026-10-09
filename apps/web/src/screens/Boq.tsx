@@ -22,6 +22,7 @@ import { api, saveFile } from '../api/client';
 import type { AnalysisSummary } from '../api/types';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
 import { MeasurementSheet } from '../boq/MeasurementSheet';
+import { BoqReportsMenu } from './Reports';
 import { FreezeDialog } from './Versions';
 import {
   ImportBanner,
@@ -262,6 +263,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
               <History className="size-4" aria-hidden /> Versions
             </Link>
           )}
+          <BoqReportsMenu boqId={boqId} />
           <ExportMenu boqId={boqId} />
           {canPrice && (
             <Link
@@ -547,13 +549,13 @@ function ExportMenu({ boqId }: { boqId: string }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (format: 'xlsx' | 'csv') => {
+  const run = async (format: 'xlsx' | 'csv', unpriced = false) => {
     setOpen(false);
     setBusy(true);
     setError(null);
     try {
       const { blob, fileName } = await api.download(
-        `/api/tenant/boqs/${boqId}/export?format=${format}`,
+        `/api/tenant/boqs/${boqId}/export?format=${format}${unpriced ? '&unpriced=true' : ''}`,
       );
       saveFile(blob, fileName);
     } catch (err) {
@@ -592,6 +594,14 @@ function ExportMenu({ boqId }: { boqId: string }) {
             onClick={() => void run('csv')}
           >
             CSV (.csv)
+          </button>
+          <button
+            role="menuitem"
+            className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-surface-2"
+            title="Quantities without rates or amounts: for subcontractors' quotes"
+            onClick={() => void run('xlsx', true)}
+          >
+            Without rates (.xlsx)
           </button>
         </div>
       )}

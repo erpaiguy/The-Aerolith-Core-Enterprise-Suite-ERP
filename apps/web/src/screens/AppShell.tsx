@@ -2,6 +2,7 @@ import { Link, Outlet } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
+  ChartColumn,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -149,6 +150,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/documents" icon={<FileStack className="size-4" />}>
               Documents
+            </NavItem>
+            <NavItem to="/reports" icon={<ChartColumn className="size-4" />}>
+              Reports
             </NavItem>
             <Upcoming icon={<Building2 className="size-4" />}>Projects</Upcoming>
             <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>

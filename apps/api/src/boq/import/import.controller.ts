@@ -53,6 +53,11 @@ const exportQuery = z.object({
   scenario: z.uuid().optional(),
   /** An earlier, frozen version of the BOQ. */
   version: z.coerce.number().int().min(1).optional(),
+  /** Rates and amounts left blank: the BOQ to send to subcontractors or to fill in again. */
+  unpriced: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
 });
 const unitText = z
   .string()
@@ -178,7 +183,7 @@ export class ImportController {
     @Param('id', ParseUUIDPipe) boqId: string,
     @Query(new ZodPipe(exportQuery)) q: z.infer<typeof exportQuery>,
   ) {
-    const out = await this.exports.export(c, boqId, q.format, q.scenario, q.version);
+    const out = await this.exports.export(c, boqId, q.format, q.scenario, q.version, q.unpriced);
     return new StreamableFile(out.stream, {
       type: out.contentType,
       disposition: attachment(out.fileName),

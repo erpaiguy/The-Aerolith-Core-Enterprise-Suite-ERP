@@ -92,4 +92,4 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 9 | RFQs: enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** |
 | 10 | Tender documents: storage, per-tender vault, folders, versions, search, preview | **Done** (Supabase Storage not built) |
 | 11 | Tender programme: CPM engine, Gantt, calendars, PDF, MSPDI/XER | **Done** (MS Project/P6 files not yet tried with a real contractor's file) |
-| 12 | Reports + dashboard: cost summary, priced/unpriced BOQ, rate analysis, bid pipeline; PDF/Excel | Next |
+| 12 | Reports + dashboard: cost summary, priced/unpriced BOQ, rate analysis, bid pipeline; PDF/Excel | **Part 1 done** (reports); dashboards next |

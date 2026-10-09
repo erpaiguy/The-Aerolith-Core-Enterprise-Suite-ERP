@@ -5,6 +5,9 @@
 // With a pricing scenario (step 6) two columns follow: each item's rate loaded with the scenario's markups
 // (rate × factor, rounded to paise) and its amount, for item-rate tenders where the submitted rates must add up to
 // the bid. That needs the pricing permission.
+//
+// Unpriced (step 12): the same file with every rate and amount blank, for subcontractors' quotes or a clean copy to
+// price again. Quantities stay.
 import { PassThrough, Readable } from 'node:stream';
 import {
   BadRequestException,
@@ -69,8 +72,14 @@ export class ExportService {
     format: 'xlsx' | 'csv',
     scenarioId?: string | undefined,
     version?: number | undefined,
+    unpriced = false,
   ): Promise<{ stream: Readable; fileName: string; contentType: string }> {
     let quote: { name: string; factor: string } | null = null;
+    if (scenarioId && unpriced)
+      throw new BadRequestException({
+        code: 'unpriced_quoted',
+        message: 'An unpriced BOQ has no quoted rates.',
+      });
     if (scenarioId) {
       if (!(await this.permissions.can(claims, 'pricing.edit')))
         throw new ForbiddenException({
@@ -92,7 +101,7 @@ export class ExportService {
       WHERE b.id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
     const base =
-      `${b.number} ${b.name}${old !== null ? ` - version ${old}` : ''}${quote ? ` - quoted (${quote.name})` : ''}`
+      `${b.number} ${b.name}${old !== null ? ` - version ${old}` : ''}${quote ? ` - quoted (${quote.name})` : ''}${unpriced ? ' - unpriced' : ''}`
         .replace(/[^\w.\- ()&]+/g, '_')
         .trim() || 'boq';
     const rows =
@@ -102,12 +111,12 @@ export class ExportService {
     const quoted = quote !== null;
     if (format === 'csv')
       return {
-        stream: Readable.from(csvLines(rows, quoted)),
+        stream: Readable.from(csvLines(rows, quoted, unpriced)),
         fileName: `${base}.csv`,
         contentType: 'text/csv; charset=utf-8',
       };
     const out = new PassThrough();
-    void writeXlsx(out, rows, b.name, quoted).catch((err: Error) => {
+    void writeXlsx(out, rows, b.name, quoted, unpriced).catch((err: Error) => {
       this.log.error(`Export of BOQ ${boqId} failed: ${err.stack ?? err.message}`);
       out.destroy(err);
     });
@@ -142,15 +151,21 @@ async function* pages(db: Sql, boqId: string, factor: string | null): AsyncGener
 const plain = (v: string | null) =>
   v === null ? null : v.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 
-const valuesOf = (r: ExportRow, quoted = false) => [
+const valuesOf = (r: ExportRow, quoted = false, unpriced = false) => [
   r.depth,
   r.node_type,
   r.code ?? '',
   r.description,
   r.unit ?? '',
   plain(r.qty),
-  plain(r.rate),
-  r.node_type === 'item' ? plain(r.amount) : r.node_type === 'section' ? plain(r.subtotal) : null,
+  unpriced ? null : plain(r.rate),
+  unpriced
+    ? null
+    : r.node_type === 'item'
+      ? plain(r.amount)
+      : r.node_type === 'section'
+        ? plain(r.subtotal)
+        : null,
   r.notes,
   ...(quoted
     ? r.node_type === 'item'
@@ -159,11 +174,15 @@ const valuesOf = (r: ExportRow, quoted = false) => [
     : []),
 ];
 
-async function* csvLines(rows: AsyncGenerator<ExportRow>, quoted: boolean): AsyncGenerator<string> {
+async function* csvLines(
+  rows: AsyncGenerator<ExportRow>,
+  quoted: boolean,
+  unpriced: boolean,
+): AsyncGenerator<string> {
   yield '﻿' + [...EXPORT_COLUMNS, ...(quoted ? QUOTED_COLUMNS : [])].join(',') + '\r\n';
   let chunk = '';
   for await (const r of rows) {
-    chunk += valuesOf(r, quoted).map(csvCell).join(',') + '\r\n';
+    chunk += valuesOf(r, quoted, unpriced).map(csvCell).join(',') + '\r\n';
     if (chunk.length > 64 * 1024) {
       yield chunk;
       chunk = '';
@@ -177,6 +196,7 @@ async function writeXlsx(
   rows: AsyncGenerator<ExportRow>,
   name: string,
   quoted: boolean,
+  unpriced: boolean,
 ) {
   const wb = new ExcelJS.stream.xlsx.WorkbookWriter({
     stream: out,
@@ -209,7 +229,7 @@ async function writeXlsx(
   header.font = { bold: true };
   header.commit();
   for await (const r of rows) {
-    const v = valuesOf(r, quoted);
+    const v = valuesOf(r, quoted, unpriced);
     // Figures go in as numbers so the sheet can be summed; Excel keeps 15 significant digits, ample for 4 decimals.
     const row = ws.addRow(
       v.map((x, i) => (((i >= 5 && i <= 7) || i >= 9) && x !== null && x !== '' ? Number(x) : x)),

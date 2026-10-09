@@ -860,3 +860,118 @@ export interface DocSearchHit extends DocItem {
   tender: { number: string; title: string };
   folder: string | null;
 }
+
+// --- reports (step 12) ---
+
+export interface ReportBoq {
+  id: string;
+  name: string;
+  status: string;
+  versionNo: number;
+  rateDate: string;
+  total: string;
+  archived: boolean;
+  tender: {
+    id: string;
+    number: string;
+    title: string;
+    client: string | null;
+    estimatedValue: string | null;
+  };
+}
+
+export type BreakdownPart =
+  'material' | 'labour' | 'equipment' | 'subcontract' | 'other' | 'additions' | 'not_analysed';
+
+export interface CostSummary {
+  asOf: string;
+  boq: ReportBoq;
+  counts: { items: number; priced: number; unpriced: number; noQty: number; analysed: number };
+  sections: { code: string | null; description: string; amount: string; pct: string | null }[];
+  unsectioned: { amount: string; items: number };
+  breakdown: {
+    total: string;
+    parts: { part: BreakdownPart; amount: string; pct: string | null }[];
+  };
+  incomplete: { code: string; description: string; missing: string[] }[];
+  bid: {
+    scenario: string;
+    base: string;
+    markups: { label: string; kind: string; pct: string | null; amount: string }[];
+    markupTotal: string;
+    beforeGst: string;
+    gst: string;
+    gstMode: 'add' | 'included' | 'exempt';
+    bid: string;
+    vsEstimatePct: string | null;
+  } | null;
+  pricingHidden: boolean;
+}
+
+export interface AnalysisReport {
+  asOf: string;
+  boq: ReportBoq;
+  analyses: {
+    id: string;
+    code: string;
+    description: string;
+    unit: string;
+    outputQty: string;
+    direct: boolean;
+    items: number;
+    qty: string | null;
+    lines: {
+      lineNo: number;
+      kind: 'resource' | 'analysis' | 'lump_sum';
+      code: string | null;
+      description: string;
+      unit: string | null;
+      qty: string | null;
+      wastagePct: string | null;
+      unitCost: string | null;
+      cost: string;
+    }[];
+    subtotal: string;
+    additions: { label: string; pct: string; amount: string }[];
+    total: string;
+    unitRate: string;
+    boqRate: string;
+    missing: string[];
+    error: string | null;
+  }[];
+}
+
+export interface PipelineRow {
+  id: string;
+  number: string;
+  title: string;
+  client: string | null;
+  vertical: string;
+  status: TenderStatus;
+  owner: string | null;
+  estimatedValue: string | null;
+  emdAmount: string | null;
+  submissionDueAt: string | null;
+  fy: string;
+  ourBid: string | null;
+  resultOn: string | null;
+  awardedValue: string | null;
+  awardedTo: string | null;
+}
+
+export interface Pipeline {
+  asOf: string;
+  years: string[];
+  owners: { id: string; name: string }[];
+  rows: PipelineRow[];
+  stages: { status: TenderStatus; count: number; estimatedValue: string }[];
+  totals: {
+    tenders: number;
+    open: number;
+    pipelineValue: string;
+    submittedValue: string | null;
+    won: number;
+    wonValue: string;
+  };
+  pricingHidden: boolean;
+}

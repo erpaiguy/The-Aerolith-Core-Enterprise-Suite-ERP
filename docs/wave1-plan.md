@@ -38,7 +38,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 9 | **RFQs** | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | **Done** (see below) |
 | 10 | **Tender documents** | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | **Done** (see below; Supabase Storage not built) |
 | 11 | **Tender programme** | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | **Done** (see below) |
-| 12 | Reports + dashboard | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel | E11, 08-dashboard.md §2.3-2.4 |
+| 12 | **Reports + dashboard** | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel (E11, 08-dashboard.md §2.3-2.4) | **Part 1 done** (reports, see below); part 2 (dashboards) next |
 
 Each step ships with API tests and a browser test of the main journey, like Wave 0.
 
@@ -100,7 +100,7 @@ Each step ships with API tests and a browser test of the main journey, like Wave
 **Known gaps (later steps):**
 - The tenant admin's display name is their email address.
 - There is no way to edit the bid/no-bid criteria per company yet.
-- There is no tender dashboard yet (step 12).
+- There is no tender dashboard yet (step 12 part 2).
 
 ## Step 2 delivered: BOQ engine (API)
 
@@ -890,3 +890,57 @@ calendar text with a holiday and a worked Sunday, the WBS as summaries, a level-
 hours; files that are neither refused; both exports read back unchanged; the Excel export); 2 API integration tests
 (each format exported and imported back with the same activities, links and dates; a file that is neither, and one
 whose links loop, refused with nothing created). The browser test exports both formats and imports each back.
+
+## Step 12 delivered (part 1): reports
+
+**Journey:**
+1. **Reports** in the menu lists the reports: the **bid pipeline**, and (with the pricing permission) the win/loss
+   analysis from step 8.
+2. **Reports** on a BOQ opens its **cost summary** or its **rate analysis report**. **Export** on a BOQ now also
+   gives an **unpriced** Excel file: every quantity, no rate or amount, for subcontractors' quotes or a clean copy.
+3. Each report is a page for paper: **Print or save as PDF** prints it as shown (the toolbar is left off; the
+   browser's "Save as PDF" printer makes the PDF), **Excel** downloads the same figures as numbers that sum. Every
+   report says when it was made ("as of").
+
+**The reports:**
+- **Cost summary** (per BOQ): each top-level section with its share; **what the BOQ is made of**: material, labour,
+  equipment, subcontract, other (lump sums), overheads and profit inside the rates, and "not analysed"; counts of
+  items priced, not priced and without quantity; and, for users with the pricing permission, the **selected
+  scenario's bid** (markups, before GST against the client's estimate, GST, bid).
+- **Rate analysis report** (per BOQ): every analysis behind the BOQ's rates, costed on the BOQ's rate date, line by
+  line (resource, quantity, wastage, rate, cost), its additions, total and rate per unit; the sub-analyses they use
+  follow. Resources without a rate on that date are named.
+- **Bid pipeline**: tenders by stage (count and estimate), and each tender with client, vertical, owner, estimate,
+  due date, our bid (pricing permission only), result and award; filtered by financial year of the due date,
+  status (or "open"), vertical and owner.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] The cost breakdown splits each item's amount in the proportions of its rate analysis on the BOQ's rate
+  date.** The money comes from the BOQ as it stands (a rate typed over the analysis is still split in the analysis'
+  proportions); the rounding to paise goes into "overheads and profit in rates" so the parts add up to the BOQ
+  exactly. Items with no analysis are "not analysed", not guessed at. A BOQ priced without analyses shows 100 % not
+  analysed: the breakdown is only as good as the analyses behind it.
+- **"Overhead and profit"** in docs/08-dashboard.md §2.4 is shown in two places: inside the rates (the analyses'
+  additions, in the breakdown) and on top of the BOQ (the scenario's markups, in the bid). They are not added
+  together, because the second is a commercial decision and pricing-only.
+- **Bid values are pricing-only, as everywhere else:** the scenario, the values we submitted, and their totals are
+  left out of the screen and the Excel file for users without `pricing.edit`. The BOQ's own value and its breakdown
+  are not: whoever can open the BOQ already sees its rates.
+- **The pipeline's year is the financial year of the submission due date** (the creation date when there is none),
+  the same rule as the win/loss analysis.
+- **PDF is the browser's print**, as for the programme: no PDF library, nothing to licence, and the paper is exactly
+  the page. A4 (the pipeline landscape).
+- Reports read live data on demand; they are not stored. Each says when it was made.
+
+**API** (under `/api/tenant`, all reading, open on a read-only licence): `GET /boqs/:id/cost-summary`,
+`GET /boqs/:id/analysis-report`, `GET /reports/pipeline?fy&status&vertical&owner`, each with `/export` for Excel;
+`GET /boqs/:id/export?unpriced=true` (refused with quoted rates).
+
+**Tests:** 4 unit tests of the breakdown (proportions, a rate typed over, paise kept exact, uncostable analyses);
+10 API integration tests (a BOQ through a nested analysis worked by hand: by section, by kind, the bid for pricing
+users only, analyses without rates named, the analysis report line by line, the unpriced export, the pipeline by
+stage with each filter, bid values hidden, and the Excel files). The browser test prints the cost summary, opens
+the analysis report, downloads the unpriced BOQ and filters and downloads the pipeline.
+
+**Part 2 (next):** the tender and bid dashboard and the estimation dashboard (docs/08-dashboard.md §2.3, §2.4) with
+charts, the KPI picker (§2.6), drill-down and export.
