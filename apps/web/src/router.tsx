@@ -16,6 +16,7 @@ import { SignInScreen } from './screens/SignIn';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
 import { BoqPricingScreen } from './screens/Pricing';
+import { BoqVersionsScreen } from './screens/Versions';
 import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
 import { ResourcesScreen } from './screens/Resources';
 import { TenderDetailScreen } from './screens/TenderDetail';
@@ -77,6 +78,15 @@ const pricingRoute = createRoute({
   },
 });
 
+const versionsRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/boqs/$boqId/versions',
+  component: function VersionsPage() {
+    const { boqId } = versionsRoute.useParams();
+    return <BoqVersionsScreen key={boqId} boqId={boqId} />;
+  },
+});
+
 const analysisRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/rate-analyses/$analysisId',
@@ -110,6 +120,7 @@ const routeTree = rootRoute.addChildren([
     }),
     analysisRoute,
     pricingRoute,
+    versionsRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/users',

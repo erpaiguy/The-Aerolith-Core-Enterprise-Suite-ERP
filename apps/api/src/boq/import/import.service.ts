@@ -32,6 +32,7 @@ import type { Sql } from 'postgres';
 import type { TenantClaims } from '../../auth/auth.service.js';
 import { APP_CONFIG, type AppConfig } from '../../config/config.js';
 import { TenantConnections } from '../../provisioning/tenant-connections.js';
+import { refuseArchived } from '../archived.js';
 import {
   LineBuilder,
   detectSettings,
@@ -502,9 +503,19 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
     const units = await loadUnitMap(db);
 
     const result = await db.begin(async (tx) => {
-      const [boq] = await tx<{ status: string; node_count: number; tender_id: string }[]>`
-        SELECT status, node_count, tender_id FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      const [boq] = await tx<
+        {
+          status: string;
+          archived: boolean;
+          node_count: number;
+          tender_id: string;
+          version_no: number;
+        }[]
+      >`
+        SELECT status, archived_at IS NOT NULL AS archived, node_count, tender_id, version_no FROM est.boq
+        WHERE id = ${boqId} FOR UPDATE`;
       if (!boq) throw new ImportProblem('The BOQ no longer exists.');
+      if (boq.archived) throw new ImportProblem('The BOQ was archived meanwhile.');
       if (boq.status !== 'draft') throw new ImportProblem('The BOQ is no longer a draft.');
       if (boq.node_count > 0) throw new ImportProblem('Lines were added to the BOQ meanwhile.');
 
@@ -535,8 +546,10 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
               id bigint, parent_id bigint, sort_key text, depth smallint, node_type text, code text, unit text,
               qty numeric, rate numeric, description text, notes text)
           ), n AS (
-            INSERT INTO est.boq_node (boq_id, id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount)
-            SELECT ${boqId}, id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, round(qty * rate, 2)
+            INSERT INTO est.boq_node (boq_id, id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount,
+              created_version)
+            SELECT ${boqId}, id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, round(qty * rate, 2),
+              ${boq.version_no}
             FROM r
           )
           INSERT INTO est.boq_node_text (boq_id, node_id, description, notes)
@@ -709,11 +722,12 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
     return path;
   }
 
-  /** Imports go into an empty draft BOQ only (adding into an existing BOQ comes with revisions, step 7). */
+  /** Imports go into an empty draft BOQ only (importing a revised BOQ into a revision comes with addenda, step 8). */
   private async importableBoq(db: Sql, boqId: string) {
-    const [b] = await db<{ status: string; node_count: number }[]>`
-      SELECT status, node_count FROM est.boq WHERE id = ${boqId}`;
+    const [b] = await db<{ status: string; archived: boolean; node_count: number }[]>`
+      SELECT status, archived_at IS NOT NULL AS archived, node_count FROM est.boq WHERE id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
+    refuseArchived(b);
     if (b.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
     if (b.node_count > 0)
       throw new ConflictException({

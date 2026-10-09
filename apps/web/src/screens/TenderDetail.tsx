@@ -293,6 +293,14 @@ function describeEvent(e: TenderDetail['events'][number]): string {
       return `${STATUS_LABEL[d.from as TenderStatus] ?? d.from} → ${STATUS_LABEL[d.to as TenderStatus] ?? d.to}${d.reason ? `: ${String(d.reason)}` : ''}`;
     case 'decision':
       return `Decided ${d.decision === 'bid' ? 'to bid' : 'not to bid'} (score ${Number(d.score).toFixed(1)})`;
+    case 'boq_frozen':
+      return `BOQ ${String(d.name ?? '')}: version ${String(d.version)} frozen (${d.kind === 'submitted' ? 'submitted' : 'internal review'})`;
+    case 'boq_revision_started':
+      return `BOQ ${String(d.name ?? '')}: revision ${String(d.version)} started${d.note ? `: ${String(d.note)}` : ''}`;
+    case 'boq_archived':
+      return `BOQ ${String(d.name ?? '')} archived`;
+    case 'boq_restored':
+      return `BOQ ${String(d.name ?? '')} restored`;
     default:
       return e.kind;
   }

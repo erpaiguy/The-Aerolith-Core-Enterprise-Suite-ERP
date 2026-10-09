@@ -31,6 +31,8 @@ export interface BoqHeader {
   tenderId: string;
   name: string;
   status: 'draft' | 'locked' | 'submitted';
+  /** The version being drafted, or the last one frozen. */
+  versionNo?: number;
   currency: string;
   nodeCount: number;
   itemCount: number;
@@ -39,6 +41,8 @@ export interface BoqHeader {
   rowVersion: number;
   /** Rates from analyses are taken as on this date. */
   rateDate?: string;
+  /** Set when the BOQ was archived (made by mistake): read only, left out of the bid. */
+  archivedAt?: string | null;
   tender?: { id: string; number: string; title: string };
 }
 

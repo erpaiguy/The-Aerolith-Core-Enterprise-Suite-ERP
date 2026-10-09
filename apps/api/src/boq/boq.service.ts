@@ -12,11 +12,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ancestorKeys, childKey, midpoint, splitKey, SUBTREE_END } from '@aerolith/shared';
-import type { Sql, TransactionSql } from 'postgres';
+import type { PendingQuery, Row, Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { measuredQty, sumQty, type MeasurementInput } from '../pricing/pricing.js';
 import { RatesService } from '../rates/rates.service.js';
+import { refuseArchived } from './archived.js';
 import { importRunning } from './import/import.service.js';
 import { loadUnitMap, sameUnit } from './units.js';
 
@@ -59,7 +60,8 @@ const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "s
 
 const HEADER = `b.id, b.tender_id AS "tenderId", b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
-  b.updated_at AS "updatedAt", b.row_version AS "rowVersion", b.rate_date::text AS "rateDate"`;
+  b.updated_at AS "updatedAt", b.row_version AS "rowVersion", b.rate_date::text AS "rateDate",
+  b.archived_at AS "archivedAt"`;
 
 export interface BoqRow {
   id: string;
@@ -164,6 +166,14 @@ export class BoqService {
   ) {
     const db = await this.tenants.forTenant(claims.ten);
     await db.begin(async (tx) => {
+      const [b] = await tx<{ status: string; archived: boolean }[]>`
+        SELECT status, archived_at IS NOT NULL AS archived FROM est.boq WHERE id = ${boqId}`;
+      if (b) refuseArchived(b);
+      if (input.rateDate !== undefined && b && b.status !== 'draft')
+        throw new ConflictException({
+          code: 'boq_locked',
+          message: 'This version is frozen. Start a new revision to change its rate date.',
+        });
       const fields = Object.fromEntries(
         Object.entries({ name: input.name, notes: input.notes, rate_date: input.rateDate }).filter(
           ([, v]) => v !== undefined,
@@ -369,15 +379,20 @@ export class BoqService {
         message: 'A file is being imported into this BOQ. Try again when it has finished.',
       });
     return db.begin(async (tx) => {
-      const [boq] = await tx<{ status: string; rate_date: string }[]>`
-        SELECT status, rate_date::text FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      const [boq] = await tx<
+        { status: string; archived: boolean; rate_date: string; version_no: number }[]
+      >`
+        SELECT status, archived_at IS NOT NULL AS archived, rate_date::text, version_no FROM est.boq
+        WHERE id = ${boqId} FOR UPDATE`;
       if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+      refuseArchived(boq);
       if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
 
       const ctx: BatchContext = {
         tx,
         boqId,
         rateDate: boq.rate_date,
+        version: boq.version_no,
         units: null,
         idMap: new Map(),
         touched: new Set(),
@@ -443,16 +458,18 @@ export class BoqService {
 
     const [row] = await tx<{ id: string; value: string }[]>`
       INSERT INTO est.boq_node (boq_id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount,
-        rate_analysis_id)
+        rate_analysis_id, created_version)
       VALUES (${boqId}, ${parent?.id ?? null}, ${key}, ${depth}, ${op.type}, ${op.code ?? null}, ${unit},
               ${op.qty ?? null}::numeric, ${rate}::numeric,
-              round(${op.qty ?? null}::numeric * ${rate}::numeric, 2), ${op.rateAnalysisId ?? null})
+              round(${op.qty ?? null}::numeric * ${rate}::numeric, 2), ${op.rateAnalysisId ?? null},
+              ${ctx.version})
       RETURNING id::text, coalesce(amount, 0)::text AS value`;
     await tx`INSERT INTO est.boq_node_text (boq_id, node_id, description, notes)
       VALUES (${boqId}, ${row!.id}, ${description}, ${op.notes ?? ''})`;
     ctx.idMap.set(op.tempId, row!.id);
     ctx.touched.add(row!.id);
     if (parent) {
+      await preImage(ctx, tx`n.id = ${parent.id}`);
       await tx`UPDATE est.boq_node SET child_count = child_count + 1
         WHERE boq_id = ${boqId} AND id = ${parent.id}`;
       ctx.touched.add(parent.id);
@@ -490,6 +507,8 @@ export class BoqService {
       unit ??= l.unit;
       link = tx`${op.rateAnalysisId}::uuid`;
     } else if (op.rateAnalysisId === null || op.rate !== undefined) link = tx`NULL`;
+    const textChanges = op.description !== undefined || op.notes !== undefined;
+    await preImage(ctx, tx`n.id = ${node.id}`, textChanges);
     const [row] = await tx<{ delta: string }[]>`
       UPDATE est.boq_node SET code = ${next('code')}, unit = ${unit},
         qty = ${next('qty')}::numeric, rate = ${rate}::numeric,
@@ -514,6 +533,11 @@ export class BoqService {
     const { tx, boqId } = ctx;
     const node = await this.lockNode(ctx, op.id, op.rowVersion);
     const value = nodeValue(node);
+    await preImage(
+      ctx,
+      tx`n.sort_key >= ${node.sort_key} AND n.sort_key < ${node.sort_key + SUBTREE_END}`,
+      true,
+    );
     const removed = await tx<{ id: string; node_type: NodeType }[]>`
       DELETE FROM est.boq_node
       WHERE boq_id = ${boqId} AND sort_key >= ${node.sort_key} AND sort_key < ${node.sort_key + SUBTREE_END}
@@ -521,6 +545,7 @@ export class BoqService {
     for (const r of removed) ctx.deleted.add(r.id);
     if (removed.length > 1) ctx.reload = true;
     if (node.parent_id) {
+      await preImage(ctx, tx`n.id = ${node.parent_id}`);
       await tx`UPDATE est.boq_node SET child_count = child_count - 1
         WHERE boq_id = ${boqId} AND id = ${node.parent_id}`;
       ctx.touched.add(node.parent_id);
@@ -589,10 +614,15 @@ export class BoqService {
     const value = nodeValue(node);
     await this.propagate(ctx, node.sort_key, value, -1);
     if (node.parent_id) {
+      await preImage(ctx, tx`n.id = ${node.parent_id}`);
       await tx`UPDATE est.boq_node SET child_count = child_count - 1
         WHERE boq_id = ${boqId} AND id = ${node.parent_id}`;
       ctx.touched.add(node.parent_id);
     }
+    await preImage(
+      ctx,
+      tx`n.sort_key >= ${node.sort_key} AND n.sort_key < ${node.sort_key + SUBTREE_END}`,
+    );
     // The new key is fresh and its range empty, so rewriting the subtree's prefix can never collide.
     await tx`UPDATE est.boq_node
       SET sort_key = ${newKey} || substr(sort_key, ${node.sort_key.length + 1}), depth = depth + ${shift}
@@ -600,6 +630,7 @@ export class BoqService {
     await tx`UPDATE est.boq_node SET parent_id = ${parent?.id ?? null}, row_version = row_version + 1
       WHERE boq_id = ${boqId} AND id = ${node.id}`;
     if (parent) {
+      await preImage(ctx, tx`n.id = ${parent.id}`);
       await tx`UPDATE est.boq_node SET child_count = child_count + 1
         WHERE boq_id = ${boqId} AND id = ${parent.id}`;
       ctx.touched.add(parent.id);
@@ -618,6 +649,7 @@ export class BoqService {
     const { tx, boqId } = ctx;
     const ancestors = ancestorKeys(key);
     if (ancestors.length) {
+      await preImage(ctx, tx`n.sort_key = ANY(${ancestors})`);
       const ids = await tx<{ id: string }[]>`
         UPDATE est.boq_node SET subtotal = subtotal + ${delta}::numeric
         WHERE boq_id = ${boqId} AND sort_key = ANY(${ancestors}) RETURNING id::text`;
@@ -777,14 +809,19 @@ export class BoqService {
         message: 'A file is being imported into this BOQ. Try again when it has finished.',
       });
     return db.begin(async (tx) => {
-      const [boq] = await tx<{ status: string; rate_date: string }[]>`
-        SELECT status, rate_date::text FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      const [boq] = await tx<
+        { status: string; archived: boolean; rate_date: string; version_no: number }[]
+      >`
+        SELECT status, archived_at IS NOT NULL AS archived, rate_date::text, version_no FROM est.boq
+        WHERE id = ${boqId} FOR UPDATE`;
       if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+      refuseArchived(boq);
       if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
       const ctx: BatchContext = {
         tx,
         boqId,
         rateDate: boq.rate_date,
+        version: boq.version_no,
         units: null,
         idMap: new Map(),
         touched: new Set(),
@@ -813,6 +850,7 @@ export class BoqService {
           qty: sumQty(measured.map((m) => m.qty)),
         });
       } else if (node.measured) {
+        await preImage(ctx, tx`n.id = ${node.id}`);
         await tx`UPDATE est.boq_node SET row_version = row_version + 1
           WHERE boq_id = ${boqId} AND id = ${node.id}`;
       }
@@ -872,9 +910,13 @@ export class BoqService {
         message: 'A file is being imported into this BOQ. Try again when it has finished.',
       });
     return db.begin(async (tx) => {
-      const [boq] = await tx<{ status: string; rate_date: string }[]>`
-        SELECT status, rate_date::text FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      const [boq] = await tx<
+        { status: string; archived: boolean; rate_date: string; version_no: number }[]
+      >`
+        SELECT status, archived_at IS NOT NULL AS archived, rate_date::text, version_no FROM est.boq
+        WHERE id = ${boqId} FOR UPDATE`;
       if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+      refuseArchived(boq);
       if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
       const used = await tx<{ id: string; items: number }[]>`
         SELECT rate_analysis_id::text AS id, count(*)::int AS items FROM est.boq_node
@@ -894,29 +936,55 @@ export class BoqService {
           message: `No rate on ${boq.rate_date} for ${codes.slice(0, 10).join(', ')}${codes.length > 10 ? ' and more' : ''}.`,
         });
       }
-      const changed =
+      const rev = { tx, boqId, version: boq.version_no };
+      const prev = boq.version_no - 1;
+      // One pass over the lines: keep pre-images (in a revision) and re-price, from the same snapshot. Separate
+      // statements would rewrite every changed line twice.
+      const [{ changed }] =
         priced.length === 0
-          ? []
-          : await tx`
-            UPDATE est.boq_node n SET rate = x.rate, amount = round(n.qty * x.rate, 2),
-              row_version = n.row_version + 1
-            FROM jsonb_to_recordset(${tx.json(priced.map((p) => ({ id: p.id, rate: p.boqRate })))})
-              AS x(id uuid, rate numeric)
-            WHERE n.boq_id = ${boqId} AND n.rate_analysis_id = x.id AND n.rate IS DISTINCT FROM x.rate
-            RETURNING 1`;
-      if (changed.length > 0) await recomputeTotals(tx, boqId);
+          ? [{ changed: 0 }]
+          : ((await tx<{ changed: number }[]>`
+            WITH x AS (
+              SELECT * FROM jsonb_to_recordset(${tx.json(priced.map((p) => ({ id: p.id, rate: p.boqRate })))})
+                AS x(id uuid, rate numeric)
+            ),
+            kept AS (
+              INSERT INTO est.boq_node_hist (boq_id, line_key, frozen_version, id, parent_id, sort_key, depth,
+                node_type, code, unit, qty, rate, amount, subtotal, child_count, rate_analysis_id, measured,
+                created_version)
+              SELECT n.boq_id, n.line_key, ${prev}, n.id, n.parent_id, n.sort_key, n.depth, n.node_type, n.code,
+                n.unit, n.qty, n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured,
+                n.created_version
+              FROM est.boq_node n JOIN x ON n.rate_analysis_id = x.id
+              WHERE ${prev} > 0 AND n.boq_id = ${boqId} AND n.rate IS DISTINCT FROM x.rate
+                AND n.created_version <= ${prev} AND n.hist_version < ${prev}
+            ),
+            upd AS (
+              UPDATE est.boq_node n SET rate = x.rate, amount = round(n.qty * x.rate, 2),
+                row_version = n.row_version + 1,
+                hist_version = CASE WHEN ${prev} > 0 AND n.created_version <= ${prev}
+                  THEN greatest(n.hist_version, ${prev}) ELSE n.hist_version END
+              FROM x
+              WHERE n.boq_id = ${boqId} AND n.rate_analysis_id = x.id AND n.rate IS DISTINCT FROM x.rate
+              RETURNING 1
+            )
+            SELECT count(*)::int AS changed FROM upd`) as unknown as [{ changed: number }]);
+      if (changed > 0) {
+        await preImage(rev, tx`n.node_type = 'section'`);
+        await recomputeTotals(tx, boqId);
+      }
       await tx`UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${boqId}`;
       await audit(tx, claims.sub, 'boq.refresh_rates', boqId, {
         rateDate: boq.rate_date,
         linked: priced.reduce((n, p) => n + p.items, 0),
-        changed: changed.length,
+        changed,
       });
       const [header] = await tx`SELECT ${tx.unsafe(HEADER)} FROM est.boq b WHERE b.id = ${boqId}`;
       return {
         header,
         linked: priced.reduce((n, p) => n + p.items, 0),
         analyses: priced.length,
-        changed: changed.length,
+        changed,
       };
     });
   }
@@ -932,6 +1000,8 @@ interface BatchContext {
   boqId: string;
   /** The BOQ's rate date: analyses are costed as on it. */
   rateDate: string;
+  /** The version being edited; above 1, lines keep their previous state before they first change. */
+  version: number;
   /** Units master, loaded on first use. */
   units: Map<string, string> | null;
   /** tempId -> real id for lines inserted in this batch. */
@@ -946,6 +1016,43 @@ interface BatchContext {
 /** What a line contributes to its ancestors' subtotals. */
 const nodeValue = (n: NodeRef): string =>
   n.node_type === 'item' ? (n.amount ?? '0') : n.node_type === 'section' ? n.subtotal : '0';
+
+/**
+ * Copy-on-write revisions (docs/wave1-plan.md step 7). Before lines first change in revision V, keeps their state as
+ * frozen in V-1 (once per line and revision; lines added in this revision have nothing to keep). `where` selects lines
+ * of est.boq_node as `n`. Text is kept when it is about to change or the line is deleted; otherwise it is left NULL,
+ * meaning "as in the next state". Version 1 (never frozen) costs nothing.
+ */
+async function preImage(
+  ctx: { tx: TransactionSql; boqId: string; version: number },
+  where: PendingQuery<Row[]>,
+  withText = false,
+) {
+  if (ctx.version <= 1) return;
+  const { tx, boqId } = ctx;
+  const prev = ctx.version - 1;
+  await tx`
+    WITH saved AS (
+      UPDATE est.boq_node n SET hist_version = ${prev}
+      WHERE n.boq_id = ${boqId} AND (${where}) AND n.created_version <= ${prev} AND n.hist_version < ${prev}
+      RETURNING n.boq_id, n.line_key, n.id, n.parent_id, n.sort_key, n.depth, n.node_type, n.code, n.unit, n.qty,
+        n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured, n.created_version
+    )
+    INSERT INTO est.boq_node_hist (boq_id, line_key, frozen_version, id, parent_id, sort_key, depth, node_type, code,
+      unit, qty, rate, amount, subtotal, child_count, rate_analysis_id, measured, created_version, description, notes)
+    SELECT s.boq_id, s.line_key, ${prev}, s.id, s.parent_id, s.sort_key, s.depth, s.node_type, s.code, s.unit, s.qty,
+      s.rate, s.amount, s.subtotal, s.child_count, s.rate_analysis_id, s.measured, s.created_version,
+      ${withText ? tx`t.description, t.notes` : tx`NULL, NULL`}
+    FROM saved s
+    ${withText ? tx`JOIN est.boq_node_text t ON t.boq_id = s.boq_id AND t.node_id = s.id` : tx``}`;
+  if (withText)
+    // A pre-image kept earlier in this revision without text (say, for a quantity change) gets it now.
+    await tx`
+      UPDATE est.boq_node_hist h SET description = t.description, notes = t.notes
+      FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
+      WHERE h.boq_id = ${boqId} AND h.frozen_version = ${prev} AND h.description IS NULL
+        AND n.boq_id = ${boqId} AND (${where}) AND h.line_key = n.line_key`;
+}
 
 /**
  * Section subtotals and the BOQ total from scratch, deepest level first: one grouped UPDATE per level. Used after

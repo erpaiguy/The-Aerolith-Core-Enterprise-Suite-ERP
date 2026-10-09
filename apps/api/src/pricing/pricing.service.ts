@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
+import { refuseArchived } from '../boq/archived.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, div, fmt, mul } from '../rates/decimal.js';
 import { priceBid, type GstMode, type Markup, type Priced } from './pricing.js';
@@ -129,8 +130,7 @@ export class PricingService {
     const db = await this.tenants.forTenant(claims.ten);
     await db
       .begin(async (tx) => {
-        const [b] = await tx`SELECT 1 FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
-        if (!b) throw new NotFoundException({ code: 'boq_not_found' });
+        await draftOnly(tx, boqId);
         // The first scenario of a BOQ becomes its bid until another is selected.
         const [current] = await tx`
           SELECT 1 FROM est.pricing_scenario WHERE boq_id = ${boqId} AND selected`;
@@ -151,6 +151,7 @@ export class PricingService {
     const db = await this.tenants.forTenant(claims.ten);
     const boqId = await db
       .begin(async (tx) => {
+        await draftOnly(tx, null, id);
         const [s] = await tx<{ boq_id: string }[]>`
           UPDATE est.pricing_scenario SET name = ${input.name}, notes = ${input.notes},
             markups = ${tx.json(toJson(input.markups))}, gst_pct = ${input.gstPct}, gst_mode = ${input.gstMode},
@@ -171,7 +172,7 @@ export class PricingService {
       const [s] = await tx<{ boq_id: string }[]>`
         SELECT boq_id FROM est.pricing_scenario WHERE id = ${id}`;
       if (!s) throw new NotFoundException({ code: 'scenario_not_found' });
-      await tx`SELECT 1 FROM est.boq WHERE id = ${s.boq_id} FOR UPDATE`;
+      await draftOnly(tx, s.boq_id);
       await tx`UPDATE est.pricing_scenario SET selected = false, row_version = row_version + 1
         WHERE boq_id = ${s.boq_id} AND selected AND id <> ${id}`;
       await tx`UPDATE est.pricing_scenario SET selected = true, row_version = row_version + 1,
@@ -187,6 +188,7 @@ export class PricingService {
     const db = await this.tenants.forTenant(claims.ten);
     const boqId = await db
       .begin(async (tx) => {
+        await draftOnly(tx, null, id);
         const [s] = await tx<{ id: string; boq_id: string }[]>`
           INSERT INTO est.pricing_scenario (boq_id, name, notes, markups, gst_pct, gst_mode, created_by,
             updated_by)
@@ -203,6 +205,7 @@ export class PricingService {
   async remove(claims: TenantClaims, id: string) {
     const db = await this.tenants.forTenant(claims.ten);
     const boqId = await db.begin(async (tx) => {
+      await draftOnly(tx, null, id);
       const [s] = await tx<{ boq_id: string; name: string }[]>`
         DELETE FROM est.pricing_scenario WHERE id = ${id} RETURNING boq_id, name`;
       if (!s) throw new NotFoundException({ code: 'scenario_not_found' });
@@ -226,7 +229,7 @@ export class PricingService {
           AND n.rate IS NULL AND coalesce(n.qty, 0) <> 0) AS unpriced,
         (SELECT row_to_json(x) FROM (SELECT ${db.unsafe(SCENARIO)} FROM est.pricing_scenario s
           WHERE s.boq_id = b.id AND s.selected) x) AS scenario
-      FROM est.boq b WHERE b.tender_id = ${tenderId} ORDER BY b.created_at`;
+      FROM est.boq b WHERE b.tender_id = ${tenderId} AND b.archived_at IS NULL ORDER BY b.created_at`;
     const lines = boqs.map((b) => {
       const p = b.scenario ? priceBid(b.total, b.scenario) : null;
       return {
@@ -280,6 +283,28 @@ export class PricingService {
       message: 'Someone else changed this scenario. Reload.',
     });
   }
+}
+
+/**
+ * Pricing changes only while the BOQ is a draft: a frozen version keeps the bid it was frozen with (the version
+ * record holds that scenario priced). Locks the BOQ row, so changes serialise with freezing.
+ */
+async function draftOnly(tx: TransactionSql, boqId: string | null, scenarioId?: string) {
+  const [b] = boqId
+    ? await tx<{ status: string; archived: boolean; version_no: number }[]>`
+        SELECT status, archived_at IS NOT NULL AS archived, version_no FROM est.boq
+        WHERE id = ${boqId} FOR UPDATE`
+    : await tx<{ status: string; archived: boolean; version_no: number }[]>`
+        SELECT b.status, b.archived_at IS NOT NULL AS archived, b.version_no
+        FROM est.boq b JOIN est.pricing_scenario s ON s.boq_id = b.id
+        WHERE s.id = ${scenarioId!} FOR UPDATE OF b`;
+  if (!b) throw new NotFoundException({ code: boqId ? 'boq_not_found' : 'scenario_not_found' });
+  refuseArchived(b);
+  if (b.status !== 'draft')
+    throw new ConflictException({
+      code: 'boq_locked',
+      message: `Version ${b.version_no} is frozen with its bid. Start a new revision to change pricing.`,
+    });
 }
 
 const toJson = (markups: Markup[]) =>

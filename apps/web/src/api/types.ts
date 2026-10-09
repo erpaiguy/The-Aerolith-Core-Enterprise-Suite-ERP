@@ -417,3 +417,59 @@ export interface TenderBidSummary {
   complete: boolean;
   vsEstimatePct: string | null;
 }
+
+// --- BOQ revisions (apps/api/src/boq/revision.service.ts) ---
+
+export interface BoqVersion {
+  versionNo: number;
+  kind: 'submitted' | 'internal';
+  label: string;
+  note: string;
+  frozenAt: string;
+  frozenBy: string | null;
+  total: string;
+  nodeCount: number;
+  itemCount: number;
+  rateDate: string;
+  scenario: { name: string; result: { beforeGst: string; gst: string; bid: string } } | null;
+}
+
+export interface BoqVersions {
+  current: {
+    versionNo: number;
+    status: 'draft' | 'locked' | 'submitted';
+    total: string;
+    nodeCount: number;
+    itemCount: number;
+  };
+  versions: BoqVersion[];
+}
+
+export interface VersionChange {
+  lineKey: string;
+  change: 'added' | 'removed' | 'changed';
+  type: 'section' | 'item' | 'note';
+  moved: boolean;
+  codeA: string | null;
+  codeB: string | null;
+  unitA: string | null;
+  unitB: string | null;
+  qtyA: string | null;
+  qtyB: string | null;
+  rateA: string | null;
+  rateB: string | null;
+  amountA: string | null;
+  amountB: string | null;
+  descriptionA: string | null;
+  descriptionB: string | null;
+  notesA: string | null;
+  notesB: string | null;
+}
+
+export interface VersionCompare {
+  from: { version: number; total: string | null };
+  to: { version: number; total: string | null };
+  summary: { added: number; removed: number; changed: number; itemsDelta: string };
+  rows: VersionChange[];
+  hasMore: boolean;
+}

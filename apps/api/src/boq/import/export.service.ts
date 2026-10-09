@@ -6,12 +6,19 @@
 // (rate × factor, rounded to paise) and its amount, for item-rate tenders where the submitted rates must add up to
 // the bid. That needs the pricing permission.
 import { PassThrough, Readable } from 'node:stream';
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import type { Sql } from 'postgres';
 import type { TenantClaims } from '../../auth/auth.service.js';
 import { PermissionsService } from '../../auth/permissions.js';
 import { PricingService } from '../../pricing/pricing.service.js';
+import { RevisionService } from '../revision.service.js';
 import { TenantConnections } from '../../provisioning/tenant-connections.js';
 import { csvCell } from './import.service.js';
 
@@ -53,6 +60,7 @@ export class ExportService {
     private readonly tenants: TenantConnections,
     private readonly permissions: PermissionsService,
     private readonly pricing: PricingService,
+    private readonly revisions: RevisionService,
   ) {}
 
   async export(
@@ -60,6 +68,7 @@ export class ExportService {
     boqId: string,
     format: 'xlsx' | 'csv',
     scenarioId?: string | undefined,
+    version?: number | undefined,
   ): Promise<{ stream: Readable; fileName: string; contentType: string }> {
     let quote: { name: string; factor: string } | null = null;
     if (scenarioId) {
@@ -72,15 +81,24 @@ export class ExportService {
       quote = await this.pricing.factorFor(claims, boqId, scenarioId);
     }
     const db = await this.tenants.forTenant(claims.ten);
+    const old = await this.revisions.exportVersion(db, boqId, version);
+    if (old !== null && quote)
+      throw new BadRequestException({
+        code: 'quoted_current_only',
+        message: 'Quoted rates come from the current version only.',
+      });
     const [b] = await db<{ name: string; number: string; total: string }[]>`
       SELECT b.name, t.number, b.total::text AS total FROM est.boq b JOIN tender.tender t ON t.id = b.tender_id
       WHERE b.id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
     const base =
-      `${b.number} ${b.name}${quote ? ` - quoted (${quote.name})` : ''}`
+      `${b.number} ${b.name}${old !== null ? ` - version ${old}` : ''}${quote ? ` - quoted (${quote.name})` : ''}`
         .replace(/[^\w.\- ()&]+/g, '_')
         .trim() || 'boq';
-    const rows = pages(db, boqId, quote?.factor ?? null);
+    const rows =
+      old !== null
+        ? this.revisions.versionRows(db, boqId, old)
+        : pages(db, boqId, quote?.factor ?? null);
     const quoted = quote !== null;
     if (format === 'csv')
       return {

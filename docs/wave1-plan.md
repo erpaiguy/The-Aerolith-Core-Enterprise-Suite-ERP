@@ -33,8 +33,8 @@ approves again (supabase-oauth-setup.md Part B).
 | 4 | **Import/export** | Units master, Excel/CSV import wizard with mapping, dry run and error report; Excel/CSV export | **Done** (see below) |
 | 5 | **Rate library + rate analysis** | Resources and rates with effective dates; analyses (resources × productivity + wastage + overheads + profit) feeding BOQ rates | **Done** (see below) |
 | 6 | **Measurement + pricing** | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | **Done** (see below) |
-| 7 | Revisions | Copy-on-write versions, compare two versions, lock on submission | E6. 1M-line copy must not take 64 s again |
-| 8 | Tender management detail | Pre-bid queries, addenda, EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | E7 |
+| 7 | **Revisions** | Copy-on-write versions, compare two versions, lock on submission | **Done** (see below) |
+| 8 | Tender management detail | Pre-bid queries, addenda (with importing a revised BOQ into a revision, moved from step 7), EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | E7 |
 | 9 | RFQs | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | E8 |
 | 10 | Tender documents | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | E10, P8 |
 | 11 | Tender programme | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | E9. Second-hardest UI |
@@ -285,7 +285,7 @@ cannot disagree):
   (100 MB, about two million lines).
 
 **Decisions made while building (change any you disagree with):**
-- **Import only into an empty BOQ.** Merging into an existing BOQ belongs with revisions (step 7).
+- **Import only into an empty BOQ.** Merging into an existing BOQ belongs with revisions (moved to step 8, with addenda).
 - **Rows with errors block the import** until the user ticks "import without the rows that have errors".
 - **[Certain] No `COPY` staging, unlike the plan.** Postgres refuses `COPY FROM` on tables with row-level security
   ("COPY FROM not supported with row-level security"), and every tenant table has it. The upload waits on the API
@@ -450,3 +450,77 @@ tests (measured quantities with totals and invariants, refusal of typed quantiti
 delete; scenarios, selection, copy, delete, preview, quoted-rate export to the paisa, tender summary); a browser test
 of the whole journey.
 
+
+## Step 7 delivered: revisions
+
+**Journey:**
+1. **Freeze** (button on a draft BOQ): **submitted to the client** or **internal review**, with a label such as "R0"
+   and a note. The BOQ becomes read only: no edits, imports, rate-date changes or pricing-scenario changes. The total,
+   line counts, rate date and the chosen pricing scenario with its bid figures are recorded with the version.
+2. **Submitting the tender** (moving it to Submitted) freezes every draft BOQ of that tender as "Submitted with the
+   tender", in the same transaction.
+3. **Start revision N+1** (Versions screen): the BOQ becomes an editable draft again, as version N+1. Version N stays
+   exactly as frozen.
+4. **Compare** any two versions, including the draft being worked on: counts of added, removed and changed lines, the
+   change in value, and the lines themselves (added / removed / changed, old and new quantity, rate, amount and
+   description, and whether the line moved), 200 at a time.
+5. **Export** any frozen version to Excel or CSV, exactly as it was frozen.
+6. **Archive** a BOQ made by mistake (BOQs are never deleted): it becomes read only, is marked "archived" on the tender
+   and is left out of the bid summary and of the freeze on submission. **Restore** brings it back.
+
+**How it is stored (copy-on-write, docs/05-database.md §4):** freezing and starting a revision copy nothing. The first
+time a line changes in revision V, its state as frozen in V-1 is kept once in `est.boq_node_hist` (its text only if
+the text changes or the line is deleted). Version N is rebuilt from each line's earliest kept state frozen at N or
+later, otherwise its current row. Compare reads only the lines kept since the older version plus the lines added since,
+never the whole BOQ. History is append-only for the app's database role.
+
+**Decisions made while building (change any you disagree with):**
+- **Two kinds of freeze, one rule:** "submitted" and "internal review" both lock the BOQ; the kind only records why.
+  Unlocking means starting a revision, never editing a frozen version.
+- **Submitting a tender freezes its draft BOQs automatically**, so the version the client received can always be
+  reproduced, even if nobody pressed Freeze.
+- **Only the chosen pricing scenario is recorded with a version** (markups, GST and the bid result). Quoted-rate
+  exports are for the current version only (`quoted_current_only`); the frozen bid figures are on the Versions screen.
+- **Measurement sheets are not versioned:** an old version keeps its quantities, but its sheet rows are the current
+  ones. [Likely] fine for bids; Wave 2 billing (measurement book) needs versioned sheets and will add them there.
+- **Importing a revised BOQ into a revision is not built yet.** Step 4 said merging into an existing BOQ belongs with
+  revisions; it moves to step 8 with addenda, because the matching rule (by item code, by description, or both) should
+  be decided on a pilot contractor's real addendum files. A wrong rule makes every line show as removed and re-added.
+- **Compare lists a line as changed only when something visible changed** (code, unit, quantity, rate, amount,
+  description, notes, position): text edited and edited back is no change. The counts are exactly the lines listed.
+  Section subtotals are not listed; the value change is over items.
+- **Archiving, not deleting** (BOQs are documents): a BOQ with a version submitted to the client cannot be archived
+  (`boq_submitted`), so what the client received stays on the tender. Archived BOQs refuse every change
+  (`boq_archived`) until restored. This was promised for step 7 when step 2 ruled out deleting BOQs.
+
+**Measured** (sandbox, the 993,100-line BOQ from step 4):
+
+| Action | Time | Before (full copy / first design) |
+|--------|------|-----------------------------------|
+| Freeze version 1 | 14 ms | |
+| Start revision 2 | 7 ms | 64 s and ~780 MB for a full copy (Wave 0 benchmark) |
+| Edit a line in revision 2 (keeps its frozen state) | 19 ms | |
+| Compare 1 → 2, one line changed | 12 ms | 1.4 s (first design) |
+| Re-price all 990,000 items from analyses in revision 2 | 39 s, history +253 MB | 142 s (first design) |
+| Compare 1 → 2, all 990,000 items changed | 42-45 s | 88 s (first design) |
+| Export version 1 (CSV, rebuilt from history) | 39 s, 134 MB | |
+| Export the current version (CSV) | 15 s, 132 MB | |
+
+[Certain] The worst case is the last compare row: every line of a million-line BOQ changed. Each page or filter of
+that comparison recomputes it, so it takes as long again. [Likely] a 50,000-line BOQ compares in about 2 s even when
+every line changed; the usual case (a few hundred lines changed) is milliseconds at any size.
+
+**API:**
+- `GET /api/tenant/boqs/:id/versions`
+- `POST /api/tenant/boqs/:id/freeze` (kind, label, note), `POST /api/tenant/boqs/:id/revise` (note)
+- `GET /api/tenant/boqs/:id/compare?from=&to=&filter=all|added|removed|changed&limit=&offset=`
+- `POST /api/tenant/boqs/:id/archive` (`{ archived: true | false }`)
+- `GET /api/tenant/boqs/:id/export?format=xlsx|csv&version=N`
+
+**Tests:** 6 API integration tests: freezing copies nothing and blocks edits, scenarios and the rate date; compare of
+added, removed, changed and moved lines with the value delta in both directions and by filter; old versions export
+byte for byte after later edits, with notes-only changes listed and text edited back not; **randomised** edits over
+four revisions (inserts, quantity, rate, text and notes edits, moves, deletes) with every version re-exported byte for
+byte, and every compare's counts, listed lines and value change agreeing with each other and with the totals;
+submitting a tender freezes its BOQs; archiving (read only, out of the bid and of the freeze, refused for a submitted
+BOQ, restore). A browser test of the whole journey, archiving included.

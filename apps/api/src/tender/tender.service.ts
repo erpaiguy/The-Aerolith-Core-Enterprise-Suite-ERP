@@ -9,6 +9,7 @@ import {
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { RevisionService } from '../boq/revision.service.js';
 import { nextNumber } from './numbering.js';
 import {
   DECISION_FROM,
@@ -117,7 +118,10 @@ function uniqueViolation(err: unknown, code: string): never {
 
 @Injectable()
 export class TenderService {
-  constructor(private readonly tenants: TenantConnections) {}
+  constructor(
+    private readonly tenants: TenantConnections,
+    private readonly revisions: RevisionService,
+  ) {}
 
   // --- parties ---
 
@@ -325,6 +329,18 @@ export class TenderService {
         updated_by = ${claims.sub}, updated_at = now(), row_version = row_version + 1 WHERE id = ${id}`;
       await event(tx, id, 'status_changed', { from, to, reason: reason.trim() }, claims.sub);
       await audit(tx, claims.sub, 'tender.status', 'tender', id, { from, to });
+      // Lock on submission (E6): the BOQs as submitted are frozen; changes need a new revision.
+      if (to === 'submitted') {
+        const drafts = await tx<{ id: string }[]>`
+          SELECT id FROM est.boq WHERE tender_id = ${id} AND status = 'draft' AND archived_at IS NULL
+          ORDER BY created_at`;
+        for (const b of drafts)
+          await this.revisions.freezeInTx(tx, claims.sub, b.id, {
+            kind: 'submitted',
+            label: 'Submitted with the tender',
+            note: reason.trim(),
+          });
+      }
       await this.reschedule(tx, id, now);
     });
     return this.get(claims, id);

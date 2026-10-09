@@ -2,11 +2,15 @@ import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   Download,
   FileUp,
+  History,
   IndianRupee,
   ListTree,
+  Lock,
   PanelLeft,
   Plus,
   RefreshCw,
@@ -18,6 +22,7 @@ import { api, saveFile } from '../api/client';
 import type { AnalysisSummary } from '../api/types';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
 import { MeasurementSheet } from '../boq/MeasurementSheet';
+import { FreezeDialog } from './Versions';
 import {
   ImportBanner,
   ImportWizard,
@@ -138,6 +143,8 @@ export function BoqScreen({ boqId }: { boqId: string }) {
   });
   const [wizard, setWizard] = useState(false);
   const [measuring, setMeasuring] = useState<BoqRow | null>(null);
+  const [freezing, setFreezing] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   const canPrice = usePermission('pricing.edit');
   const [picking, setPicking] = useState<{
     row: BoqRow;
@@ -177,8 +184,26 @@ export function BoqScreen({ boqId }: { boqId: string }) {
   if (header.isPending) return <Spinner />;
   if (header.isError) return <Alert tone="danger">{describeError(header.error)}</Alert>;
   const h = header.data;
-  const canEdit = canEditBoq && h.status === 'draft';
+  const archived = Boolean(h.archivedAt);
+  const canEdit = canEditBoq && h.status === 'draft' && !archived;
   const running = importJob?.status === 'importing';
+  const setArchived = async (to: boolean) => {
+    setArchiveError(null);
+    try {
+      qc.setQueryData(
+        ['boq', boqId],
+        await api.request<BoqHeader>(`/api/tenant/boqs/${boqId}/archive`, {
+          method: 'POST',
+          body: { archived: to },
+        }),
+      );
+      void qc.invalidateQueries({ queryKey: ['tender-boqs'] });
+      void qc.invalidateQueries({ queryKey: ['bid-summary'] });
+      setGridKey((k) => k + 1);
+    } catch (err) {
+      setArchiveError(describeError(err));
+    }
+  };
 
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] min-h-[34rem] flex-col gap-3">
@@ -195,7 +220,17 @@ export function BoqScreen({ boqId }: { boqId: string }) {
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">{h.name}</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-fg-muted">
-            {h.status !== 'draft' && <Badge tone="warning">{h.status}</Badge>}
+            <Link
+              to="/boqs/$boqId/versions"
+              params={{ boqId }}
+              className="hover:underline"
+              title="Versions: freeze, revise, compare"
+            >
+              <Badge tone={h.status === 'draft' ? 'accent' : 'warning'}>
+                Version {h.versionNo ?? 1} · {h.status === 'draft' ? 'draft' : h.status}
+              </Badge>
+            </Link>
+            {archived && <Badge tone="danger">Archived</Badge>}
             <span>
               {h.itemCount.toLocaleString('en-IN')} items · {h.nodeCount.toLocaleString('en-IN')}{' '}
               lines
@@ -212,6 +247,20 @@ export function BoqScreen({ boqId }: { boqId: string }) {
               <FileUp className="size-4" aria-hidden /> Import
             </Button>
           )}
+          {canEditBoq && h.status === 'draft' && !archived && !wizard && (
+            <Button variant="secondary" onClick={() => setFreezing(true)}>
+              <Lock className="size-4" aria-hidden /> Freeze
+            </Button>
+          )}
+          {h.status !== 'draft' && (
+            <Link
+              to="/boqs/$boqId/versions"
+              params={{ boqId }}
+              className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3"
+            >
+              <History className="size-4" aria-hidden /> Versions
+            </Link>
+          )}
           <ExportMenu boqId={boqId} />
           {canPrice && (
             <Link
@@ -221,6 +270,27 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             >
               <IndianRupee className="size-4" aria-hidden /> Pricing
             </Link>
+          )}
+          {canEditBoq && !wizard && !running && (
+            <Button
+              variant="ghost"
+              onClick={() => void setArchived(!archived)}
+              title={
+                archived
+                  ? 'Make this BOQ part of the tender again'
+                  : 'Made by mistake? Archive it: read only, left out of the bid. It can be restored.'
+              }
+            >
+              {archived ? (
+                <>
+                  <ArchiveRestore className="size-4" aria-hidden /> Restore
+                </>
+              ) : (
+                <>
+                  <Archive className="size-4" aria-hidden /> Archive
+                </>
+              )}
+            </Button>
           )}
           <Button
             variant="ghost"
@@ -238,6 +308,12 @@ export function BoqScreen({ boqId }: { boqId: string }) {
           </div>
         </div>
       </div>
+      {archiveError && <Alert tone="danger">{archiveError}</Alert>}
+      {archived && (
+        <Alert tone="warning">
+          This BOQ is archived: read only and left out of the tender&apos;s bid.
+        </Alert>
+      )}
       {running && !wizard && importJob && <ImportBanner job={importJob} />}
       {wizard ? (
         <ImportWizard boqId={boqId} onClose={() => setWizard(false)} />
@@ -255,6 +331,19 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             onMeasure={setMeasuring}
           />
         </div>
+      )}
+      {freezing && (
+        <FreezeDialog
+          boqId={boqId}
+          versionNo={h.versionNo ?? 1}
+          onClose={() => setFreezing(false)}
+          onDone={() => {
+            setFreezing(false);
+            void qc.invalidateQueries({ queryKey: ['boq', boqId] });
+            void qc.invalidateQueries({ queryKey: ['boq-versions', boqId] });
+            setGridKey((k) => k + 1);
+          }}
+        />
       )}
       {measuring && (
         <MeasurementSheet
@@ -586,15 +675,24 @@ export function TenderBoqs({ tenderId, canEdit }: { tenderId: string; canEdit: b
         <p className="text-sm text-fg-muted">No BOQ yet.</p>
       ) : (
         <ul className="divide-y divide-line text-sm">
-          {boqs.data.map((b) => (
-            <li key={b.id} className="flex items-center justify-between gap-3 py-2">
-              <Link
-                to="/boqs/$boqId"
-                params={{ boqId: b.id }}
-                className="min-w-0 truncate font-medium text-accent hover:underline"
-              >
-                {b.name}
-              </Link>
+          {[
+            ...boqs.data.filter((b) => !b.archivedAt),
+            ...boqs.data.filter((b) => b.archivedAt),
+          ].map((b) => (
+            <li
+              key={b.id}
+              className={`flex items-center justify-between gap-3 py-2 ${b.archivedAt ? 'opacity-60' : ''}`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Link
+                  to="/boqs/$boqId"
+                  params={{ boqId: b.id }}
+                  className="min-w-0 truncate font-medium text-accent hover:underline"
+                >
+                  {b.name}
+                </Link>
+                {b.archivedAt && <Badge tone="neutral">archived</Badge>}
+              </span>
               <span className="shrink-0 text-right">
                 <span className="tabular-nums">{formatInr(b.total)}</span>
                 <span className="block text-xs text-fg-muted">

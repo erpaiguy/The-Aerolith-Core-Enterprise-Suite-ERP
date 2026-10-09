@@ -15,6 +15,7 @@ import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { BoqService, type Op } from './boq.service.js';
+import { RevisionService } from './revision.service.js';
 
 const MAX_OPS = 500;
 
@@ -70,6 +71,20 @@ const opSchema = z.discriminatedUnion('op', [
   }),
 ]);
 const changesBody = z.object({ ops: z.array(opSchema).min(1).max(MAX_OPS) });
+const freezeBody = z.object({
+  kind: z.enum(['submitted', 'internal']),
+  label: z.string().trim().max(100).default(''),
+  note: z.string().trim().max(4000).default(''),
+});
+const reviseBody = z.object({ note: z.string().trim().max(4000).default('') });
+const archiveBody = z.object({ archived: z.boolean() });
+const compareQuery = z.object({
+  from: z.coerce.number().int().min(1),
+  to: z.coerce.number().int().min(1),
+  filter: z.enum(['all', 'added', 'removed', 'changed']).default('all'),
+  limit: z.coerce.number().int().min(1).max(500).default(200),
+  offset: z.coerce.number().int().min(0).max(10_000_000).default(0),
+});
 const dimension = z
   .union([z.string().trim(), z.number()])
   .transform((v) => (v === '' ? null : String(v)))
@@ -147,7 +162,66 @@ const headerBody = z.object({
 @Controller('tenant')
 @UseGuards(TenantAuthGuard, PermissionGuard)
 export class BoqController {
-  constructor(private readonly boqs: BoqService) {}
+  constructor(
+    private readonly boqs: BoqService,
+    private readonly revisions: RevisionService,
+  ) {}
+
+  // --- revisions (step 7) ---
+
+  @Get('boqs/:id/versions')
+  versions(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.revisions.versions(c, id);
+  }
+
+  /** Freezes the current version: submitted to the client, or locked for internal review. Nothing is copied. */
+  @Post('boqs/:id/freeze')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  freeze(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(freezeBody)) b: z.infer<typeof freezeBody>,
+  ) {
+    return this.revisions.freeze(c, id, b);
+  }
+
+  /** Starts the next revision of a frozen BOQ. */
+  @Post('boqs/:id/revise')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  revise(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(reviseBody)) b: z.infer<typeof reviseBody>,
+  ) {
+    return this.revisions.revise(c, id, b.note);
+  }
+
+  /** Archives a BOQ made by mistake (BOQs are never deleted), or restores it. */
+  @Post('boqs/:id/archive')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  async archive(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(archiveBody)) b: z.infer<typeof archiveBody>,
+  ) {
+    await this.revisions.archive(c, id, b.archived);
+    return this.boqs.header(c, id);
+  }
+
+  @Get('boqs/:id/compare')
+  compare(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(compareQuery)) q: z.infer<typeof compareQuery>,
+  ) {
+    return this.revisions.compare(c, id, q.from, q.to, q);
+  }
 
   @Get('tenders/:id/boqs')
   list(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) tenderId: string) {
