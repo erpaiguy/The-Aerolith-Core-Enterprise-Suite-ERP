@@ -32,7 +32,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 3 | BOQ grid (UI) | Virtualised grid, keyboard editing, insert/indent/move/delete, collapse, search | **Done** (see below) |
 | 4 | **Import/export** | Units master, Excel/CSV import wizard with mapping, dry run and error report; Excel/CSV export | **Done** (see below) |
 | 5 | **Rate library + rate analysis** | Resources and rates with effective dates; analyses (resources × productivity + wastage + overheads + profit) feeding BOQ rates | **Done** (see below) |
-| 6 | Measurement + pricing | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | E4, E5 |
+| 6 | **Measurement + pricing** | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | **Done** (see below) |
 | 7 | Revisions | Copy-on-write versions, compare two versions, lock on submission | E6. 1M-line copy must not take 64 s again |
 | 8 | Tender management detail | Pre-bid queries, addenda, EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | E7 |
 | 9 | RFQs | Enquiry packs to vendors, quotes, comparative statement, price into the estimate | E8 |
@@ -396,4 +396,57 @@ the trial banner says "ends today" on the last day). The browser test had only p
 **Tests:** 6 costing unit tests (hand-checked figures, nesting, missing rates, cycles, depth); 13 API integration tests
 (dated rates, price-book check/apply/re-apply, analyses with sub-analyses, cycle refusal, preview, copy, BOQ apply,
 unit mismatch, unlink, refresh with invariants, missing rates, permissions); a browser test of the whole journey.
+
+## Step 6 delivered: measurement sheets and bid pricing
+
+**Journey:**
+1. **Measurement sheet** (ruler button in the BOQ grid, or double-click a measured quantity): rows of description,
+   nos × length × breadth × height, blank dimensions skipped, **Deduct** for openings; formulas such as =1.5*2 work and
+   rows paste straight from Excel. Saving makes the item's quantity the sheet total; amount and every subtotal follow.
+2. **Pricing** (button on the BOQ, for roles allowed to see pricing): **scenarios** of markups on the BOQ total, each
+   a % of the BOQ total, a % of the running total, or a fixed amount, in order: overheads, contingency, escalation,
+   profit, discount, other. Then GST: **added** (18 % or 12 % for works contracts), **already in the rates**, or
+   **exempt**. Live totals as you type; the first scenario becomes the bid; any other can be chosen instead.
+3. **Against the estimate**: each scenario shows how far its value before GST is above or below the client's
+   estimated value (the tender's figure), the number a tender committee looks at.
+4. **Item-rate submission**: the bid's markups are spread over every item rate (rate × factor, rounded to paise) and
+   exported to Excel with "Quoted rate" and "Quoted amount" columns. The screen says exactly how far the rounded
+   rates land from the bid (usually a few paise).
+5. **Bid summary** on the tender page: every BOQ priced by its chosen scenario, the total before GST, GST and bid
+   value, against the estimate; BOQs without a scenario or with unpriced items are flagged.
+
+**Decisions made while building (change any you disagree with):**
+- **A measured quantity cannot be typed over** (`qty_from_measurements`); clearing the sheet keeps the last total and
+  makes the quantity editable again. Rates, units and descriptions stay editable.
+- **Markups apply to the whole BOQ**, not per section or per item: that is how Indian bids are built (overheads and
+  profit on the estimate) and it keeps the BOQ itself the cost estimate. Per-section bid values are shown as shares.
+- **The comparison with the estimate is before GST**, as tender committees compare it.
+- **Every amount is rounded to paise at each step** (each markup, GST), with exact decimal arithmetic.
+- **New permission `pricing.edit`**: margins are sensitive, so it covers *seeing* pricing as well as changing it
+  (screens, summaries, quoted-rate export). Managers yes, workers no by default; the admin can change it.
+- Measurement sheets are not in the BOQ export yet (the quantity is); [Likely] needed for the client's measurement
+  book in Wave 2 billing, where it belongs.
+
+**Measured** (sandbox, the 993,100-line BOQ from step 4):
+
+| Action | Time |
+|--------|------|
+| Pricing summary (counts, sections, every scenario, quoted total over 990,000 items) | 0.4 s |
+| Saving a measurement sheet | 66 ms |
+
+Every stored invariant held afterwards. Rounding each of the 990,000 loaded rates to paise moved the quoted total by
+₹5,692.96 (0.00004 % of that synthetic BOQ); the screen states this difference so nobody is surprised at submission.
+
+**API:**
+- `GET/POST /api/tenant/boqs/:id/lines/:lineId/measurements` (POST replaces the sheet, with the line's row version)
+- `GET /api/tenant/boqs/:id/pricing`, `POST /api/tenant/boqs/:id/pricing/preview`, `POST /api/tenant/boqs/:id/scenarios`
+- `POST /api/tenant/scenarios/:id` (update), `…/select`, `…/copy`, `…/delete`
+- `GET /api/tenant/tenders/:id/bid-summary`
+- `GET /api/tenant/boqs/:id/export?format=xlsx|csv&scenario=:id` (quoted rates)
+
+**Tests:** 4 pricing and measurement unit tests (hand-worked: ₹10,00,000 with five markups → ₹12,16,190 before GST,
+₹14,35,104.20 with GST, 5.76 % above an ₹11,50,000 estimate; 14.007 cum of brickwork less a door); 8 API integration
+tests (measured quantities with totals and invariants, refusal of typed quantities, versions, permissions, cascade on
+delete; scenarios, selection, copy, delete, preview, quoted-rate export to the paisa, tender summary); a browser test
+of the whole journey.
 

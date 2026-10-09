@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Download,
   FileUp,
+  IndianRupee,
   ListTree,
   PanelLeft,
   Plus,
@@ -16,6 +17,7 @@ import { useCallback, useDeferredValue, useRef, useState, type FormEvent } from 
 import { api, saveFile } from '../api/client';
 import type { AnalysisSummary } from '../api/types';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
+import { MeasurementSheet } from '../boq/MeasurementSheet';
 import {
   ImportBanner,
   ImportWizard,
@@ -135,6 +137,8 @@ export function BoqScreen({ boqId }: { boqId: string }) {
     queryFn: () => api.request<BoqHeader>(`/api/tenant/boqs/${boqId}`),
   });
   const [wizard, setWizard] = useState(false);
+  const [measuring, setMeasuring] = useState<BoqRow | null>(null);
+  const canPrice = usePermission('pricing.edit');
   const [picking, setPicking] = useState<{
     row: BoqRow;
     resolve: (id: string | null) => void;
@@ -209,6 +213,15 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             </Button>
           )}
           <ExportMenu boqId={boqId} />
+          {canPrice && (
+            <Link
+              to="/boqs/$boqId/pricing"
+              params={{ boqId }}
+              className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3"
+            >
+              <IndianRupee className="size-4" aria-hidden /> Pricing
+            </Link>
+          )}
           <Button
             variant="ghost"
             aria-pressed={panel}
@@ -239,8 +252,23 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             onHeader={onHeader}
             onSaving={setSaving}
             onPickAnalysis={pickAnalysis}
+            onMeasure={setMeasuring}
           />
         </div>
+      )}
+      {measuring && (
+        <MeasurementSheet
+          boqId={boqId}
+          item={measuring}
+          canEdit={canEdit && !running}
+          currentVersion={() => grid.current?.row(measuring.id)?.rowVersion ?? measuring.rowVersion}
+          onSaved={(rows, header) => {
+            grid.current?.apply(rows, header);
+            void qc.invalidateQueries({ queryKey: ['boq-outline', boqId] });
+            setMeasuring(null);
+          }}
+          onClose={() => setMeasuring(null)}
+        />
       )}
       {picking && (
         <AnalysisPicker

@@ -15,6 +15,7 @@ import { ancestorKeys, childKey, midpoint, splitKey, SUBTREE_END } from '@aeroli
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { measuredQty, sumQty, type MeasurementInput } from '../pricing/pricing.js';
 import { RatesService } from '../rates/rates.service.js';
 import { importRunning } from './import/import.service.js';
 import { loadUnitMap, sameUnit } from './units.js';
@@ -54,7 +55,7 @@ const MAX_TOUCHED_ROWS = 1000;
 const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "sortKey", n.depth,
   n.node_type AS type, n.code, t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate,
   n.amount::text AS amount, n.subtotal::text AS subtotal, n.child_count AS "childCount",
-  n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId"`;
+  n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId", n.measured`;
 
 const HEADER = `b.id, b.tender_id AS "tenderId", b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
@@ -77,6 +78,8 @@ export interface BoqRow {
   childCount: number;
   rowVersion: number;
   rateAnalysisId: string | null;
+  /** The quantity is the total of the item's measurement sheet. */
+  measured: boolean;
 }
 
 interface NodeRef {
@@ -92,6 +95,8 @@ interface NodeRef {
   amount: string | null;
   subtotal: string;
   row_version: number;
+  /** Only read by lockNode. */
+  measured?: boolean;
 }
 
 /** The root-most collapsed proper ancestor of `key`, if any. */
@@ -465,6 +470,13 @@ export class BoqService {
       (op.qty !== undefined || op.rate !== undefined || op.rateAnalysisId != null)
     )
       throw new BadRequestException({ code: 'qty_rate_on_non_item' });
+    if (op.qty !== undefined && node.measured && !ctx.measuring)
+      throw new ConflictException({
+        code: 'qty_from_measurements',
+        id: op.id,
+        message:
+          'This quantity comes from its measurement sheet. Change the sheet, or clear it to type a quantity.',
+      });
     // Absent fields keep their value; null clears. Amount follows qty × rate for items.
     const next = (field: 'code' | 'unit' | 'qty' | 'rate') =>
       op[field] !== undefined ? op[field] : node[field];
@@ -622,7 +634,7 @@ export class BoqService {
     const id = this.resolve(ctx, rawId);
     const [n] = await ctx.tx<NodeRef[]>`
       SELECT id::text, parent_id::text, sort_key, depth, node_type, code, unit, qty::text, rate::text,
-        amount::text, subtotal::text, row_version
+        amount::text, subtotal::text, row_version, measured
       FROM est.boq_node WHERE boq_id = ${ctx.boqId} AND id = ${id} FOR UPDATE`;
     if (!n) throw new NotFoundException({ code: 'line_not_found', id: rawId });
     // Rows inserted earlier in this batch have no version on the client yet.
@@ -736,6 +748,106 @@ export class BoqService {
     return r ? r.sort_key : null;
   }
 
+  // --- measurement sheets ---
+
+  async measurements(claims: TenantClaims, boqId: string, nodeId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const [n] = await db`SELECT 1 FROM est.boq_node WHERE boq_id = ${boqId} AND id = ${nodeId}`;
+    if (!n) throw new NotFoundException({ code: 'line_not_found' });
+    return db`
+      SELECT seq, description, nos::text, length::text, breadth::text, height::text, deduct, qty::text
+      FROM est.measurement WHERE boq_id = ${boqId} AND node_id = ${nodeId} ORDER BY seq`;
+  }
+
+  /**
+   * Replaces an item's measurement sheet. The item's quantity becomes the rows' total (amount and every subtotal
+   * follow, as for any edit); no rows clears the sheet and leaves the quantity as it was, to be typed again.
+   */
+  async setMeasurements(
+    claims: TenantClaims,
+    boqId: string,
+    nodeId: string,
+    rowVersion: number,
+    rows: MeasurementInput[],
+  ) {
+    const db = await this.tenants.forTenant(claims.ten);
+    if (await importRunning(db, boqId))
+      throw new ConflictException({
+        code: 'boq_importing',
+        message: 'A file is being imported into this BOQ. Try again when it has finished.',
+      });
+    return db.begin(async (tx) => {
+      const [boq] = await tx<{ status: string; rate_date: string }[]>`
+        SELECT status, rate_date::text FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+      if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
+      const ctx: BatchContext = {
+        tx,
+        boqId,
+        rateDate: boq.rate_date,
+        units: null,
+        idMap: new Map(),
+        touched: new Set(),
+        deleted: new Set(),
+        reload: false,
+        measuring: true,
+      };
+      const node = await this.lockNode(ctx, nodeId, rowVersion);
+      if (node.node_type !== 'item')
+        throw new BadRequestException({
+          code: 'not_an_item',
+          message: 'Only items have measurements.',
+        });
+      const measured = rows.map((r, i) => ({ ...r, seq: i + 1, qty: measuredQty(r) }));
+      await tx`DELETE FROM est.measurement WHERE boq_id = ${boqId} AND node_id = ${node.id}`;
+      if (measured.length > 0) {
+        await tx`
+          INSERT INTO est.measurement (boq_id, node_id, seq, description, nos, length, breadth, height, deduct, qty)
+          SELECT ${boqId}, ${node.id}, x.seq, x.description, x.nos, x.length, x.breadth, x.height, x.deduct, x.qty
+          FROM jsonb_to_recordset(${tx.json(measured)}) AS x(seq int, description text, nos numeric,
+            length numeric, breadth numeric, height numeric, deduct boolean, qty numeric)`;
+        await this.update(ctx, {
+          op: 'update',
+          id: node.id,
+          rowVersion,
+          qty: sumQty(measured.map((m) => m.qty)),
+        });
+      } else if (node.measured) {
+        await tx`UPDATE est.boq_node SET row_version = row_version + 1
+          WHERE boq_id = ${boqId} AND id = ${node.id}`;
+      }
+      await tx`UPDATE est.boq_node SET measured = ${measured.length > 0}
+        WHERE boq_id = ${boqId} AND id = ${node.id}`;
+      await tx`UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${boqId}`;
+      await audit(tx, claims.sub, 'boq.measurements', boqId, {
+        line: node.id,
+        rows: measured.length,
+      });
+      const live = [...ctx.touched, node.id];
+      const changed = await tx<BoqRow[]>`
+        SELECT ${tx.unsafe(ROW)}
+        FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
+        WHERE n.boq_id = ${boqId} AND n.id = ANY(${live}::bigint[]) ORDER BY n.sort_key`;
+      const [header] = await tx`SELECT ${tx.unsafe(HEADER)} FROM est.boq b WHERE b.id = ${boqId}`;
+      return {
+        header,
+        rows: changed,
+        measurements: measured.map(
+          ({ seq, description, nos, length, breadth, height, deduct, qty }) => ({
+            seq,
+            description,
+            nos,
+            length,
+            breadth,
+            height,
+            deduct,
+            qty,
+          }),
+        ),
+      };
+    });
+  }
+
   /** The rate an analysis gives on the BOQ's rate date, refusing a unit that does not match the item's. */
   private async fromAnalysis(ctx: BatchContext, analysisId: string, itemUnit: string | null) {
     const a = await this.rates.boqRate(ctx.tx, analysisId, ctx.rateDate);
@@ -827,6 +939,8 @@ interface BatchContext {
   touched: Set<string>;
   deleted: Set<string>;
   reload: boolean;
+  /** Set by setMeasurements: the one place allowed to change a measured item's quantity. */
+  measuring?: boolean;
 }
 
 /** What a line contributes to its ancestors' subtotals. */

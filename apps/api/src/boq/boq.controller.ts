@@ -70,6 +70,33 @@ const opSchema = z.discriminatedUnion('op', [
   }),
 ]);
 const changesBody = z.object({ ops: z.array(opSchema).min(1).max(MAX_OPS) });
+const dimension = z
+  .union([z.string().trim(), z.number()])
+  .transform((v) => (v === '' ? null : String(v)))
+  .refine((v) => v === null || /^\d{1,12}(\.\d{1,4})?$/.test(v), {
+    message: 'A positive number with up to 4 decimals',
+  })
+  .nullable()
+  .default(null);
+const measurementBody = z.object({
+  rowVersion: z.number().int().positive(),
+  rows: z
+    .array(
+      z
+        .object({
+          description: z.string().trim().max(500).default(''),
+          nos: dimension,
+          length: dimension,
+          breadth: dimension,
+          height: dimension,
+          deduct: z.boolean().default(false),
+        })
+        .refine((r) => [r.nos, r.length, r.breadth, r.height].some((d) => d !== null), {
+          message: 'Each row needs at least one of nos, length, breadth or height',
+        }),
+    )
+    .max(1000),
+});
 
 const windowQuery = z
   .object({
@@ -184,6 +211,29 @@ export class BoqController {
     @Query(new ZodPipe(searchQuery)) q: z.infer<typeof searchQuery>,
   ) {
     return this.boqs.search(c, id, q.q, q);
+  }
+
+  @Get('boqs/:id/lines/:lineId/measurements')
+  measurements(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineId', new ZodPipe(lineId)) lineIdParam: string,
+  ) {
+    return this.boqs.measurements(c, id, lineIdParam);
+  }
+
+  /** Replaces the item's measurement sheet; its quantity becomes the total. */
+  @Post('boqs/:id/lines/:lineId/measurements')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  setMeasurements(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineId', new ZodPipe(lineId)) lineIdParam: string,
+    @Body(new ZodPipe(measurementBody)) b: z.infer<typeof measurementBody>,
+  ) {
+    return this.boqs.setMeasurements(c, id, lineIdParam, b.rowVersion, b.rows);
   }
 
   /** Re-price every item linked to a rate analysis, as on the BOQ's rate date. */

@@ -22,6 +22,8 @@ export interface BoqRow {
   rowVersion: number;
   /** The rate analysis this item's rate came from (the rate is copied, not live). */
   rateAnalysisId?: string | null;
+  /** The quantity is the total of the item's measurement sheet. */
+  measured?: boolean;
 }
 
 export interface BoqHeader {

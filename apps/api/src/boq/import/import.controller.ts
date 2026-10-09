@@ -47,7 +47,11 @@ const settingsBody = z.object({
   normaliseUnits: z.boolean().default(true),
 });
 const startBody = z.object({ skipErrors: z.boolean().default(false) });
-const exportQuery = z.object({ format: z.enum(['xlsx', 'csv']).default('xlsx') });
+const exportQuery = z.object({
+  format: z.enum(['xlsx', 'csv']).default('xlsx'),
+  /** Adds quoted rates loaded with this pricing scenario's markups. */
+  scenario: z.uuid().optional(),
+});
 const unitText = z
   .string()
   .trim()
@@ -172,7 +176,7 @@ export class ImportController {
     @Param('id', ParseUUIDPipe) boqId: string,
     @Query(new ZodPipe(exportQuery)) q: z.infer<typeof exportQuery>,
   ) {
-    const out = await this.exports.export(c, boqId, q.format);
+    const out = await this.exports.export(c, boqId, q.format, q.scenario);
     return new StreamableFile(out.stream, {
       type: out.contentType,
       disposition: attachment(out.fileName),

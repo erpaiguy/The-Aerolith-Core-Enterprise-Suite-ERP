@@ -348,19 +348,31 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'tender.edit',
         'boq.edit',
         'rates.edit',
+        'pricing.edit',
       ]);
       expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
         'tender.edit',
         'boq.edit',
         'rates.edit',
+        'pricing.edit',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
       const all = (await get('/tenant/permissions', t.admin)).json<{
         grants: Record<string, Record<string, boolean>>;
       }>();
       expect(all.grants).toEqual({
-        manager: { 'tender.edit': true, 'boq.edit': true, 'rates.edit': true },
-        worker: { 'tender.edit': false, 'boq.edit': false, 'rates.edit': false },
+        manager: {
+          'tender.edit': true,
+          'boq.edit': true,
+          'rates.edit': true,
+          'pricing.edit': true,
+        },
+        worker: {
+          'tender.edit': false,
+          'boq.edit': false,
+          'rates.edit': false,
+          'pricing.edit': false,
+        },
       });
     });
 

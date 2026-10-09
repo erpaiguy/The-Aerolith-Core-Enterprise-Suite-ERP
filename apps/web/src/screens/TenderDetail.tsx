@@ -8,6 +8,7 @@ import type { Criterion, TenderDetail, TenderStatus } from '../api/types';
 import { describeError, formatDate, formatDateTime, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
 import { TenderBoqs } from './Boq';
+import { TenderBidSummaryCard } from './Pricing';
 import { SOURCES, TenderForm, VERTICALS } from './TenderForm';
 import { DueLabel, STATUS_LABEL, statusTone, useCanEditTenders } from './Tenders';
 
@@ -301,6 +302,7 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
   const qc = useQueryClient();
   const canEdit = useCanEditTenders();
   const canEditBoq = usePermission('boq.edit');
+  const canPrice = usePermission('pricing.edit');
   const [editing, setEditing] = useState(false);
   const tender = useQuery({
     queryKey: ['tender', tenderId],
@@ -367,6 +369,7 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
           <div className="grid gap-5 xl:grid-cols-[1fr_26rem]">
             <div className="space-y-5">
               <TenderBoqs tenderId={t.id} canEdit={canEditBoq} />
+              {canPrice && <TenderBidSummaryCard tenderId={t.id} />}
               <Card title="Dates">
                 <dl className="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
                   <Row label="Submission due">

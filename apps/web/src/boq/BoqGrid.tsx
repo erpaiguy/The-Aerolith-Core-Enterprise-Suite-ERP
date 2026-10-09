@@ -19,6 +19,7 @@ import {
   IndentIncrease,
   MoveDown,
   MoveUp,
+  Ruler,
   StickyNote,
   Trash2,
   Undo2,
@@ -77,6 +78,10 @@ type Undo =
 export interface GridHandle {
   /** Opens the grid at the line with this sort key, expanding any collapsed section above it. */
   jumpTo(sortKey: string): void;
+  /** The line as the grid knows it now (with the newest row version). */
+  row(id: string): BoqRow | undefined;
+  /** Merges rows changed outside the grid (a measurement sheet saved) and the new BOQ header. */
+  apply(rows: BoqRow[], header: BoqHeader): void;
 }
 
 interface Props {
@@ -84,6 +89,8 @@ interface Props {
   canEdit: boolean;
   onHeader: (h: BoqHeader) => void;
   onSaving: (pending: number) => void;
+  /** Opens the item's measurement sheet. */
+  onMeasure?: ((row: BoqRow) => void) | undefined;
   /** Asks the user for a rate analysis for this item; resolves to its id, or null when cancelled. */
   onPickAnalysis?: ((row: BoqRow) => Promise<string | null>) | undefined;
 }
@@ -92,7 +99,7 @@ const editable = (row: BoqRow, col: EditableColumn) =>
   row.type === 'item' || col === 'description' || (col === 'code' && row.type === 'section');
 
 export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
-  { boqId, canEdit, onHeader, onSaving, onPickAnalysis },
+  { boqId, canEdit, onHeader, onSaving, onPickAnalysis, onMeasure },
   ref,
 ) {
   const storageKey = `aerolith.boq.${boqId}.collapsed`;
@@ -488,6 +495,12 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
         scroller.current?.focus();
       });
     },
+    row: (id: string) => rowById(id),
+    apply(changed: BoqRow[], header: BoqHeader) {
+      for (const r of changed) versions.current.set(r.id, r.rowVersion);
+      onHeader(header);
+      setSlice((s) => mergeChanges(s, changed, [], new Set(collapsedRef.current.values())));
+    },
   }));
 
   const ensureVisible = (index: number) => {
@@ -513,6 +526,11 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
 
   const startEdit = (initial?: string) => {
     if (!canEdit || !activeRow || !active || !editable(activeRow, active.col)) return;
+    // A measured quantity is the sheet's total: edit the sheet instead.
+    if (active.col === 'qty' && activeRow.measured) {
+      onMeasure?.(activeRow);
+      return;
+    }
     setEditing({
       id: activeRow.id,
       col: active.col,
@@ -706,6 +724,10 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
         onDoubleClick={() => {
           if (col === 'amount' || !canEdit || !editable(row, col)) return;
           setActive({ id: row.id, col });
+          if (col === 'qty' && row.measured) {
+            onMeasure?.(row);
+            return;
+          }
           setEditing({ id: row.id, col, value: editValue(row, col) });
         }}
       >
@@ -812,6 +834,17 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
           >
             <Trash2 className="size-4" aria-hidden />
           </Button>
+          {onMeasure && (
+            <Button
+              variant="ghost"
+              onClick={() => activeRow && onMeasure(activeRow)}
+              disabled={activeRow?.type !== 'item'}
+              title="Measurement sheet: the quantity from nos × L × B × H rows"
+              aria-label="Measurement sheet"
+            >
+              <Ruler className="size-4" aria-hidden />
+            </Button>
+          )}
           {onPickAnalysis && (
             <Button
               variant="ghost"
@@ -1007,7 +1040,12 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                     {cell(
                       row,
                       'qty',
-                      <span className="w-full text-right tabular-nums">
+                      <span className="flex w-full items-center justify-end gap-1 tabular-nums">
+                        {row.measured && (
+                          <Ruler className="size-3 shrink-0 text-accent" aria-label="Measured">
+                            <title>From the measurement sheet</title>
+                          </Ruler>
+                        )}
                         {row.type === 'item' ? formatQty(row.qty) : ''}
                       </span>,
                     )}

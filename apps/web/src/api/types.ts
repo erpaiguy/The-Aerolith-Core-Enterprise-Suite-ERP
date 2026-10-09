@@ -348,3 +348,72 @@ export interface AnalysisDetail {
   usedBy: { id: string; code: string; description: string }[];
   boqs: { id: string; name: string; tenderNumber: string; items: number }[];
 }
+
+// --- Bid pricing (apps/api/src/pricing) ---
+
+export type MarkupKind =
+  'overhead' | 'profit' | 'contingency' | 'escalation' | 'discount' | 'other';
+export type GstMode = 'add' | 'included' | 'exempt';
+
+export interface Markup {
+  kind: MarkupKind;
+  label: string;
+  basis: 'base' | 'running';
+  pct: string | null;
+  amount: string | null;
+}
+
+export interface Priced {
+  base: string;
+  markups: { kind: MarkupKind; label: string; basis: string; pct: string | null; amount: string }[];
+  markupTotal: string;
+  beforeGst: string;
+  gst: string;
+  gstIncluded: string | null;
+  bid: string;
+  factor: string;
+  vsEstimatePct: string | null;
+}
+
+export interface Scenario {
+  id: string;
+  boqId: string;
+  name: string;
+  notes: string;
+  markups: Markup[];
+  gstPct: string;
+  gstMode: GstMode;
+  selected: boolean;
+  rowVersion: number;
+  result: Priced;
+}
+
+export interface PricingSummary {
+  boq: { id: string; name: string; status: string; base: string };
+  tender: { id: string; number: string; title: string; estimatedValue: string | null };
+  counts: { items: number; unpriced: number; noQty: number; measured: number };
+  sections: { id: string; code: string | null; description: string; subtotal: string }[];
+  unsectioned: { amount: string; items: number };
+  scenarios: Scenario[];
+  quoted: { factor: string; total: string; difference: string } | null;
+}
+
+export interface TenderBidSummary {
+  estimatedValue: string | null;
+  boqs: {
+    id: string;
+    name: string;
+    base: string;
+    unpriced: number;
+    scenario: { id: string; name: string } | null;
+    beforeGst: string | null;
+    gst: string | null;
+    bid: string | null;
+  }[];
+  base: string;
+  beforeGst: string;
+  gst: string;
+  bid: string;
+  complete: boolean;
+  vsEstimatePct: string | null;
+}

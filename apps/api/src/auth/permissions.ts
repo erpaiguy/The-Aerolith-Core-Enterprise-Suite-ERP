@@ -24,6 +24,10 @@ export const PERMISSIONS = {
     label: 'Edit the rate library: resources, their rates, price books and rate analyses',
     defaults: { manager: true, worker: false },
   },
+  'pricing.edit': {
+    label: 'See and change bid pricing: markups, profit, GST, scenarios and quoted rates',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

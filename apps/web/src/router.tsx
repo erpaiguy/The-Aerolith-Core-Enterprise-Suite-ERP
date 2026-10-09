@@ -15,6 +15,7 @@ import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens
 import { SignInScreen } from './screens/SignIn';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
+import { BoqPricingScreen } from './screens/Pricing';
 import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
 import { ResourcesScreen } from './screens/Resources';
 import { TenderDetailScreen } from './screens/TenderDetail';
@@ -67,6 +68,15 @@ const boqRoute = createRoute({
   },
 });
 
+const pricingRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/boqs/$boqId/pricing',
+  component: function PricingPage() {
+    const { boqId } = pricingRoute.useParams();
+    return <BoqPricingScreen key={boqId} boqId={boqId} />;
+  },
+});
+
 const analysisRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/rate-analyses/$analysisId',
@@ -99,6 +109,7 @@ const routeTree = rootRoute.addChildren([
       component: RateAnalysesScreen,
     }),
     analysisRoute,
+    pricingRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/users',
