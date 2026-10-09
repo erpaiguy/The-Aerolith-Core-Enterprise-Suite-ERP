@@ -198,3 +198,19 @@ export async function signInNewAdmin(
   await page.getByRole('button', { name: 'Verify' }).click();
   await page.getByRole('link', { name: 'Home' }).waitFor();
 }
+
+/**
+ * On failure, prints where the page was and what it showed. CI keeps traces as artifacts, but this puts the essentials
+ * in the job log itself, readable where artifacts cannot be downloaded.
+ */
+export async function logPageOnFailure(
+  page: Page,
+  info: { status?: string | undefined; expectedStatus: string; title: string },
+) {
+  if (info.status === info.expectedStatus) return;
+  const snapshot = await page
+    .locator('body')
+    .ariaSnapshot({ timeout: 2000 })
+    .catch(() => '(no snapshot)');
+  console.error(`--- "${info.title}" failed at ${page.url()}\n${snapshot.slice(0, 4000)}\n---`);
+}

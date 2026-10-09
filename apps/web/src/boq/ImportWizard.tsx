@@ -404,11 +404,8 @@ function Summary({
     }
   };
   const errors = s.counts.errors;
-  // The result of the check is below the settings: bring it into view.
-  const top = useRef<HTMLDivElement>(null);
-  useEffect(() => top.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), []);
   return (
-    <div ref={top} className="scroll-mt-4 space-y-3" data-testid="import-summary">
+    <div className="space-y-3" data-testid="import-summary">
       {s.revision && <RevisionSummary r={s.revision} />}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat

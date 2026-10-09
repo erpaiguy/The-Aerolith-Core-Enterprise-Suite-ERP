@@ -2,9 +2,11 @@
 // export the BOQ to Excel, and import that file into a second BOQ with the same lines and total.
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { signInNewAdmin } from './helpers.js';
+import { logPageOnFailure, signInNewAdmin } from './helpers.js';
 
 const shot = (name: string) => ({ path: `screenshots/${name}.png`, fullPage: true });
+
+test.afterEach(async ({ page }, info) => logPageOnFailure(page, info));
 const grid = (page: Page) => page.getByRole('treegrid', { name: 'BOQ lines' });
 
 const CSV =

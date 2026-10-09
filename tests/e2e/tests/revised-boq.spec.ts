@@ -1,9 +1,11 @@
 // Wave 1 step 8 in a real browser: the client's corrigendum comes with a revised BOQ (no rates). It is imported into
 // revision 2 of the priced BOQ: the check lists what changes, the rates stay, and compare shows the revision.
 import { expect, test, type Page } from '@playwright/test';
-import { signInNewAdmin } from './helpers.js';
+import { logPageOnFailure, signInNewAdmin } from './helpers.js';
 
 const shot = (name: string) => ({ path: `screenshots/${name}.png`, fullPage: true });
+
+test.afterEach(async ({ page }, info) => logPageOnFailure(page, info));
 const grid = (page: Page) => page.getByRole('treegrid', { name: 'BOQ lines' });
 
 const V1 =
