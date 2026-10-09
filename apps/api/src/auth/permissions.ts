@@ -20,6 +20,10 @@ export const PERMISSIONS = {
     label: 'Create BOQs and edit their lines',
     defaults: { manager: true, worker: false },
   },
+  'rates.edit': {
+    label: 'Edit the rate library: resources, their rates, price books and rate analyses',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

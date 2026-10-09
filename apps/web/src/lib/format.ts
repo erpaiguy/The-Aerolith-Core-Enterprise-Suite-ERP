@@ -1,7 +1,13 @@
 import { ApiError } from '../api/client';
 
-export const daysUntil = (iso: string, now = new Date()): number =>
-  Math.ceil((new Date(iso).getTime() - now.getTime()) / 86_400_000);
+/**
+ * Calendar days from today to the date, in the user's time zone: something due on the 19th, seen on the 9th, is
+ * "in 10 d" whatever the hour (counting 24-hour periods made it 11 before mid-afternoon). 0 = today, negative = past.
+ */
+export function daysUntil(iso: string, now = new Date()): number {
+  const day = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((day(new Date(iso)) - day(now)) / 86_400_000);
+}
 
 export const formatDate = (iso: string): string =>
   new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });

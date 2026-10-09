@@ -20,6 +20,8 @@ export interface BoqRow {
   subtotal: string;
   childCount: number;
   rowVersion: number;
+  /** The rate analysis this item's rate came from (the rate is copied, not live). */
+  rateAnalysisId?: string | null;
 }
 
 export interface BoqHeader {
@@ -33,6 +35,8 @@ export interface BoqHeader {
   total: string;
   notes: string;
   rowVersion: number;
+  /** Rates from analyses are taken as on this date. */
+  rateDate?: string;
   tender?: { id: string; number: string; title: string };
 }
 

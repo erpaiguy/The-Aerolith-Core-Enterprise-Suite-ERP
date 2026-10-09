@@ -2,11 +2,12 @@ import { Link, Outlet } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
+  Boxes,
   BriefcaseBusiness,
+  Calculator,
   Building2,
   Contact,
   FileStack,
-  Gauge,
   KeyRound,
   LogOut,
   ScrollText,
@@ -80,7 +81,8 @@ function LicenceBanner() {
   if (entitlement.tier === 'trial' && days <= 14) {
     return (
       <div className="bg-info/10 px-4 py-2 text-sm text-fg">
-        Trial ends in {days} day{days === 1 ? '' : 's'} ({formatDate(entitlement.ends)}).
+        Trial ends {days <= 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`} (
+        {formatDate(entitlement.ends)}).
       </div>
     );
   }
@@ -139,7 +141,12 @@ export function AppShell() {
             <NavItem to="/clients" icon={<Contact className="size-4" />}>
               Clients
             </NavItem>
-            <Upcoming icon={<Gauge className="size-4" />}>Estimation</Upcoming>
+            <NavItem to="/resources" icon={<Boxes className="size-4" />}>
+              Resources
+            </NavItem>
+            <NavItem to="/rate-analyses" icon={<Calculator className="size-4" />}>
+              Rate analyses
+            </NavItem>
             <Upcoming icon={<FileStack className="size-4" />}>Documents</Upcoming>
             <Upcoming icon={<Building2 className="size-4" />}>Projects</Upcoming>
             <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>

@@ -15,11 +15,15 @@ import { ancestorKeys, childKey, midpoint, splitKey, SUBTREE_END } from '@aeroli
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { RatesService } from '../rates/rates.service.js';
 import { importRunning } from './import/import.service.js';
+import { loadUnitMap, sameUnit } from './units.js';
 
 export type NodeType = 'section' | 'item' | 'note';
 
 export interface LineFields {
+  /** Take the rate (and an empty unit or description) from this rate analysis; null unlinks, keeping the rate. */
+  rateAnalysisId?: string | null | undefined;
   code?: string | null | undefined;
   description?: string | undefined;
   notes?: string | undefined;
@@ -50,11 +54,11 @@ const MAX_TOUCHED_ROWS = 1000;
 const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "sortKey", n.depth,
   n.node_type AS type, n.code, t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate,
   n.amount::text AS amount, n.subtotal::text AS subtotal, n.child_count AS "childCount",
-  n.row_version AS "rowVersion"`;
+  n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId"`;
 
 const HEADER = `b.id, b.tender_id AS "tenderId", b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
-  b.updated_at AS "updatedAt", b.row_version AS "rowVersion"`;
+  b.updated_at AS "updatedAt", b.row_version AS "rowVersion", b.rate_date::text AS "rateDate"`;
 
 export interface BoqRow {
   id: string;
@@ -72,6 +76,7 @@ export interface BoqRow {
   subtotal: string;
   childCount: number;
   rowVersion: number;
+  rateAnalysisId: string | null;
 }
 
 interface NodeRef {
@@ -104,7 +109,10 @@ export class BoqService {
   /** How often the fallback plan ran (a sign that a tenant needs a search index). */
   searchFallbacks = 0;
 
-  constructor(private readonly tenants: TenantConnections) {}
+  constructor(
+    private readonly tenants: TenantConnections,
+    private readonly rates: RatesService,
+  ) {}
 
   // --- BOQ headers ---
 
@@ -142,11 +150,20 @@ export class BoqService {
     claims: TenantClaims,
     boqId: string,
     rowVersion: number,
-    input: { name?: string | undefined; notes?: string | undefined },
+    input: {
+      name?: string | undefined;
+      notes?: string | undefined;
+      /** Rates from analyses are taken as on this date (applied and refreshed). */
+      rateDate?: string | undefined;
+    },
   ) {
     const db = await this.tenants.forTenant(claims.ten);
     await db.begin(async (tx) => {
-      const fields = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+      const fields = Object.fromEntries(
+        Object.entries({ name: input.name, notes: input.notes, rate_date: input.rateDate }).filter(
+          ([, v]) => v !== undefined,
+        ),
+      );
       if (Object.keys(fields).length === 0)
         throw new BadRequestException({ code: 'nothing_to_update' });
       const [row] =
@@ -347,14 +364,16 @@ export class BoqService {
         message: 'A file is being imported into this BOQ. Try again when it has finished.',
       });
     return db.begin(async (tx) => {
-      const [boq] = await tx<{ status: string }[]>`
-        SELECT status FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      const [boq] = await tx<{ status: string; rate_date: string }[]>`
+        SELECT status, rate_date::text FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
       if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
       if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
 
       const ctx: BatchContext = {
         tx,
         boqId,
+        rateDate: boq.rate_date,
+        units: null,
         idMap: new Map(),
         touched: new Set(),
         deleted: new Set(),
@@ -404,21 +423,28 @@ export class BoqService {
   private async insert(ctx: BatchContext, op: Extract<Op, { op: 'insert' }>) {
     const { tx, boqId } = ctx;
     if (ctx.idMap.has(op.tempId)) throw new BadRequestException({ code: 'duplicate_temp_id' });
-    if (op.type !== 'item' && (op.qty != null || op.rate != null))
+    if (op.type !== 'item' && (op.qty != null || op.rate != null || op.rateAnalysisId != null))
       throw new BadRequestException({ code: 'qty_rate_on_non_item' });
+    const link = op.rateAnalysisId
+      ? await this.fromAnalysis(ctx, op.rateAnalysisId, op.unit ?? null)
+      : null;
+    const unit = op.unit ?? link?.unit ?? null;
+    const rate = link ? link.rate : (op.rate ?? null);
+    const description = op.description || link?.description || '';
     const parent = await this.parentNode(ctx, op.parentId);
     const key = await this.keyFor(ctx, parent, op.afterId, null);
     const depth = parent ? parent.depth + 1 : 0;
     if (depth > MAX_DEPTH) throw new BadRequestException({ code: 'too_deep' });
 
     const [row] = await tx<{ id: string; value: string }[]>`
-      INSERT INTO est.boq_node (boq_id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount)
-      VALUES (${boqId}, ${parent?.id ?? null}, ${key}, ${depth}, ${op.type}, ${op.code ?? null}, ${op.unit ?? null},
-              ${op.qty ?? null}::numeric, ${op.rate ?? null}::numeric,
-              round(${op.qty ?? null}::numeric * ${op.rate ?? null}::numeric, 2))
+      INSERT INTO est.boq_node (boq_id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount,
+        rate_analysis_id)
+      VALUES (${boqId}, ${parent?.id ?? null}, ${key}, ${depth}, ${op.type}, ${op.code ?? null}, ${unit},
+              ${op.qty ?? null}::numeric, ${rate}::numeric,
+              round(${op.qty ?? null}::numeric * ${rate}::numeric, 2), ${op.rateAnalysisId ?? null})
       RETURNING id::text, coalesce(amount, 0)::text AS value`;
     await tx`INSERT INTO est.boq_node_text (boq_id, node_id, description, notes)
-      VALUES (${boqId}, ${row!.id}, ${op.description ?? ''}, ${op.notes ?? ''})`;
+      VALUES (${boqId}, ${row!.id}, ${description}, ${op.notes ?? ''})`;
     ctx.idMap.set(op.tempId, row!.id);
     ctx.touched.add(row!.id);
     if (parent) {
@@ -434,15 +460,29 @@ export class BoqService {
   private async update(ctx: BatchContext, op: Extract<Op, { op: 'update' }>) {
     const { tx, boqId } = ctx;
     const node = await this.lockNode(ctx, op.id, op.rowVersion);
-    if (node.node_type !== 'item' && (op.qty !== undefined || op.rate !== undefined))
+    if (
+      node.node_type !== 'item' &&
+      (op.qty !== undefined || op.rate !== undefined || op.rateAnalysisId != null)
+    )
       throw new BadRequestException({ code: 'qty_rate_on_non_item' });
     // Absent fields keep their value; null clears. Amount follows qty × rate for items.
     const next = (field: 'code' | 'unit' | 'qty' | 'rate') =>
       op[field] !== undefined ? op[field] : node[field];
+    // The analysis link: applying one sets the rate; typing a rate by hand unlinks; otherwise it stays.
+    let unit = next('unit');
+    let rate = next('rate');
+    let link = tx`rate_analysis_id`;
+    if (op.rateAnalysisId) {
+      const l = await this.fromAnalysis(ctx, op.rateAnalysisId, unit);
+      rate = l.rate;
+      unit ??= l.unit;
+      link = tx`${op.rateAnalysisId}::uuid`;
+    } else if (op.rateAnalysisId === null || op.rate !== undefined) link = tx`NULL`;
     const [row] = await tx<{ delta: string }[]>`
-      UPDATE est.boq_node SET code = ${next('code')}, unit = ${next('unit')},
-        qty = ${next('qty')}::numeric, rate = ${next('rate')}::numeric,
-        amount = CASE WHEN node_type = 'item' THEN round(${next('qty')}::numeric * ${next('rate')}::numeric, 2) END,
+      UPDATE est.boq_node SET code = ${next('code')}, unit = ${unit},
+        qty = ${next('qty')}::numeric, rate = ${rate}::numeric,
+        amount = CASE WHEN node_type = 'item' THEN round(${next('qty')}::numeric * ${rate}::numeric, 2) END,
+        rate_analysis_id = ${link},
         row_version = row_version + 1
       WHERE boq_id = ${boqId} AND id = ${node.id}
       RETURNING (coalesce(amount, 0) - ${node.amount ?? '0'}::numeric)::text AS delta`;
@@ -696,6 +736,79 @@ export class BoqService {
     return r ? r.sort_key : null;
   }
 
+  /** The rate an analysis gives on the BOQ's rate date, refusing a unit that does not match the item's. */
+  private async fromAnalysis(ctx: BatchContext, analysisId: string, itemUnit: string | null) {
+    const a = await this.rates.boqRate(ctx.tx, analysisId, ctx.rateDate);
+    ctx.units ??= await loadUnitMap(ctx.tx);
+    if (itemUnit && !sameUnit(ctx.units, itemUnit, a.unit))
+      throw new ConflictException({
+        code: 'unit_mismatch',
+        message: `The analysis is priced per ${a.unit}; this item is measured in ${itemUnit}.`,
+      });
+    return { rate: a.boqRate, unit: a.unit, description: a.description };
+  }
+
+  /**
+   * Re-prices every item linked to an analysis, as on the BOQ's rate date, then recomputes all subtotals and the
+   * total in a few set-based statements. Refused when any linked analysis has a resource without a rate on that date.
+   */
+  async refreshRates(claims: TenantClaims, boqId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    if (await importRunning(db, boqId))
+      throw new ConflictException({
+        code: 'boq_importing',
+        message: 'A file is being imported into this BOQ. Try again when it has finished.',
+      });
+    return db.begin(async (tx) => {
+      const [boq] = await tx<{ status: string; rate_date: string }[]>`
+        SELECT status, rate_date::text FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+      if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
+      const used = await tx<{ id: string; items: number }[]>`
+        SELECT rate_analysis_id::text AS id, count(*)::int AS items FROM est.boq_node
+        WHERE boq_id = ${boqId} AND rate_analysis_id IS NOT NULL GROUP BY rate_analysis_id`;
+      const engine = await this.rates.engineFor(
+        tx,
+        used.map((u) => u.id),
+        boq.rate_date,
+      );
+      const priced = used.map((u) => ({ ...u, ...engine.cost(u.id) }));
+      const missing = priced.filter((p) => p.missing.length > 0);
+      if (missing.length > 0) {
+        const codes = [...new Set(missing.flatMap((m) => m.missing.map((r) => r.code)))];
+        throw new ConflictException({
+          code: 'missing_rates',
+          missing: missing.flatMap((m) => m.missing),
+          message: `No rate on ${boq.rate_date} for ${codes.slice(0, 10).join(', ')}${codes.length > 10 ? ' and more' : ''}.`,
+        });
+      }
+      const changed =
+        priced.length === 0
+          ? []
+          : await tx`
+            UPDATE est.boq_node n SET rate = x.rate, amount = round(n.qty * x.rate, 2),
+              row_version = n.row_version + 1
+            FROM jsonb_to_recordset(${tx.json(priced.map((p) => ({ id: p.id, rate: p.boqRate })))})
+              AS x(id uuid, rate numeric)
+            WHERE n.boq_id = ${boqId} AND n.rate_analysis_id = x.id AND n.rate IS DISTINCT FROM x.rate
+            RETURNING 1`;
+      if (changed.length > 0) await recomputeTotals(tx, boqId);
+      await tx`UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${boqId}`;
+      await audit(tx, claims.sub, 'boq.refresh_rates', boqId, {
+        rateDate: boq.rate_date,
+        linked: priced.reduce((n, p) => n + p.items, 0),
+        changed: changed.length,
+      });
+      const [header] = await tx`SELECT ${tx.unsafe(HEADER)} FROM est.boq b WHERE b.id = ${boqId}`;
+      return {
+        header,
+        linked: priced.reduce((n, p) => n + p.items, 0),
+        analyses: priced.length,
+        changed: changed.length,
+      };
+    });
+  }
+
   private async mustExist(db: Sql, boqId: string) {
     const [b] = await db`SELECT 1 FROM est.boq WHERE id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
@@ -705,6 +818,10 @@ export class BoqService {
 interface BatchContext {
   tx: TransactionSql;
   boqId: string;
+  /** The BOQ's rate date: analyses are costed as on it. */
+  rateDate: string;
+  /** Units master, loaded on first use. */
+  units: Map<string, string> | null;
   /** tempId -> real id for lines inserted in this batch. */
   idMap: Map<string, string>;
   touched: Set<string>;
@@ -715,6 +832,30 @@ interface BatchContext {
 /** What a line contributes to its ancestors' subtotals. */
 const nodeValue = (n: NodeRef): string =>
   n.node_type === 'item' ? (n.amount ?? '0') : n.node_type === 'section' ? n.subtotal : '0';
+
+/**
+ * Section subtotals and the BOQ total from scratch, deepest level first: one grouped UPDATE per level. Used after
+ * bulk re-pricing, where per-line deltas would mean one statement per line.
+ */
+async function recomputeTotals(tx: TransactionSql, boqId: string) {
+  const [deepest] = await tx<{ max: number }[]>`
+    SELECT coalesce(max(depth), 0)::int AS max FROM est.boq_node WHERE boq_id = ${boqId}`;
+  const max = deepest?.max ?? 0;
+  for (let d = max - 1; d >= 0; d--)
+    await tx`
+      UPDATE est.boq_node p SET subtotal = c.v
+      FROM (
+        SELECT parent_id, sum(CASE node_type WHEN 'item' THEN coalesce(amount, 0) WHEN 'section' THEN subtotal
+          ELSE 0 END) AS v
+        FROM est.boq_node WHERE boq_id = ${boqId} AND depth = ${d + 1} GROUP BY parent_id
+      ) c
+      WHERE p.boq_id = ${boqId} AND p.id = c.parent_id AND p.subtotal IS DISTINCT FROM c.v`;
+  await tx`UPDATE est.boq SET total = (
+      SELECT coalesce(sum(CASE node_type WHEN 'item' THEN coalesce(amount, 0) WHEN 'section' THEN subtotal
+        ELSE 0 END), 0)
+      FROM est.boq_node WHERE boq_id = ${boqId} AND depth = 0)
+    WHERE id = ${boqId}`;
+}
 
 async function audit(
   tx: TransactionSql,

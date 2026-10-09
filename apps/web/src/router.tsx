@@ -15,6 +15,8 @@ import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens
 import { SignInScreen } from './screens/SignIn';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
+import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
+import { ResourcesScreen } from './screens/Resources';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
 import { Spinner } from '@aerolith/ui';
@@ -65,6 +67,15 @@ const boqRoute = createRoute({
   },
 });
 
+const analysisRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/rate-analyses/$analysisId',
+  component: function AnalysisPage() {
+    const { analysisId } = analysisRoute.useParams();
+    return <AnalysisEditor key={analysisId} analysisId={analysisId} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -77,6 +88,17 @@ const routeTree = rootRoute.addChildren([
     tenderRoute,
     boqRoute,
     createRoute({ getParentRoute: () => appLayout, path: '/clients', component: ClientsScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/resources',
+      component: ResourcesScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/rate-analyses',
+      component: RateAnalysesScreen,
+    }),
+    analysisRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/users',

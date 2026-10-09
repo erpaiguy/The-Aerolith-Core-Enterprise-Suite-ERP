@@ -1,9 +1,20 @@
 import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Download, FileUp, ListTree, PanelLeft, Plus, Search, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Download,
+  FileUp,
+  ListTree,
+  PanelLeft,
+  Plus,
+  RefreshCw,
+  Search,
+  X,
+} from 'lucide-react';
 import { useCallback, useDeferredValue, useRef, useState, type FormEvent } from 'react';
 import { api, saveFile } from '../api/client';
+import type { AnalysisSummary } from '../api/types';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
 import {
   ImportBanner,
@@ -124,6 +135,20 @@ export function BoqScreen({ boqId }: { boqId: string }) {
     queryFn: () => api.request<BoqHeader>(`/api/tenant/boqs/${boqId}`),
   });
   const [wizard, setWizard] = useState(false);
+  const [picking, setPicking] = useState<{
+    row: BoqRow;
+    resolve: (id: string | null) => void;
+  } | null>(null);
+  const pickAnalysis = useCallback(
+    (row: BoqRow) => new Promise<string | null>((resolve) => setPicking({ row, resolve })),
+    [],
+  );
+  const reload = useCallback(() => {
+    setGridKey((k) => k + 1);
+    void qc.invalidateQueries({ queryKey: ['boq', boqId] });
+    void qc.invalidateQueries({ queryKey: ['boq-outline', boqId] });
+    void qc.invalidateQueries({ queryKey: ['tender-boqs'] });
+  }, [qc, boqId]);
   const [gridKey, setGridKey] = useState(0);
   const latestImport = useLatestImport(boqId, canEditBoq);
   const importJob = latestImport.data?.job;
@@ -175,6 +200,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
               {saving > 0 ? 'Saving…' : canEdit ? 'All changes saved' : 'Read only'}
             </span>
           </p>
+          <RatesBar header={h} canEdit={canEdit && !running} onRefreshed={reload} />
         </div>
         <div className="flex items-end gap-4">
           {canEdit && h.nodeCount === 0 && !wizard && (
@@ -212,14 +238,188 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             canEdit={canEdit && !running}
             onHeader={onHeader}
             onSaving={setSaving}
+            onPickAnalysis={pickAnalysis}
           />
         </div>
+      )}
+      {picking && (
+        <AnalysisPicker
+          row={picking.row}
+          rateDate={h.rateDate ?? ''}
+          onDone={(id) => {
+            picking.resolve(id);
+            setPicking(null);
+          }}
+        />
       )}
       <p className={wizard ? 'hidden' : 'hidden text-xs text-fg-subtle lg:block'}>
         Arrows move · Enter or type to edit · Tab next cell · Ctrl+Enter add item · Ctrl+Shift+Enter
         add section · Alt+Shift+arrows indent/move · Space folds a section · Ctrl+Home/End · Paste
         rows from Excel · Formulas like =12*3.5
       </p>
+    </div>
+  );
+}
+
+/** The date rates from analyses are taken as on, and re-pricing every linked item to it. */
+function RatesBar({
+  header,
+  canEdit,
+  onRefreshed,
+}: {
+  header: BoqHeader;
+  canEdit: boolean;
+  onRefreshed: () => void;
+}) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const setDate = async (rateDate: string) => {
+    setMessage(null);
+    try {
+      const h = await api.request<BoqHeader>(`/api/tenant/boqs/${header.id}`, {
+        method: 'POST',
+        body: { rowVersion: header.rowVersion, rateDate },
+      });
+      qc.setQueryData(['boq', header.id], h);
+    } catch (err) {
+      setMessage({ tone: 'danger', text: describeError(err) });
+    }
+  };
+  const refresh = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await api.request<{ changed: number; linked: number }>(
+        `/api/tenant/boqs/${header.id}/refresh-rates`,
+        { method: 'POST', body: {} },
+      );
+      setMessage({
+        tone: 'success',
+        text:
+          r.linked === 0
+            ? 'No items take their rate from an analysis yet.'
+            : `${r.changed.toLocaleString('en-IN')} of ${r.linked.toLocaleString('en-IN')} linked items re-priced.`,
+      });
+      if (r.changed > 0) onRefreshed();
+    } catch (err) {
+      setMessage({ tone: 'danger', text: describeError(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-fg-muted">
+      <label className="flex items-center gap-2">
+        Rates as on
+        <Input
+          type="date"
+          aria-label="BOQ rates as on"
+          className="h-8 w-40 py-1"
+          value={header.rateDate ?? ''}
+          disabled={!canEdit}
+          onChange={(e) => e.target.value && void setDate(e.target.value)}
+        />
+      </label>
+      {canEdit && (
+        <Button
+          variant="ghost"
+          busy={busy}
+          onClick={() => void refresh()}
+          title="Re-price every item linked to a rate analysis, as on this date"
+        >
+          <RefreshCw className="size-4" aria-hidden /> Refresh rates
+        </Button>
+      )}
+      {message && (
+        <span role="status" className={message.tone === 'danger' ? 'text-danger' : 'text-success'}>
+          {message.text}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Choose a rate analysis for an item: shows each analysis' rate as on the BOQ's rate date. */
+function AnalysisPicker({
+  row,
+  rateDate,
+  onDone,
+}: {
+  row: BoqRow;
+  rateDate: string;
+  onDone: (id: string | null) => void;
+}) {
+  const [search, setSearch] = useState(row.description.slice(0, 30));
+  const q = useDeferredValue(search.trim());
+  const list = useQuery({
+    queryKey: ['rate-analyses', 'picker', q, rateDate],
+    queryFn: () =>
+      api.request<{ items: AnalysisSummary[] }>(
+        `/api/tenant/rate-analyses?limit=20&asOf=${rateDate}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+      ),
+  });
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-24"
+      onKeyDown={(e) => e.key === 'Escape' && onDone(null)}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose a rate analysis"
+        className="w-full max-w-2xl rounded-lg border border-line bg-surface p-4 shadow-xl"
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-semibold">Rate from analysis</h2>
+          <Button variant="ghost" aria-label="Close" onClick={() => onDone(null)}>
+            <X className="size-4" aria-hidden />
+          </Button>
+        </div>
+        <p className="mb-2 text-sm text-fg-muted">
+          For “{row.description || row.code || 'this item'}”{row.unit ? ` (${row.unit})` : ''}.
+          Rates as on {rateDate}.
+        </p>
+        <Input
+          autoFocus
+          aria-label="Search rate analyses"
+          placeholder="Code or description"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="mt-2 max-h-80 overflow-auto">
+          {list.isPending ? (
+            <Spinner />
+          ) : list.isError ? (
+            <Alert tone="danger">{describeError(list.error)}</Alert>
+          ) : list.data.items.length === 0 ? (
+            <p className="p-3 text-sm text-fg-muted">No analyses match.</p>
+          ) : (
+            <ul>
+              {list.data.items.map((a) => (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    disabled={a.missing > 0}
+                    onClick={() => onDone(a.id)}
+                    className="flex w-full items-baseline gap-3 rounded px-2 py-2 text-left text-sm hover:bg-surface-2 disabled:opacity-60"
+                  >
+                    <span className="font-mono text-xs text-fg-muted">{a.code}</span>
+                    <span className="min-w-0 flex-1 truncate">{a.description}</span>
+                    <span className="shrink-0 tabular-nums">
+                      {a.missing > 0 ? (
+                        <Badge tone="danger">{a.missing} without rate</Badge>
+                      ) : (
+                        `₹${formatAmount(a.boqRate)} / ${a.unit}`
+                      )}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

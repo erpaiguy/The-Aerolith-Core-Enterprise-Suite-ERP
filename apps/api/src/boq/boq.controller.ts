@@ -30,6 +30,7 @@ const decimal4 = z
   .nullable();
 
 const lineFields = {
+  rateAnalysisId: z.uuid().nullable().optional(),
   code: z.string().trim().max(40).nullable().optional(),
   description: z.string().max(10_000).optional(),
   notes: z.string().max(10_000).optional(),
@@ -105,6 +106,11 @@ const headerBody = z.object({
   rowVersion: z.number().int().positive(),
   name: z.string().trim().min(1).max(200).optional(),
   notes: z.string().trim().max(4000).optional(),
+  rateDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+    .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)), 'Not a date')
+    .optional(),
 });
 
 /**
@@ -146,7 +152,11 @@ export class BoqController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(headerBody)) b: z.infer<typeof headerBody>,
   ) {
-    return this.boqs.updateHeader(c, id, b.rowVersion, { name: b.name, notes: b.notes });
+    return this.boqs.updateHeader(c, id, b.rowVersion, {
+      name: b.name,
+      notes: b.notes,
+      rateDate: b.rateDate,
+    });
   }
 
   @Get('boqs/:id/rows')
@@ -174,6 +184,15 @@ export class BoqController {
     @Query(new ZodPipe(searchQuery)) q: z.infer<typeof searchQuery>,
   ) {
     return this.boqs.search(c, id, q.q, q);
+  }
+
+  /** Re-price every item linked to a rate analysis, as on the BOQ's rate date. */
+  @Post('boqs/:id/refresh-rates')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  refreshRates(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.boqs.refreshRates(c, id);
   }
 
   @Post('boqs/:id/changes')

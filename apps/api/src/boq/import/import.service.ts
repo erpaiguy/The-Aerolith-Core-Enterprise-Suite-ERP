@@ -42,6 +42,7 @@ import {
   type Settings,
   type Structure,
 } from './builder.js';
+import { loadUnitMap } from '../units.js';
 import { readRows, sniffType } from './reader.js';
 
 export const MAX_LINES = 2_000_000;
@@ -183,7 +184,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
 
   async addUnit(claims: TenantClaims, input: { code: string; name: string; aliases: string[] }) {
     const db = await this.tenants.forTenant(claims.ten);
-    const taken = await this.unitMap(db, false);
+    const taken = await loadUnitMap(db, false);
     for (const a of [input.code, ...input.aliases]) {
       const owner = taken.get(a.toLowerCase());
       if (owner) throw new ConflictException({ code: 'unit_exists', unit: owner, alias: a });
@@ -196,18 +197,6 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
         VALUES (${claims.sub}, 'unit.create', 'unit', ${input.code}, ${tx.json({ name: input.name, aliases })})`;
     });
     return this.units(claims);
-  }
-
-  /** Lower-case code or alias -> unit code. */
-  private async unitMap(db: Sql, activeOnly = true): Promise<Map<string, string>> {
-    const rows = await db<{ code: string; aliases: string[] }[]>`
-      SELECT code, aliases FROM platform.unit ${activeOnly ? db`WHERE active` : db``}`;
-    const map = new Map<string, string>();
-    for (const r of rows) {
-      map.set(r.code.toLowerCase(), r.code);
-      for (const a of r.aliases) if (!map.has(a.toLowerCase())) map.set(a.toLowerCase(), r.code);
-    }
-    return map;
   }
 
   // --- jobs ---
@@ -312,7 +301,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
     const job = await this.job(db, jobId);
     if (!job.settings) throw new ConflictException({ code: 'not_validated' });
     const path = await this.filePath(claims.ten, job);
-    const units = await this.unitMap(db);
+    const units = await loadUnitMap(db);
     const settings = job.settings;
     async function* lines() {
       yield '﻿Row,Severity,Column,Message\r\n';
@@ -465,7 +454,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
       throw new ImportProblem(
         `The sheet has ${sheet.rows.toLocaleString('en-IN')} rows; one import takes up to ${MAX_LINES.toLocaleString('en-IN')}.`,
       );
-    const b = new LineBuilder(settings, await this.unitMap(db));
+    const b = new LineBuilder(settings, await loadUnitMap(db));
     const issues: Issue[] = [];
     let total = 0;
     let lines = 0;
@@ -510,7 +499,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
     const expected = job.summary!.lines;
     // Fixed-width segments sort correctly as plain strings; wide enough for the largest possible sibling count.
     const width = expected < 36 ** 3 ? 3 : expected < 36 ** 4 ? 4 : 5;
-    const units = await this.unitMap(db);
+    const units = await loadUnitMap(db);
 
     const result = await db.begin(async (tx) => {
       const [boq] = await tx<{ status: string; node_count: number; tender_id: string }[]>`

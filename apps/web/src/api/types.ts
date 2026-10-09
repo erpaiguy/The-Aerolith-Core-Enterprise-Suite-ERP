@@ -246,3 +246,105 @@ export interface ImportJob {
   progress: number;
   error: string | null;
 }
+
+// --- Rate library and rate analysis (apps/api/src/rates) ---
+
+export type ResourceKind = 'material' | 'labour' | 'equipment' | 'subcontract' | 'other';
+export const RESOURCE_KINDS: { value: ResourceKind; label: string }[] = [
+  { value: 'material', label: 'Material' },
+  { value: 'labour', label: 'Labour' },
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'subcontract', label: 'Subcontract' },
+  { value: 'other', label: 'Other' },
+];
+
+export interface Resource {
+  id: string;
+  code: string;
+  name: string;
+  kind: ResourceKind;
+  unit: string;
+  notes: string;
+  active: boolean;
+  rowVersion: number;
+  /** In force on the date asked for (list) or today (detail); null when there is none yet. */
+  rate: string | null;
+  rateFrom: string | null;
+}
+
+export interface ResourceDetail extends Resource {
+  rates: { effectiveFrom: string; rate: string; source: string; createdAt: string }[];
+  usedIn: { id: string; code: string; description: string }[];
+}
+
+export interface PriceBookResult {
+  dryRun: boolean;
+  headerRow: number;
+  rows: number;
+  created: number;
+  updated: number;
+  rates: number;
+  unchanged: number;
+  errors: number;
+  issues: { rowNo: number; message: string }[];
+  unitChanged: { code: string; from: string; to: string }[];
+}
+
+export interface Costing {
+  unitRate: string;
+  boqRate: string;
+  subtotal: string;
+  total: string;
+  lines: { lineNo: number; unitCost: string | null; cost: string }[];
+  additions: { label: string; pct: string; amount: string }[];
+  byKind: Record<ResourceKind, string>;
+  additionsPerUnit: string;
+  missing: { id: string; code: string; name: string }[];
+}
+
+export interface AnalysisSummary {
+  id: string;
+  code: string;
+  description: string;
+  unit: string;
+  outputQty: string;
+  active: boolean;
+  boqRate: string;
+  unitRate: string;
+  missing: number;
+}
+
+export interface AnalysisLine {
+  kind: 'resource' | 'analysis' | 'lump_sum';
+  resourceId: string | null;
+  subAnalysisId: string | null;
+  description: string;
+  qty: string;
+  wastagePct: string;
+  amount: string | null;
+  resource?: {
+    code: string;
+    name: string;
+    kind: ResourceKind;
+    unit: string;
+    active: boolean;
+  } | null;
+  subAnalysis?: { code: string; description: string; unit: string; active: boolean } | null;
+}
+
+export interface AnalysisDetail {
+  id: string;
+  code: string;
+  description: string;
+  unit: string;
+  outputQty: string;
+  additions: { label: string; pct: string }[];
+  notes: string;
+  active: boolean;
+  rowVersion: number;
+  asOf: string;
+  lines: AnalysisLine[];
+  costing: Costing;
+  usedBy: { id: string; code: string; description: string }[];
+  boqs: { id: string; name: string; tenderNumber: string; items: number }[];
+}

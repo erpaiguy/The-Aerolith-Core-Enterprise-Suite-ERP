@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useSession } from './session';
 
-export type Permission = 'tender.edit' | 'boq.edit';
+export type Permission = 'tender.edit' | 'boq.edit' | 'rates.edit';
 
 export function usePermission(p: Permission): boolean {
   const { user, licence } = useSession();

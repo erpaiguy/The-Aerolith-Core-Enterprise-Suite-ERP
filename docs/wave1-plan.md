@@ -31,7 +31,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 2 | BOQ engine (API) | `est` schema, partitioned lines, fractional sort keys, windowed reads with collapsed sections, ancestor total deltas, row-version conflicts | The benchmark design (05-database.md §4) made real |
 | 3 | BOQ grid (UI) | Virtualised grid, keyboard editing, insert/indent/move/delete, collapse, search | **Done** (see below) |
 | 4 | **Import/export** | Units master, Excel/CSV import wizard with mapping, dry run and error report; Excel/CSV export | **Done** (see below) |
-| 5 | Rate library + rate analysis | Resources and rates with effective dates; analyses (resources × productivity + wastage + overheads + profit) feeding BOQ rates | E1, E2 |
+| 5 | **Rate library + rate analysis** | Resources and rates with effective dates; analyses (resources × productivity + wastage + overheads + profit) feeding BOQ rates | **Done** (see below) |
 | 6 | Measurement + pricing | Measurement sheets; markups, contingency, escalation, GST; scenarios; bid summary | E4, E5 |
 | 7 | Revisions | Copy-on-write versions, compare two versions, lock on submission | E6. 1M-line copy must not take 64 s again |
 | 8 | Tender management detail | Pre-bid queries, addenda, EMD/bank guarantees with expiry reminders, document checklist, submission, competitor bids, win/loss | E7 |
@@ -332,4 +332,68 @@ triggered it for every user.
 semicolon CSV with multi-line cells and errors; Excel and CSV round trips; permissions; cancel; interrupted jobs; bad
 files; units); a browser test that imports a CSV through the wizard, exports to Excel, and imports that into a second
 BOQ with the same total.
+
+## Step 5 delivered: rate library and rate analysis
+
+**Journey:**
+1. **Resources** (Pre-construction menu): the tenant's own materials, labour, equipment and subcontract rates. Every
+   rate has a **from date**, so "the rate as on 1 April" is always answerable and old estimates stay repeatable.
+2. **Import price book**: an Excel/CSV sheet with Code, Name (or Description) and Rate; Unit, Type and Effective from
+   when present (Indian dates such as 01-04-2026 work). **Check** shows new, changed and unchanged rows and every
+   problem; **Apply** saves them in one transaction. Importing the same sheet twice changes nothing.
+3. **Rate analyses**: an item of work built from resource lines (quantity + wastage %), **sub-analyses** (mortar inside
+   brickwork) and lump sums, for an output quantity (CPWD-style "for 10 cum"), then percentages applied in order on the
+   running total (one click adds water charges 1 % + contractor's profit and overheads 15 %). The editor costs it
+   **live, as on any date**, with the split per unit by material, labour, equipment, subcontract and overheads.
+4. **In a BOQ**: select an item → **Rate from analysis** → pick. The item takes the analysis' rate (and its unit and
+   description when empty) as on the BOQ's **rates-as-on date**. A small calculator icon marks such rates.
+   **Refresh rates** re-prices every linked item after resource rates or the date change.
+
+**Decisions made while building (change any you disagree with):**
+- **BOQ rates are copied, not live.** A BOQ is a document; a cement price change must not silently move a submitted
+  bid. Rates change only on "Rate from analysis" or "Refresh rates".
+- **Typing a rate by hand unlinks the item** from its analysis, so a refresh never overwrites a deliberate rate.
+- **Missing rates block, never price at zero.** An analysis whose resource has no rate on the date shows "no rate"
+  and the BOQ refuses to take or refresh it (`missing_rates`, naming the resources).
+- **Units must match.** An analysis per cum cannot price an item measured in sqm (`unit_mismatch`); "Cu.M" and "cum"
+  are the same through the units master.
+- **Exact arithmetic.** Costing uses integer-scaled decimals (no floating point); the BOQ gets the rate rounded to
+  paise (half away from zero), the analysis shows 4 decimals. Checked by hand in the tests (PCC 1:4:8:
+  ₹4,896.70 of lines → ₹5,687.52 per cum).
+- **No cycles, nesting up to 10.** Saving (or previewing) an analysis that would end up inside itself is refused with
+  the path (`MORTAR-16 → BW-16 → MORTAR-16`).
+- **Masters are archived, never deleted** (the database refuses deletes to the app role); rate versions can be
+  removed.
+- **New permission `rates.edit`** (managers yes, workers no by default; the admin can change it on the Users page).
+  Everyone can read rates; applying an analysis to a BOQ needs `boq.edit`.
+- **No bundled schedules of rates** (CPWD DSR, state SORs): the tenant imports its own price book (licensing, and
+  rates differ by region anyway).
+
+**Measured** (sandbox, the 993,100-line BOQ from step 4, every item linked to one analysis):
+
+| Action | Time |
+|--------|------|
+| Refresh rates, all 990,000 linked items change | **31.5 s** (one request; the BOQ is locked meanwhile) |
+| Refresh rates, nothing changed | 0.9 s |
+| Editing a line afterwards | 21 ms |
+
+Every stored invariant (subtotals, child counts, BOQ total) held after the refresh. [Likely] 31 s is acceptable for a
+rare, deliberate action, but a refresh during a working session makes other users' open rows stale (they reload).
+[Guessing] Against Supabase over the internet it is still one set-based statement, so it should stay in the same range;
+measure on the pilot's project.
+
+**API:**
+- `GET/POST /api/tenant/resources`, `GET/POST /api/tenant/resources/:id`, `POST …/rates`, `POST …/rates/delete`,
+  `POST /api/tenant/resources/price-book?dryRun=true|false` (multipart)
+- `GET/POST /api/tenant/rate-analyses`, `GET/POST /api/tenant/rate-analyses/:id?asOf=`, `POST …/copy`,
+  `POST /api/tenant/rate-analyses/preview` (cost without saving)
+- BOQ: `rateAnalysisId` on insert/update ops; `rateDate` on the BOQ header; `POST /api/tenant/boqs/:id/refresh-rates`
+
+**Bug fixed on the way (tender register, step 1):** "due in N days" counted 24-hour periods rounded up, so a tender due
+on the 19th at 3 pm showed "in 11 d" on the 9th before 3 pm. It now counts calendar days in the user's time zone (and
+the trial banner says "ends today" on the last day). The browser test had only passed because CI ran after 3 pm.
+
+**Tests:** 6 costing unit tests (hand-checked figures, nesting, missing rates, cycles, depth); 13 API integration tests
+(dated rates, price-book check/apply/re-apply, analyses with sub-analyses, cycle refusal, preview, copy, BOQ apply,
+unit mismatch, unlink, refresh with invariants, missing rates, permissions); a browser test of the whole journey.
 

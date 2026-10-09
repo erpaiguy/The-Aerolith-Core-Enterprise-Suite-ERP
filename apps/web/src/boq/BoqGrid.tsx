@@ -7,6 +7,7 @@
 // - Structural changes (move, indent, delete) re-open the window around the affected line.
 import { Alert, Button } from '@aerolith/ui';
 import {
+  Calculator,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
@@ -83,13 +84,15 @@ interface Props {
   canEdit: boolean;
   onHeader: (h: BoqHeader) => void;
   onSaving: (pending: number) => void;
+  /** Asks the user for a rate analysis for this item; resolves to its id, or null when cancelled. */
+  onPickAnalysis?: ((row: BoqRow) => Promise<string | null>) | undefined;
 }
 
 const editable = (row: BoqRow, col: EditableColumn) =>
   row.type === 'item' || col === 'description' || (col === 'code' && row.type === 'section');
 
 export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
-  { boqId, canEdit, onHeader, onSaving },
+  { boqId, canEdit, onHeader, onSaving, onPickAnalysis },
   ref,
 ) {
   const storageKey = `aerolith.boq.${boqId}.collapsed`;
@@ -351,6 +354,21 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
         : null;
     });
     return true;
+  };
+
+  /** Takes the active item's rate (and an empty unit or description) from a rate analysis the user picks. */
+  const rateFromAnalysis = async () => {
+    const row = activeRow;
+    if (!row || row.type !== 'item' || !onPickAnalysis) return;
+    const analysisId = await onPickAnalysis(row);
+    scroller.current?.focus();
+    if (!analysisId) return;
+    void enqueue(() => {
+      const current = rowById(row.id);
+      return current
+        ? [{ op: 'update', id: row.id, rowVersion: current.rowVersion, rateAnalysisId: analysisId }]
+        : null;
+    });
   };
 
   // --- structure ---
@@ -794,6 +812,17 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
           >
             <Trash2 className="size-4" aria-hidden />
           </Button>
+          {onPickAnalysis && (
+            <Button
+              variant="ghost"
+              onClick={() => void rateFromAnalysis()}
+              disabled={activeRow?.type !== 'item'}
+              title="Take this item's rate from a rate analysis"
+              aria-label="Rate from analysis"
+            >
+              <Calculator className="size-4" aria-hidden />
+            </Button>
+          )}
           <Button variant="ghost" onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
             <Undo2 className="size-4" aria-hidden />
           </Button>
@@ -985,7 +1014,15 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                     {cell(
                       row,
                       'rate',
-                      <span className="w-full text-right tabular-nums">
+                      <span className="flex w-full items-center justify-end gap-1 tabular-nums">
+                        {row.rateAnalysisId && (
+                          <Calculator
+                            className="size-3 shrink-0 text-accent"
+                            aria-label="Rate from a rate analysis"
+                          >
+                            <title>Rate from a rate analysis</title>
+                          </Calculator>
+                        )}
                         {row.type === 'item' ? formatRate(row.rate) : ''}
                       </span>,
                     )}
