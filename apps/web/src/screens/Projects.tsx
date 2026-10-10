@@ -16,7 +16,7 @@ import {
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, Gauge, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
@@ -392,12 +392,20 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
           </span>
         }
         actions={
-          p.canEdit &&
-          !editing && (
-            <Button variant="secondary" onClick={() => setEditing(true)}>
-              <Pencil className="size-4" aria-hidden /> Edit
-            </Button>
-          )
+          <div className="flex gap-2">
+            <Link
+              to="/projects/$projectId/dashboard"
+              params={{ projectId: p.id }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm font-medium hover:bg-surface-2"
+            >
+              <Gauge className="size-4" aria-hidden /> Dashboard
+            </Link>
+            {p.canEdit && !editing && (
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil className="size-4" aria-hidden /> Edit
+              </Button>
+            )}
+          </div>
         }
       />
       {p.statusReason && (p.status === 'on_hold' || p.status === 'cancelled') && (
@@ -461,7 +469,8 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">
-                  The project dashboard comes in the last step of Wave 2a.
+                  Wave 2b: approvals, purchase requisitions and orders from the BOQ and schedule,
+                  stores, and daily site reports.
                 </p>
               </Card>
             </div>

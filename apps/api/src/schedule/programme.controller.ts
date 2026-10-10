@@ -20,6 +20,7 @@ import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
 import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { DashboardService } from './dashboard.service.js';
 import { MacroService } from './macro.service.js';
 import { ProgrammeService } from './programme.service.js';
 
@@ -148,7 +149,14 @@ export class ProgrammeController {
   constructor(
     private readonly programmes: ProgrammeService,
     private readonly macros: MacroService,
+    private readonly dashboards: DashboardService,
   ) {}
+
+  /** Where the project stands: money, progress three ways, the S-curve, the look-ahead and the next milestones. */
+  @Get('projects/:id/dashboard')
+  dashboard(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.dashboards.dashboard(c, id);
+  }
 
   /** The project's schedules rolled up through its WBS, by package, trade and zone, and its milestones. */
   @Get('projects/:id/macro')

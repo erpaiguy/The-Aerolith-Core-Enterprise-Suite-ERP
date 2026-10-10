@@ -25,6 +25,6 @@ import { WbsService } from './wbs.service.js';
     // Every BOQ and plan route, whichever module serves it, checks a project's team first.
     { provide: APP_INTERCEPTOR, useClass: ProjectAccess },
   ],
-  exports: [ProjectService],
+  exports: [ProjectService, ProjectBoqService, ProgressService],
 })
 export class ProjectModule {}

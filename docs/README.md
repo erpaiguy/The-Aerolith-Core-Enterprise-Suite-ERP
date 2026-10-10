@@ -102,4 +102,12 @@ Wave 1's exit criterion, a pilot contractor pricing and submitting a real tender
 | Step | What | Status |
 |------|------|--------|
 | 1 | Projects: register, from a won tender, sites, team, project-scoped visibility, status | **Done** |
-| 2 | Contract BOQ and budget from the won tender | Next |
+| 2 | Contract BOQ and budget from the won tender | **Done** |
+| 3 | WBS and cost codes; BOQ items mapped to them | **Done** |
+| 4 | Project schedules: baselines, progress as of a data date, resources, look-ahead; 50k activities | **Done** |
+| 5 | Macro plans: schedules rolled up through the WBS, by package, trade and zone; milestones | **Done** |
+| 6 | Progress measurement: measurement books, progress report, activities' physical progress | **Done** |
+| 7 | Project dashboard: money, progress three ways, S-curve, look-ahead; progress report in Excel | **Done** |
+
+Wave 2a's exit criterion, a won tender running as a live project on a baseline schedule, needs the pilot as well:
+nothing here has run on a real project yet.

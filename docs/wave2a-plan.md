@@ -38,7 +38,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 4 | **Project schedules** (J4) | The Wave 1 engine for project plans: constraints, resources and assignments, multiple baselines, progress updates (data date, actuals, remaining duration), look-ahead; 50k activities | **Done** (see below) |
 | 5 | **Macro plans** (J5) | Roll-up of micro plans through the WBS, milestones, summary views by package, trade and zone | **Done** (see below) |
 | 6 | **Progress measurement** (J6) | Physical % per BOQ item and activity, measurement-based progress, progress value against the contract BOQ | **Done** (see below) |
-| 7 | **Project dashboard and reports** | Progress, schedule variance, budget against contract, look-ahead | |
+| 7 | **Project dashboard and reports** | Progress, schedule variance, budget against contract, look-ahead | **Done** (see below) |
 
 Each step ships with API tests and a browser test of the main journey, as in Wave 1.
 
@@ -399,3 +399,60 @@ project.
   - an activity's physical progress from a section's items (89%), and after one is unlinked (78%).
 - A browser test: a contract BOQ item measured from dimensions, a wrong figure reversed with a reason, the done
   column, and the progress report at 50%.
+
+## Step 7 delivered: project dashboard and reports
+
+**Journey:** a project's page has a **Dashboard** button. The dashboard is one printable page, worked out when it is
+opened:
+- **Money**: the contract (its BOQ total, and the contract value if different), the planned margin, the work done
+  at contract rates with its physical progress, this month's work, and the margin on the work done (its value at
+  contract rates less the same work at budget rates).
+- **Schedules**: each live schedule's data date, its finish against its baseline (the slip in days), the activities
+  done, going, late against the baseline and critical, and its progress **three ways, side by side**:
+  - **planned**: where the baseline says the work should be by the data date (baseline working days elapsed);
+  - **scheduled**: what the planners report done (step 4, by working days);
+  - **measured**: the physical progress of the BOQ items its activities carry out (step 6, by contract value).
+  When two of them are more than 10 points apart, the page says so in words ("the planners report 80% done, the
+  measurements show 30%"; "40% done against 60% planned").
+- **S-curve**, month by month: **planned** (the value of the BOQ items linked to activities, spread over the
+  activities' baseline working days), **forecast** (the same over the current schedule), **earned** (all work
+  measured, at contract rates, to the end of each month). It says how much of the contract is linked to activities;
+  the figures are in a table under the chart.
+- The **next 14 days** across the live schedules (from each one's data date), with a link to a schedule's full
+  look-ahead; the **next milestones** against their baseline dates.
+- **Budget against contract** by contract BOQ, and the work done by section, with a link to the progress report.
+
+The **progress report** (step 6) downloads as **Excel**: by contract BOQ and its sections, and by WBS element, as
+numbers that sum.
+
+**Who sees it:** the project's team (and those who see every project), as for the rest of the project; viewers too.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] Three progress figures, never blended into one.** Step 6 left the schedule's progress typed by hand
+  beside the measured progress. A single "true" percentage would need a rule for which wins, and either choice hides
+  a mistake: a planner's optimism, or a measurement book not kept up. Shown side by side, a gap is visible and named.
+- **[Certain] Working days, on each activity's calendar, holidays included**, for planned progress and both
+  curves. Calendar days were tried first; the API test caught them giving 68.8% planned instead of 75% across
+  Gandhi Jayanti.
+- **[Likely] The curves cover only the linked work.** Planned and forecast need dates, which only an activity gives;
+  an item carried out by two activities is shared equally between them. Earned counts all measured work, linked or
+  not, because that is what will be billed. Link the BOQ to the schedule (a section code links all of it) for the
+  curves to mean anything.
+- **[Likely] Months, not weeks**, on the curve: a project of one to three years reads well by month; a ten-day job
+  does not need an S-curve.
+- **No portfolio view across projects yet** (each project's dashboard only); and nothing is stored: the dashboard is
+  worked out from the live data each time it opens.
+
+**API** (under `/api/tenant`): `GET /projects/:id/dashboard`, `GET /projects/:id/progress/export?from=&to=` (Excel).
+
+**Tests:**
+- 2 API integration tests, with every figure worked by hand on the site calendar:
+  - an empty project; then a schedule with a baseline, progress as of 1 October and two activities carrying out the
+    contract's items: contract 49,000, budget 45,000, margin 8.16%; planned 75% (concrete's span crosses the
+    2 October holiday), scheduled 66.7%, measured 62.5%; a slip of one day; the S-curve's planned (0, 33,000,
+    44,000), forecast (0, 31,428.57, 44,000) and earned (4,400, 24,200, 29,700) by month; the look-ahead and the
+    milestone;
+  - the progress report as Excel (section and project totals, the period), and the team only.
+- A browser test: a won tender's item measured (40%), a schedule with the item linked to its activity, a baseline
+  and progress as of a data date; the dashboard's figures (planned 60%, scheduled 40%, measured 40%, two days late,
+  the gap said in words), the S-curve, the look-ahead, and the progress report downloaded as Excel.

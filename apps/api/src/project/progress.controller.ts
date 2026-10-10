@@ -8,13 +8,17 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { PermissionGuard } from '../auth/permissions.js';
+import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { progressXlsx } from './progress-excel.js';
 import { ProgressService } from './progress.service.js';
 
 const date = z.iso.date();
@@ -54,6 +58,16 @@ const reverse = z.object({ reason: z.string().trim().min(3).max(300) });
 const period = z.object({ from: date.optional(), to: date.optional() });
 const link = z.object({ boqId: z.uuid(), code: z.string().trim().min(1).max(40) });
 const unlink = z.object({ lineKey: z.uuid() });
+const periodOf = (q: z.infer<typeof period>) => {
+  const to = q.to ?? new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+  const from = q.from ?? `${to.slice(0, 8)}01`;
+  if (from > to)
+    throw new BadRequestException({
+      code: 'bad_period',
+      message: 'The period starts after it ends.',
+    });
+  return { from, to };
+};
 const lineId = (v: string) => {
   if (!/^\d{1,18}$/.test(v)) throw new BadRequestException({ code: 'line_not_found' });
   return v;
@@ -67,7 +81,10 @@ const lineId = (v: string) => {
 @Controller('tenant')
 @UseGuards(TenantAuthGuard, PermissionGuard)
 export class ProgressController {
-  constructor(private readonly progress: ProgressService) {}
+  constructor(
+    private readonly progress: ProgressService,
+    private readonly tenants: TenantConnections,
+  ) {}
 
   @Get('boqs/:id/lines/:lineId/progress')
   book(
@@ -109,14 +126,29 @@ export class ProgressController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query(new ZodPipe(period)) q: z.infer<typeof period>,
   ) {
-    const to = q.to ?? new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
-    const from = q.from ?? `${to.slice(0, 8)}01`;
-    if (from > to)
-      throw new BadRequestException({
-        code: 'bad_period',
-        message: 'The period starts after it ends.',
-      });
+    const { from, to } = periodOf(q);
     return this.progress.report(c, id, from, to);
+  }
+
+  /** The same report as an Excel workbook. */
+  @Get('projects/:id/progress/export')
+  async reportFile(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(period)) q: z.infer<typeof period>,
+  ) {
+    const { from, to } = periodOf(q);
+    const r = await this.progress.report(c, id, from, to);
+    const db = await this.tenants.forTenant(c.ten);
+    const [p] = await db<{ number: string; name: string }[]>`
+      SELECT number, name FROM proj.project WHERE id = ${id}`;
+    const name = `${p!.number} ${p!.name} - progress to ${to}`
+      .replace(/[^\w.\- ()&]+/g, '_')
+      .trim();
+    return new StreamableFile(await progressXlsx(p!, r), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      disposition: attachment(`${name}.xlsx`),
+    });
   }
 
   @Get('programmes/:id/activities/:activityId/lines')

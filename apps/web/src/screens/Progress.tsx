@@ -1,12 +1,12 @@
 // A project's progress (docs/wave2a-plan.md step 6): the work done to a day and in a period, measured in the contract
 // BOQ's measurement books: value at contract rates, physical progress within the BOQ quantities, the budget value
 // of the same work; by contract BOQ and its sections, and by WBS element.
-import { Alert, Card, Field, Input, PageHeader, Spinner, Table, cx } from '@aerolith/ui';
+import { Alert, Button, Card, Field, Input, PageHeader, Spinner, Table, cx } from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { api } from '../api/client';
+import { api, saveFile } from '../api/client';
 import type { ProjectDetail } from '../api/types';
 import { describeError, formatInr } from '../lib/format';
 import { shortDate } from '../schedule/model';
@@ -54,6 +54,22 @@ export function ProgressScreen({ projectId }: { projectId: string }) {
     placeholderData: keepPreviousData,
     enabled: Boolean(from && to && from <= to),
   });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const download = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { blob, fileName } = await api.download(
+        `/api/tenant/projects/${projectId}/progress/export?from=${from}&to=${to}`,
+      );
+      saveFile(blob, fileName || 'progress.xlsx');
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
   if (project.isPending) return <Spinner />;
   if (project.isError) return <Alert tone="danger">{describeError(project.error)}</Alert>;
   const p = project.data;
@@ -70,7 +86,18 @@ export function ProgressScreen({ projectId }: { projectId: string }) {
       <PageHeader
         title="Progress"
         subtitle="Work done as measured in the contract BOQ, at contract rates."
+        actions={
+          <Button
+            variant="secondary"
+            busy={busy}
+            disabled={!r || r.boqs.length === 0}
+            onClick={() => void download()}
+          >
+            <Download className="size-4" aria-hidden /> Excel
+          </Button>
+        }
       />
+      {error && <Alert tone="danger">{error}</Alert>}
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Period from">
           <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />

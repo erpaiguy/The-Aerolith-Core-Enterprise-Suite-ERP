@@ -38,6 +38,7 @@ import { CostCodesScreen } from './screens/CostCodes';
 import { WbsScreen } from './screens/Wbs';
 import { MacroScreen } from './screens/Macro';
 import { ProgressScreen } from './screens/Progress';
+import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
 import { TemplatesScreen } from './screens/Templates';
 import { TenderSettingsScreen } from './screens/TenderSettings';
@@ -103,6 +104,14 @@ const progressRoute = createRoute({
   component: function ProgressPage() {
     const { projectId } = progressRoute.useParams();
     return <ProgressScreen key={projectId} projectId={projectId} />;
+  },
+});
+const projectDashboardRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/dashboard',
+  component: function ProjectDashboardPage() {
+    const { projectId } = projectDashboardRoute.useParams();
+    return <ProjectDashboardScreen key={projectId} projectId={projectId} />;
   },
 });
 const macroRoute = createRoute({
@@ -250,6 +259,7 @@ const routeTree = rootRoute.addChildren([
     wbsRoute,
     macroRoute,
     progressRoute,
+    projectDashboardRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/cost-codes',

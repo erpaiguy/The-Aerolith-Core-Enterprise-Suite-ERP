@@ -342,7 +342,7 @@ function WbsSummary({ projectId }: { projectId: string }) {
       {d.data && (
         <p className="text-sm text-fg-muted">
           {d.data.wbs.length === 0
-            ? 'No WBS yet. Make it from the contract BOQ, or by hand.'
+            ? 'No WBS yet. Make it from the contract BOQ, or by hand. '
             : `${d.data.wbs.length} WBS elements. `}
           {items > 0 &&
             `Of ${items.toLocaleString('en-IN')} contract items, ${(items - d.data.unmapped.wbs.contract.lines).toLocaleString('en-IN')} are mapped to the WBS and ${(items - d.data.unmapped.costCode.contract.lines).toLocaleString('en-IN')} to cost codes.`}
