@@ -153,6 +153,12 @@ const measurementBody = z.object({
     .max(1000),
 });
 
+const positionQuery = z
+  .object({
+    line: z.coerce.number().int().min(1).max(100_000_000).optional(),
+    key: sortKey.optional(),
+  })
+  .refine((q) => (q.line === undefined) !== (q.key === undefined), 'Give line or key');
 const windowQuery = z
   .object({
     after: sortKey.optional(),
@@ -307,6 +313,16 @@ export class BoqController {
     @Query(new ZodPipe(windowQuery)) q: z.infer<typeof windowQuery>,
   ) {
     return this.boqs.window(c, id, q);
+  }
+
+  /** `?line=N` gives the sort key of the Nth line; `?key=K` the line number of the line at K. */
+  @Get('boqs/:id/position')
+  position(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(positionQuery)) q: z.infer<typeof positionQuery>,
+  ) {
+    return this.boqs.position(c, id, q.key !== undefined ? { key: q.key } : { line: q.line! });
   }
 
   @Get('boqs/:id/outline')

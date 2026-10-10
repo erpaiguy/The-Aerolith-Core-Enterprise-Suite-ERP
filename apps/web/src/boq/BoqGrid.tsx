@@ -40,6 +40,7 @@ import {
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
 import { BulkEditDialog } from './BulkEdit';
+import { PositionBar } from './PositionBar';
 import { load, save } from '../lib/storage';
 import {
   COLUMNS,
@@ -543,16 +544,19 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
     void open(at ? { key: at.key, offset: at.offset } : {});
   };
 
+  /** Opens the grid at the line with this sort key, expanding any collapsed section above it. */
+  const jump = (key: string) => {
+    const m = new Map(collapsedRef.current);
+    for (const [id, k] of m) if (key.startsWith(k + '!')) m.delete(id);
+    if (m.size !== collapsedRef.current.size) persist(m);
+    void open({ key, offset: ROW_H * 3 }).then((r) => {
+      if (r[0]) setActive({ id: r[0].id, col: 'description' });
+      scroller.current?.focus();
+    });
+  };
+
   useImperativeHandle(ref, () => ({
-    jumpTo(key: string) {
-      const m = new Map(collapsedRef.current);
-      for (const [id, k] of m) if (key.startsWith(k + '!')) m.delete(id);
-      if (m.size !== collapsedRef.current.size) persist(m);
-      void open({ key, offset: ROW_H * 3 }).then((r) => {
-        if (r[0]) setActive({ id: r[0].id, col: 'description' });
-        scroller.current?.focus();
-      });
-    },
+    jumpTo: jump,
     row: (id: string) => rowById(id),
     apply(changed: BoqRow[], header: BoqHeader) {
       for (const r of changed) versions.current.set(r.id, r.rowVersion);
@@ -1241,6 +1245,11 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
             </div>
           )}
         </div>
+        <PositionBar
+          boqId={boqId}
+          topKey={rows[Math.min(rows.length - 1, Math.floor(scrollTop / ROW_H))]?.sortKey ?? null}
+          onJump={jump}
+        />
       </div>
     </div>
   );

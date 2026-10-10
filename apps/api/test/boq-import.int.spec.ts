@@ -86,6 +86,9 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ import and export (integration)',
     return settled(res.json<ImportJob>().id);
   };
   const validated = async (job: ImportJob, settings: object = {}) => {
+    // A scan that failed has no settings to confirm: say why, rather than what the validation then refuses.
+    if (!job.settings)
+      throw new Error(`job ${job.status}, not scanned: ${job.error ?? 'no error'}`);
     const res = await post(`/tenant/imports/${job.id}/validate`, { ...job.settings, ...settings });
     if (res.statusCode !== 200) throw new Error(`${res.statusCode} ${res.body}`);
     return settled(job.id);

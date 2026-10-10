@@ -550,6 +550,40 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ engine (integration)', () => {
       expect(await invariants(boqId)).toEqual([]);
     }, 60_000);
 
+    it('finds the line at any number, and the number of any line, counting collapsed lines too', async () => {
+      type Pos = { line: number; sortKey: string; total: number };
+      const pos = async (q: string) =>
+        (await get(`/tenant/boqs/${boqId}/position?${q}`)).json<Pos>();
+      const rows = await allRows(boqId);
+      const total = SECTIONS * (PER_SECTION + 2);
+      expect(await pos('line=1')).toEqual({ line: 1, sortKey: rows[0]!.sortKey, total });
+      expect(await pos('line=2000')).toEqual({ line: 2000, sortKey: rows[1999]!.sortKey, total });
+      // Past the end: the last line.
+      expect(await pos('line=99999')).toEqual({
+        line: total,
+        sortKey: rows.at(-1)!.sortKey,
+        total,
+      });
+      // Back again: the number of a line from its key.
+      const k = rows[1234]!.sortKey;
+      expect(await pos(`key=${encodeURIComponent(k)}`)).toEqual({ line: 1235, sortKey: k, total });
+      // Collapsing a section in the grid does not renumber the lines below it.
+      const section = rows.find((r) => r.type === 'section')!;
+      const window = (
+        await get(
+          `/tenant/boqs/${boqId}/rows?from=${encodeURIComponent(k)}&collapsed=${section.id}&limit=1`,
+        )
+      ).json<{ rows: { sortKey: string }[] }>();
+      expect((await pos(`key=${encodeURIComponent(window.rows[0]!.sortKey)}`)).line).toBe(1235);
+      // One of line or key; an empty BOQ has no lines.
+      expect((await get(`/tenant/boqs/${boqId}/position?line=1&key=${k}`)).statusCode).toBe(400);
+      expect((await get(`/tenant/boqs/${boqId}/position`)).statusCode).toBe(400);
+      const empty = await newBoq('Empty');
+      expect((await get(`/tenant/boqs/${empty}/position?line=1`)).json()).toMatchObject({
+        code: 'boq_empty',
+      });
+    });
+
     it('pages forward through every row exactly once, in tree order', async () => {
       const rows = await allRows(boqId);
       expect(rows).toHaveLength(SECTIONS * (PER_SECTION + 2));

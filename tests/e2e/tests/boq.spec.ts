@@ -197,4 +197,17 @@ test('scrolling a 3,000-line BOQ keeps every line in order while the window slid
     if (codes.includes(1)) break;
   }
   await expect(grid(page).getByRole('row', { name: /^L0001 Road line 1 / })).toBeVisible();
+
+  // The position bar: where the view is in the whole BOQ, and straight to any line by number or by sliding.
+  const position = page.getByRole('group', { name: 'Position in the BOQ' });
+  await expect(position.getByTestId('boq-position')).toHaveText('Line 1 of 3,000');
+  await position.getByLabel('Go to line').fill('2,345');
+  await position.getByLabel('Go to line').press('Enter');
+  await expect(grid(page).getByRole('row', { name: /^L2345 Road line 2345 / })).toBeVisible();
+  await expect(position.getByTestId('boq-position')).toHaveText(/^Line 2,3\d\d of 3,000$/);
+  const slider = position.getByLabel('Slide to a point in the BOQ');
+  await slider.focus();
+  await slider.press('End');
+  await expect(grid(page).getByRole('row', { name: /^L3000 Road line 3000 / })).toBeVisible();
+  await page.screenshot({ path: 'screenshots/boq-position.png' });
 });

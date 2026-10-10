@@ -308,6 +308,41 @@ export class BoqService {
     return { rows: backward ? out.reverse() : out, hasMore: !exhausted };
   }
 
+  /**
+   * Where a line sits in the whole BOQ, counting every line in order (collapsed sections included), for "go to line"
+   * and the position rail of a BOQ of any size: the line at a number (1 = the first), or the number of the line at a
+   * sort key. Both walk the (boq_id, sort_key) index only, so a million lines take a fraction of a second.
+   */
+  async position(
+    claims: TenantClaims,
+    boqId: string,
+    at: { line: number } | { key: string },
+  ): Promise<{ line: number; sortKey: string; total: number }> {
+    const db = await this.tenants.forTenant(claims.ten);
+    const [b] = await db<{ total: number }[]>`
+      SELECT (SELECT count(*)::int FROM est.boq_node WHERE boq_id = ${boqId}) AS total
+      FROM est.boq WHERE id = ${boqId}`;
+    if (!b) throw new NotFoundException({ code: 'boq_not_found' });
+    if (b.total === 0)
+      throw new NotFoundException({ code: 'boq_empty', message: 'The BOQ has no lines.' });
+    if ('line' in at) {
+      const line = Math.min(Math.max(1, at.line), b.total);
+      const [r] = await db<{ sort_key: string }[]>`
+        SELECT sort_key FROM est.boq_node WHERE boq_id = ${boqId}
+        ORDER BY sort_key OFFSET ${line - 1} LIMIT 1`;
+      return { line, sortKey: r!.sort_key, total: b.total };
+    }
+    const [r] = await db<{ before: number; sort_key: string | null }[]>`
+      SELECT (SELECT count(*)::int FROM est.boq_node WHERE boq_id = ${boqId} AND sort_key < ${at.key}) AS before,
+        (SELECT sort_key FROM est.boq_node WHERE boq_id = ${boqId} AND sort_key >= ${at.key}
+          ORDER BY sort_key LIMIT 1) AS sort_key`;
+    return {
+      line: Math.min(r!.before + 1, b.total),
+      sortKey: r!.sort_key ?? at.key,
+      total: b.total,
+    };
+  }
+
   /** Sections down to `maxDepth`, for the outline/navigation panel. */
   async outline(claims: TenantClaims, boqId: string, maxDepth: number) {
     const db = await this.tenants.forTenant(claims.ten);

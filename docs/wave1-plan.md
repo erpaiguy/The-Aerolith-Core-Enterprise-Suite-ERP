@@ -39,7 +39,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 10 | **Tender documents** | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | **Done** (see below; Supabase Storage not built) |
 | 11 | **Tender programme** | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | **Done** (see below) |
 | 12 | **Reports + dashboard** | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel (E11, 08-dashboard.md §2.3-2.4) | **Done** (reports and dashboards, see below) |
-| 13 | **The rest of Wave 1's scope** | Third-party notices and SBOM; BOQ item kinds (provisional sums, rate only, alternates), templates, bulk edit; foreign currency; company bid criteria, checklist templates, calendar; RFQ negotiation rounds and reminders; document retention, templates, links, PDF search; jumping anywhere in a huge BOQ. Not MS Project .mpp (see below) | In progress (see below) |
+| 13 | **The rest of Wave 1's scope** | Third-party notices and SBOM; BOQ item kinds (provisional sums, rate only, alternates), templates, bulk edit; foreign currency; company bid criteria, checklist templates, calendar; RFQ negotiation rounds and reminders; document retention, templates, links, PDF search; jumping anywhere in a huge BOQ. Not MS Project .mpp (see below) | Delivered, except documents in Supabase Storage and anything Cloudflare (see below) |
 
 Each step ships with API tests and a browser test of the main journey, like Wave 0.
 
@@ -1213,3 +1213,23 @@ given up for good, a read stopped for taking too long; thumbnails recognised by 
 found by a worker, name matches first, an unreadable file marked so; a thumbnail kept and served back as that
 picture, SVG and oversized pictures refused, none for a new version). The browser test now sees the thumbnail drawn
 while uploading and finds a specification by the words inside it.
+
+### Part 8: anywhere in a BOQ of a million lines
+
+The grid holds a few hundred lines at a time (step 3), so its scrollbar covers only those. Under the grid, a
+**position bar** shows the line at the top of the view ("Line 412,305 of 1,000,000"), a **slider** across the whole
+BOQ (drag and let go, or Home/End/arrows with the keyboard), and **Go to line** by number. Line numbers count every
+line in order, collapsed sections included, so a number means the same line for everyone; going to a line inside a
+collapsed section opens it.
+
+**Decisions:** the number of the top line is read once scrolling settles (a quarter of a second), not on every
+frame. Measured on a million lines: about 0.06 s for "which line is this" and 0.11 s for "which is line 900,000"
+(both walk the (boq, sort key) index only). [Likely] straight after importing a million lines, until Postgres's
+autovacuum has passed over the table, these take longer (the index cannot answer alone yet); nothing breaks.
+
+**API:** `GET /boqs/:id/position?line=N` (the sort key of line N, clamped to the BOQ) or `?key=K` (the number of the
+line at K); both return `{line, sortKey, total}`.
+
+**Tests:** 1 API integration test over 3,040 lines (first, middle and past the end; key to number and back; numbers
+unchanged by a collapsed section; one of line or key; an empty BOQ). The 3,000-line browser test now goes to line
+2,345 by number and to the end with the slider.
