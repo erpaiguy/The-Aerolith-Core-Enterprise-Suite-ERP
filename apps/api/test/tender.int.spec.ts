@@ -352,6 +352,8 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'rfq.edit',
         'documents.edit',
         'programme.edit',
+        'projects.edit',
+        'projects.all',
       ]);
       expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
         'tender.edit',
@@ -361,6 +363,8 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'rfq.edit',
         'documents.edit',
         'programme.edit',
+        'projects.edit',
+        'projects.all',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
       const all = (await get('/tenant/permissions', t.admin)).json<{
@@ -375,6 +379,8 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'rfq.edit': true,
           'documents.edit': true,
           'programme.edit': true,
+          'projects.edit': true,
+          'projects.all': true,
         },
         worker: {
           'tender.edit': false,
@@ -384,6 +390,8 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'rfq.edit': false,
           'documents.edit': true,
           'programme.edit': false,
+          'projects.edit': false,
+          'projects.all': false,
         },
       });
     });

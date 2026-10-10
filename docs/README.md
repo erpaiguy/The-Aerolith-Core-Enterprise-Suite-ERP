@@ -96,3 +96,10 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 13 | The rest of Wave 1: notices/SBOM, item kinds, templates, bulk edit, currencies, company tender settings, RFQ rounds, document lifecycle, PDF search, thumbnails, jumping anywhere in a huge BOQ | **Done** (Supabase Storage and anything Cloudflare excluded; no .mpp or OCR, by decision) |
 
 Wave 1's exit criterion, a pilot contractor pricing and submitting a real tender on it, is **not met yet**.
+
+## Wave 2a build progress ([plan](wave2a-plan.md))
+
+| Step | What | Status |
+|------|------|--------|
+| 1 | Projects: register, from a won tender, sites, team, project-scoped visibility, status | **Done** |
+| 2 | Contract BOQ and budget from the won tender | Next |

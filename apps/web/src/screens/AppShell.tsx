@@ -168,7 +168,12 @@ export function AppShell() {
             <NavItem to="/reports" icon={<ChartColumn className="size-4" />}>
               Reports
             </NavItem>
-            <Upcoming icon={<Building2 className="size-4" />}>Projects</Upcoming>
+            <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+              Construction
+            </div>
+            <NavItem to="/projects" icon={<Building2 className="size-4" />}>
+              Projects
+            </NavItem>
             <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>
           </nav>
           <div className="px-4 pb-4">

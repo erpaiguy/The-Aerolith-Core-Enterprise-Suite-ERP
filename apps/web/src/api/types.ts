@@ -1130,3 +1130,63 @@ export interface BoqTemplate {
   rowVersion: number;
   createdBy: string | null;
 }
+
+// --- projects (Wave 2a step 1) ---
+
+export type ProjectStatus = 'planned' | 'active' | 'on_hold' | 'completed' | 'closed' | 'cancelled';
+export type ProjectRole = 'lead' | 'member' | 'viewer';
+
+export interface ProjectSummary {
+  id: string;
+  number: string;
+  name: string;
+  status: ProjectStatus;
+  clientRef: string | null;
+  location: string | null;
+  contractValue: string | null;
+  startOn: string | null;
+  plannedFinishOn: string | null;
+  updatedAt: string;
+  client: { id: string; name: string } | null;
+  lead: { id: string; displayName: string } | null;
+}
+
+export interface ProjectSite {
+  id: string;
+  name: string;
+  address: string | null;
+  stateCode: string | null;
+  active: boolean;
+  rowVersion: number;
+}
+
+export interface ProjectMember {
+  userId: string;
+  displayName: string;
+  username: string;
+  role: ProjectRole;
+  addedAt: string;
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  statusReason: string | null;
+  actualFinishOn: string | null;
+  description: string;
+  rowVersion: number;
+  createdAt: string;
+  tenderId: string | null;
+  tender: { id: string; number: string; title: string } | null;
+  entity: { id: string; name: string };
+  sites: ProjectSite[];
+  team: ProjectMember[];
+  events: {
+    id: string;
+    kind: string;
+    data: Record<string, unknown>;
+    at: string;
+    actor: string | null;
+  }[];
+  myRole: ProjectRole | null;
+  canEdit: boolean;
+  allowedMoves: ProjectStatus[];
+}

@@ -42,6 +42,15 @@ export const PERMISSIONS = {
     label: 'Create and edit tender programmes: activities, links, calendars',
     defaults: { manager: true, worker: false },
   },
+  'projects.edit': {
+    label:
+      'Create projects (also from won tenders), and edit any project they can see: details, sites and team',
+    defaults: { manager: true, worker: false },
+  },
+  'projects.all': {
+    label: 'See every project, not only those they are on the team of',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

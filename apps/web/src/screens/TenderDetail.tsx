@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { ArrowLeft, ExternalLink, Pencil } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
+import { TenderProjectCard } from './Projects';
 import type { Criterion, TenderDetail, TenderStatus } from '../api/types';
 import { describeError, formatDate, formatDateTime, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
@@ -445,6 +446,7 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
             overview={
               <div className="grid gap-5 xl:grid-cols-[1fr_26rem]">
                 <div className="space-y-5">
+                  {t.status === 'won' && <TenderProjectCard tenderId={t.id} />}
                   <TenderBoqs tenderId={t.id} canEdit={canEditBoq} />
                   {canPrice && <TenderBidSummaryCard tenderId={t.id} />}
                   <Card title="Dates">
