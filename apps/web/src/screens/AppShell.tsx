@@ -4,6 +4,7 @@ import {
   Bell,
   ChartColumn,
   LayoutDashboard,
+  LayoutTemplate,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -153,6 +154,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/rate-analyses" icon={<Calculator className="size-4" />}>
               Rate analyses
+            </NavItem>
+            <NavItem to="/boq-templates" icon={<LayoutTemplate className="size-4" />}>
+              BOQ templates
             </NavItem>
             <NavItem to="/documents" icon={<FileStack className="size-4" />}>
               Documents

@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import type { PendingQuery, Row, Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
+import type { ItemKind } from './kinds.js';
 import { priceBid, type GstMode, type Markup } from '../pricing/pricing.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { refuseArchived } from './archived.js';
@@ -36,6 +37,7 @@ export interface VersionRow {
   rate: string | null;
   amount: string | null;
   subtotal: string;
+  item_kind: ItemKind;
 }
 
 /**
@@ -58,7 +60,7 @@ function stateAt(
       ORDER BY h.line_key, h.frozen_version
     )
     SELECT p.line_key, p.id, p.parent_id, p.sort_key, p.depth, p.node_type, p.code, p.unit, p.qty, p.rate, p.amount,
-      p.subtotal, p.created_version, p.frozen_version AS fv
+      p.subtotal, p.created_version, p.frozen_version AS fv, p.item_kind
       ${
         withText
           ? db`, coalesce(p.description, nx.description, cu.description, '') AS description,
@@ -85,7 +87,7 @@ function stateAt(
     WHERE p.created_version <= ${v}
     UNION ALL
     SELECT n.line_key, n.id, n.parent_id, n.sort_key, n.depth, n.node_type, n.code, n.unit, n.qty, n.rate, n.amount,
-      n.subtotal, n.created_version, NULL::int AS fv
+      n.subtotal, n.created_version, NULL::int AS fv, n.item_kind
       ${withText ? db`, t.description, t.notes` : db``}
     FROM est.boq_node n
     ${withText ? db`JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id` : db``}
@@ -167,7 +169,10 @@ export class RevisionService {
     const [s] = await tx<{ name: string; markups: Markup[]; gstPct: string; gstMode: GstMode }[]>`
       SELECT name, markups, gst_pct::text AS "gstPct", gst_mode AS "gstMode" FROM est.pricing_scenario
       WHERE boq_id = ${boqId} AND selected`;
-    const scenario = s ? { ...s, result: priceBid(b.total, s, b.estimate) } : null;
+    const [ps] = await tx<{ v: string }[]>`
+      SELECT coalesce(sum(amount), 0)::text AS v FROM est.boq_node
+      WHERE boq_id = ${boqId} AND item_kind = 'provisional'`;
+    const scenario = s ? { ...s, result: priceBid(b.total, s, b.estimate, ps!.v) } : null;
     await tx`
       INSERT INTO est.boq_version (boq_id, version_no, kind, label, note, frozen_by, total, node_count, item_count,
         rate_date, scenario)
@@ -310,7 +315,7 @@ export class RevisionService {
           coalesce(b.sort_key, a.sort_key) AS ord,
           a.code AS code_a, b.code AS code_b, a.unit AS unit_a, b.unit AS unit_b,
           a.qty AS qty_a, b.qty AS qty_b, a.rate AS rate_a, b.rate AS rate_b,
-          a.amount AS amount_a, b.amount AS amount_b,
+          a.amount AS amount_a, b.amount AS amount_b, a.item_kind AS kind_a, b.item_kind AS kind_b,
           (a.line_key IS NOT NULL AND b.line_key IS NOT NULL
             AND (a.parent_id IS DISTINCT FROM b.parent_id OR a.sort_key <> b.sort_key)) AS moved,
           (a.line_key IS NOT NULL AND b.line_key IS NOT NULL AND tt.line_key IS NOT NULL) AS text_touched
@@ -321,6 +326,7 @@ export class RevisionService {
       WHERE change <> 'changed' OR moved
         OR code_a IS DISTINCT FROM code_b OR unit_a IS DISTINCT FROM unit_b
         OR qty_a IS DISTINCT FROM qty_b OR rate_a IS DISTINCT FROM rate_b OR amount_a IS DISTINCT FROM amount_b
+        OR kind_a IS DISTINCT FROM kind_b
         -- Text kept in between may still have ended up the same (edited, then edited back).
         OR (text_touched AND (SELECT ROW(t.description, t.notes) FROM (${this.textAt(db, boqId, from, 'd')}) t)
           IS DISTINCT FROM (SELECT ROW(t.description, t.notes) FROM (${this.textAt(db, boqId, to, 'd')}) t))`;
@@ -350,6 +356,7 @@ export class RevisionService {
             pick.code_a AS "codeA", pick.code_b AS "codeB", pick.unit_a AS "unitA", pick.unit_b AS "unitB",
             pick.qty_a::text AS "qtyA", pick.qty_b::text AS "qtyB", pick.rate_a::text AS "rateA",
             pick.rate_b::text AS "rateB", pick.amount_a::text AS "amountA", pick.amount_b::text AS "amountB",
+            pick.kind_a AS "kindA", pick.kind_b AS "kindB",
             ta.description AS "descriptionA", tb.description AS "descriptionB",
             ta.notes AS "notesA", tb.notes AS "notesB"
           FROM pick
@@ -389,7 +396,7 @@ export class RevisionService {
   async *versionRows(db: Sql, boqId: string, v: number): AsyncGenerator<VersionRow> {
     const query = db<VersionRow[]>`
       SELECT s.sort_key, s.depth, s.node_type, s.code, s.description, s.notes, s.unit, s.qty::text AS qty,
-        s.rate::text AS rate, s.amount::text AS amount, s.subtotal::text AS subtotal
+        s.rate::text AS rate, s.amount::text AS amount, s.subtotal::text AS subtotal, s.item_kind
       FROM (${stateAt(db, boqId, v, null, true)}) s
       ORDER BY s.sort_key`;
     for await (const rows of query.cursor(2000)) yield* rows;

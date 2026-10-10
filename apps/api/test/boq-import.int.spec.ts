@@ -692,4 +692,474 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ import and export (integration)',
       expect((await allRows(boqId))[0]).toMatchObject({ unit: 'brass', amount: '12000.00' });
     });
   });
+  describe('kinds of item: provisional sums, rate-only items, alternates', () => {
+    // Masonry 10 cum at 100 = 1,000 (normal). Lifts: provisional sum 50,000 (in the total, no markups). Rock
+    // excavation: rate only, 450 (not in the total). Granite instead of vitrified: alternate, 100 sqm at 300 =
+    // 30,000 shown, not in the total. BOQ total 51,000.
+    let boqId: string;
+    const ops = (o: object[]) => post(`/tenant/boqs/${boqId}/changes`, { ops: o });
+    type KindRow = BoqRow & { kind: string };
+
+    it('keeps rate-only items and alternates out of the total, provisional sums in it', async () => {
+      boqId = await newBoq('Kinds');
+      const r = await ops([
+        {
+          op: 'insert',
+          tempId: 'ts',
+          parentId: null,
+          afterId: null,
+          type: 'section',
+          description: 'Works',
+        },
+        {
+          op: 'insert',
+          tempId: 'ta',
+          parentId: 'ts',
+          afterId: null,
+          type: 'item',
+          description: 'Masonry',
+          unit: 'cum',
+          qty: '10',
+          rate: '100',
+        },
+        {
+          op: 'insert',
+          tempId: 'tb',
+          parentId: 'ts',
+          afterId: 'ta',
+          type: 'item',
+          kind: 'provisional',
+          description: 'Lifts',
+          unit: 'LS',
+          qty: '1',
+          rate: '50000',
+        },
+        {
+          op: 'insert',
+          tempId: 'tc',
+          parentId: 'ts',
+          afterId: 'tb',
+          type: 'item',
+          kind: 'rate_only',
+          description: 'Excavation in hard rock',
+          unit: 'cum',
+          rate: '450',
+        },
+        {
+          op: 'insert',
+          tempId: 'td',
+          parentId: 'ts',
+          afterId: 'tc',
+          type: 'item',
+          kind: 'alternate',
+          description: 'Granite instead of vitrified tiles',
+          unit: 'sqm',
+          qty: '100',
+          rate: '300',
+        },
+      ]);
+      expect(r.statusCode).toBe(200);
+      const rows = (await allRows(boqId)) as KindRow[];
+      expect(rows.map((x) => [x.description, x.kind, x.amount])).toEqual([
+        ['Works', 'normal', null],
+        ['Masonry', 'normal', '1000.00'],
+        ['Lifts', 'provisional', '50000.00'],
+        ['Excavation in hard rock', 'rate_only', null],
+        ['Granite instead of vitrified tiles', 'alternate', null],
+      ]);
+      expect(rows[0]!.subtotal).toBe('51000.00');
+      expect((await header(boqId)).total).toBe('51000.00');
+
+      // An item made an alternate leaves the total; made normal again, it comes back.
+      const masonry = rows[1]!;
+      expect(
+        (
+          await ops([
+            { op: 'update', id: masonry.id, rowVersion: masonry.rowVersion, kind: 'alternate' },
+          ])
+        ).statusCode,
+      ).toBe(200);
+      expect((await header(boqId)).total).toBe('50000.00');
+      const again = ((await allRows(boqId)) as KindRow[])[1]!;
+      const u = await ops([
+        { op: 'update', id: again.id, rowVersion: again.rowVersion, kind: 'normal' },
+      ]);
+      expect(u.statusCode).toBe(200);
+      expect((await header(boqId)).total).toBe('51000.00');
+      // Sections and notes have no kind.
+      const bad = await ops([
+        {
+          op: 'insert',
+          tempId: 'tx',
+          parentId: null,
+          afterId: null,
+          type: 'section',
+          kind: 'provisional',
+          description: 'X',
+        },
+      ]);
+      expect(bad.json()).toMatchObject({ code: 'qty_rate_on_non_item' });
+    });
+
+    it('puts markups on everything but the provisional sums, and loads rates the same way', async () => {
+      const created = await post(`/tenant/boqs/${boqId}/scenarios`, {
+        name: 'Ten per cent',
+        markups: [{ kind: 'profit', label: 'Profit', basis: 'base', pct: '10' }],
+        gstPct: '18',
+        gstMode: 'exempt',
+      });
+      expect(created.statusCode).toBe(200);
+      const summary = (await get(`/tenant/boqs/${boqId}/pricing`)).json<{
+        scenarios: {
+          result: {
+            base: string;
+            provisional: string;
+            markupTotal: string;
+            beforeGst: string;
+            factor: string;
+          };
+        }[];
+        quoted: { total: string; difference: string };
+      }>();
+      // Markups on 1,000 only: 100. Before GST 51,100. Factor 1.1 for the other items.
+      expect(summary.scenarios[0]!.result).toMatchObject({
+        base: '51000.00',
+        provisional: '50000.00',
+        markupTotal: '100.00',
+        beforeGst: '51100.00',
+        factor: '1.100000',
+      });
+      expect(summary.quoted).toMatchObject({ total: '51100.00', difference: '0.00' });
+
+      const scenario = (await get(`/tenant/boqs/${boqId}/pricing`)).json<{
+        scenarios: { id: string }[];
+      }>().scenarios[0]!.id;
+      const csv = (await get(`/tenant/boqs/${boqId}/export?format=csv&scenario=${scenario}`)).body;
+      const lines = csv
+        .replace(/^\uFEFF/, '')
+        .trim()
+        .split('\r\n');
+      expect(lines.slice(1)).toEqual([
+        '0,section,,Works,,,,51000,,,',
+        '1,item,,Masonry,cum,10,100,1000,,110,1100',
+        '1,provisional sum,,Lifts,LS,1,50000,50000,,50000,50000',
+        '1,rate only,,Excavation in hard rock,cum,,450,,,495,',
+        '1,alternate,,Granite instead of vitrified tiles,sqm,100,300,,,330,',
+      ]);
+    });
+
+    it('exports the kinds in the Type column and imports them back', async () => {
+      const csv = (await get(`/tenant/boqs/${boqId}/export?format=csv`)).body;
+      const copy = await newBoq('Kinds again');
+      let job = await uploaded(copy, 'kinds.csv', csv);
+      job = await validated(job);
+      await imported(job);
+      const rows = (await allRows(copy)) as KindRow[];
+      expect(rows.map((x) => [x.kind, x.amount])).toEqual([
+        ['normal', null],
+        ['normal', '1000.00'],
+        ['provisional', '50000.00'],
+        ['rate_only', null],
+        ['alternate', null],
+      ]);
+      expect((await header(copy)).total).toBe('51000.00');
+    });
+
+    it('shows the kinds in the cost summary, provisional sums as a part of their own', async () => {
+      const s = (await get(`/tenant/boqs/${boqId}/cost-summary`)).json<{
+        kinds: object;
+        breakdown: { parts: { part: string; amount: string }[] };
+      }>();
+      expect(s.kinds).toEqual({
+        provisional: { items: 1, amount: '50000.00' },
+        rateOnly: { items: 1, priced: 1 },
+        alternates: { items: 1, value: '30000.00' },
+      });
+      expect(Object.fromEntries(s.breakdown.parts.map((p) => [p.part, p.amount]))).toMatchObject({
+        provisional: '50000.00',
+        not_analysed: '1000.00',
+      });
+    });
+  });
+  describe('templates and bulk edit', () => {
+    // A: Earthwork (excavation 50 cum at 200 = 10,000; a provisional sum 5,000) and B: Finishes, with a sub-section
+    // B1: Painting (200 sqm at 50 = 10,000). Total 25,000.
+    let source: string;
+    type KindRow = BoqRow & { kind: string };
+    const build = async () => {
+      source = await newBoq('Template source');
+      const r = await post(`/tenant/boqs/${source}/changes`, {
+        ops: [
+          {
+            op: 'insert',
+            tempId: 'ta',
+            parentId: null,
+            afterId: null,
+            type: 'section',
+            code: 'A',
+            description: 'Earthwork',
+          },
+          {
+            op: 'insert',
+            tempId: 'ta1',
+            parentId: 'ta',
+            afterId: null,
+            type: 'item',
+            code: 'A.1',
+            description: 'Excavation',
+            unit: 'cum',
+            qty: '50',
+            rate: '200',
+          },
+          {
+            op: 'insert',
+            tempId: 'ta2',
+            parentId: 'ta',
+            afterId: 'ta1',
+            type: 'item',
+            code: 'A.2',
+            kind: 'provisional',
+            description: 'Dewatering',
+            unit: 'LS',
+            qty: '1',
+            rate: '5000',
+          },
+          {
+            op: 'insert',
+            tempId: 'tb',
+            parentId: null,
+            afterId: 'ta',
+            type: 'section',
+            code: 'B',
+            description: 'Finishes',
+          },
+          {
+            op: 'insert',
+            tempId: 'tb1',
+            parentId: 'tb',
+            afterId: null,
+            type: 'section',
+            code: 'B1',
+            description: 'Painting',
+          },
+          {
+            op: 'insert',
+            tempId: 'tb11',
+            parentId: 'tb1',
+            afterId: null,
+            type: 'item',
+            code: 'B1.1',
+            description: 'Acrylic emulsion, two coats',
+            unit: 'sqm',
+            qty: '200',
+            rate: '50',
+          },
+        ],
+      });
+      expect(r.statusCode).toBe(200);
+      expect((await header(source)).total).toBe('25000.00');
+    };
+
+    it('saves a BOQ as a template, structure only, and starts a new BOQ from it', async () => {
+      await build();
+      const saved = await post(`/tenant/boqs/${source}/save-as-template`, {
+        name: 'School block (civil)',
+        vertical: 'buildings',
+      });
+      expect(saved.statusCode).toBe(201);
+      const t = saved.json<{
+        id: string;
+        lineCount: number;
+        itemCount: number;
+        lines: { rate: string | null; qty: string | null; kind: string }[];
+      }>();
+      expect(t).toMatchObject({
+        lineCount: 6,
+        itemCount: 3,
+        withRates: false,
+        withQuantities: false,
+      });
+      expect(t.lines.map((l) => [l.qty, l.rate])).toEqual(Array(6).fill([null, null]));
+      expect(t.lines.map((l) => l.kind)).toContain('provisional');
+
+      const made = await post(`/tenant/tenders/${tenderId}/boqs/from-template`, {
+        templateId: t.id,
+        name: 'Block B',
+      });
+      expect(made.statusCode).toBe(201);
+      const boqId = made.json<{ id: string }>().id;
+      const rows = (await allRows(boqId)) as KindRow[];
+      expect(
+        rows.map((r) => [r.depth, r.type, r.code, r.description, r.unit, r.qty, r.rate, r.kind]),
+      ).toEqual([
+        [0, 'section', 'A', 'Earthwork', null, null, null, 'normal'],
+        [1, 'item', 'A.1', 'Excavation', 'cum', null, null, 'normal'],
+        [1, 'item', 'A.2', 'Dewatering', 'LS', null, null, 'provisional'],
+        [0, 'section', 'B', 'Finishes', null, null, null, 'normal'],
+        [1, 'section', 'B1', 'Painting', null, null, null, 'normal'],
+        [2, 'item', 'B1.1', 'Acrylic emulsion, two coats', 'sqm', null, null, 'normal'],
+      ]);
+      expect(await header(boqId)).toMatchObject({ total: '0.00', nodeCount: 6, itemCount: 3 });
+      // The new BOQ is an ordinary BOQ: lines can be added between the template's.
+      const add = await post(`/tenant/boqs/${boqId}/changes`, {
+        ops: [
+          {
+            op: 'insert',
+            tempId: 'tn',
+            parentId: rows[0]!.id,
+            afterId: rows[1]!.id,
+            type: 'item',
+            description: 'Backfilling',
+            unit: 'cum',
+            qty: '20',
+            rate: '100',
+          },
+        ],
+      });
+      expect(add.statusCode).toBe(200);
+      expect((await header(boqId)).total).toBe('2000.00');
+    });
+
+    it('keeps quantities and rates when asked, refuses a name twice, and stops using an archived template', async () => {
+      const full = (
+        await post(`/tenant/boqs/${source}/save-as-template`, {
+          name: 'School block (priced)',
+          vertical: 'buildings',
+          withQuantities: true,
+          withRates: true,
+        })
+      ).json<{ id: string }>();
+      const made = (
+        await post(`/tenant/tenders/${tenderId}/boqs/from-template`, {
+          templateId: full.id,
+          name: 'Block C',
+        })
+      ).json<{ id: string; total: string }>();
+      expect(made.total).toBe('25000.00');
+      const rows = await allRows(made.id);
+      expect(rows.find((r) => r.code === 'B1')!.subtotal).toBe('10000.00');
+      expect(shape(rows)).toEqual(shape(await allRows(source)));
+
+      const dup = await post(`/tenant/boqs/${source}/save-as-template`, {
+        name: 'school block (PRICED)',
+      });
+      expect(dup.statusCode).toBe(409);
+      expect(
+        (await get('/tenant/boq-templates?vertical=buildings')).json<unknown[]>(),
+      ).toHaveLength(2);
+      expect((await get('/tenant/boq-templates?vertical=mep')).json<unknown[]>()).toHaveLength(0);
+      expect(
+        (await post(`/tenant/boq-templates/${full.id}/archive`, { archived: true })).statusCode,
+      ).toBe(200);
+      const refused = await post(`/tenant/tenders/${tenderId}/boqs/from-template`, {
+        templateId: full.id,
+        name: 'X',
+      });
+      expect(refused.json()).toMatchObject({ code: 'template_archived' });
+      expect(
+        (await get('/tenant/boq-templates?archived=true'))
+          .json<{ id: string }[]>()
+          .map((x) => x.id),
+      ).toEqual([full.id]);
+      // Everyone reads templates; saving one needs boq.edit.
+      expect((await get('/tenant/boq-templates', worker)).statusCode).toBe(200);
+      expect(
+        (await post(`/tenant/boqs/${source}/save-as-template`, { name: 'W' }, worker)).statusCode,
+      ).toBe(403);
+    });
+
+    it('changes every item in a range of lines at once, sections included', async () => {
+      const rows = (await allRows(source)) as KindRow[];
+      const first = rows[0]!.sortKey;
+      const last = rows.at(-1)!.sortKey;
+      const bulk = (from: string, to: string, action: object) =>
+        post(`/tenant/boqs/${source}/bulk`, { from, to, action });
+
+      // Every rate up 10 %: 220, 5,500, 55 → 11,000 + 5,500 + 11,000 = 27,500.
+      let r = await bulk(first, last, { kind: 'scale', pct: '10' });
+      expect(r.json()).toEqual({ changed: 3, total: '27500.00' });
+      let now = (await allRows(source)) as KindRow[];
+      expect(now.map((x) => x.rate)).toEqual([
+        null,
+        '220.0000',
+        '5500.0000',
+        null,
+        null,
+        '55.0000',
+      ]);
+      expect(now.find((x) => x.code === 'B')!.subtotal).toBe('11000.00');
+
+      // Section B (with its sub-section) selected by its own line: the painting becomes an alternate.
+      const b = now.find((x) => x.code === 'B')!;
+      r = await bulk(b.sortKey, b.sortKey, { kind: 'item_kind', itemKind: 'alternate' });
+      expect(r.json()).toEqual({ changed: 1, total: '16500.00' });
+      // Selected bottom-up: the same range.
+      r = await bulk(rows[2]!.sortKey, rows[1]!.sortKey, { kind: 'unit', unit: 'job' });
+      expect(r.json()).toMatchObject({ changed: 2 });
+      now = (await allRows(source)) as KindRow[];
+      expect(now.map((x) => [x.code, x.unit, x.kind])).toEqual([
+        ['A', null, 'normal'],
+        ['A.1', 'job', 'normal'],
+        ['A.2', 'job', 'provisional'],
+        ['B', null, 'normal'],
+        ['B1', null, 'normal'],
+        ['B1.1', 'sqm', 'alternate'],
+      ]);
+      expect((await bulk(first, last, { kind: 'scale', pct: '-100' })).statusCode).toBe(400);
+      expect((await bulk(first, last, { kind: 'rate', rate: '1' })).json()).toEqual({
+        changed: 3,
+        total: '51.00',
+      });
+      expect((await bulk(first, last, { kind: 'clear_rates' })).json()).toEqual({
+        changed: 3,
+        total: '0.00',
+      });
+      expect(
+        (
+          await post(
+            `/tenant/boqs/${source}/bulk`,
+            { from: first, to: last, action: { kind: 'clear_rates' } },
+            worker,
+          )
+        ).statusCode,
+      ).toBe(403);
+    });
+
+    it('keeps the frozen version as it was', async () => {
+      const boqId = await newBoq('Bulk after freeze');
+      await post(`/tenant/boqs/${boqId}/changes`, {
+        ops: [
+          {
+            op: 'insert',
+            tempId: 'ti',
+            parentId: null,
+            afterId: null,
+            type: 'item',
+            description: 'Plaster',
+            unit: 'sqm',
+            qty: '10',
+            rate: '100',
+          },
+        ],
+      });
+      expect((await post(`/tenant/boqs/${boqId}/freeze`, { kind: 'internal' })).statusCode).toBe(
+        200,
+      );
+      expect((await post(`/tenant/boqs/${boqId}/revise`, {})).statusCode).toBe(200);
+      const [row] = await allRows(boqId);
+      await post(`/tenant/boqs/${boqId}/bulk`, {
+        from: row!.sortKey,
+        to: row!.sortKey,
+        action: { kind: 'scale', pct: '20' },
+      });
+      const cmp = (await get(`/tenant/boqs/${boqId}/compare?from=1&to=2`)).json<{
+        from: { total: string };
+        to: { total: string };
+        rows: { rateA: string; rateB: string }[];
+      }>();
+      expect(cmp.from.total).toBe('1000.00');
+      expect(cmp.to.total).toBe('1200.00');
+      expect(cmp.rows).toEqual([expect.objectContaining({ rateA: '100.0000', rateB: '120.0000' })]);
+    });
+  });
 });

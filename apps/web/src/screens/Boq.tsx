@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, Field, Input, Select, Spinner } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
@@ -16,13 +16,16 @@ import {
   RefreshCw,
   Search,
   X,
+  LayoutTemplate,
 } from 'lucide-react';
 import { useCallback, useDeferredValue, useRef, useState, type FormEvent } from 'react';
 import { api, saveFile } from '../api/client';
-import type { AnalysisSummary } from '../api/types';
+import type { AnalysisSummary, BoqTemplate } from '../api/types';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
 import { MeasurementSheet } from '../boq/MeasurementSheet';
 import { BoqReportsMenu } from './Reports';
+import { VERTICALS } from './TenderForm';
+import { SaveTemplateDialog } from './Templates';
 import { FreezeDialog } from './Versions';
 import {
   ImportBanner,
@@ -145,6 +148,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
   const [wizard, setWizard] = useState(false);
   const [measuring, setMeasuring] = useState<BoqRow | null>(null);
   const [freezing, setFreezing] = useState(false);
+  const [templating, setTemplating] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const canPrice = usePermission('pricing.edit');
   const [picking, setPicking] = useState<{
@@ -264,6 +268,15 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             </Link>
           )}
           <BoqReportsMenu boqId={boqId} />
+          {canEditBoq && h.nodeCount > 0 && (
+            <Button
+              variant="ghost"
+              onClick={() => setTemplating(true)}
+              title="Save this BOQ as a template"
+            >
+              <LayoutTemplate className="size-4" aria-hidden /> Save as template
+            </Button>
+          )}
           <ExportMenu boqId={boqId} />
           {canPrice && (
             <Link
@@ -332,8 +345,12 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             onSaving={setSaving}
             onPickAnalysis={pickAnalysis}
             onMeasure={setMeasuring}
+            onBulkDone={reload}
           />
         </div>
+      )}
+      {templating && (
+        <SaveTemplateDialog boqId={boqId} boqName={h.name} onClose={() => setTemplating(false)} />
       )}
       {freezing && (
         <FreezeDialog
@@ -618,7 +635,13 @@ function ExportMenu({ boqId }: { boqId: string }) {
 export function TenderBoqs({ tenderId, canEdit }: { tenderId: string; canEdit: boolean }) {
   const navigate = useNavigate();
   const [name, setName] = useState('');
+  const [templateId, setTemplateId] = useState('');
   const [adding, setAdding] = useState(false);
+  const templates = useQuery({
+    queryKey: ['boq-templates'],
+    queryFn: () => api.request<BoqTemplate[]>('/api/tenant/boq-templates'),
+    enabled: adding,
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const boqs = useQuery({
@@ -630,10 +653,15 @@ export function TenderBoqs({ tenderId, canEdit }: { tenderId: string; canEdit: b
     setBusy(true);
     setError(null);
     try {
-      const b = await api.request<BoqHeader>(`/api/tenant/tenders/${tenderId}/boqs`, {
-        method: 'POST',
-        body: { name },
-      });
+      const b = templateId
+        ? await api.request<{ id: string }>(`/api/tenant/tenders/${tenderId}/boqs/from-template`, {
+            method: 'POST',
+            body: { name, templateId },
+          })
+        : await api.request<BoqHeader>(`/api/tenant/tenders/${tenderId}/boqs`, {
+            method: 'POST',
+            body: { name },
+          });
       await navigate({ to: '/boqs/$boqId', params: { boqId: b.id } });
     } catch (err) {
       setError(describeError(err));
@@ -665,6 +693,21 @@ export function TenderBoqs({ tenderId, canEdit }: { tenderId: string; canEdit: b
               />
             </Field>
           </div>
+          <Field label="Start from">
+            <Select
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              className="w-64"
+              aria-label="Start from"
+            >
+              <option value="">An empty BOQ</option>
+              {(templates.data ?? []).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({VERTICALS[t.vertical] ?? t.vertical}, {t.lineCount} lines)
+                </option>
+              ))}
+            </Select>
+          </Field>
           <Button type="submit" busy={busy}>
             Create
           </Button>

@@ -39,6 +39,7 @@ approves again (supabase-oauth-setup.md Part B).
 | 10 | **Tender documents** | Storage adapter, per-tender vault, folders, versions, tags, search, bulk upload/download, preview | **Done** (see below; Supabase Storage not built) |
 | 11 | **Tender programme** | CPM engine (shared with Wave 2a), Gantt canvas, calendars, PDF, MSPDI/XER import-export | **Done** (see below) |
 | 12 | **Reports + dashboard** | Cost summary, priced/unpriced BOQ, rate analysis, bid pipeline dashboard; PDF/Excel (E11, 08-dashboard.md §2.3-2.4) | **Done** (reports and dashboards, see below) |
+| 13 | **The rest of Wave 1's scope** | Third-party notices and SBOM; BOQ item kinds (provisional sums, rate only, alternates), templates, bulk edit; foreign currency; company bid criteria, checklist templates, calendar; RFQ negotiation rounds and reminders; document retention, templates, links, PDF search; jumping anywhere in a huge BOQ. Not MS Project .mpp (see below) | In progress (see below) |
 
 Each step ships with API tests and a browser test of the main journey, like Wave 0.
 
@@ -1000,3 +1001,64 @@ headline numbers, every chart, the filters, each user's tiles with pricing tiles
 used while current and recomputed after an edit, the Excel file, the time). The browser test reads the headline
 numbers, adds and orders two tiles that survive a reload, drills from the pipeline value into the report, opens the
 estimation dashboard and downloads the Excel file.
+
+## Step 13: the rest of Wave 1's scope
+
+What docs/01-mvp.md and docs/04-features.md promised for Wave 1 and steps 1-12 left out, except the documents in the
+tenant's Supabase Storage (waits on the OAuth app registration) and anything Cloudflare-related (you chose not to use
+it).
+
+**Not built, by decision: reading MS Project .mpp files.** .mpp is a closed binary format; the only usable reader
+(MPXJ) is Java under the LGPL, so it would mean shipping a Java runtime in every installer and image for a file MS
+Project already saves as XML, which we read. The import screen says "File → Save As → XML" instead. Change this if a
+pilot cannot save as XML.
+
+### Part 1: third-party notices and SBOM
+
+`tools/notices.mjs` writes `THIRD_PARTY_NOTICES.txt` and a CycloneDX `sbom.cdx.json` into the web and owner bundles,
+the API image (`/app`) and the desktop installer's resources (docs/licensing-policy.md §3.2). The app shows the
+notices under **Third-party licences**. Each package's licence and NOTICE files are reproduced as shipped (Apache
+ECharts' NOTICE included); the few packages published without a licence file get the standard MIT or ISC text with
+their author.
+
+### Part 2: kinds of item, templates, bulk edit
+
+**Kinds of item** (E3): **Kind of item** on the BOQ toolbar makes the selected item
+- a **provisional sum**: counted in the total, but pricing markups apply to everything else
+  (`markups on (base − provisional sums)`, provisional sums added after), and quoted item rates are not loaded;
+- **rate only**: priced, no amount, not in the total;
+- an **alternate / option**: priced, its value shown in brackets, not in the total.
+
+Marked PS, Rate only, Alt. on the line. Export writes the kind in the Type column ("provisional sum", "rate only",
+"alternate") and import reads it back (also "PS", "option"); a revised BOQ with a Type column can change an item's
+kind. The cost summary lists them, and provisional sums are a part of their own in "what it is made of".
+
+**Templates** (E3 "per-vertical templates"): **Save as template** on a BOQ copies its lines (quantities and rates only
+if asked) as a company template for a vertical; **Start from** on a tender's **New BOQ** form uses one. A template is a
+copy: later changes to either side change nothing on the other. **BOQ templates** in the menu lists them, changes
+their vertical, archives and restores them.
+
+**Bulk edit** (E3): Shift+click selects lines from the active one; **Bulk edit** then raises or lowers rates by a
+percentage, sets a rate, a unit or the kind, or clears rates, for every item in the selection, sections' contents
+included. One statement on the server, so it does not matter how many lines the selection holds (up to 100,000 items);
+totals are recomputed and the frozen version keeps the old figures.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] Rate-only items and alternates keep no amount**, so every total, subtotal, version comparison and
+  dashboard leaves them out without knowing about kinds; the alternate's value is worked out where it is shown.
+- **[Likely] Provisional sums take no markups** because Indian percentage tenders quote "x % above/below" on the BOQ
+  excluding provisional sums. If a client says otherwise, mark the line normal.
+- **A bulk rate change unlinks the rate analysis**, as typing a rate does: the rate no longer comes from it.
+- **The selection is a range of lines**, not a set of ticked lines: it works the same for 10 lines or 100,000, most
+  of which are not on screen.
+
+**API** (under `/api/tenant`): `kind` on BOQ line inserts and updates; `POST /boqs/:id/bulk`
+(`{from, to, action}`); `GET /boq-templates`, `GET /boq-templates/:id`, `POST /boqs/:id/save-as-template`,
+`POST /boq-templates/:id` (rename, vertical), `POST /boq-templates/:id/archive`, `POST /tenders/:id/boqs/from-template`.
+Migrations `0016_boq_item_kinds.sql`, `0017_boq_templates.sql`.
+
+**Tests:** 8 API integration tests (kinds in totals, kind changes, kinds on sections refused, markups and loaded rates
+around a provisional sum, the Type column exported and imported back, the cost summary; a template with and without
+quantities and rates, names, archiving, permissions; bulk changes by range including sections and bottom-up
+selections, refused percentages, permissions, and a frozen version kept). The browser test marks a provisional sum and
+an alternate, raises a selection's rates by 10 %, saves a template and starts the next BOQ from it.

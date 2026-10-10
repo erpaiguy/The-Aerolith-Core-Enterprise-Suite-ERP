@@ -38,6 +38,7 @@ const lineFields = {
   unit: z.string().trim().max(20).nullable().optional(),
   qty: decimal4.optional(),
   rate: decimal4.optional(),
+  kind: z.enum(['normal', 'provisional', 'rate_only', 'alternate']).optional(),
 };
 
 const opSchema = z.discriminatedUnion('op', [
@@ -71,6 +72,28 @@ const opSchema = z.discriminatedUnion('op', [
   }),
 ]);
 const changesBody = z.object({ ops: z.array(opSchema).min(1).max(MAX_OPS) });
+const bulkBody = z.object({
+  from: sortKey,
+  to: sortKey,
+  action: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('unit'), unit: z.string().trim().max(20).nullable() }),
+    z.object({
+      kind: z.literal('item_kind'),
+      itemKind: z.enum(['normal', 'provisional', 'rate_only', 'alternate']),
+    }),
+    z.object({ kind: z.literal('rate'), rate: decimal4.unwrap() }),
+    z.object({
+      kind: z.literal('scale'),
+      pct: z
+        .union([z.string().trim(), z.number()])
+        .transform((v) => String(v))
+        .refine((v) => /^-?\d{1,3}(\.\d{1,4})?$/.test(v) && Number(v) > -100, {
+          message: 'A percentage above -100, up to 4 decimals',
+        }),
+    }),
+    z.object({ kind: z.literal('clear_rates') }),
+  ]),
+});
 const freezeBody = z.object({
   kind: z.enum(['submitted', 'internal']),
   label: z.string().trim().max(100).default(''),
@@ -308,6 +331,19 @@ export class BoqController {
     @Body(new ZodPipe(measurementBody)) b: z.infer<typeof measurementBody>,
   ) {
     return this.boqs.setMeasurements(c, id, lineIdParam, b.rowVersion, b.rows);
+  }
+
+  /** One change to every item in a range of lines (bulk edit). */
+  @Post('boqs/:id/bulk')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  bulk(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(bulkBody)) b: z.infer<typeof bulkBody>,
+  ) {
+    return this.boqs.bulk(c, id, { from: b.from, to: b.to }, b.action);
   }
 
   /** Re-price every item linked to a rate analysis, as on the BOQ's rate date. */

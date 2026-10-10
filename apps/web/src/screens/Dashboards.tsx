@@ -624,6 +624,7 @@ const PART_COLOURS: Record<string, keyof ReturnType<typeof themeColours> | strin
   subcontract: '#7c3aed',
   other: '#64748b',
   additions: '#db2777',
+  provisional: '#0d9488',
   not_analysed: '#cbd5e1',
 };
 

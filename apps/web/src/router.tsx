@@ -29,6 +29,7 @@ import {
   ReportsScreen,
 } from './screens/Reports';
 import { RfqScreen } from './screens/Rfq';
+import { TemplatesScreen } from './screens/Templates';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
 import { WinLossScreen } from './screens/TenderInsights';
@@ -208,6 +209,11 @@ const routeTree = rootRoute.addChildren([
     rfqRoute,
     programmeRoute,
     createRoute({ getParentRoute: () => appLayout, path: '/reports', component: ReportsScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/boq-templates',
+      component: TemplatesScreen,
+    }),
     dashboardRoute,
     createRoute({
       getParentRoute: () => appLayout,

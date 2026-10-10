@@ -10,6 +10,7 @@ const PART_LABEL: Record<string, string> = {
   subcontract: 'Subcontract',
   other: 'Other (lump sums)',
   additions: 'Overheads and profit in rates',
+  provisional: 'Provisional sums',
   not_analysed: 'Not analysed',
 };
 const STATUS_LABEL: Record<string, string> = {
@@ -110,6 +111,9 @@ export async function costSummaryXlsx(s: CostSummary): Promise<Buffer> {
     ['Not priced', s.counts.unpriced],
     ['Without quantity', s.counts.noQty],
     ['Linked to a rate analysis', s.counts.analysed],
+    ['Provisional sums (in the total)', s.kinds.provisional.items],
+    ['Rate-only items (not in the total)', s.kinds.rateOnly.items],
+    ['Alternates (not in the total)', s.kinds.alternates.items],
   ] as const) {
     const row = ws.getRow(r++);
     row.values = ['', label, n];

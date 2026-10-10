@@ -117,6 +117,14 @@ function Breakdown({ p, estimate }: { p: Priced; estimate: string | null }) {
     >
       <dt className="text-fg-muted">BOQ total (base)</dt>
       <dd className="text-right tabular-nums">{formatAmount(p.base)}</dd>
+      {p.provisional && Number(p.provisional) !== 0 && (
+        <>
+          <dt className="pl-3 text-fg-subtle">of which provisional sums (no markups)</dt>
+          <dd className="text-right tabular-nums text-fg-subtle" data-testid="provisional">
+            {formatAmount(p.provisional)}
+          </dd>
+        </>
+      )}
       {p.markups.map((m, i) => (
         <div key={i} className="contents">
           <dt className="text-fg-muted">

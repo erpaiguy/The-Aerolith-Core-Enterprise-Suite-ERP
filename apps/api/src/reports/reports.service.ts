@@ -43,6 +43,12 @@ export interface CostSummary {
   counts: { items: number; priced: number; unpriced: number; noQty: number; analysed: number };
   sections: { code: string | null; description: string; amount: string; pct: string | null }[];
   unsectioned: { amount: string; items: number };
+  /** Items of other kinds: provisional sums (in the total), rate-only items and alternates (not in it). */
+  kinds: {
+    provisional: { items: number; amount: string };
+    rateOnly: { items: number; priced: number };
+    alternates: { items: number; value: string };
+  };
   breakdown: Breakdown;
   /** Analyses with a resource that has no rate on the BOQ's rate date: their split leaves that resource out. */
   incomplete: { code: string; description: string; missing: string[] }[];
@@ -186,9 +192,28 @@ export class ReportsService {
     const [loose] = await db<{ amount: string; items: number }[]>`
       SELECT coalesce(sum(amount), 0)::text AS amount, count(*)::int AS items FROM est.boq_node
       WHERE boq_id = ${boqId} AND depth = 0 AND node_type = 'item'`;
-    const groups = await db<{ analysisId: string | null; amount: string }[]>`
-      SELECT rate_analysis_id::text AS "analysisId", coalesce(sum(amount), 0)::text AS amount
-      FROM est.boq_node WHERE boq_id = ${boqId} AND node_type = 'item' GROUP BY rate_analysis_id`;
+    const groups = await db<{ analysisId: string | null; amount: string; provisional: boolean }[]>`
+      SELECT rate_analysis_id::text AS "analysisId", coalesce(sum(amount), 0)::text AS amount,
+        item_kind = 'provisional' AS provisional
+      FROM est.boq_node WHERE boq_id = ${boqId} AND node_type = 'item'
+      GROUP BY rate_analysis_id, item_kind = 'provisional'`;
+    const [kinds] = await db<
+      {
+        psItems: number;
+        psAmount: string;
+        roItems: number;
+        roPriced: number;
+        altItems: number;
+        altValue: string;
+      }[]
+    >`
+      SELECT count(*) FILTER (WHERE item_kind = 'provisional')::int AS "psItems",
+        coalesce(sum(amount) FILTER (WHERE item_kind = 'provisional'), 0)::text AS "psAmount",
+        count(*) FILTER (WHERE item_kind = 'rate_only')::int AS "roItems",
+        count(*) FILTER (WHERE item_kind = 'rate_only' AND rate IS NOT NULL)::int AS "roPriced",
+        count(*) FILTER (WHERE item_kind = 'alternate')::int AS "altItems",
+        coalesce(sum(round(qty * rate, 2)) FILTER (WHERE item_kind = 'alternate'), 0)::text AS "altValue"
+      FROM est.boq_node WHERE boq_id = ${boqId} AND item_kind <> 'normal'`;
 
     const ids = groups.map((g) => g.analysisId).filter((x): x is string => x !== null);
     const engine = await this.rates.engineFor(db, ids, boq.rateDate);
@@ -245,6 +270,11 @@ export class ReportsService {
       counts: counts!,
       sections: sections.map((s) => ({ ...s, pct: pct(s.amount) })),
       unsectioned: { amount: fmt(dec(loose!.amount), 2), items: loose!.items },
+      kinds: {
+        provisional: { items: kinds!.psItems, amount: fmt(dec(kinds!.psAmount), 2) },
+        rateOnly: { items: kinds!.roItems, priced: kinds!.roPriced },
+        alternates: { items: kinds!.altItems, value: fmt(dec(kinds!.altValue), 2) },
+      },
       breakdown: breakdown(groups, (id) => costed.get(id) ?? null),
       incomplete,
       bid,

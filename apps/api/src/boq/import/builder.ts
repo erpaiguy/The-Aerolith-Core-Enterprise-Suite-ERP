@@ -1,5 +1,6 @@
 // Turns raw spreadsheet rows into BOQ lines (docs/wave1-plan.md step 4). Pure and streaming: one row in, at most one
 // line out, plus any issues. The same builder runs for the dry run and for the import, so they cannot disagree.
+import { counted, kindFromText, type ItemKind } from '../kinds.js';
 
 export type Field =
   'code' | 'description' | 'unit' | 'qty' | 'rate' | 'amount' | 'level' | 'type' | 'notes';
@@ -42,6 +43,8 @@ export type LineType = 'section' | 'item' | 'note';
 export interface Line {
   rowNo: number;
   type: LineType;
+  /** Items only; 'normal' otherwise. */
+  kind: ItemKind;
   depth: number;
   code: string | null;
   description: string;
@@ -309,11 +312,19 @@ export class LineBuilder {
     // Type: an explicit Type column wins; otherwise inferred from whether the row has figures.
     const hasFigures = Boolean(numbers.qty ?? numbers.rate ?? raw.unit);
     let type: LineType;
+    let kind: ItemKind = 'normal';
     const typeText = get('type').toLowerCase();
     if (mapping.type !== undefined && typeText) {
       const t = typeText === 'heading' ? 'section' : typeText;
-      if (t !== 'section' && t !== 'item' && t !== 'note') {
-        error('type', `Type "${get('type')}" must be section, item or note`);
+      const k = kindFromText(t);
+      if (k) {
+        type = 'item';
+        kind = k;
+      } else if (t !== 'section' && t !== 'item' && t !== 'note') {
+        error(
+          'type',
+          `Type "${get('type')}" must be section, item, note, provisional sum, rate only or alternate`,
+        );
         type = hasFigures ? 'item' : 'section';
       } else type = t;
     } else if (hasFigures) type = 'item';
@@ -375,7 +386,7 @@ export class LineBuilder {
       warn('description', 'Item has no code or description');
 
     let amount: bigint | null = null;
-    if (type === 'item' && numbers.qty && numbers.rate) {
+    if (type === 'item' && counted(kind) && numbers.qty && numbers.rate) {
       amount = amountPaise(numbers.qty, numbers.rate);
       if (numbers.amount) {
         const diff = amount - BigInt(Math.round(Number(numbers.amount) * 100));
@@ -399,6 +410,7 @@ export class LineBuilder {
       line: {
         rowNo,
         type,
+        kind,
         depth,
         code,
         description,

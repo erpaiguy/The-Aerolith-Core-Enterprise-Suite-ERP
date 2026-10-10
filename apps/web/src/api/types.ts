@@ -546,6 +546,8 @@ export interface Markup {
 
 export interface Priced {
   base: string;
+  /** Provisional sums inside the base: no markups on them. */
+  provisional?: string;
   markups: { kind: MarkupKind; label: string; basis: string; pct: string | null; amount: string }[];
   markupTotal: string;
   beforeGst: string;
@@ -570,7 +572,7 @@ export interface Scenario {
 }
 
 export interface PricingSummary {
-  boq: { id: string; name: string; status: string; base: string };
+  boq: { id: string; name: string; status: string; base: string; provisional?: string };
   tender: { id: string; number: string; title: string; estimatedValue: string | null };
   counts: { items: number; unpriced: number; noQty: number; measured: number };
   sections: { id: string; code: string | null; description: string; subtotal: string }[];
@@ -881,7 +883,14 @@ export interface ReportBoq {
 }
 
 export type BreakdownPart =
-  'material' | 'labour' | 'equipment' | 'subcontract' | 'other' | 'additions' | 'not_analysed';
+  | 'material'
+  | 'labour'
+  | 'equipment'
+  | 'subcontract'
+  | 'other'
+  | 'additions'
+  | 'provisional'
+  | 'not_analysed';
 
 export interface CostSummary {
   asOf: string;
@@ -889,6 +898,11 @@ export interface CostSummary {
   counts: { items: number; priced: number; unpriced: number; noQty: number; analysed: number };
   sections: { code: string | null; description: string; amount: string; pct: string | null }[];
   unsectioned: { amount: string; items: number };
+  kinds: {
+    provisional: { items: number; amount: string };
+    rateOnly: { items: number; priced: number };
+    alternates: { items: number; value: string };
+  };
   breakdown: {
     total: string;
     parts: { part: BreakdownPart; amount: string; pct: string | null }[];
@@ -1064,4 +1078,21 @@ export interface EstimationDashboardData extends DashboardCommon {
       changePct: string | null;
     }[];
   };
+}
+
+// --- BOQ templates (step 13) ---
+
+export interface BoqTemplate {
+  id: string;
+  name: string;
+  vertical: string;
+  description: string;
+  withQuantities: boolean;
+  withRates: boolean;
+  lineCount: number;
+  itemCount: number;
+  archivedAt: string | null;
+  updatedAt: string;
+  rowVersion: number;
+  createdBy: string | null;
 }

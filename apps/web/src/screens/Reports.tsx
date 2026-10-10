@@ -44,6 +44,7 @@ export const PART_LABEL: Record<BreakdownPart, string> = {
   subcontract: 'Subcontract',
   other: 'Other (lump sums)',
   additions: 'Overheads and profit in rates',
+  provisional: 'Provisional sums',
   not_analysed: 'Not analysed',
 };
 const PART_COLOUR: Record<BreakdownPart, string> = {
@@ -53,6 +54,7 @@ const PART_COLOUR: Record<BreakdownPart, string> = {
   subcontract: '#7c3aed',
   other: '#64748b',
   additions: '#db2777',
+  provisional: '#0d9488',
   not_analysed: '#cbd5e1',
 };
 
@@ -351,6 +353,31 @@ function CostSummaryBody({ s }: { s: CostSummary }) {
           , {s.counts.noQty.toLocaleString('en-IN')} without quantity;{' '}
           {s.counts.analysed.toLocaleString('en-IN')} linked to a rate analysis.
         </p>
+        {(s.kinds.provisional.items > 0 ||
+          s.kinds.rateOnly.items > 0 ||
+          s.kinds.alternates.items > 0) && (
+          <ul className="mt-1 list-disc pl-5" aria-label="Other kinds of item">
+            {s.kinds.provisional.items > 0 && (
+              <li>
+                {s.kinds.provisional.items} provisional sum
+                {s.kinds.provisional.items === 1 ? '' : 's'}, ₹{money(s.kinds.provisional.amount)}:
+                in the total, no markups on them.
+              </li>
+            )}
+            {s.kinds.rateOnly.items > 0 && (
+              <li>
+                {s.kinds.rateOnly.items} rate-only item{s.kinds.rateOnly.items === 1 ? '' : 's'} (
+                {s.kinds.rateOnly.priced} priced): not in the total.
+              </li>
+            )}
+            {s.kinds.alternates.items > 0 && (
+              <li data-testid="alternates">
+                {s.kinds.alternates.items} alternate{s.kinds.alternates.items === 1 ? '' : 's'}{' '}
+                worth ₹{money(s.kinds.alternates.value)}: not in the total.
+              </li>
+            )}
+          </ul>
+        )}
       </Section>
 
       {s.bid ? (

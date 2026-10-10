@@ -4,6 +4,21 @@
 
 export type NodeType = 'section' | 'item' | 'note';
 
+/** Kinds of item: provisional sums count in the total; rate-only items and alternates are priced but not counted. */
+export type ItemKind = 'normal' | 'provisional' | 'rate_only' | 'alternate';
+export const KIND_LABEL: Record<ItemKind, string> = {
+  normal: 'Normal item',
+  provisional: 'Provisional sum',
+  rate_only: 'Rate only',
+  alternate: 'Alternate / option',
+};
+/** The short marker shown on the line. */
+export const KIND_BADGE: Partial<Record<ItemKind, string>> = {
+  provisional: 'PS',
+  rate_only: 'Rate only',
+  alternate: 'Alt.',
+};
+
 export interface BoqRow {
   id: string;
   parentId: string | null;
@@ -24,6 +39,7 @@ export interface BoqRow {
   rateAnalysisId?: string | null;
   /** The quantity is the total of the item's measurement sheet. */
   measured?: boolean;
+  kind?: ItemKind;
 }
 
 export interface BoqHeader {
@@ -140,6 +156,12 @@ const AMOUNT = grouped(2, 2);
 
 export const formatQty = (v: string | null): string => (v === null ? '' : QTY.format(Number(v)));
 export const formatRate = (v: string | null): string => (v === null ? '' : RATE.format(Number(v)));
+/** qty × rate to paise, for an alternate (stored without an amount because it is not in the total). */
+export function itemValue(r: Pick<BoqRow, 'qty' | 'rate'>): string | null {
+  if (r.qty === null || r.rate === null) return null;
+  return (Math.round(Number(r.qty) * Number(r.rate) * 100) / 100).toFixed(2);
+}
+
 export const formatAmount = (v: string | null): string =>
   v === null ? '' : AMOUNT.format(Number(v));
 

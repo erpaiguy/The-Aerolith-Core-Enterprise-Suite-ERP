@@ -369,6 +369,7 @@ export class DashboardService {
       groups.map((g) => ({
         analysisId: g.analysisId ? `${g.rateDate}|${g.analysisId}` : null,
         amount: g.amount,
+        provisional: g.provisional,
       })),
       (key) => costs.get(key) ?? null,
     );
@@ -397,8 +398,13 @@ export class DashboardService {
    * stored mix always belongs to its stamp.
    */
   private async costMix(db: Sql, progress: PendingQuery<Row[]>) {
-    type Mix = { a: string | null; v: string }[];
-    type Group = { rateDate: string; analysisId: string | null; amount: string };
+    type Mix = { a: string | null; v: string; p?: boolean }[];
+    type Group = {
+      rateDate: string;
+      analysisId: string | null;
+      amount: string;
+      provisional: boolean;
+    };
     const { stale, cachedGroups, fresh } = await db.begin(
       'isolation level repeatable read read only',
       async (tx) => {
@@ -413,17 +419,21 @@ export class DashboardService {
         // The current rows are summed where they are; only BOQs changed since are read line by line.
         const cachedGroups = current.length
           ? await tx<Group[]>`
-              SELECT b.rate_date::text AS "rateDate", x.a AS "analysisId", sum(x.v)::text AS amount
+              SELECT b.rate_date::text AS "rateDate", x.a AS "analysisId", sum(x.v)::text AS amount,
+                coalesce(x.p, false) AS provisional
               FROM est.boq_cost_mix m JOIN est.boq b ON b.id = m.boq_id
-              CROSS JOIN LATERAL jsonb_to_recordset(m.mix) AS x(a uuid, v numeric)
-              WHERE m.boq_id = ANY(${current}::uuid[]) GROUP BY b.rate_date, x.a`
+              CROSS JOIN LATERAL jsonb_to_recordset(m.mix) AS x(a uuid, v numeric, p boolean)
+              WHERE m.boq_id = ANY(${current}::uuid[]) GROUP BY b.rate_date, x.a, coalesce(x.p, false)`
           : [];
         const fresh = stale.length
           ? await tx<{ boqId: string; mix: Mix }[]>`
-              SELECT g.boq_id AS "boqId", json_agg(json_build_object('a', g.a, 'v', g.v)) AS mix FROM (
-                SELECT n.boq_id, n.rate_analysis_id AS a, coalesce(sum(n.amount), 0)::text AS v FROM est.boq_node n
+              SELECT g.boq_id AS "boqId", json_agg(json_build_object('a', g.a, 'v', g.v, 'p', g.p)) AS mix
+              FROM (
+                SELECT n.boq_id, n.rate_analysis_id AS a, coalesce(sum(n.amount), 0)::text AS v,
+                  n.item_kind = 'provisional' AS p
+                FROM est.boq_node n
                 WHERE n.boq_id = ANY(${stale.map((b) => b.id)}::uuid[]) AND n.node_type = 'item'
-                GROUP BY n.boq_id, n.rate_analysis_id
+                GROUP BY n.boq_id, n.rate_analysis_id, n.item_kind = 'provisional'
               ) g GROUP BY g.boq_id`
           : [];
         return { stale, cachedGroups, fresh };
@@ -439,15 +449,19 @@ export class DashboardService {
         ON CONFLICT (boq_id) DO UPDATE SET stamp = EXCLUDED.stamp, mix = EXCLUDED.mix, computed_at = now()
         WHERE est.boq_cost_mix.stamp IS DISTINCT FROM EXCLUDED.stamp`;
     // One group per (rate date, analysis) across all the BOQs: the split is the same for each.
-    const sums = new Map<string, { rateDate: string; analysisId: string | null; amount: bigint }>();
-    const add = (rateDate: string, analysisId: string | null, v: string) => {
-      const key = `${rateDate}|${analysisId ?? ''}`;
-      const g = sums.get(key) ?? { rateDate, analysisId, amount: 0n };
+    const sums = new Map<
+      string,
+      { rateDate: string; analysisId: string | null; provisional: boolean; amount: bigint }
+    >();
+    const add = (rateDate: string, analysisId: string | null, provisional: boolean, v: string) => {
+      const key = `${rateDate}|${analysisId ?? ''}|${provisional}`;
+      const g = sums.get(key) ?? { rateDate, analysisId, provisional, amount: 0n };
       g.amount += dec(v);
       sums.set(key, g);
     };
-    for (const g of cachedGroups) add(g.rateDate, g.analysisId, g.amount);
-    for (const b of stale) for (const m of computed.get(b.id) ?? []) add(b.rateDate, m.a, m.v);
+    for (const g of cachedGroups) add(g.rateDate, g.analysisId, g.provisional, g.amount);
+    for (const b of stale)
+      for (const m of computed.get(b.id) ?? []) add(b.rateDate, m.a, m.p ?? false, m.v);
     return [...sums.values()].map((g) => ({ ...g, amount: fmt(g.amount, 2) }));
   }
 

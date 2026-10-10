@@ -35,6 +35,7 @@ describe('cost breakdown', () => {
       subcontract: '0.00',
       other: '70.00',
       additions: '630.00',
+      provisional: '0.00',
       not_analysed: '500.00',
     });
     expect(b.parts.find((p) => p.part === 'equipment')!.pct).toBe('28.57');

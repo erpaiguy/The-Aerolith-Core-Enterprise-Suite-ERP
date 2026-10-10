@@ -37,6 +37,10 @@ interface ScenarioRow {
 const SCENARIO = `s.id, s.boq_id AS "boqId", s.name, s.notes, s.markups, s.gst_pct::text AS "gstPct",
   s.gst_mode AS "gstMode", s.selected, s.row_version AS "rowVersion", s.updated_at AS "updatedAt"`;
 
+/** The provisional sums of BOQ `b` (alias), found through the partial index on kinds. */
+const PROVISIONAL = (db: Sql) => db`(SELECT coalesce(sum(n.amount), 0)::text FROM est.boq_node n
+  WHERE n.boq_id = b.id AND n.item_kind = 'provisional')`;
+
 function friendly(err: unknown): never {
   if ((err as { code?: string }).code === '23505')
     throw new ConflictException({
@@ -59,10 +63,11 @@ export class PricingService {
         name: string;
         status: string;
         total: string;
+        provisional: string;
         tender: { id: string; number: string; title: string; estimatedValue: string | null };
       }[]
     >`
-      SELECT b.id, b.name, b.status, b.total::text AS total,
+      SELECT b.id, b.name, b.status, b.total::text AS total, ${PROVISIONAL(db)} AS provisional,
         json_build_object('id', t.id, 'number', t.number, 'title', t.title,
           'estimatedValue', t.estimated_value::text) AS tender
       FROM est.boq b JOIN tender.tender t ON t.id = b.tender_id WHERE b.id = ${boqId}`;
@@ -85,11 +90,11 @@ export class PricingService {
     const scenarios = await this.scenarios(db, boqId);
     const priced = scenarios.map((s) => ({
       ...s,
-      result: priceBid(b.total, s, b.tender.estimatedValue),
+      result: priceBid(b.total, s, b.tender.estimatedValue, b.provisional),
     }));
     const selected = priced.find((s) => s.selected);
     return {
-      boq: { id: b.id, name: b.name, status: b.status, base: b.total },
+      boq: { id: b.id, name: b.name, status: b.status, base: b.total, provisional: b.provisional },
       tender: b.tender,
       counts: counts!,
       sections,
@@ -102,7 +107,9 @@ export class PricingService {
 
   private async quotedTotal(db: Sql, boqId: string, p: Priced) {
     const [q] = await db<{ total: string }[]>`
-      SELECT coalesce(sum(round(qty * round(rate * ${p.factor}::numeric, 2), 2)), 0)::text AS total
+      SELECT (coalesce(sum(round(qty * round(rate * ${p.factor}::numeric, 2), 2))
+          FILTER (WHERE item_kind = 'normal'), 0)
+        + coalesce(sum(amount) FILTER (WHERE item_kind = 'provisional'), 0))::text AS total
       FROM est.boq_node WHERE boq_id = ${boqId} AND node_type = 'item' AND rate IS NOT NULL AND qty IS NOT NULL`;
     return {
       factor: p.factor,
@@ -119,11 +126,11 @@ export class PricingService {
   /** Prices an unsaved scenario: the editor's live totals. */
   async preview(claims: TenantClaims, boqId: string, input: ScenarioInput) {
     const db = await this.tenants.forTenant(claims.ten);
-    const [b] = await db<{ total: string; estimate: string | null }[]>`
-      SELECT b.total::text AS total, t.estimated_value::text AS estimate
+    const [b] = await db<{ total: string; estimate: string | null; provisional: string }[]>`
+      SELECT b.total::text AS total, t.estimated_value::text AS estimate, ${PROVISIONAL(db)} AS provisional
       FROM est.boq b JOIN tender.tender t ON t.id = b.tender_id WHERE b.id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
-    return priceBid(b.total, input, b.estimate);
+    return priceBid(b.total, input, b.estimate, b.provisional);
   }
 
   async create(claims: TenantClaims, boqId: string, input: ScenarioInput) {
@@ -222,16 +229,23 @@ export class PricingService {
       SELECT estimated_value::text AS "estimatedValue" FROM tender.tender WHERE id = ${tenderId}`;
     if (!t) throw new NotFoundException({ code: 'tender_not_found' });
     const boqs = await db<
-      { id: string; name: string; total: string; unpriced: number; scenario: ScenarioRow | null }[]
+      {
+        id: string;
+        name: string;
+        total: string;
+        provisional: string;
+        unpriced: number;
+        scenario: ScenarioRow | null;
+      }[]
     >`
-      SELECT b.id, b.name, b.total::text AS total,
+      SELECT b.id, b.name, b.total::text AS total, ${PROVISIONAL(db)} AS provisional,
         (SELECT count(*)::int FROM est.boq_node n WHERE n.boq_id = b.id AND n.node_type = 'item'
           AND n.rate IS NULL AND coalesce(n.qty, 0) <> 0) AS unpriced,
         (SELECT row_to_json(x) FROM (SELECT ${db.unsafe(SCENARIO)} FROM est.pricing_scenario s
           WHERE s.boq_id = b.id AND s.selected) x) AS scenario
       FROM est.boq b WHERE b.tender_id = ${tenderId} AND b.archived_at IS NULL ORDER BY b.created_at`;
     const lines = boqs.map((b) => {
-      const p = b.scenario ? priceBid(b.total, b.scenario) : null;
+      const p = b.scenario ? priceBid(b.total, b.scenario, null, b.provisional) : null;
       return {
         id: b.id,
         name: b.name,
@@ -268,11 +282,12 @@ export class PricingService {
   /** The selected (or given) scenario's factor, for exporting loaded item rates. */
   async factorFor(claims: TenantClaims, boqId: string, scenarioId: string) {
     const db = await this.tenants.forTenant(claims.ten);
-    const [s] = await db<(ScenarioRow & { total: string })[]>`
-      SELECT ${db.unsafe(SCENARIO)}, b.total::text AS total FROM est.pricing_scenario s
+    const [s] = await db<(ScenarioRow & { total: string; provisional: string })[]>`
+      SELECT ${db.unsafe(SCENARIO)}, b.total::text AS total, ${PROVISIONAL(db)} AS provisional
+      FROM est.pricing_scenario s
       JOIN est.boq b ON b.id = s.boq_id WHERE s.id = ${scenarioId} AND s.boq_id = ${boqId}`;
     if (!s) throw new BadRequestException({ code: 'scenario_not_found' });
-    return { name: s.name, factor: priceBid(s.total, s).factor };
+    return { name: s.name, factor: priceBid(s.total, s, null, s.provisional).factor };
   }
 
   private async stale(tx: TransactionSql, id: string): Promise<never> {

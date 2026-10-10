@@ -1,10 +1,13 @@
 // Bid pricing (docs/04-features.md E5) and measurement quantities (E4). Pure, exact decimal arithmetic.
 //
 //   base       = the BOQ total (quantities × rates, which may already carry overheads from rate analyses)
-//   markups    = in order; each a % of the base or of the running total, or a fixed amount; discounts reduce
+//   provisional = the provisional sums inside it (fixed by the client: no markups on them)
+//   markups    = in order; each a % of (base − provisional) or of the running total, or a fixed amount;
+//                discounts reduce
 //   before GST = base + markups          ← what the tender committee compares with its estimate
 //   GST        = added on top, included in the rates already, or exempt
-//   factor     = before GST ÷ base       ← loads item rates so a submitted item-rate BOQ adds up to the bid
+//   factor     = (before GST − provisional) ÷ (base − provisional)
+//                                        ← loads the other items' rates so a submitted item-rate BOQ adds up
 import { dec, div, fmt, mul, pctOf, type Dec } from '../rates/decimal.js';
 
 export type MarkupKind =
@@ -36,6 +39,8 @@ export interface ScenarioInput {
 
 export interface Priced {
   base: string;
+  /** Provisional sums inside the base: they take no markups and are not loaded. */
+  provisional: string;
   markups: { kind: MarkupKind; label: string; basis: string; pct: string | null; amount: string }[];
   markupTotal: string;
   beforeGst: string;
@@ -51,8 +56,15 @@ export interface Priced {
 
 const money = (d: Dec) => dec(fmt(d, 2)); // rounded to paise, half away from zero
 
-export function priceBid(baseText: string, s: ScenarioInput, estimate?: string | null): Priced {
-  const base = dec(baseText);
+export function priceBid(
+  baseText: string,
+  s: ScenarioInput,
+  estimate?: string | null,
+  provisionalText = '0',
+): Priced {
+  const total = dec(baseText);
+  const ps = dec(provisionalText);
+  const base = total - ps; // what markups apply to
   let running = base;
   const markups: Priced['markups'] = [];
   for (const m of s.markups) {
@@ -70,7 +82,7 @@ export function priceBid(baseText: string, s: ScenarioInput, estimate?: string |
       amount: fmt(amt, 2),
     });
   }
-  const beforeGst = running;
+  const beforeGst = running + ps;
   const gstPct = dec(s.gstPct);
   const gst = s.gstMode === 'add' ? money(pctOf(beforeGst, gstPct)) : 0n;
   const gstIncluded =
@@ -79,14 +91,15 @@ export function priceBid(baseText: string, s: ScenarioInput, estimate?: string |
       : null;
   const est = estimate ? dec(estimate) : 0n;
   return {
-    base: fmt(base, 2),
+    base: fmt(total, 2),
+    provisional: fmt(ps, 2),
     markups,
-    markupTotal: fmt(beforeGst - base, 2),
+    markupTotal: fmt(running - base, 2),
     beforeGst: fmt(beforeGst, 2),
     gst: fmt(gst, 2),
     gstIncluded,
     bid: fmt(beforeGst + gst, 2),
-    factor: base === 0n ? '1.000000' : fmt(div(beforeGst, base), 6),
+    factor: base === 0n ? '1.000000' : fmt(div(running, base), 6),
     vsEstimatePct: est > 0n ? fmt(div(mul(beforeGst - est, dec('100')), est), 2) : null,
   };
 }

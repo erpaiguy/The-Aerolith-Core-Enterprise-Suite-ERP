@@ -561,12 +561,13 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
           WITH r AS (
             SELECT * FROM jsonb_to_recordset(${tx.json(batch)}) AS r(
               id bigint, parent_id bigint, sort_key text, depth smallint, node_type text, code text, unit text,
-              qty numeric, rate numeric, description text, notes text)
+              qty numeric, rate numeric, description text, notes text, item_kind text)
           ), n AS (
             INSERT INTO est.boq_node (boq_id, id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount,
-              created_version)
-            SELECT ${boqId}, id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, round(qty * rate, 2),
-              ${boq.version_no}
+              created_version, item_kind)
+            SELECT ${boqId}, id, parent_id, sort_key, depth, node_type, code, unit, qty, rate,
+              CASE WHEN item_kind IN ('normal', 'provisional') THEN round(qty * rate, 2) END, ${boq.version_no},
+              item_kind
             FROM r
           )
           INSERT INTO est.boq_node_text (boq_id, node_id, description, notes)
@@ -597,6 +598,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
           rate: line.rate,
           description: line.description,
           notes: line.notes,
+          item_kind: line.kind,
         });
         batchBytes += 200 + line.description.length + line.notes.length;
         if (line.type === 'section') {
@@ -675,7 +677,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
   ) {
     const existing = await db<Existing[]>`
       SELECT n.id::text, n.parent_id::text AS "parentId", n.sort_key AS "sortKey", n.node_type AS type, n.code,
-        t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate, n.measured
+        t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate, n.measured, n.item_kind AS kind
       FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
       WHERE n.boq_id = ${boqId} ORDER BY n.sort_key LIMIT ${MAX_REVISE_LINES + 1}`;
     if (existing.length > MAX_REVISE_LINES)
@@ -699,6 +701,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
       unit: m.unit !== undefined,
       qty: m.qty !== undefined,
       rate: m.rate !== undefined,
+      kind: m.type !== undefined,
     };
     return planRevision([...existing], lines, mapped);
   }

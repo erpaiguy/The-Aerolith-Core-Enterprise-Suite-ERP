@@ -5,6 +5,7 @@
 // - Edits are saved one batch at a time, in order. The server answers with the edited line and its ancestors, so
 //   section totals shown are always the stored ones.
 // - Structural changes (move, indent, delete) re-open the window around the affected line.
+import { SUBTREE_END } from '@aerolith/shared';
 import { Alert, Button } from '@aerolith/ui';
 import {
   Calculator,
@@ -17,6 +18,7 @@ import {
   FolderPlus,
   IndentDecrease,
   IndentIncrease,
+  ListChecks,
   MoveDown,
   MoveUp,
   Ruler,
@@ -37,6 +39,7 @@ import {
 } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
+import { BulkEditDialog } from './BulkEdit';
 import { load, save } from '../lib/storage';
 import {
   COLUMNS,
@@ -56,6 +59,10 @@ import {
   type EditableColumn,
   type NodeType,
   type Slice,
+  itemValue,
+  KIND_BADGE,
+  KIND_LABEL,
+  type ItemKind,
 } from './model';
 
 const ROW_H = 32;
@@ -93,15 +100,30 @@ interface Props {
   onMeasure?: ((row: BoqRow) => void) | undefined;
   /** Asks the user for a rate analysis for this item; resolves to its id, or null when cancelled. */
   onPickAnalysis?: ((row: BoqRow) => Promise<string | null>) | undefined;
+  /** A bulk change was made on the server: the grid and the header need reading again. */
+  onBulkDone?: (() => void) | undefined;
 }
+
+/** A range of lines by sort key (Shift+click): `to`'s subtree is in it, so a section brings its contents. */
+interface Selection {
+  anchor: string;
+  to: string;
+}
+const inSelection = (s: Selection | null, key: string) => {
+  if (!s) return false;
+  const [lo, hi] = s.anchor <= s.to ? [s.anchor, s.to] : [s.to, s.anchor];
+  return key >= lo && key < hi + SUBTREE_END;
+};
 
 const editable = (row: BoqRow, col: EditableColumn) =>
   row.type === 'item' || col === 'description' || (col === 'code' && row.type === 'section');
 
 export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
-  { boqId, canEdit, onHeader, onSaving, onPickAnalysis, onMeasure },
+  { boqId, canEdit, onHeader, onSaving, onPickAnalysis, onMeasure, onBulkDone },
   ref,
 ) {
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const storageKey = `aerolith.boq.${boqId}.collapsed`;
   const [slice, setSlice] = useState<Slice>({ rows: [], hasBefore: false, hasAfter: false });
   const [collapsed, setCollapsed] = useState<Map<string, string>>(() => {
@@ -378,6 +400,15 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
     });
   };
 
+  const setKind = (kind: ItemKind) => {
+    const row = activeRow;
+    if (!row || row.type !== 'item' || (row.kind ?? 'normal') === kind) return;
+    void enqueue(() => {
+      const current = rowById(row.id);
+      return current ? [{ op: 'update', id: row.id, rowVersion: current.rowVersion, kind }] : null;
+    });
+  };
+
   // --- structure ---
 
   const insert = (type: NodeType) => {
@@ -540,6 +571,11 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
 
   const onGridKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (editing) return;
+    if (e.key === 'Escape' && selection) {
+      e.preventDefault();
+      setSelection(null);
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     if (e.altKey && e.shiftKey && canEdit) {
       const dir = { ArrowRight: 'in', ArrowLeft: 'out', ArrowUp: 'up', ArrowDown: 'down' }[e.key];
@@ -716,9 +752,16 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
         data-col={col}
         className={`relative flex h-full min-w-0 items-center border-r border-line px-2 ${extra} ${isActive ? 'outline-2 -outline-offset-2 outline-accent' : ''}`}
         onMouseDown={(e) => {
-          if (col === 'amount' || isEditing) return;
+          if (isEditing) return;
           e.preventDefault();
           scroller.current?.focus();
+          // Shift+click: select the lines from the active one to this one (for a bulk change).
+          if (e.shiftKey && canEdit && activeRow) {
+            setSelection({ anchor: activeRow.sortKey, to: row.sortKey });
+            return;
+          }
+          setSelection(null);
+          if (col === 'amount') return;
           setActive({ id: row.id, col });
         }}
         onDoubleClick={() => {
@@ -769,6 +812,18 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+      {bulkOpen && selection && (
+        <BulkEditDialog
+          boqId={boqId}
+          selection={selection}
+          onClose={() => setBulkOpen(false)}
+          onDone={() => {
+            setBulkOpen(false);
+            setSelection(null);
+            onBulkDone?.();
+          }}
+        />
+      )}
       {canEdit && (
         <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="BOQ editing">
           <Button
@@ -855,6 +910,36 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
             >
               <Calculator className="size-4" aria-hidden />
             </Button>
+          )}
+          <select
+            aria-label="Kind of item"
+            title="Provisional sums count in the total but take no markups; rate-only items and alternates are priced but not counted"
+            className="h-9 rounded-md border border-line bg-surface px-2 text-sm disabled:opacity-50"
+            disabled={activeRow?.type !== 'item'}
+            value={activeRow?.type === 'item' ? (activeRow.kind ?? 'normal') : 'normal'}
+            onChange={(e) => setKind(e.target.value as ItemKind)}
+          >
+            {(Object.keys(KIND_LABEL) as ItemKind[]).map((k) => (
+              <option key={k} value={k}>
+                {KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
+          {selection ? (
+            <>
+              <Button variant="secondary" onClick={() => setBulkOpen(true)}>
+                <ListChecks className="size-4" aria-hidden /> Bulk edit
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setSelection(null)}
+                title="Clear the selection (Esc)"
+              >
+                Clear selection
+              </Button>
+            </>
+          ) : (
+            <span className="px-1 text-xs text-fg-subtle">Shift+click to select lines</span>
           )}
           <Button variant="ghost" onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
             <Undo2 className="size-4" aria-hidden />
@@ -980,7 +1065,8 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                     aria-level={row.depth + 1}
                     aria-expanded={isSection && row.childCount > 0 ? !isCollapsed : undefined}
                     data-row-id={row.id}
-                    className={`absolute left-0 right-0 grid ${GRID_COLUMNS} border-b border-line text-sm ${isSection ? 'bg-surface-2/60 font-semibold' : ''} ${active?.id === row.id ? 'bg-accent/5' : ''}`}
+                    aria-selected={inSelection(selection, row.sortKey) || undefined}
+                    className={`absolute left-0 right-0 grid ${GRID_COLUMNS} border-b border-line text-sm ${isSection ? 'bg-surface-2/60 font-semibold' : ''} ${active?.id === row.id ? 'bg-accent/5' : ''} ${inSelection(selection, row.sortKey) ? '!bg-accent/15' : ''}`}
                     style={{ top: i * ROW_H, height: ROW_H }}
                   >
                     {cell(
@@ -1034,6 +1120,15 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                           {row.description ||
                             (isSection ? 'Untitled section' : row.type === 'note' ? 'Note' : '')}
                         </span>
+                        {row.type === 'item' && row.kind && KIND_BADGE[row.kind] && (
+                          <span
+                            className="ml-1.5 shrink-0 rounded bg-surface-3 px-1 text-[10px] font-semibold uppercase text-fg-muted"
+                            title={KIND_LABEL[row.kind]}
+                            data-testid="kind-badge"
+                          >
+                            {KIND_BADGE[row.kind]}
+                          </span>
+                        )}
                       </span>,
                     )}
                     {cell(row, 'unit', <span className="truncate">{row.unit}</span>)}
@@ -1071,11 +1166,29 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                         className="w-full text-right tabular-nums"
                         data-testid={isSection ? `subtotal-${row.code ?? row.id}` : undefined}
                       >
-                        {row.type === 'item'
-                          ? formatAmount(row.amount)
-                          : isSection
-                            ? formatAmount(row.subtotal)
-                            : ''}
+                        {row.type === 'item' ? (
+                          row.kind === 'alternate' ? (
+                            <span
+                              className="italic text-fg-subtle"
+                              title="Alternate: its value is shown, but it is not in the total"
+                            >
+                              ({formatAmount(itemValue(row))})
+                            </span>
+                          ) : row.kind === 'rate_only' ? (
+                            <span
+                              className="text-xs text-fg-subtle"
+                              title="Rate only: not in the total"
+                            >
+                              rate only
+                            </span>
+                          ) : (
+                            formatAmount(row.amount)
+                          )
+                        ) : isSection ? (
+                          formatAmount(row.subtotal)
+                        ) : (
+                          ''
+                        )}
                       </span>,
                       'bg-surface-2/40',
                     )}

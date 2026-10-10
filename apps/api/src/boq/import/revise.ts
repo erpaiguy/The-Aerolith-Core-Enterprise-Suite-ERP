@@ -9,6 +9,7 @@
 // 3. Field changes of matched lines are applied in one statement. A blank cell in the file never clears what the BOQ
 //    has: a revised client BOQ usually has no rates, and the estimator's priced rates (and their analysis links) stay.
 import type { NodeType, Op } from '../boq.service.js';
+import { counted, KIND_LABEL, type ItemKind } from '../kinds.js';
 import { amountPaise, paiseToString, type Line } from './builder.js';
 
 export interface Existing {
@@ -23,6 +24,7 @@ export interface Existing {
   qty: string | null;
   rate: string | null;
   measured: boolean;
+  kind: ItemKind;
 }
 
 /** Which columns the file has: a column that is not mapped changes nothing. */
@@ -33,6 +35,8 @@ export interface Mapped {
   unit: boolean;
   qty: boolean;
   rate: boolean;
+  /** The file has a Type column, which can say an item is a provisional sum, rate only or an alternate. */
+  kind?: boolean | undefined;
 }
 
 export interface FieldChange {
@@ -44,6 +48,7 @@ export interface FieldChange {
   qty: string | null;
   /** A new rate from the file (unlinks its analysis); null keeps the BOQ's rate. */
   rate: string | null;
+  kind: ItemKind;
   /** The quantity was measured and the file changes it: the sheet stays but no longer drives the quantity. */
   unmeasure: boolean;
   textChanged: boolean;
@@ -263,6 +268,7 @@ export function planRevision(existing: Existing[], file: Line[], mapped: Mapped)
         unit: l.type === 'item' ? l.unit : null,
         qty: l.type === 'item' ? l.qty : null,
         rate: l.type === 'item' ? l.rate : null,
+        kind: l.type === 'item' ? l.kind : 'normal',
       });
     } else if (!anchors.has(i)) {
       moved++;
@@ -310,6 +316,7 @@ export function planRevision(existing: Existing[], file: Line[], mapped: Mapped)
     const newRate = fileRate !== null && !sameNumber(fileRate, e.rate) ? fileRate : null;
     if (item && fileRate === null && e.rate !== null) ratesKept++;
     if (newRate !== null) ratesFromFile++;
+    const kind = item && mapped.kind ? f.kind : e.kind;
     const qtyChanged = !sameNumber(qty, e.qty);
     const textChanged = description !== e.description || notes !== e.notes;
     const what = [
@@ -317,16 +324,28 @@ export function planRevision(existing: Existing[], file: Line[], mapped: Mapped)
       unit !== e.unit && `unit ${e.unit ?? '-'} → ${unit ?? '-'}`,
       qtyChanged && `qty ${e.qty ?? '-'} → ${qty ?? '-'}`,
       newRate !== null && `rate ${e.rate ?? '-'} → ${newRate}`,
+      kind !== e.kind && `${KIND_LABEL[e.kind]} → ${KIND_LABEL[kind]}`,
       description !== e.description && 'description',
       notes !== e.notes && 'notes',
     ].filter(Boolean) as string[];
     const rate = newRate ?? e.rate;
-    if (item && qty !== null && rate !== null) total += amountPaise(qty, rate);
+    if (item && counted(kind) && qty !== null && rate !== null) total += amountPaise(qty, rate);
     if (what.length === 0) return;
     const unmeasure = e.measured && qtyChanged;
     if (unmeasure) measuredOverridden++;
     sample({ change: 'changed', code, description, detail: what.join(', ') });
-    fields.push({ id, code, description, notes, unit, qty, rate: newRate, unmeasure, textChanged });
+    fields.push({
+      id,
+      code,
+      description,
+      notes,
+      unit,
+      qty,
+      rate: newRate,
+      kind,
+      unmeasure,
+      textChanged,
+    });
   });
 
   return {

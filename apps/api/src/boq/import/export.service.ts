@@ -23,6 +23,7 @@ import { PermissionsService } from '../../auth/permissions.js';
 import { PricingService } from '../../pricing/pricing.service.js';
 import { RevisionService } from '../revision.service.js';
 import { TenantConnections } from '../../provisioning/tenant-connections.js';
+import { KIND_LABEL, type ItemKind } from '../kinds.js';
 import { csvCell } from './import.service.js';
 
 const PAGE = 5000;
@@ -51,6 +52,7 @@ interface ExportRow {
   rate: string | null;
   amount: string | null;
   subtotal: string;
+  item_kind?: ItemKind;
   quoted_rate?: string | null;
   quoted_amount?: string | null;
 }
@@ -130,14 +132,18 @@ export class ExportService {
 
 async function* pages(db: Sql, boqId: string, factor: string | null): AsyncGenerator<ExportRow> {
   let after = '';
+  // Provisional sums are submitted as the client fixed them; rate-only items and alternates get a loaded rate but no
+  // amount, as in the BOQ.
   const quoted = factor
-    ? db`, round(n.rate * ${factor}::numeric, 2)::text AS quoted_rate,
-        round(n.qty * round(n.rate * ${factor}::numeric, 2), 2)::text AS quoted_amount`
+    ? db`, CASE WHEN n.item_kind = 'provisional' THEN n.rate ELSE round(n.rate * ${factor}::numeric, 2) END::text
+          AS quoted_rate,
+        CASE n.item_kind WHEN 'provisional' THEN n.amount WHEN 'normal'
+          THEN round(n.qty * round(n.rate * ${factor}::numeric, 2), 2) END::text AS quoted_amount`
     : db``;
   for (;;) {
     const rows = await db<ExportRow[]>`
       SELECT n.sort_key, n.depth, n.node_type, n.code, t.description, t.notes, n.unit, n.qty::text AS qty,
-        n.rate::text AS rate, n.amount::text AS amount, n.subtotal::text AS subtotal ${quoted}
+        n.rate::text AS rate, n.amount::text AS amount, n.subtotal::text AS subtotal, n.item_kind ${quoted}
       FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
       WHERE n.boq_id = ${boqId} AND n.sort_key > ${after}
       ORDER BY n.sort_key LIMIT ${PAGE}`;
@@ -153,7 +159,7 @@ const plain = (v: string | null) =>
 
 const valuesOf = (r: ExportRow, quoted = false, unpriced = false) => [
   r.depth,
-  r.node_type,
+  r.node_type === 'item' ? KIND_LABEL[r.item_kind ?? 'normal'] : r.node_type,
   r.code ?? '',
   r.description,
   r.unit ?? '',

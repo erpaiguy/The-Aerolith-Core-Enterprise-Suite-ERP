@@ -242,6 +242,7 @@ describe.skipIf(!controlUrl || !adminUrl)('reports (integration)', () => {
         subcontract: '0.00',
         other: '70.00',
         additions: '630.00',
+        provisional: '0.00',
         not_analysed: '500.00',
       });
       expect(s.breakdown.total).toBe('3500.00');

@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { BoqController } from '../boq/boq.controller.js';
 import { BoqService } from '../boq/boq.service.js';
+import { TemplateController } from '../boq/template.controller.js';
+import { TemplateService } from '../boq/template.service.js';
 import { RevisionService } from '../boq/revision.service.js';
 import { ExportService } from '../boq/import/export.service.js';
 import { ImportController } from '../boq/import/import.controller.js';
@@ -24,6 +26,7 @@ import { TenderService } from './tender.service.js';
     BoqController,
     ImportController,
     RfqController,
+    TemplateController,
   ],
   providers: [
     TenderService,
@@ -33,6 +36,7 @@ import { TenderService } from './tender.service.js';
     ExportService,
     RevisionService,
     RfqService,
+    TemplateService,
   ],
 })
 export class TenderModule {}

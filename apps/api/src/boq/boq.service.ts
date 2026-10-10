@@ -18,11 +18,21 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { measuredQty, sumQty, type MeasurementInput } from '../pricing/pricing.js';
 import { RatesService } from '../rates/rates.service.js';
 import { refuseArchived } from './archived.js';
+import { counted, type ItemKind } from './kinds.js';
+export { counted, ITEM_KINDS, type ItemKind } from './kinds.js';
 import type { FieldChange } from './import/revise.js';
 import { importRunning } from './import/jobs.js';
 import { loadUnitMap, sameUnit } from './units.js';
 
 export type NodeType = 'section' | 'item' | 'note';
+
+export type BulkAction =
+  | { kind: 'unit'; unit: string | null }
+  | { kind: 'item_kind'; itemKind: ItemKind }
+  | { kind: 'rate'; rate: string }
+  | { kind: 'scale'; pct: string }
+  | { kind: 'clear_rates' };
+const MAX_BULK_ITEMS = 100_000;
 
 export interface LineFields {
   /** Take the rate (and an empty unit or description) from this rate analysis; null unlinks, keeping the rate. */
@@ -33,6 +43,8 @@ export interface LineFields {
   unit?: string | null | undefined;
   qty?: string | null | undefined;
   rate?: string | null | undefined;
+  /** Items only. */
+  kind?: ItemKind | undefined;
 }
 
 export type Op =
@@ -57,7 +69,7 @@ const MAX_TOUCHED_ROWS = 1000;
 const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "sortKey", n.depth,
   n.node_type AS type, n.code, t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate,
   n.amount::text AS amount, n.subtotal::text AS subtotal, n.child_count AS "childCount",
-  n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId", n.measured`;
+  n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId", n.measured, n.item_kind AS kind`;
 
 const HEADER = `b.id, b.tender_id AS "tenderId", b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
@@ -83,6 +95,7 @@ export interface BoqRow {
   rateAnalysisId: string | null;
   /** The quantity is the total of the item's measurement sheet. */
   measured: boolean;
+  kind: ItemKind;
 }
 
 interface NodeRef {
@@ -98,6 +111,7 @@ interface NodeRef {
   amount: string | null;
   subtotal: string;
   row_version: number;
+  item_kind: ItemKind;
   /** Only read by lockNode. */
   measured?: boolean;
 }
@@ -487,13 +501,16 @@ export class BoqService {
               unit: f.unit,
               qty: f.qty,
               rate: f.rate,
+              kind: f.kind,
               unmeasure: f.unmeasure,
             })),
-          )}) AS x(id bigint, code text, unit text, qty numeric, rate numeric, unmeasure boolean)
+          )}) AS x(id bigint, code text, unit text, qty numeric, rate numeric, kind text, unmeasure boolean)
         )
         UPDATE est.boq_node n SET code = x.code, unit = x.unit, qty = x.qty, rate = coalesce(x.rate, n.rate),
           rate_analysis_id = CASE WHEN x.rate IS NULL THEN n.rate_analysis_id END,
-          amount = CASE WHEN n.node_type = 'item' THEN round(x.qty * coalesce(x.rate, n.rate), 2) END,
+          item_kind = CASE WHEN n.node_type = 'item' THEN x.kind ELSE n.item_kind END,
+          amount = CASE WHEN n.node_type = 'item' AND x.kind IN ('normal', 'provisional')
+            THEN round(x.qty * coalesce(x.rate, n.rate), 2) END,
           measured = n.measured AND NOT x.unmeasure, row_version = n.row_version + 1
         FROM x WHERE n.boq_id = ${boq.id} AND n.id = x.id`;
       const texts = chunk.filter((f) => f.textChanged);
@@ -513,8 +530,15 @@ export class BoqService {
   private async insert(ctx: BatchContext, op: Extract<Op, { op: 'insert' }>) {
     const { tx, boqId } = ctx;
     if (ctx.idMap.has(op.tempId)) throw new BadRequestException({ code: 'duplicate_temp_id' });
-    if (op.type !== 'item' && (op.qty != null || op.rate != null || op.rateAnalysisId != null))
+    if (
+      op.type !== 'item' &&
+      (op.qty != null ||
+        op.rate != null ||
+        op.rateAnalysisId != null ||
+        (op.kind ?? 'normal') !== 'normal')
+    )
       throw new BadRequestException({ code: 'qty_rate_on_non_item' });
+    const kind: ItemKind = op.kind ?? 'normal';
     const link = op.rateAnalysisId
       ? await this.fromAnalysis(ctx, op.rateAnalysisId, op.unit ?? null)
       : null;
@@ -528,11 +552,11 @@ export class BoqService {
 
     const [row] = await tx<{ id: string; value: string }[]>`
       INSERT INTO est.boq_node (boq_id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount,
-        rate_analysis_id, created_version)
+        rate_analysis_id, created_version, item_kind)
       VALUES (${boqId}, ${parent?.id ?? null}, ${key}, ${depth}, ${op.type}, ${op.code ?? null}, ${unit},
               ${op.qty ?? null}::numeric, ${rate}::numeric,
-              round(${op.qty ?? null}::numeric * ${rate}::numeric, 2), ${op.rateAnalysisId ?? null},
-              ${ctx.version})
+              ${counted(kind) ? tx`round(${op.qty ?? null}::numeric * ${rate}::numeric, 2)` : tx`NULL`},
+              ${op.rateAnalysisId ?? null}, ${ctx.version}, ${kind})
       RETURNING id::text, coalesce(amount, 0)::text AS value`;
     await tx`INSERT INTO est.boq_node_text (boq_id, node_id, description, notes)
       VALUES (${boqId}, ${row!.id}, ${description}, ${op.notes ?? ''})`;
@@ -554,9 +578,13 @@ export class BoqService {
     const node = await this.lockNode(ctx, op.id, op.rowVersion);
     if (
       node.node_type !== 'item' &&
-      (op.qty !== undefined || op.rate !== undefined || op.rateAnalysisId != null)
+      (op.qty !== undefined ||
+        op.rate !== undefined ||
+        op.rateAnalysisId != null ||
+        (op.kind ?? 'normal') !== 'normal')
     )
       throw new BadRequestException({ code: 'qty_rate_on_non_item' });
+    const kind: ItemKind = op.kind ?? node.item_kind;
     if (op.qty !== undefined && node.measured && !ctx.measuring)
       throw new ConflictException({
         code: 'qty_from_measurements',
@@ -582,8 +610,9 @@ export class BoqService {
     const [row] = await tx<{ delta: string }[]>`
       UPDATE est.boq_node SET code = ${next('code')}, unit = ${unit},
         qty = ${next('qty')}::numeric, rate = ${rate}::numeric,
-        amount = CASE WHEN node_type = 'item' THEN round(${next('qty')}::numeric * ${rate}::numeric, 2) END,
-        rate_analysis_id = ${link},
+        amount = CASE WHEN node_type = 'item' AND ${counted(kind)}
+          THEN round(${next('qty')}::numeric * ${rate}::numeric, 2) END,
+        rate_analysis_id = ${link}, item_kind = ${kind},
         row_version = row_version + 1
       WHERE boq_id = ${boqId} AND id = ${node.id}
       RETURNING (coalesce(amount, 0) - ${node.amount ?? '0'}::numeric)::text AS delta`;
@@ -736,7 +765,7 @@ export class BoqService {
     const id = this.resolve(ctx, rawId);
     const [n] = await ctx.tx<NodeRef[]>`
       SELECT id::text, parent_id::text, sort_key, depth, node_type, code, unit, qty::text, rate::text,
-        amount::text, subtotal::text, row_version, measured
+        amount::text, subtotal::text, row_version, measured, item_kind
       FROM est.boq_node WHERE boq_id = ${ctx.boqId} AND id = ${id} FOR UPDATE`;
     if (!n) throw new NotFoundException({ code: 'line_not_found', id: rawId });
     // Rows inserted earlier in this batch have no version on the client yet.
@@ -754,7 +783,7 @@ export class BoqService {
     const id = this.resolve(ctx, rawId);
     const [p] = await ctx.tx<NodeRef[]>`
       SELECT id::text, parent_id::text, sort_key, depth, node_type, code, unit, qty::text, rate::text,
-        amount::text, subtotal::text, row_version
+        amount::text, subtotal::text, row_version, item_kind
       FROM est.boq_node WHERE boq_id = ${ctx.boqId} AND id = ${id}`;
     if (!p) throw new NotFoundException({ code: 'line_not_found', id: rawId });
     if (p.node_type !== 'section') throw new BadRequestException({ code: 'parent_not_section' });
@@ -818,7 +847,7 @@ export class BoqService {
   private async nodeByKey(ctx: BatchContext, key: string): Promise<NodeRef> {
     const [n] = await ctx.tx<NodeRef[]>`
       SELECT id::text, parent_id::text, sort_key, depth, node_type, code, unit, qty::text, rate::text,
-        amount::text, subtotal::text, row_version
+        amount::text, subtotal::text, row_version, item_kind
       FROM est.boq_node WHERE boq_id = ${ctx.boqId} AND sort_key = ${key}`;
     if (!n) throw new NotFoundException({ code: 'line_not_found' });
     return n;
@@ -969,6 +998,77 @@ export class BoqService {
   }
 
   /**
+   * One change to every item in a range of lines (by sort key, sections' contents included): a unit, a kind, a rate,
+   * rates raised or lowered by a percentage, or rates cleared. Set-based, so a selection of 50,000 items is one
+   * statement; totals are then recomputed. A rate set here unlinks the item's rate analysis, as typing it would.
+   */
+  async bulk(
+    claims: TenantClaims,
+    boqId: string,
+    range: { from: string; to: string },
+    action: BulkAction,
+  ) {
+    const db = await this.tenants.forTenant(claims.ten);
+    if (await importRunning(db, boqId))
+      throw new ConflictException({
+        code: 'boq_importing',
+        message: 'A file is being imported into this BOQ. Try again when it has finished.',
+      });
+    const [from, to] = range.from <= range.to ? [range.from, range.to] : [range.to, range.from];
+    return db.begin(async (tx) => {
+      const [boq] = await tx<{ status: string; archived: boolean; version_no: number }[]>`
+        SELECT status, archived_at IS NOT NULL AS archived, version_no FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+      if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+      refuseArchived(boq);
+      if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
+      // Everything from `from` to the end of `to`'s subtree.
+      const inRange = tx`n.node_type = 'item' AND n.sort_key >= ${from} AND n.sort_key < ${to + SUBTREE_END}`;
+      const set =
+        action.kind === 'unit'
+          ? tx`unit = ${action.unit}`
+          : action.kind === 'item_kind'
+            ? tx`item_kind = ${action.itemKind}`
+            : action.kind === 'rate'
+              ? tx`rate = ${action.rate}::numeric, rate_analysis_id = NULL`
+              : action.kind === 'scale'
+                ? tx`rate = round(n.rate * (1 + ${action.pct}::numeric / 100), 2), rate_analysis_id = NULL`
+                : tx`rate = NULL, rate_analysis_id = NULL`;
+      const only = action.kind === 'scale' ? tx`AND n.rate IS NOT NULL` : tx``;
+      const rev = { tx, boqId, version: boq.version_no };
+      await preImage(rev, tx`${inRange} ${only}`);
+      const [r] = await tx<{ changed: number }[]>`
+        WITH upd AS (
+          UPDATE est.boq_node n SET ${set}, row_version = n.row_version + 1
+          WHERE n.boq_id = ${boqId} AND ${inRange} ${only}
+          RETURNING n.id
+        )
+        SELECT count(*)::int AS changed FROM upd`;
+      // A second statement, so it sees the new rates and kinds (one statement cannot update a row twice).
+      await tx`
+        UPDATE est.boq_node n SET amount = CASE WHEN n.item_kind IN ('normal', 'provisional')
+          THEN round(n.qty * n.rate, 2) END
+        WHERE n.boq_id = ${boqId} AND ${inRange}
+          AND n.amount IS DISTINCT FROM CASE WHEN n.item_kind IN ('normal', 'provisional')
+            THEN round(n.qty * n.rate, 2) END`;
+      if (r!.changed > MAX_BULK_ITEMS)
+        throw new BadRequestException({
+          code: 'too_many_lines',
+          message: `A bulk change covers up to ${MAX_BULK_ITEMS.toLocaleString('en-IN')} items at a time.`,
+        });
+      if (r!.changed > 0) {
+        await preImage(rev, tx`n.node_type = 'section'`);
+        await recomputeTotals(tx, boqId);
+      }
+      await tx`UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${boqId}`;
+      await audit(tx, claims.sub, 'boq.bulk', boqId, { from, to, action, changed: r!.changed });
+      const [h] = await tx<
+        { total: string }[]
+      >`SELECT total::text FROM est.boq WHERE id = ${boqId}`;
+      return { changed: r!.changed, total: h!.total };
+    });
+  }
+
+  /**
    * Re-prices every item linked to an analysis, as on the BOQ's rate date, then recomputes all subtotals and the
    * total in a few set-based statements. Refused when any linked analysis has a resource without a rate on that date.
    */
@@ -1021,16 +1121,17 @@ export class BoqService {
             kept AS (
               INSERT INTO est.boq_node_hist (boq_id, line_key, frozen_version, id, parent_id, sort_key, depth,
                 node_type, code, unit, qty, rate, amount, subtotal, child_count, rate_analysis_id, measured,
-                created_version)
+                created_version, item_kind)
               SELECT n.boq_id, n.line_key, ${prev}, n.id, n.parent_id, n.sort_key, n.depth, n.node_type, n.code,
                 n.unit, n.qty, n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured,
-                n.created_version
+                n.created_version, n.item_kind
               FROM est.boq_node n JOIN x ON n.rate_analysis_id = x.id
               WHERE ${prev} > 0 AND n.boq_id = ${boqId} AND n.rate IS DISTINCT FROM x.rate
                 AND n.created_version <= ${prev} AND n.hist_version < ${prev}
             ),
             upd AS (
-              UPDATE est.boq_node n SET rate = x.rate, amount = round(n.qty * x.rate, 2),
+              UPDATE est.boq_node n SET rate = x.rate,
+                amount = CASE WHEN n.item_kind IN ('normal', 'provisional') THEN round(n.qty * x.rate, 2) END,
                 row_version = n.row_version + 1,
                 hist_version = CASE WHEN ${prev} > 0 AND n.created_version <= ${prev}
                   THEN greatest(n.hist_version, ${prev}) ELSE n.hist_version END
@@ -1111,12 +1212,13 @@ async function preImage(
       UPDATE est.boq_node n SET hist_version = ${prev}
       WHERE n.boq_id = ${boqId} AND (${where}) AND n.created_version <= ${prev} AND n.hist_version < ${prev}
       RETURNING n.boq_id, n.line_key, n.id, n.parent_id, n.sort_key, n.depth, n.node_type, n.code, n.unit, n.qty,
-        n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured, n.created_version
+        n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured, n.created_version, n.item_kind
     )
     INSERT INTO est.boq_node_hist (boq_id, line_key, frozen_version, id, parent_id, sort_key, depth, node_type, code,
-      unit, qty, rate, amount, subtotal, child_count, rate_analysis_id, measured, created_version, description, notes)
+      unit, qty, rate, amount, subtotal, child_count, rate_analysis_id, measured, created_version, item_kind,
+      description, notes)
     SELECT s.boq_id, s.line_key, ${prev}, s.id, s.parent_id, s.sort_key, s.depth, s.node_type, s.code, s.unit, s.qty,
-      s.rate, s.amount, s.subtotal, s.child_count, s.rate_analysis_id, s.measured, s.created_version,
+      s.rate, s.amount, s.subtotal, s.child_count, s.rate_analysis_id, s.measured, s.created_version, s.item_kind,
       ${withText ? tx`t.description, t.notes` : tx`NULL, NULL`}
     FROM saved s
     ${withText ? tx`JOIN est.boq_node_text t ON t.boq_id = s.boq_id AND t.node_id = s.id` : tx``}`;

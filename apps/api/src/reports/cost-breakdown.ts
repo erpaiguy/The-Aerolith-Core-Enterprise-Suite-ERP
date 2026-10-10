@@ -5,19 +5,26 @@
 // material, labour, equipment, subcontract, other (lump sums), and the analysis' own additions (overheads and
 // profit inside the rates). The item's amount is split as it stands, even when its rate was typed over or the
 // analysis changed since: the proportions come from the analysis, the money from the BOQ. Items without an
-// analysis, or whose analysis gives a zero rate, are "not analysed". Every split is rounded to paise and the
+// analysis, or whose analysis gives a zero rate, are "not analysed"; provisional sums are a part of their own. Every split is rounded to paise and the
 // rounding goes to the additions, so the parts always add up to the BOQ exactly.
 import { dec, div, fmt, mul, ZERO, type Dec } from '../rates/decimal.js';
 import { RESOURCE_KINDS, type Costing, type ResourceKind } from '../rates/engine.js';
 
-export type BreakdownPart = ResourceKind | 'additions' | 'not_analysed';
-export const BREAKDOWN_PARTS: BreakdownPart[] = [...RESOURCE_KINDS, 'additions', 'not_analysed'];
+export type BreakdownPart = ResourceKind | 'additions' | 'provisional' | 'not_analysed';
+export const BREAKDOWN_PARTS: BreakdownPart[] = [
+  ...RESOURCE_KINDS,
+  'additions',
+  'provisional',
+  'not_analysed',
+];
 
 export interface AnalysedGroup {
   /** The rate analysis, or null for items without one. */
   analysisId: string | null;
   /** Σ item amounts, as stored. */
   amount: string;
+  /** Provisional sums: fixed by the client, a part of their own whatever analysis they link. */
+  provisional?: boolean | undefined;
 }
 
 export interface Breakdown {
@@ -41,6 +48,10 @@ export function breakdown(
   for (const g of groups) {
     const amount = dec(g.amount);
     total += amount;
+    if (g.provisional) {
+      bump('provisional', amount);
+      continue;
+    }
     const c = g.analysisId ? costOf(g.analysisId) : null;
     const unit = c ? dec(c.unitRate) : ZERO;
     if (!c || unit === ZERO) {

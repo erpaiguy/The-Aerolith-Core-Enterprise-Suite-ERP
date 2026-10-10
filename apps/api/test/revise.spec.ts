@@ -31,6 +31,7 @@ const line = (
 ): Line => ({
   rowNo: ++row,
   type,
+  kind: 'normal',
   depth,
   code,
   description,
@@ -57,6 +58,7 @@ function boq(lines: Line[], measured: string[] = []): Existing[] {
       parentId: parent?.id ?? null,
       sortKey: key,
       type: l.type,
+      kind: l.kind,
       code: l.code,
       description: l.description,
       notes: '',
