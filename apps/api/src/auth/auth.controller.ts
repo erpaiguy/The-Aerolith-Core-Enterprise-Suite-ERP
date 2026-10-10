@@ -200,6 +200,8 @@ export class AuthController {
   }
 }
 
+const nameSchema = z.object({ displayName: z.string().trim().min(2).max(100) });
+
 /** Tenant admin: staff accounts and password-reset requests. */
 @Controller('tenant')
 @UseGuards(TenantAuthGuard)
@@ -247,6 +249,28 @@ export class TenantUsersController {
     @Body(new ZodPipe(roleSchema)) body: z.infer<typeof roleSchema>,
   ) {
     return this.users.changeRole(claims, id, body.role);
+  }
+
+  /** The admin renames anyone; everyone else uses `me/name`. */
+  @Post('users/:id/name')
+  @HttpCode(200)
+  @Roles('admin')
+  rename(
+    @Auth() claims: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(nameSchema)) body: z.infer<typeof nameSchema>,
+  ) {
+    return this.users.rename(claims, id, body.displayName);
+  }
+
+  /** Any signed-in user: their own name. A personal detail, so also on a read-only licence. */
+  @Post('me/name')
+  @HttpCode(200)
+  renameMe(
+    @Auth() claims: TenantClaims,
+    @Body(new ZodPipe(nameSchema)) body: z.infer<typeof nameSchema>,
+  ) {
+    return this.users.rename(claims, claims.sub, body.displayName);
   }
 
   @Get('password-resets')

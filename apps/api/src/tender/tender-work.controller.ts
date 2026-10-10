@@ -145,7 +145,18 @@ const resultBody = z.object({
   winnerName: text(200).default(null),
 });
 
-const agendaQuery = z.object({ days: z.coerce.number().int().min(1).max(366).default(30) });
+const agendaQuery = z
+  .object({
+    days: z.coerce.number().int().min(1).max(366).default(30),
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional(),
+  })
+  .refine(
+    (q) =>
+      (q.from === undefined) === (q.to === undefined) &&
+      (!q.from || (q.from <= q.to! && Date.parse(q.to!) - Date.parse(q.from) <= 62 * 86_400_000)),
+    { message: 'Give both from and to, at most 62 days apart' },
+  );
 const analysisQuery = z.object({ fy: fyParam.optional() });
 
 type Claims = TenantClaims;
@@ -167,7 +178,12 @@ export class TenderWorkController {
 
   @Get('tender-agenda')
   agenda(@Auth() c: Claims, @Query(new ZodPipe(agendaQuery)) q: z.infer<typeof agendaQuery>) {
-    return this.work.agenda(c, q.days);
+    return this.work.agenda(
+      c,
+      q.days,
+      new Date(),
+      q.from && q.to ? { from: q.from, to: q.to } : undefined,
+    );
   }
 
   @Get('tender-analysis')

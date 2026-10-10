@@ -13,6 +13,8 @@ import { ProvisioningModule } from '../provisioning/provisioning.module.js';
 import { RatesModule } from '../rates/rates.module.js';
 import { RfqController } from '../rfq/rfq.controller.js';
 import { RfqService } from '../rfq/rfq.service.js';
+import { TenderSettingsController } from './tender-settings.controller.js';
+import { TenderSettingsService } from './tender-settings.service.js';
 import { TenderWorkController } from './tender-work.controller.js';
 import { TenderWorkService } from './tender-work.service.js';
 import { TenderController } from './tender.controller.js';
@@ -27,6 +29,7 @@ import { TenderService } from './tender.service.js';
     ImportController,
     RfqController,
     TemplateController,
+    TenderSettingsController,
   ],
   providers: [
     TenderService,
@@ -37,6 +40,7 @@ import { TenderService } from './tender.service.js';
     RevisionService,
     RfqService,
     TemplateService,
+    TenderSettingsService,
   ],
 })
 export class TenderModule {}

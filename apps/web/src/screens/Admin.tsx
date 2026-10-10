@@ -186,6 +186,19 @@ export function UsersScreen() {
     },
     onError: (err) => setError(errorMessage(err instanceof ApiError ? err.code : undefined)),
   });
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const rename = useMutation({
+    mutationFn: (r: { id: string; name: string }) =>
+      api.request(`/api/tenant/users/${r.id}/name`, {
+        method: 'POST',
+        body: { displayName: r.name },
+      }),
+    onSuccess: (_d, r) => {
+      if (r.id === session.user?.id) session.renamed(r.name.trim());
+      setRenaming(null);
+      void qc.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
   const action = useMutation({
     mutationFn: ({
       id,
@@ -283,7 +296,37 @@ export function UsersScreen() {
                 {users.data?.map((u) => (
                   <tr key={u.id} className={u.status === 'deactivated' ? 'opacity-60' : ''}>
                     <td className="py-2.5 pr-3">
-                      <div className="font-medium">{u.displayName}</div>
+                      {renaming?.id === u.id ? (
+                        <form
+                          className="flex items-center gap-1"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            rename.mutate(renaming);
+                          }}
+                        >
+                          <Input
+                            aria-label={`New name for ${u.username}`}
+                            value={renaming.name}
+                            onChange={(e) => setRenaming({ id: u.id, name: e.target.value })}
+                            autoFocus
+                          />
+                          <Button type="submit" variant="secondary" busy={rename.isPending}>
+                            Save
+                          </Button>
+                          <Button type="button" variant="ghost" onClick={() => setRenaming(null)}>
+                            Cancel
+                          </Button>
+                        </form>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-left font-medium hover:underline"
+                          title="Rename"
+                          onClick={() => setRenaming({ id: u.id, name: u.displayName })}
+                        >
+                          {u.displayName}
+                        </button>
+                      )}
                       <div className="text-xs text-fg-muted">{u.username}</div>
                     </td>
                     <td className="py-2.5 pr-3">

@@ -278,3 +278,39 @@ export function ChangePasswordScreen({ forced }: { forced: boolean }) {
     </AuthLayout>
   );
 }
+
+/** The signed-in user's name, as shown on tenders, reminders and in activity logs. */
+export function YourNameCard() {
+  const session = useSession();
+  const [name, setName] = useState(session.user?.displayName ?? '');
+  const [saved, setSaved] = useState(false);
+  const { error, busy, run } = useSubmit();
+  return (
+    <form
+      className="mx-auto mb-6 w-full max-w-sm space-y-3 rounded-lg border border-line bg-surface p-5"
+      aria-label="Your name"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setSaved(false);
+        void run(async () => {
+          const r = await api.request<{ displayName: string }>('/api/tenant/me/name', {
+            method: 'POST',
+            body: { displayName: name },
+          });
+          session.renamed(r.displayName);
+          setSaved(true);
+        });
+      }}
+    >
+      <h2 className="font-semibold">Your name</h2>
+      <Field label="Name" hint="Shown on tenders, reminders and in activity logs.">
+        <Input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
+      </Field>
+      {error && <Alert tone="danger">{error}</Alert>}
+      {saved && <Alert tone="success">Saved.</Alert>}
+      <Button type="submit" busy={busy} disabled={name.trim().length < 2}>
+        Save name
+      </Button>
+    </form>
+  );
+}

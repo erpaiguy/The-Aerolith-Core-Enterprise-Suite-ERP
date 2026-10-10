@@ -102,6 +102,32 @@ export class UsersService {
     });
   }
 
+  /**
+   * Renames a user (the name shown on tenders, reminders and in the activity log): the user themselves, or the
+   * admin for anyone. The tenant admin starts with their email address as their name.
+   */
+  async rename(claims: TenantClaims, userId: string, displayName: string) {
+    if (claims.role !== 'admin' && claims.sub !== userId)
+      throw new ForbiddenException({
+        code: 'forbidden',
+        message: 'Only the admin can rename other users.',
+      });
+    const db = await this.tenants.forTenant(claims.ten);
+    return db.begin(async (tx) => {
+      const [u] = await tx<{ display_name: string }[]>`
+        SELECT display_name FROM platform."user" WHERE id = ${userId} FOR UPDATE`;
+      if (!u) throw new NotFoundException({ code: 'user_not_found' });
+      if (u.display_name !== displayName) {
+        await tx`UPDATE platform."user" SET display_name = ${displayName}, updated_at = now() WHERE id = ${userId}`;
+        await this.audit(tx, claims.sub, 'user.rename', userId, {
+          from: u.display_name,
+          to: displayName,
+        });
+      }
+      return { id: userId, displayName };
+    });
+  }
+
   async pendingResets(claims: TenantClaims) {
     const db = await this.tenants.forTenant(claims.ten);
     return db`SELECT r.id, r.requested_at AS "requestedAt", r.device_label AS "deviceLabel",

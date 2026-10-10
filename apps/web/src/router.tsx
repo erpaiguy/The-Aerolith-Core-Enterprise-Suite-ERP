@@ -12,7 +12,12 @@ import { ActivateScreen } from './screens/Activate';
 import { AppShell } from './screens/AppShell';
 import { HomeScreen } from './screens/Home';
 import { LicencesScreen } from './screens/Licences';
-import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens/Passwords';
+import {
+  ChangePasswordScreen,
+  ForgotScreen,
+  SetPasswordScreen,
+  YourNameCard,
+} from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
@@ -30,6 +35,7 @@ import {
 } from './screens/Reports';
 import { RfqScreen } from './screens/Rfq';
 import { TemplatesScreen } from './screens/Templates';
+import { TenderSettingsScreen } from './screens/TenderSettings';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
 import { WinLossScreen } from './screens/TenderInsights';
@@ -231,6 +237,15 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/settings/tenders',
+      component: () => (
+        <AdminOnly>
+          <TenderSettingsScreen />
+        </AdminOnly>
+      ),
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/password-resets',
       component: () => (
         <AdminOnly>
@@ -241,7 +256,12 @@ const routeTree = rootRoute.addChildren([
     createRoute({
       getParentRoute: () => appLayout,
       path: '/account/password',
-      component: () => <ChangePasswordScreen forced={false} />,
+      component: () => (
+        <>
+          <YourNameCard />
+          <ChangePasswordScreen forced={false} />
+        </>
+      ),
     }),
   ]),
   programmePrintRoute,

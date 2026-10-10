@@ -40,6 +40,8 @@ interface SessionApi extends SessionState {
   activate(key: string): Promise<void>;
   signedIn(result: Extract<LoginResult, { status: 'ok' }>): Promise<void>;
   passwordChanged(accessToken: string): void;
+  /** The signed-in user changed their name. */
+  renamed(displayName: string): void;
   signOut(): Promise<void>;
   forgetDevice(): void;
 }
@@ -192,6 +194,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       passwordChanged(accessToken: string) {
         api.setAccessToken(accessToken);
         setState((s) => ({ ...s, mustChangePassword: false }));
+      },
+      renamed(displayName: string) {
+        setState((s) => (s.user ? { ...s, user: { ...s.user, displayName } } : s));
       },
       async signOut() {
         await api.request('/api/auth/logout', { method: 'POST' }).catch(() => undefined);

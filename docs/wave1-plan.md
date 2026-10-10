@@ -1081,3 +1081,24 @@ rate in use cannot be removed. Exports carry the rupee rates; the foreign rates 
 **Tests:** 3 API integration tests (a rate missing, priced from the exchange rate, re-priced when it changes, a bulk
 rise, the cost summary, a rupee rate ending it, removing a rate in use, permissions); the browser test prices a lift
 in dollars and changes the exchange rate.
+
+### Part 4: the company's tender settings, the calendar, names
+
+- **Tender settings** (admin, in the menu): the company's own **bid/no-bid criteria** (labels, weights 0-5, order;
+  up to 20) and its **standard document checklist** (envelope, title, required; up to 100). "Back to the built-in
+  list" restores the defaults. A decision must score every current criterion; a decision already made keeps the
+  criteria and labels it was scored on, so later edits never change past scores.
+- **Month calendar:** the tender agenda has a **List | Month** switch (remembered on the device); the month view shows
+  each day's submissions, pre-bid meetings, query deadlines, openings, guarantee expiries and documents due, with
+  arrows to move a month.
+- **Names:** **Account** lets anyone change their own name; the admin renames anyone from **Users**. The tenant
+  admin no longer has to keep their email address as their name.
+
+**API:** `GET /tender-settings`, `POST /tender-settings/bid-criteria` (`{criteria}` or `null`),
+`POST /tender-settings/checklist` (`{items}` or `null`); `GET /tender-agenda?from&to` (up to 62 days);
+`POST /me/name`, `POST /users/:id/name` (admin).
+
+**Tests:** 4 API integration tests (criteria set by the admin only, a decision on the old list refused and one on
+the new scored, reset; the company checklist added to a tender, duplicates refused; the calendar's date range; names
+by the user and by the admin). The browser test renames the admin, sets two criteria and a checklist item, scores a
+tender 80 on them and finds it in the month calendar.

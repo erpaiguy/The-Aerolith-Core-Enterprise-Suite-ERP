@@ -5,6 +5,7 @@ import {
   ChartColumn,
   LayoutDashboard,
   LayoutTemplate,
+  Settings2,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -135,6 +136,9 @@ export function AppShell() {
                 >
                   Reset requests
                 </NavItem>
+                <NavItem to="/settings/tenders" icon={<Settings2 className="size-4" />}>
+                  Tender settings
+                </NavItem>
               </>
             )}
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
@@ -184,7 +188,7 @@ export function AppShell() {
                 to="/account/password"
                 className="rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
               >
-                Password
+                Account
               </Link>
               <button
                 type="button"

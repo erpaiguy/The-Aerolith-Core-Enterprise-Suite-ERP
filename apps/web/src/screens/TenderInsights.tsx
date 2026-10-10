@@ -26,8 +26,149 @@ const dayKey = (iso: string) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-/** The next weeks across open tenders: deadlines, meetings, openings, expiring guarantees, documents due. */
+/** The next weeks across open tenders: deadlines, meetings, openings, expiring guarantees, documents due; as a list
+ * or a month calendar. */
 export function TenderAgenda() {
+  const [view, setView] = useState<'list' | 'month'>(() => {
+    try {
+      return localStorage.getItem('aerolith.agenda.view') === 'month' ? 'month' : 'list';
+    } catch {
+      return 'list';
+    }
+  });
+  const pick = (v: 'list' | 'month') => {
+    setView(v);
+    try {
+      localStorage.setItem('aerolith.agenda.view', v);
+    } catch {
+      // Not kept: fine.
+    }
+  };
+  const toggle = (
+    <div className="flex rounded-md border border-line p-0.5" role="group" aria-label="Agenda view">
+      {(['list', 'month'] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={view === v}
+          onClick={() => pick(v)}
+          className={`rounded px-2 py-1 text-xs ${view === v ? 'bg-surface-2 font-medium' : 'text-fg-muted'}`}
+        >
+          {v === 'list' ? 'List' : 'Month'}
+        </button>
+      ))}
+    </div>
+  );
+  return view === 'list' ? <AgendaList view={toggle} /> : <AgendaMonth view={toggle} />;
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** A month of tender dates, Monday first, today marked; arrows move a month. */
+function AgendaMonth({ view }: { view: React.ReactNode }) {
+  const now = new Date();
+  const [month, setMonth] = useState({ y: now.getFullYear(), m: now.getMonth() });
+  const first = new Date(month.y, month.m, 1);
+  const days = new Date(month.y, month.m + 1, 0).getDate();
+  const from = `${month.y}-${pad(month.m + 1)}-01`;
+  const to = `${month.y}-${pad(month.m + 1)}-${pad(days)}`;
+  const agenda = useQuery({
+    queryKey: ['tender-agenda-month', from],
+    queryFn: () => api.request<AgendaItem[]>(`/api/tenant/tender-agenda?from=${from}&to=${to}`),
+  });
+  const byDay = (agenda.data ?? []).reduce<Record<string, AgendaItem[]>>((g, a) => {
+    (g[dayKey(a.at)] ??= []).push(a);
+    return g;
+  }, {});
+  const lead = (first.getDay() + 6) % 7; // Monday first
+  const cells = [...Array<null>(lead).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const today = dayKey(now.toISOString());
+  const shift = (by: number) =>
+    setMonth(({ y, m }) => {
+      const d = new Date(y, m + by, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+  return (
+    <Card
+      title={first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+      actions={
+        <div className="flex items-center gap-1">
+          {view}
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-sm hover:bg-surface-2"
+            onClick={() => shift(-1)}
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-sm hover:bg-surface-2"
+            onClick={() => shift(1)}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
+      }
+    >
+      {agenda.isError && <Alert tone="danger">{describeError(agenda.error)}</Alert>}
+      <div
+        className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-line bg-line text-xs"
+        role="grid"
+        aria-label="Month"
+      >
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+          <div
+            key={d}
+            className="bg-surface-2 px-1.5 py-1 font-medium text-fg-muted"
+            role="columnheader"
+          >
+            {d}
+          </div>
+        ))}
+        {cells.map((d, i) => {
+          const key = d ? `${month.y}-${pad(month.m + 1)}-${pad(d)}` : null;
+          const items = key ? (byDay[key] ?? []) : [];
+          return (
+            <div
+              key={i}
+              role="gridcell"
+              aria-label={key ?? undefined}
+              className={`min-h-20 bg-surface p-1 ${d ? '' : 'bg-surface-2/50'}`}
+            >
+              {d && (
+                <div
+                  className={`mb-0.5 text-right tabular-nums ${key === today ? 'font-bold text-accent' : 'text-fg-muted'}`}
+                >
+                  {d}
+                </div>
+              )}
+              {items.slice(0, 4).map((a, j) => (
+                <Link
+                  key={j}
+                  to="/tenders/$tenderId"
+                  params={{ tenderId: a.tender.id }}
+                  title={`${a.label}: ${a.tender.number} · ${a.tender.title}`}
+                  className="mb-0.5 block truncate rounded px-1 py-0.5 hover:bg-surface-2"
+                >
+                  <Badge tone={KIND[a.kind].tone}>{KIND[a.kind].label}</Badge>{' '}
+                  <span className="text-fg">{a.tender.number}</span>
+                </Link>
+              ))}
+              {items.length > 4 && (
+                <div className="px-1 text-fg-subtle">+{items.length - 4} more</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function AgendaList({ view }: { view: React.ReactNode }) {
   const [days, setDays] = useState(30);
   const agenda = useQuery({
     queryKey: ['tender-agenda', days],
@@ -38,16 +179,19 @@ export function TenderAgenda() {
     <Card
       title="Agenda"
       actions={
-        <Select
-          aria-label="How far ahead"
-          className="w-36"
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-        >
-          <option value={7}>Next 7 days</option>
-          <option value={30}>Next 30 days</option>
-          <option value={90}>Next 90 days</option>
-        </Select>
+        <div className="flex items-center gap-2">
+          {view}
+          <Select
+            aria-label="How far ahead"
+            className="w-36"
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+          >
+            <option value={7}>Next 7 days</option>
+            <option value={30}>Next 30 days</option>
+            <option value={90}>Next 90 days</option>
+          </Select>
+        </div>
       }
     >
       {agenda.isPending ? (

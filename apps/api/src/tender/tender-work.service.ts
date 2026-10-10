@@ -16,7 +16,6 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt } from '../rates/decimal.js';
 import { audit, event, rescheduleChecklistItem, rescheduleSecurity } from './tender-records.js';
 import {
-  CHECKLIST_TEMPLATE,
   EXPIRING_FORMS,
   OPEN_STATUSES,
   bidValidityEnd,
@@ -25,6 +24,7 @@ import {
   type Envelope,
   type TenderStatus,
 } from './tender-rules.js';
+import { TenderSettingsService } from './tender-settings.service.js';
 import { TenderService, type Patch } from './tender.service.js';
 
 export type QueryStatus = 'draft' | 'sent' | 'answered' | 'withdrawn';
@@ -180,6 +180,7 @@ export class TenderWorkService {
     private readonly tenants: TenantConnections,
     private readonly permissions: PermissionsService,
     private readonly tenders: TenderService,
+    private readonly settings: TenderSettingsService,
   ) {}
 
   /** Everything below the tender's header, for its page: lists, the bids ranked, and what still stands in the way. */
@@ -562,8 +563,9 @@ export class TenderWorkService {
         SELECT coalesce(max(seq), 0) + 1 AS next FROM tender.checklist_item WHERE tender_id = ${tenderId}`) as unknown as [
         { next: number },
       ];
-      const add = CHECKLIST_TEMPLATE.filter((c) => !have.has(c.title.toLowerCase())).map(
-        (c, i) => ({
+      const add = (await this.settings.checklist(tx))
+        .filter((c) => !have.has(c.title.toLowerCase()))
+        .map((c, i) => ({
           tender_id: tenderId,
           seq: next + i,
           envelope: c.envelope,
@@ -571,8 +573,7 @@ export class TenderWorkService {
           required: c.required,
           created_by: claims.sub,
           updated_by: claims.sub,
-        }),
-      );
+        }));
       if (add.length) await tx`INSERT INTO tender.checklist_item ${tx(add)}`;
       return { added: add.length };
     });
@@ -747,10 +748,20 @@ export class TenderWorkService {
    * Dates coming up across tenders: submissions, pre-bid meetings, query deadlines and openings of open tenders,
    * expiring bank guarantees (also ones already expired while still with the client), and checklist items due.
    */
-  async agenda(claims: TenantClaims, days: number, now = new Date()) {
+  /** Dates of open tenders from a week ago to `days` ahead, or (for the calendar) between two given days. */
+  async agenda(
+    claims: TenantClaims,
+    days: number,
+    now = new Date(),
+    range?: { from: string; to: string },
+  ) {
     const db = await this.tenants.forTenant(claims.ten);
-    const from = new Date(now.getTime() - 7 * 86_400_000);
-    const to = new Date(now.getTime() + days * 86_400_000);
+    const from = range
+      ? new Date(`${range.from}T00:00:00+05:30`)
+      : new Date(now.getTime() - 7 * 86_400_000);
+    const to = range
+      ? new Date(`${range.to}T23:59:59+05:30`)
+      : new Date(now.getTime() + days * 86_400_000);
     const fromDay = today(from);
     const toDay = today(to);
     const rows = await db<

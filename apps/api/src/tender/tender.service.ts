@@ -9,12 +9,12 @@ import {
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { TenderSettingsService } from './tender-settings.service.js';
 import { RevisionService } from '../boq/revision.service.js';
 import { nextNumber } from './numbering.js';
 import { audit, event, remindEmdReturn } from './tender-records.js';
 import {
   DECISION_FROM,
-  DEFAULT_CRITERIA,
   EMD_RETURN_DUE,
   OPEN_STATUSES,
   REASON_REQUIRED,
@@ -127,6 +127,7 @@ export class TenderService {
   constructor(
     private readonly tenants: TenantConnections,
     private readonly revisions: RevisionService,
+    private readonly settings: TenderSettingsService,
   ) {}
 
   // --- parties ---
@@ -275,7 +276,7 @@ export class TenderService {
       events,
       allowedMoves: allowedMoves(status),
       canDecide: DECISION_FROM.includes(status),
-      defaultCriteria: DEFAULT_CRITERIA,
+      defaultCriteria: await this.settings.criteria(db),
     };
   }
 
@@ -381,16 +382,24 @@ export class TenderService {
     input: { criteria: Criterion[]; decision: 'bid' | 'no_bid'; reason: string },
     now = new Date(),
   ) {
-    const known = new Map(DEFAULT_CRITERIA.map((c) => [c.key, c]));
+    const db = await this.tenants.forTenant(claims.ten);
+    // The company's criteria (or the built-in ones): every one scored, no other.
+    const known = new Map((await this.settings.criteria(db)).map((c) => [c.key, c]));
     const keys = new Set(input.criteria.map((c) => c.key));
-    if (keys.size !== input.criteria.length || [...keys].some((k) => !known.has(k)))
-      throw new BadRequestException({ code: 'invalid_criteria' });
+    if (
+      keys.size !== input.criteria.length ||
+      [...keys].some((k) => !known.has(k)) ||
+      keys.size !== known.size
+    )
+      throw new BadRequestException({
+        code: 'invalid_criteria',
+        message: 'The bid criteria changed meanwhile. Reload and score again.',
+      });
     if (input.decision === 'no_bid' && input.reason.trim().length < 3)
       throw new BadRequestException({ code: 'reason_required' });
     // Labels come from the server's list, so the stored history reads the same in every client.
     const criteria = input.criteria.map((c) => ({ ...c, label: known.get(c.key)!.label }));
     const score = bidScore(criteria);
-    const db = await this.tenants.forTenant(claims.ten);
     await db.begin(async (tx) => {
       const from = await this.lockStatus(tx, id);
       if (!DECISION_FROM.includes(from))
