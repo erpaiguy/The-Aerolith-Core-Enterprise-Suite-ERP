@@ -98,9 +98,9 @@ Each step ships with API tests and a browser test of the main journey, like Wave
   - `apps/web/src/lib/format.test.ts`
   - `tests/e2e/tests/tenders.spec.ts` (lead → scored bid → submitted → lost)
 
-**Known gaps (later steps):**
-- The tenant admin's display name is their email address.
-- There is no way to edit the bid/no-bid criteria per company yet.
+**Gaps found here, all closed later:**
+- The tenant admin's display name was their email address: anyone can now change their own name (step 13 part 4).
+- The bid/no-bid criteria were fixed in code: each company sets its own (step 13 part 4).
 - The tender dashboard came in step 12 (part 2).
 
 ## Step 2 delivered: BOQ engine (API)
@@ -174,10 +174,10 @@ Each step ships with API tests and a browser test of the main journey, like Wave
 - A browser test scrolls a 3,000-line BOQ down and back up through the trim point, and checks that every rendered
   line is in order with no gaps.
 
-**Not built: dragging the scrollbar to an arbitrary line of a 1M-line BOQ.**
+**Not built here: dragging the scrollbar to an arbitrary line of a 1M-line BOQ.**
 - That needs row positions, which cost a full count or break on every insert.
 - The scrollbar covers the loaded slice; the outline covers the whole BOQ.
-- Revisit if the pilot finds this limiting.
+- Built later as a position bar under the grid, with line numbers read from the index on demand (step 13 part 8).
 
 **Deviation from 03 §13:** the grid uses DOM virtualisation, not a canvas grid.
 - About 30 rows are rendered at a time, which is fast enough.
@@ -572,9 +572,9 @@ result):
   days beyond validity), so the app compares against the validity itself and says so.
 - **Submitting with documents missing is allowed** (the form warns): some tenders are handed in off-system, and a hard
   block would push people to tick boxes untruthfully.
-- **Not built yet:** per-company checklist templates (the standard list is in code), performance guarantees after a
-  win (the instrument records them; the workflow belongs with Wave 2 projects), and a calendar grid (the agenda list
-  comes first; the dashboard is step 12).
+- **Built later:** per-company checklist templates and the month calendar (step 13 part 4).
+- **Still not built:** performance guarantees after a win (the instrument records them; the workflow belongs with
+  Wave 2 projects).
 
 **API** (under `/api/tenant`; changes need `tender.edit` unless noted):
 - `GET /tenders/:id/work`: queries, addenda, securities, checklist, submissions, ranked bids, readiness
@@ -694,9 +694,10 @@ export intact; a check the BOQ has outrun is refused); a browser test of the jou
   default; the admin can change it). Putting rates into a BOQ also needs `boq.edit`, into the rate library
   `rates.edit`.
 
-**Not built yet:** negotiation rounds with the history of each vendor's rates; reminders for quotes due; quote PDFs
-attached to the RFQ (that needs tender documents, step 10); an RFQ PDF (the Excel enquiry prints well enough); a
-vendor portal.
+**Built later** (step 13 part 5): negotiation rounds with the history of each vendor's rates; reminders for quotes
+due; quote documents attached to the RFQ.
+
+**Still not built:** an RFQ PDF (the Excel enquiry prints well enough); a vendor portal.
 
 **API** (under `/api/tenant`; changes need `rfq.edit`):
 - `GET /tenders/:id/rfqs`, `POST /tenders/:id/rfqs`, `GET /rfqs/:id` (lines, vendors, quotes and the comparative
@@ -759,9 +760,11 @@ total changing.
   certificates is often their job, and nothing they do is permanent (versions and the trash keep everything).
 - **Uploads are in the audit log, not the tender's activity**: a 200-file folder upload would bury the activity.
 
-**Not built yet:** Supabase Storage (above); search inside PDFs (names, descriptions and tags only); linking a
-document to a checklist item, addendum or RFQ quote; per-company folder templates; folders moved between parents
-(documents move; folders are renamed); purging the trash; thumbnails.
+**Built later** (step 13 parts 5-7): linking a document to a checklist item, addendum or RFQ quote; per-company
+folder templates; folders moved between parents; deleting from the trash for good, by hand or by a retention rule;
+search inside PDFs; thumbnails.
+
+**Still not built:** Supabase Storage (above); OCR of scanned PDFs (decided against, part 7).
 
 **API** (under `/api/tenant`; changes need `documents.edit`):
 - `GET /tenders/:id/documents` (folders, documents, trash count), `GET /tenders/:id/documents/trash`
@@ -824,8 +827,10 @@ refusing deletes; a Supabase tenant refused). A browser test of the journey.
   changing it after submission, or tell me to freeze it with the BOQs.
 - **Who may do what**: everyone reads; the new `programme.edit` (managers yes, workers no by default) changes.
 
-**Not built yet:** MS Project XML and Primavera XER import and export, and Excel export (part 2); resources,
-baselines and progress (Wave 2a, which needs them); dragging bars on the chart; undo; copying a programme.
+**Built later:** MS Project XML and Primavera XER import and export, and Excel export (part 2).
+
+**Still not built:** resources, baselines and progress (Wave 2a, which needs them); dragging bars on the chart; undo;
+copying a programme; reading MS Project .mpp files (decided against, step 13).
 
 **API** (under `/api/tenant`; changes need `programme.edit`):
 - `GET /tenders/:id/programmes`, `POST /tenders/:id/programmes`, `GET /programmes/:id` (calendars, activities in

@@ -93,3 +93,6 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 | 10 | Tender documents: storage, per-tender vault, folders, versions, search, preview | **Done** (Supabase Storage not built) |
 | 11 | Tender programme: CPM engine, Gantt, calendars, PDF, MSPDI/XER | **Done** (MS Project/P6 files not yet tried with a real contractor's file) |
 | 12 | Reports + dashboard: cost summary, priced/unpriced BOQ, rate analysis, bid pipeline; PDF/Excel | **Done** |
+| 13 | The rest of Wave 1: notices/SBOM, item kinds, templates, bulk edit, currencies, company tender settings, RFQ rounds, document lifecycle, PDF search, thumbnails, jumping anywhere in a huge BOQ | **Done** (Supabase Storage and anything Cloudflare excluded; no .mpp or OCR, by decision) |
+
+Wave 1's exit criterion, a pilot contractor pricing and submitting a real tender on it, is **not met yet**.
