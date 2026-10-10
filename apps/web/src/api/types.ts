@@ -220,6 +220,8 @@ export interface Addendum {
   affectsBoq: boolean;
   acknowledged: boolean;
   rowVersion: number;
+  /** Tender documents linked to it (the corrigendum itself). */
+  documents: { id: string; name: string }[];
 }
 
 export interface SecurityInstrument {
@@ -252,6 +254,8 @@ export interface ChecklistItem {
   notes: string;
   doneAt: string | null;
   rowVersion: number;
+  /** Tender documents linked to it (the certificate it asks for). */
+  documents: { id: string; name: string }[];
 }
 
 export interface Submission {
@@ -841,6 +845,8 @@ export interface DocVault {
   folders: DocFolder[];
   documents: DocItem[];
   trashCount: number;
+  /** Days the trash keeps a document before it is deleted for good; null: for ever. */
+  trashDays: number | null;
   canSeeRestricted: boolean;
   maxBytes: number;
 }

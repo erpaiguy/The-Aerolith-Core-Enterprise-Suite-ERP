@@ -2,7 +2,6 @@
 // documents, every upload a version, the trash, ZIP downloads and search. Everyone reads; changes need
 // `documents.edit`. Restricted folders (our prices, vendor quotes) and what is in them are visible only to roles
 // with `pricing.edit`, the same people who see bid pricing; to everyone else they do not exist.
-import type { LinkKind } from './links.js';
 import {
   BadRequestException,
   ConflictException,
@@ -36,26 +35,16 @@ import {
   type FileStore,
   type StagedFile,
 } from './file-store.js';
+import { folderTemplate, MAX_DEPTH, trashDays } from './document-settings.js';
+import type { LinkKind } from './links.js';
 import { clamdScan, type ScanResult } from './scanner.js';
 
 /** Folders deep enough for "Drawings / Structural / Revision 2"; deeper trees are usually a copied disk. */
-export const MAX_DEPTH = 8;
 const MAX_VAULT = 20_000;
 const MAX_ZIP = 2_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The folders most Indian works tenders need; the commercial ones are restricted. */
-export const STANDARD_FOLDERS: { name: string; restricted: boolean }[] = [
-  { name: '01 Tender notice and documents', restricted: false },
-  { name: '02 Drawings', restricted: false },
-  { name: '03 Addenda and corrigenda', restricted: false },
-  { name: '04 Pre-bid queries and replies', restricted: false },
-  { name: '05 Our technical bid', restricted: false },
-  { name: '06 Our financial bid', restricted: true },
-  { name: '07 Vendor and subcontractor quotes', restricted: true },
-  { name: '08 Correspondence', restricted: false },
-  { name: '09 Site visit', restricted: false },
-];
 
 export interface FolderRow {
   id: string;
@@ -256,6 +245,8 @@ export class DocumentsService implements OnApplicationBootstrap {
       folders,
       documents,
       trashCount: trash!.n,
+      /** Days the trash keeps a document before it is deleted for good; null: for ever. */
+      trashDays: await trashDays(db),
       canSeeRestricted: see,
       maxBytes: this.config.documents.maxBytes,
     };
@@ -514,29 +505,51 @@ export class DocumentsService implements OnApplicationBootstrap {
     return this.vault(claims, tenderId);
   }
 
-  /** Adds the standard folders a tender does not have yet. */
+  /**
+   * Adds the company's standard folders (the built-in ones until the admin sets its own) that the tender does not
+   * have yet. A folder already there keeps its restriction; one added under a restricted folder is restricted.
+   */
   async standardFolders(claims: TenantClaims, tenderId: string) {
     const db = await this.tenants.forTenant(claims.ten);
     await db.begin(async (tx) => {
       await this.mustHaveTender(tx, tenderId);
-      for (const f of STANDARD_FOLDERS)
+      const { folders } = await folderTemplate(tx);
+      const ids = new Map<string, { id: string; restricted: boolean }>();
+      for (const f of folders) {
+        const parts = f.path.split('/');
+        const name = parts[parts.length - 1]!;
+        const parent =
+          parts.length > 1 ? ids.get(parts.slice(0, -1).join('/').toLowerCase()) : null;
+        if (parent === undefined) continue; // its parent could not be made
+        const restricted = f.restricted || (parent?.restricted ?? false);
         await tx`
           INSERT INTO doc.folder (tender_id, parent_id, name, restricted, created_by, updated_by)
-          VALUES (${tenderId}, NULL, ${f.name}, ${f.restricted}, ${claims.sub}, ${claims.sub})
+          VALUES (${tenderId}, ${parent?.id ?? null}, ${name}, ${restricted}, ${claims.sub}, ${claims.sub})
           ON CONFLICT DO NOTHING`;
+        const [row] = await tx<{ id: string; restricted: boolean }[]>`
+          SELECT id, restricted FROM doc.folder WHERE tender_id = ${tenderId}
+            AND ${parent ? tx`parent_id = ${parent.id}` : tx`parent_id IS NULL`} AND lower(name) = lower(${name})`;
+        if (row) ids.set(f.path.toLowerCase(), row);
+      }
       await audit(tx, claims.sub, 'folder.standard', 'tender', tenderId, {});
     });
     return this.vault(claims, tenderId);
   }
 
   /**
-   * Renames a folder, or restricts it (with everything under it) or lifts the restriction. Only roles that see
-   * restricted folders may change the restriction; a folder inside a restricted one stays restricted.
+   * Renames a folder, moves it (with everything in it) under another folder of the tender or to the top, or restricts
+   * it (with everything under it) or lifts the restriction. Only roles that see restricted folders may change the
+   * restriction; a folder inside a restricted one stays restricted, so one moved into a restricted folder becomes so.
    */
   async updateFolder(
     claims: TenantClaims,
     folderId: string,
-    input: { rowVersion: number; name?: string | undefined; restricted?: boolean | undefined },
+    input: {
+      rowVersion: number;
+      name?: string | undefined;
+      restricted?: boolean | undefined;
+      parentId?: string | null | undefined;
+    },
   ) {
     const db = await this.tenants.forTenant(claims.ten);
     const see = await this.seesRestricted(claims);
@@ -553,8 +566,48 @@ export class DocumentsService implements OnApplicationBootstrap {
           throw err;
         }
       }
+      let underRestricted = false;
+      if (input.parentId !== undefined && input.parentId !== f.parent_id) {
+        if (input.parentId) {
+          const parent = await this.folder(tx, f.tender_id, input.parentId, see);
+          const [inside] = await tx`
+            WITH RECURSIVE up AS (
+              SELECT id, parent_id FROM doc.folder WHERE id = ${parent.id}
+              UNION ALL SELECT p.id, p.parent_id FROM doc.folder p JOIN up ON p.id = up.parent_id
+            ) SELECT 1 FROM up WHERE id = ${folderId}`;
+          if (inside)
+            throw new ConflictException({
+              code: 'folder_into_itself',
+              message: 'A folder cannot go inside itself or one of its own folders.',
+            });
+          const [h] = await tx<{ height: number }[]>`
+            WITH RECURSIVE down AS (
+              SELECT id, 1 AS level FROM doc.folder WHERE id = ${folderId}
+              UNION ALL SELECT c.id, down.level + 1 FROM doc.folder c JOIN down ON c.parent_id = down.id
+            ) SELECT max(level)::int AS height FROM down`;
+          if ((await this.depth(tx, parent.id)) + h!.height > MAX_DEPTH) throw tooDeep();
+          underRestricted = parent.restricted;
+        }
+        try {
+          await tx`UPDATE doc.folder SET parent_id = ${input.parentId} WHERE id = ${folderId}`;
+        } catch (err) {
+          if (isUnique(err)) throw folderExists();
+          throw err;
+        }
+        if (underRestricted && !f.restricted)
+          await tx`
+            WITH RECURSIVE down AS (
+              SELECT id FROM doc.folder WHERE id = ${folderId}
+              UNION ALL SELECT c.id FROM doc.folder c JOIN down ON c.parent_id = down.id
+            ) UPDATE doc.folder SET restricted = true WHERE id IN (SELECT id FROM down)`;
+      }
       if (input.restricted !== undefined && input.restricted !== f.restricted) {
-        if (!input.restricted && f.parent_id) {
+        if (!input.restricted && underRestricted)
+          throw new ConflictException({
+            code: 'parent_restricted',
+            message: 'The folder it is in is restricted; lift that one instead.',
+          });
+        if (!input.restricted && f.parent_id && input.parentId === undefined) {
           const [p] = await tx<{ restricted: boolean }[]>`
             SELECT restricted FROM doc.folder WHERE id = ${f.parent_id}`;
           if (p?.restricted)
@@ -572,9 +625,10 @@ export class DocumentsService implements OnApplicationBootstrap {
       await tx`UPDATE doc.folder SET updated_at = now(), updated_by = ${claims.sub},
         row_version = row_version + 1 WHERE id = ${folderId}`;
       await audit(tx, claims.sub, 'folder.update', 'folder', folderId, {
-        from: { name: f.name, restricted: f.restricted },
+        from: { name: f.name, restricted: f.restricted, parentId: f.parent_id },
         name: input.name,
         restricted: input.restricted,
+        parentId: input.parentId,
       });
       return f.tender_id;
     });

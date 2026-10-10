@@ -1,5 +1,6 @@
-// The company's tender settings (docs/wave1-plan.md step 13): its bid/no-bid criteria and weights, and its standard
-// document checklist. Admin only; until changed, the built-in lists apply.
+// The company's tender settings (docs/wave1-plan.md step 13): its bid/no-bid criteria and weights, its standard
+// document checklist, the standard folders of a tender's documents and how long their trash keeps documents. Admin
+// only; until changed, the built-in lists apply and the trash keeps everything.
 import { Alert, Button, Card, Input, PageHeader, Select, Spinner } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
@@ -63,7 +64,180 @@ export function TenderSettingsScreen() {
           />
         </>
       )}
+      <DocumentSettings />
     </div>
+  );
+}
+
+interface DocSettings {
+  folders: { path: string; restricted: boolean }[];
+  foldersCustomised: boolean;
+  trashDays: number | null;
+}
+
+function DocumentSettings() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ['document-settings'],
+    queryFn: () => api.request<DocSettings>('/api/tenant/document-settings'),
+  });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<{ what: string; message: string } | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const save = async (what: 'folders' | 'trash', body: object) => {
+    setBusy(what);
+    setError(null);
+    setSaved(null);
+    try {
+      qc.setQueryData(
+        ['document-settings'],
+        await api.request<DocSettings>(`/api/tenant/document-settings/${what}`, {
+          method: 'POST',
+          body,
+        }),
+      );
+      setSaved(what);
+    } catch (err) {
+      setError({ what, message: describeError(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+  if (q.isPending) return <Spinner />;
+  if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
+  return (
+    <>
+      <FoldersCard
+        key={JSON.stringify(q.data.folders)}
+        settings={q.data}
+        busy={busy === 'folders'}
+        saved={saved === 'folders'}
+        error={error?.what === 'folders' ? error.message : null}
+        save={(body) => void save('folders', body)}
+      />
+      <Card title="Trash">
+        <p className="mb-3 text-sm text-fg-muted">
+          Documents moved to a tender&rsquo;s trash can be restored until they are deleted for good:
+          by you, from the trash, or by this rule.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            aria-label="Keep documents in the trash"
+            className="w-64"
+            value={q.data.trashDays ?? ''}
+            disabled={busy === 'trash'}
+            onChange={(e) =>
+              void save('trash', { days: e.target.value ? Number(e.target.value) : null })
+            }
+          >
+            <option value="">Keep them until deleted by hand</option>
+            {[30, 90, 180, 365].map((d) => (
+              <option key={d} value={d}>
+                Delete for good after {d} days
+              </option>
+            ))}
+          </Select>
+          {saved === 'trash' && <span className="text-sm text-success">Saved.</span>}
+        </div>
+        {error?.what === 'trash' && (
+          <div className="mt-3">
+            <Alert tone="danger">{error.message}</Alert>
+          </div>
+        )}
+      </Card>
+    </>
+  );
+}
+
+function FoldersCard({
+  settings,
+  busy,
+  saved,
+  error,
+  save,
+}: {
+  settings: DocSettings;
+  busy: boolean;
+  saved: boolean;
+  error: string | null;
+  save: (body: object) => void;
+}) {
+  const [list, setList] = useState(settings.folders);
+  return (
+    <Card title="Standard folders for tender documents">
+      <p className="mb-3 text-sm text-fg-muted">
+        &ldquo;Add the standard folders&rdquo; on a tender&rsquo;s Documents tab makes these. Write
+        a folder inside another as <span className="font-mono">Drawings/Structural</span>; a
+        restricted folder, and everything in it, is seen only by roles that see bid pricing.
+        {!settings.foldersCustomised && ' These are the built-in folders.'}
+      </p>
+      <ol className="space-y-2" aria-label="Standard folders">
+        {list.map((f, i) => (
+          <li key={i} className="flex flex-wrap items-center gap-2">
+            <Input
+              aria-label={`Folder ${i + 1}`}
+              value={f.path}
+              onChange={(e) =>
+                setList(list.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)))
+              }
+              className="min-w-[16rem] flex-1"
+            />
+            <label className="flex items-center gap-1 text-sm">
+              <input
+                type="checkbox"
+                checked={f.restricted}
+                onChange={(e) =>
+                  setList(
+                    list.map((x, j) => (j === i ? { ...x, restricted: e.target.checked } : x)),
+                  )
+                }
+              />
+              Restricted
+            </label>
+            <Button
+              variant="ghost"
+              onClick={() => setList(list.filter((_, j) => j !== i))}
+              aria-label={`Remove folder ${i + 1}`}
+            >
+              <Trash2 className="size-4" aria-hidden />
+            </Button>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          disabled={list.length >= 200}
+          onClick={() => setList([...list, { path: '', restricted: false }])}
+        >
+          <Plus className="size-4" aria-hidden /> Add folder
+        </Button>
+        <div className="ml-auto flex gap-2">
+          {settings.foldersCustomised && (
+            <Button variant="ghost" onClick={() => save({ folders: null })}>
+              Back to the built-in folders
+            </Button>
+          )}
+          <Button
+            busy={busy}
+            disabled={list.length === 0 || list.some((f) => !f.path.trim())}
+            onClick={() => save({ folders: list })}
+          >
+            Save folders
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <div className="mt-3">
+          <Alert tone="danger">{error}</Alert>
+        </div>
+      )}
+      {saved && (
+        <div className="mt-3">
+          <Alert tone="success">Saved. Tenders get these folders from now on.</Alert>
+        </div>
+      )}
+    </Card>
   );
 }
 

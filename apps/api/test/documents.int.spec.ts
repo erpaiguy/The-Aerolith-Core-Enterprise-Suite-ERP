@@ -2,8 +2,8 @@
 // versions, folder uploads, restricted folders hidden from roles without pricing, downloads, ZIPs, the trash,
 // search, the size limit, virus scanning (a fake clamd) and what the database itself refuses.
 import 'reflect-metadata';
-import { randomBytes } from 'node:crypto';
-import { mkdtemp, readdir } from 'node:fs/promises';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { mkdtemp, readdir, stat } from 'node:fs/promises';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,6 +16,7 @@ import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap.js';
 import { migrate } from '../src/db/migrate.js';
 import { DocumentsService } from '../src/documents/documents.service.js';
+import { DocumentLifecycle } from '../src/documents/lifecycle.service.js';
 import { TenantConnections } from '../src/provisioning/tenant-connections.js';
 import { readyTenant } from './helpers/tenant.js';
 
@@ -51,6 +52,7 @@ interface Vault {
   folders: Folder[];
   documents: Doc[];
   trashCount: number;
+  trashDays: number | null;
   canSeeRestricted: boolean;
 }
 
@@ -537,5 +539,230 @@ describe.skipIf(!controlUrl || !adminUrl)('tender documents (integration)', () =
       await control`UPDATE core.tenant_db SET provider = 'local_postgres' WHERE tenant_id = ${t.tenantId}`;
       (svc as unknown as { providers: Map<string, string> }).providers.clear();
     }
+  });
+
+  describe('step 13: folders moved, company folders, deleting for good, links', () => {
+    let tid: string;
+    const folders = async (tender = tid, headers = t.admin) =>
+      (await ok<Vault>(get(`/tenant/tenders/${tender}/documents`, headers))).folders;
+    const mk = async (name: string, parentId: string | null = null, restricted = false) =>
+      (
+        await ok<Vault>(post(`/tenant/tenders/${tid}/folders`, { name, parentId, restricted }))
+      ).folders.find((f) => f.name === name && f.parentId === parentId)!;
+    const move = (f: Folder, parentId: string | null) =>
+      post(`/tenant/folders/${f.id}`, { rowVersion: f.rowVersion, parentId });
+    const fresh = async (f: Folder) => (await folders()).find((x) => x.id === f.id)!;
+
+    beforeAll(async () => {
+      tid = (await ok<{ id: string }>(post('/tenant/tenders', { title: 'Court building, Risod' })))
+        .id;
+    });
+
+    it('moves a folder with everything in it; into a restricted one it becomes restricted', async () => {
+      const structure = await mk('Structure');
+      const columns = await mk('Columns', structure.id);
+      const archive = await mk('Archive');
+      const col = await uploaded(tid, 'C1 schedule.pdf', pdf('c1'), { folderId: columns.id });
+      await ok(move(structure, archive.id));
+      expect((await fresh(structure)).parentId).toBe(archive.id);
+      expect((await fresh(columns)).parentId).toBe(structure.id);
+      // Not into itself or below itself.
+      expect((await move(await fresh(archive), columns.id)).json()).toMatchObject({
+        code: 'folder_into_itself',
+      });
+      expect((await move(await fresh(structure), structure.id)).json()).toMatchObject({
+        code: 'folder_into_itself',
+      });
+      // A name already there is refused.
+      await mk('Structure');
+      expect((await move(await fresh(structure), null)).json()).toMatchObject({
+        code: 'folder_exists',
+      });
+      // Into a restricted folder: restricted with what is in it, hidden from the worker.
+      const money = await mk('Money', null, true);
+      await ok(move(await fresh(structure), money.id));
+      expect((await fresh(columns)).restricted).toBe(true);
+      const seen = await ok<Vault>(get(`/tenant/tenders/${tid}/documents`, worker));
+      expect(seen.folders.map((f) => f.name)).not.toContain('Columns');
+      expect(seen.documents.map((d) => d.id)).not.toContain(col.document.id);
+      // Too deep: a chain 7 deep cannot take a folder with a sub-folder (7 + 2 > 8).
+      let parent: Folder | null = null;
+      for (let i = 1; i <= 7; i++) parent = await mk(`Level ${i}`, parent?.id ?? null);
+      const pair = await mk('Pair');
+      await mk('Pair child', pair.id);
+      expect((await move(pair, parent!.id)).json()).toMatchObject({ code: 'too_deep' });
+      // Workers move folders they see (documents.edit), not into a restricted one they cannot see.
+      await ok(
+        post('/tenant/permissions', {
+          role: 'worker',
+          permission: 'documents.edit',
+          granted: true,
+        }),
+      );
+      expect((await move(await fresh(pair), money.id)).statusCode).toBe(200);
+      expect(
+        (
+          await post(
+            `/tenant/folders/${archive.id}`,
+            { rowVersion: (await fresh(archive)).rowVersion, parentId: money.id },
+            worker,
+          )
+        ).json(),
+      ).toMatchObject({ code: 'folder_not_found' });
+    });
+
+    it("adds the company's own standard folders, nested and restricted; only the admin sets them", async () => {
+      const body = {
+        folders: [
+          { path: 'Tender / Notice', restricted: false },
+          { path: 'Tender/Drawings/Structural', restricted: false },
+          { path: 'Money', restricted: true },
+          { path: 'money/EMD', restricted: false },
+        ],
+      };
+      expect((await post('/tenant/document-settings/folders', body, worker)).statusCode).toBe(403);
+      const s = await ok<{
+        folders: { path: string; restricted: boolean }[];
+        foldersCustomised: boolean;
+      }>(post('/tenant/document-settings/folders', body));
+      expect(s.foldersCustomised).toBe(true);
+      expect(s.folders).toEqual([
+        { path: 'Tender', restricted: false },
+        { path: 'Tender/Notice', restricted: false },
+        { path: 'Tender/Drawings', restricted: false },
+        { path: 'Tender/Drawings/Structural', restricted: false },
+        { path: 'Money', restricted: true },
+        { path: 'Money/EMD', restricted: true },
+      ]);
+      const other = (
+        await ok<{ id: string }>(post('/tenant/tenders', { title: 'Bus stand, Mehkar' }))
+      ).id;
+      const v = await ok<Vault>(post(`/tenant/tenders/${other}/folders/standard`));
+      const byName = new Map(v.folders.map((f) => [f.name, f]));
+      expect(byName.get('Structural')!.parentId).toBe(byName.get('Drawings')!.id);
+      expect(byName.get('Drawings')!.parentId).toBe(byName.get('Tender')!.id);
+      expect(byName.get('EMD')).toMatchObject({
+        restricted: true,
+        parentId: byName.get('Money')!.id,
+      });
+      // Again: nothing added twice.
+      expect(
+        (await ok<Vault>(post(`/tenant/tenders/${other}/folders/standard`))).folders,
+      ).toHaveLength(6);
+      const deep = { folders: [{ path: 'a/b/c/d/e/f/g/h/i', restricted: false }] };
+      expect((await post('/tenant/document-settings/folders', deep)).json()).toMatchObject({
+        code: 'bad_folder_template',
+      });
+      const reset = await ok<{ foldersCustomised: boolean; folders: unknown[] }>(
+        post('/tenant/document-settings/folders', { folders: null }),
+      );
+      expect(reset).toMatchObject({ foldersCustomised: false });
+      expect(reset.folders).toHaveLength(9);
+    });
+
+    it('deletes for good only from the trash, by the admin or the trash rule; files go when nothing uses them', async () => {
+      const life = app.get(DocumentLifecycle);
+      const same = pdf('the same bytes in two documents');
+      const a = (await uploaded(tid, 'Copy A.pdf', same)).document;
+      const b = (await uploaded(tid, 'Copy B.pdf', same)).document;
+      const [version] = await db<{ storage_key: string }[]>`
+        SELECT storage_key FROM doc.document_version WHERE document_id = ${a.id}`;
+      const key = version!.storage_key;
+      const file = join(docDir, t.tenantId, key.slice(0, 2), key);
+
+      expect((await post(`/tenant/documents/${a.id}/purge`)).json()).toMatchObject({
+        code: 'not_in_trash',
+      });
+      await ok(post(`/tenant/documents/${a.id}/delete`));
+      expect((await post(`/tenant/documents/${a.id}/purge`, {}, worker)).statusCode).toBe(403);
+      await ok(post(`/tenant/documents/${a.id}/purge`));
+      expect(await db`SELECT 1 FROM doc.document WHERE id = ${a.id}`).toHaveLength(0);
+      expect(await db`SELECT 1 FROM doc.document_version WHERE document_id = ${a.id}`).toHaveLength(
+        0,
+      );
+      const [tomb] = await db<{ name: string; reason: string; versions: number }[]>`
+        SELECT name, reason, versions FROM doc.purged_document WHERE id = ${a.id}`;
+      expect(tomb).toEqual({ name: 'Copy A.pdf', reason: 'manual', versions: 1 });
+      // The database function takes nothing that is not in the trash.
+      const [live] = await db<
+        { ok: boolean }[]
+      >`SELECT doc.purge_document(${b.id}, NULL, 'manual') AS ok`;
+      expect(live!.ok).toBe(false);
+
+      // Within the hour, files stay; later, the file stays while Copy B still uses it.
+      const now = Date.now();
+      expect(await life.housekeeping(t.tenantId, new Date(now))).toEqual({
+        purged: 0,
+        filesRemoved: 0,
+      });
+      expect(await life.housekeeping(t.tenantId, new Date(now + 2 * 3600_000))).toEqual({
+        purged: 0,
+        filesRemoved: 0,
+      });
+      expect(await stat(file)).toBeTruthy();
+
+      // The trash rule: 30 days. Copy B goes to the trash; 31 days later it is gone, and so is the file.
+      expect((await post('/tenant/document-settings/trash', { days: 45 })).statusCode).toBe(400);
+      await ok(post('/tenant/document-settings/trash', { days: 30 }));
+      expect((await ok<Vault>(get(`/tenant/tenders/${tid}/documents`))).trashDays).toBe(30);
+      await ok(post(`/tenant/documents/${b.id}/delete`));
+      const later = await life.housekeeping(t.tenantId, new Date(now + 31 * 24 * 3600_000));
+      expect(later.purged).toBeGreaterThanOrEqual(1);
+      expect(later.filesRemoved).toBeGreaterThanOrEqual(1);
+      await expect(stat(file)).rejects.toThrow();
+      const [rule] = await db<{ reason: string; purged_by: string | null }[]>`
+        SELECT reason, purged_by FROM doc.purged_document WHERE id = ${b.id}`;
+      expect(rule).toEqual({ reason: 'retention', purged_by: null });
+      await ok(post('/tenant/document-settings/trash', { days: null }));
+
+      // Emptying a tender's trash.
+      const c = (await uploaded(tid, 'Old draft.pdf', pdf('old draft'))).document;
+      await ok(post(`/tenant/documents/${c.id}/delete`));
+      expect(
+        (await ok<{ purged: number }>(post(`/tenant/tenders/${tid}/documents/trash/empty`))).purged,
+      ).toBe(1);
+      expect((await ok<Vault>(get(`/tenant/tenders/${tid}/documents`))).trashCount).toBe(0);
+    });
+
+    it('links documents to an addendum and a checklist item; the tender shows them', async () => {
+      await ok(
+        post(`/tenant/tenders/${tid}/addenda`, {
+          ref: 'Corrigendum 1',
+          issuedOn: '2026-10-01',
+          summary: 'Revised drawings for the court hall.',
+        }),
+      );
+      await ok(post(`/tenant/tenders/${tid}/checklist`, { title: 'Solvency certificate' }));
+      let work = await ok<{
+        addenda: { id: string; documents: { name: string }[] }[];
+        checklist: { id: string; title: string; documents: { name: string }[] }[];
+      }>(get(`/tenant/tenders/${tid}/work`));
+      const corr = (await uploaded(tid, 'Corrigendum 1.pdf', pdf('corrigendum'))).document;
+      const solv = (await uploaded(tid, 'Solvency.pdf', pdf('solvency'))).document;
+      await ok(
+        post(`/tenant/documents/${corr.id}/links`, {
+          kind: 'addendum',
+          targetId: work.addenda[0]!.id,
+        }),
+      );
+      const item = work.checklist.find((c) => c.title === 'Solvency certificate')!;
+      await ok(
+        post(`/tenant/documents/${solv.id}/links`, { kind: 'checklist_item', targetId: item.id }),
+      );
+      work = await ok(get(`/tenant/tenders/${tid}/work`));
+      expect(work.addenda[0]!.documents.map((d) => d.name)).toEqual(['Corrigendum 1.pdf']);
+      expect(work.checklist.find((c) => c.id === item.id)!.documents.map((d) => d.name)).toEqual([
+        'Solvency.pdf',
+      ]);
+      // A checklist item of another tender is refused.
+      expect(
+        (
+          await post(`/tenant/documents/${solv.id}/links`, {
+            kind: 'checklist_item',
+            targetId: randomUUID(),
+          })
+        ).json(),
+      ).toMatchObject({ code: 'link_target_not_found' });
+    });
   });
 });

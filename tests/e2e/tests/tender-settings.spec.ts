@@ -28,9 +28,13 @@ test("the admin sets the company's tender criteria and checklist; a tender is sc
 
   // 2. Two criteria only: strategic fit (weight 3) and a new one, repeat client (weight 2).
   await nav('Tender settings');
-  const criteria = page.getByRole('list', { name: 'Criteria' });
-  while ((await criteria.getByRole('listitem').count()) > 1)
+  const criteria = page.getByRole('list', { name: 'Criteria' }).getByRole('listitem');
+  await expect(criteria.first()).toBeVisible();
+  // Each removal is awaited before the next: a count read before React re-renders would be one too many.
+  for (let left = await criteria.count(); left > 1; left--) {
     await page.getByRole('button', { name: 'Remove criterion 2' }).click();
+    await expect(criteria).toHaveCount(left - 1);
+  }
   await page.getByLabel('Criterion 1', { exact: true }).fill('Strategic fit for us');
   await page.getByRole('button', { name: 'Add criterion' }).click();
   await page.getByLabel('Criterion 2', { exact: true }).fill('Repeat client');
@@ -38,14 +42,26 @@ test("the admin sets the company's tender criteria and checklist; a tender is sc
   await page.getByRole('button', { name: 'Save criteria' }).click();
   await expect(page.getByText('Saved. New decisions use these criteria.')).toBeVisible();
   // The checklist: one item of our own added to the built-in list.
-  const items = page.getByRole('list', { name: 'Checklist items' });
-  const before = await items.getByRole('listitem').count();
+  const items = page.getByRole('list', { name: 'Checklist items' }).getByRole('listitem');
+  await expect(items.first()).toBeVisible();
+  const before = await items.count();
   await page.getByRole('button', { name: 'Add item' }).click();
   await page
     .getByLabel(`Checklist item ${before + 1}`, { exact: true })
     .fill('ISO 9001 certificate');
   await page.getByRole('button', { name: 'Save checklist' }).click();
   await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
+  // The company's own folders: one more, inside the drawings; and the trash emptied after 90 days.
+  const standard = page.getByRole('list', { name: 'Standard folders' }).getByRole('listitem');
+  const folderCount = await standard.count();
+  await page.getByRole('button', { name: 'Add folder' }).click();
+  await page
+    .getByLabel(`Folder ${folderCount + 1}`, { exact: true })
+    .fill('02 Drawings/Structural');
+  await page.getByRole('button', { name: 'Save folders' }).click();
+  await expect(page.getByText('Saved. Tenders get these folders from now on.')).toBeVisible();
+  await page.getByLabel('Keep documents in the trash').selectOption('90');
+  await expect(page.getByLabel('Keep documents in the trash')).toHaveValue('90');
   await page.screenshot(shot('settings-01-criteria'));
 
   // 3. A tender due tomorrow, scored on the two criteria: strategic fit 5, repeat client 3 → (3 + 2 × 0.5) ÷ 5 = 80.

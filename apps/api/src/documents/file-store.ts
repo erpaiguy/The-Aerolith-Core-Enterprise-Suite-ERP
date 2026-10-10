@@ -9,7 +9,7 @@
 // connection can be verified (see DocumentsService.store).
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat, utimes } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -41,6 +41,11 @@ export interface FileStore {
   commit(file: StagedFile): Promise<string>;
   discard(file: StagedFile): Promise<void>;
   open(key: string): Promise<Readable>;
+  /**
+   * Removes a kept file no version uses any more (the caller has checked), unless it was kept or reused within
+   * `minAgeMs`: an upload of the same bytes may be about to write its row.
+   */
+  remove(key: string, minAgeMs: number, now?: number): Promise<boolean>;
 }
 
 export class LocalFileStore implements FileStore {
@@ -86,6 +91,9 @@ export class LocalFileStore implements FileStore {
     const kept = await stat(dest).catch(() => null);
     if (kept) {
       await rm(file.path, { force: true });
+      // Reused: marked recent, so a purge of an older document with the same bytes leaves the file alone.
+      const at = new Date();
+      await utimes(dest, at, at).catch(() => undefined);
       return file.sha256;
     }
     await mkdir(dirname(dest), { recursive: true });
@@ -101,6 +109,14 @@ export class LocalFileStore implements FileStore {
     const path = this.pathOf(key);
     if (!(await stat(path).catch(() => null))) throw new FileMissingError(key);
     return createReadStream(path);
+  }
+
+  async remove(key: string, minAgeMs: number, now = Date.now()): Promise<boolean> {
+    const path = this.pathOf(key);
+    const s = await stat(path).catch(() => null);
+    if (!s || now - s.mtimeMs < minAgeMs) return false;
+    await rm(path, { force: true });
+    return true;
   }
 
   /** Removes temporary files left by uploads that never finished (a crash or a dropped connection). */

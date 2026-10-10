@@ -38,6 +38,7 @@ import {
   fromLocalInput,
   toLocalInput,
 } from '../lib/format';
+import { LinkedDocuments } from '../documents/LinkedDocuments';
 import { usePermission } from '../session/permissions';
 import { useSession } from '../session/session';
 import { TenderDocuments } from './Documents';
@@ -213,6 +214,7 @@ export function QueriesAndAddenda({
   onChanged: () => void;
 }) {
   const { run, busy, error } = useAction(onChanged);
+  const canAttach = usePermission('documents.edit');
   const [reference, setReference] = useState('');
   const [question, setQuestion] = useState('');
   const [adding, setAdding] = useState(false);
@@ -394,6 +396,16 @@ export function QueriesAndAddenda({
                   </label>
                 </div>
                 <p className="whitespace-pre-wrap">{x.summary}</p>
+                <LinkedDocuments
+                  tenderId={tender.id}
+                  kind="addendum"
+                  targetId={x.id}
+                  label={x.ref}
+                  documents={x.documents}
+                  folder="03 Addenda and corrigenda"
+                  canAttach={canAttach}
+                  onChanged={onChanged}
+                />
                 {x.affectsBoq && (
                   <p className="text-xs text-fg-muted">
                     To bring the client&apos;s revised BOQ in: open the BOQ, start a revision if it
@@ -678,6 +690,7 @@ export function Checklist({
 }) {
   const { user } = useSession();
   const { run, busy, error } = useAction(onChanged);
+  const canAttach = usePermission('documents.edit');
   const people = useQuery({
     queryKey: ['people'],
     queryFn: () => api.request<Person[]>('/api/tenant/people'),
@@ -777,6 +790,22 @@ export function Checklist({
                             .filter(Boolean)
                             .join(' · ')}
                         </span>
+                        <LinkedDocuments
+                          tenderId={tender.id}
+                          kind="checklist_item"
+                          targetId={c.id}
+                          label={c.title}
+                          documents={c.documents}
+                          folder={
+                            c.envelope === 'financial'
+                              ? '06 Our financial bid'
+                              : c.envelope === 'technical'
+                                ? '05 Our technical bid'
+                                : null
+                          }
+                          canAttach={canAttach}
+                          onChanged={onChanged}
+                        />
                         {canEdit && (
                           <Button
                             variant="ghost"

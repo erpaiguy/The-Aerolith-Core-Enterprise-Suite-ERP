@@ -16,11 +16,13 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
-import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
+import { Auth, RequiresFeatures, Roles, TenantAuthGuard } from '../auth/guards.js';
 import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
 import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { TRASH_DAYS } from './document-settings.js';
 import { DocumentsService } from './documents.service.js';
+import { DocumentLifecycle } from './lifecycle.service.js';
 
 const rowVersion = z.number().int().positive();
 const folderCreate = z.object({
@@ -32,6 +34,8 @@ const folderUpdate = z.object({
   rowVersion,
   name: z.string().max(200).optional(),
   restricted: z.boolean().optional(),
+  /** Moves the folder under another one of the tender; null: to the top level. */
+  parentId: z.uuid().nullable().optional(),
 });
 const uploadQuery = z.object({
   folderId: z.uuid().optional(),
@@ -69,6 +73,20 @@ function fileHeaders(reply: FastifyReply) {
   reply.header('Cache-Control', 'private, no-store');
 }
 
+const foldersBody = z.object({
+  folders: z
+    .array(z.object({ path: z.string().max(1000), restricted: z.boolean().default(false) }))
+    .max(200)
+    .nullable(),
+});
+const trashBody = z.object({
+  days: z
+    .number()
+    .int()
+    .refine((d) => (TRASH_DAYS as readonly number[]).includes(d), 'One of 30, 90, 180, 365')
+    .nullable(),
+});
+
 const linkBody = z.object({
   kind: z.enum(['rfq_vendor', 'checklist_item', 'addendum']),
   targetId: z.string().min(1).max(80),
@@ -81,7 +99,10 @@ const linkBody = z.object({
 @Controller('tenant')
 @UseGuards(TenantAuthGuard, PermissionGuard)
 export class DocumentsController {
-  constructor(private readonly docs: DocumentsService) {}
+  constructor(
+    private readonly docs: DocumentsService,
+    private readonly lifecycle: DocumentLifecycle,
+  ) {}
 
   @Get('tenders/:id/documents')
   vault(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
@@ -230,6 +251,45 @@ export class DocumentsController {
     @Body(new ZodPipe(linkBody)) b: z.infer<typeof linkBody>,
   ) {
     return this.docs.unlink(c, id, b.kind, b.targetId);
+  }
+
+  /** The admin deletes a document in the trash for good. */
+  @Post('documents/:id/purge')
+  @HttpCode(200)
+  @Roles('admin')
+  @RequiresFeatures()
+  purge(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.lifecycle.purge(c, id);
+  }
+
+  @Post('tenders/:id/documents/trash/empty')
+  @HttpCode(200)
+  @Roles('admin')
+  @RequiresFeatures()
+  emptyTrash(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.lifecycle.emptyTrash(c, id);
+  }
+
+  /** The company's standard folders and how long the trash keeps documents (docs/wave1-plan.md step 13). */
+  @Get('document-settings')
+  settings(@Auth() c: Claims) {
+    return this.lifecycle.settings(c);
+  }
+
+  @Post('document-settings/folders')
+  @HttpCode(200)
+  @Roles('admin')
+  @RequiresFeatures()
+  setFolders(@Auth() c: Claims, @Body(new ZodPipe(foldersBody)) b: z.infer<typeof foldersBody>) {
+    return this.lifecycle.setFolders(c, b.folders);
+  }
+
+  @Post('document-settings/trash')
+  @HttpCode(200)
+  @Roles('admin')
+  @RequiresFeatures()
+  setTrash(@Auth() c: Claims, @Body(new ZodPipe(trashBody)) b: z.infer<typeof trashBody>) {
+    return this.lifecycle.setTrashDays(c, b.days);
   }
 
   @Post('documents/:id/restore')

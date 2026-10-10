@@ -145,6 +145,34 @@ test('an estimator keeps the tender documents: folders, versions, preview, trash
   await page.getByRole('button', { name: 'Download folder (ZIP)' }).click();
   expect((await zipping).suggestedFilename()).toMatch(/^TND_.*02 Drawings\.zip$/);
 
+  // 6b. A superseded drawing deleted for good from the trash (the admin's call).
+  await page.getByLabel('Files to upload').setInputFiles([file('Old layout.pdf', 'Old layout')]);
+  await documents(page).getByRole('button', { name: 'Old layout.pdf' }).click();
+  await page
+    .getByRole('region', { name: 'Document Old layout.pdf' })
+    .getByRole('button', { name: 'Move to trash' })
+    .click();
+  await page.getByRole('button', { name: 'Trash (1)' }).click();
+  await page.getByRole('button', { name: 'Delete Old layout.pdf for good' }).click();
+  await page.getByRole('button', { name: 'Sure? Delete for good' }).click();
+  await expect(page.getByText('The trash is empty.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Trash (0)' })).toBeVisible();
+
+  // 6c. The qualification papers belong with the tender notice: the folder moves, sub-folder and all.
+  await folders(page)
+    .getByRole('button', { name: /^Qualification/ })
+    .click();
+  await page.getByLabel('Move folder to').selectOption({ label: '01 Tender notice and documents' });
+  await expect(page.getByRole('heading').filter({ hasText: 'Qualification' })).toContainText(
+    '01 Tender notice and documents',
+  );
+  await folders(page)
+    .getByRole('button', { name: /^Financial/ })
+    .click();
+  await expect(
+    documents(page).getByRole('button', { name: 'Turnover certificate.pdf' }),
+  ).toBeVisible();
+
   // 7. Found from the Documents page by tag.
   await page
     .getByRole('navigation', { name: 'Main' })

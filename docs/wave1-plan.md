@@ -1132,3 +1132,45 @@ not for a draft, scheduled at 09:30 IST, moved with the date, counting the decli
 documents linked, restricted ones hidden from a worker, workers refused, a target in another tender or missing
 refused, unlinked and trashed documents gone). The RFQ browser test now records a second round from DryTech and
 attaches Aqua Seal's covering letter.
+
+### Part 6: documents: company folders, folders moved, deleting for good, links
+
+- **The company's standard folders** (Tender settings, admin): the folders "Add the standard folders" makes, nested
+  as `Drawings/Structural`, each restricted or not (a folder inside a restricted one is restricted). Until set, the
+  built-in nine; "Back to the built-in folders" restores them. Up to 200 folders, 8 deep.
+- **Folders move:** **Move to…** on a folder puts it, with everything in it, under another folder or at the top. Not
+  into itself or one of its own folders, not deeper than 8 levels, not next to a folder of the same name. Moved into
+  a restricted folder, it and its contents become restricted.
+- **Deleting for good** (step 10 kept everything for ever): in a tender's trash the admin can delete a document for
+  good, or **Empty trash**; and in Tender settings choose **Delete for good after 30 / 90 / 180 / 365 days** in the
+  trash (default: kept until deleted by hand). The trash shows the date each document goes.
+- **Linked documents:** **Attach** on an addendum (the corrigendum, kept in "03 Addenda and corrigenda") or a
+  checklist item (the certificate, kept in "05 Our technical bid" or "06 Our financial bid" when the tender has them
+  and the user may see them) files it in the tender's documents and links it there, as RFQ quotes do (part 5).
+
+**Decisions:**
+- **[Certain] The database still refuses deletes from the app.** The only way out is `doc.purge_document`, a database
+  function that takes nothing but a document already in the trash and records each deletion (`doc.purged_document`:
+  name, versions, who or which rule, when). The audit trail of what existed survives the files.
+- **Files are removed an hour later, by the hourly housekeeping, and only when no version in the tenant uses them**
+  (two documents can share a file). A file kept or reused within the hour is left for the next round, so an upload of
+  the same bytes in progress never loses its file. The housekeeping runs in each API process
+  (`DOCUMENT_JANITOR=off` to stop it); running it twice at once is harmless.
+- **Only the admin deletes for good**, not anyone with `documents.edit`: workers organise documents and may trash
+  them, but nothing they do is permanent.
+- **Restricted folders the user cannot see are never offered** as a place to move to; a worker's attachment to a
+  financial checklist item lands at the top of the vault instead of in a folder they could not see.
+
+**API:** `parentId` on `POST /folders/:id`; `POST /documents/:id/purge`, `POST /tenders/:id/documents/trash/empty`
+(admin); `GET /document-settings`, `POST /document-settings/folders` (`{folders: [{path, restricted}]}` or `null`),
+`POST /document-settings/trash` (`{days: 30 | 90 | 180 | 365 | null}`) (admin); `trashDays` on the vault;
+`documents` on each addendum and checklist item of `GET /tenders/:id/work`. Migration `0020_document_lifecycle.sql`.
+
+**Tests:** 4 unit tests (the folder template made whole: parents added, first spelling kept, restrictions inherited,
+bad names, depth and size refused); 4 API integration tests (folders moved, refused into themselves, next to a
+namesake or too deep, restricted when moved into a restricted folder, out of a worker's reach; the company folders
+set by the admin only and made nested and restricted on a tender, twice without repeats; deleting for good only from
+the trash and only by the admin, the record kept, the database function refusing a live document, a shared file
+kept until its last user goes, the trash rule, emptying the trash; documents linked to an addendum and a checklist
+item). The browser tests now delete a document for good and move a folder, attach a corrigendum to its addendum, and
+set a company folder and the trash rule.

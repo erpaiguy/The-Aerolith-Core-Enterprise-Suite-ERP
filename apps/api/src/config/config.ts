@@ -33,6 +33,7 @@ const envSchema = z.object({
   IMPORT_MAX_MB: z.coerce.number().int().positive().max(1024).default(100),
   DOCUMENT_DIR: z.string().min(1).optional(),
   DOCUMENT_MAX_MB: z.coerce.number().int().positive().max(2048).default(200),
+  DOCUMENT_JANITOR: z.enum(['on', 'off']).optional(),
   CLAMD_HOST: z.string().min(1).optional(),
   CLAMD_PORT: z.coerce.number().int().positive().max(65535).default(3310),
   RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
@@ -81,7 +82,13 @@ export interface AppConfig {
    * Tender documents (docs/wave1-plan.md step 10): where the files of tenants on our own Postgres are kept (one
    * folder per tenant), the largest file accepted, and the optional ClamAV daemon that scans each upload.
    */
-  documents: { dir: string; maxBytes: number; clamd: { host: string; port: number } | null };
+  documents: {
+    dir: string;
+    maxBytes: number;
+    clamd: { host: string; port: number } | null;
+    /** Hourly: the trash retention rule, and files no document uses any more removed. */
+    janitor: boolean;
+  };
   /** Multiplies every rate limit (tests raise it). */
   rateLimitScale: number;
   /** Trust X-Forwarded-For (only behind a proxy/tunnel that sets it). */
@@ -204,6 +211,7 @@ function documentsConfig(e: z.infer<typeof envSchema>): AppConfig['documents'] {
     dir: e.DOCUMENT_DIR ?? join(process.cwd(), '.documents'),
     maxBytes: e.DOCUMENT_MAX_MB * 1024 * 1024,
     clamd: e.CLAMD_HOST ? { host: e.CLAMD_HOST, port: e.CLAMD_PORT } : null,
+    janitor: (e.DOCUMENT_JANITOR ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
   };
 }
 

@@ -12,6 +12,7 @@ import {
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { PermissionsService } from '../auth/permissions.js';
+import { linkedDocuments } from '../documents/links.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt } from '../rates/decimal.js';
 import { audit, event, rescheduleChecklistItem, rescheduleSecurity } from './tender-records.js';
@@ -198,12 +199,14 @@ export class TenderWorkService {
     const seePricing = await this.permissions.can(claims, 'pricing.edit');
     const [queries, addenda, securities, checklist, submissions, bids] = await Promise.all([
       db`SELECT ${db.unsafe(QUERY)} FROM tender.query q WHERE q.tender_id = ${tenderId} ORDER BY q.seq`,
-      db`SELECT ${db.unsafe(ADDENDUM)} FROM tender.addendum a WHERE a.tender_id = ${tenderId}
+      db<
+        { id: string; acknowledged: boolean }[]
+      >`SELECT ${db.unsafe(ADDENDUM)} FROM tender.addendum a WHERE a.tender_id = ${tenderId}
         ORDER BY a.issued_on, a.created_at`,
       db<{ form: string; purpose: string; status: string; validUntil: string | null }[]>`
         SELECT ${db.unsafe(SECURITY)} FROM tender.security_instrument s WHERE s.tender_id = ${tenderId}
         ORDER BY s.created_at`,
-      db<{ required: boolean; status: string; title: string }[]>`
+      db<{ id: string; required: boolean; status: string; title: string }[]>`
         SELECT ${db.unsafe(CHECKLIST)} FROM tender.checklist_item c
         LEFT JOIN platform."user" u ON u.id = c.assignee_id
         WHERE c.tender_id = ${tenderId} ORDER BY c.envelope = 'other', c.envelope DESC, c.seq`,
@@ -224,6 +227,22 @@ export class TenderWorkService {
       >`SELECT b.id, b.party_id AS "partyId", p.name, b.quoted_value::text AS "quotedValue", b.qualified, b.notes
         FROM tender.competitor_bid b LEFT JOIN platform.party p ON p.id = b.party_id
         WHERE b.tender_id = ${tenderId} ORDER BY b.quoted_value NULLS LAST, p.name`,
+    ]);
+
+    // Documents linked to an addendum (the corrigendum itself) or a checklist item (the certificate it asks for).
+    const [addendumDocs, checklistDocs] = await Promise.all([
+      linkedDocuments(
+        db,
+        'addendum',
+        addenda.map((a) => a.id),
+        seePricing,
+      ),
+      linkedDocuments(
+        db,
+        'checklist_item',
+        checklist.map((c) => c.id),
+        seePricing,
+      ),
     ]);
 
     // The bid security must outlast the bid's validity (clients usually add some days to that).
@@ -251,9 +270,9 @@ export class TenderWorkService {
     );
     return {
       queries,
-      addenda,
+      addenda: addenda.map((a) => ({ ...a, documents: addendumDocs.get(a.id) ?? [] })),
       securities: securityRows,
-      checklist,
+      checklist: checklist.map((c) => ({ ...c, documents: checklistDocs.get(c.id) ?? [] })),
       submissions: submissions.map((s) => (seePricing ? s : { ...s, bidValue: null })),
       bids: ranked,
       opening:

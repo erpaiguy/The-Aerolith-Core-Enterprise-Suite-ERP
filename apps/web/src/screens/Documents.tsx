@@ -51,6 +51,7 @@ import type {
 } from '../api/types';
 import { describeError, formatDate, formatDateTime } from '../lib/format';
 import { usePermission } from '../session/permissions';
+import { useSession } from '../session/session';
 
 /** Types shown inside the app; the server marks PDFs and images only when their bytes say so. */
 const PREVIEW = new Set([
@@ -304,7 +305,12 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
       <div className="min-w-0 space-y-5">
         {error && <Alert tone="danger">{error}</Alert>}
         {showTrash ? (
-          <TrashList tenderId={tenderId} canEdit={canEdit} onChanged={refresh} />
+          <TrashList
+            tenderId={tenderId}
+            canEdit={canEdit}
+            trashDays={vd.trashDays}
+            onChanged={refresh}
+          />
         ) : (
           <Card
             title={
@@ -427,6 +433,7 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
               {current && canEdit && !q && (
                 <FolderActions
                   folder={byId.get(current)!}
+                  folders={vd.folders}
                   canRestrict={vd.canSeeRestricted}
                   run={run}
                   busy={busy}
@@ -616,12 +623,14 @@ function NewFolder({
 
 function FolderActions({
   folder,
+  folders,
   canRestrict,
   run,
   busy,
   onDeleted,
 }: {
   folder: DocFolder;
+  folders: DocFolder[];
   canRestrict: boolean;
   run: Run;
   busy: string | null;
@@ -629,6 +638,17 @@ function FolderActions({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(folder.name);
+  // Anywhere but inside itself.
+  const inside = new Set([folder.id]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const f of folders)
+      if (f.parentId && inside.has(f.parentId) && !inside.has(f.id)) {
+        inside.add(f.id);
+        grew = true;
+      }
+  }
+  const targets = folderOptions(folders).filter((o) => !inside.has(o.id));
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md bg-surface-2 px-3 py-2 text-sm">
       {renaming ? (
@@ -665,6 +685,32 @@ function FolderActions({
           <Button variant="ghost" onClick={() => setRenaming(true)}>
             Rename
           </Button>
+          <Select
+            aria-label="Move folder to"
+            className="w-56"
+            value=""
+            disabled={busy === 'move-folder'}
+            onChange={(e) => {
+              const to = e.target.value;
+              if (to)
+                void run('move-folder', () =>
+                  post<DocVault>(`folders/${folder.id}`, {
+                    rowVersion: folder.rowVersion,
+                    parentId: to === 'top' ? null : to,
+                  }),
+                );
+            }}
+          >
+            <option value="">Move to…</option>
+            {folder.parentId && <option value="top">The top level</option>}
+            {targets
+              .filter((o) => o.id !== folder.parentId)
+              .map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+          </Select>
           {canRestrict && (
             <Button
               variant="ghost"
@@ -1226,14 +1272,35 @@ function EditDocument({
 function TrashList({
   tenderId,
   canEdit,
+  trashDays,
   onChanged,
 }: {
   tenderId: string;
   canEdit: boolean;
+  trashDays: number | null;
   onChanged: () => void;
 }) {
+  const isAdmin = useSession().user?.role === 'admin';
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const act = async (key: string, path: string) => {
+    setBusy(key);
+    setError(null);
+    try {
+      await post(path);
+      setConfirming(null);
+      onChanged();
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const goesOn = (deletedAt: string | null) =>
+    trashDays && deletedAt
+      ? formatDate(new Date(new Date(deletedAt).getTime() + trashDays * 86_400_000).toISOString())
+      : null;
   const trash = useQuery({
     queryKey: ['documents-trash', tenderId],
     queryFn: () => api.request<DocItem[]>(`/api/tenant/tenders/${tenderId}/documents/trash`),
@@ -1251,10 +1318,37 @@ function TrashList({
     }
   };
   return (
-    <Card title="Trash">
+    <Card
+      title="Trash"
+      actions={
+        isAdmin &&
+        (trash.data?.length ?? 0) > 0 &&
+        (confirming === 'all' ? (
+          <span className="flex items-center gap-2 text-sm">
+            Delete all {trash.data!.length} for good?
+            <Button
+              variant="danger"
+              busy={busy === 'all'}
+              onClick={() => void act('all', `tenders/${tenderId}/documents/trash/empty`)}
+            >
+              Delete for good
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(null)}>
+              Keep
+            </Button>
+          </span>
+        ) : (
+          <Button variant="secondary" onClick={() => setConfirming('all')}>
+            Empty trash
+          </Button>
+        ))
+      }
+    >
       <p className="mb-3 text-sm text-fg-muted">
-        Documents moved to the trash keep every version and can be restored. Nothing is deleted for
-        good.
+        Documents moved to the trash keep every version and can be restored.{' '}
+        {trashDays
+          ? `They are deleted for good ${trashDays} days after going to the trash (your admin's setting).`
+          : 'They stay until your admin deletes them for good.'}
       </p>
       {error && (
         <div className="mb-3">
@@ -1275,13 +1369,38 @@ function TrashList({
                 <span className="font-medium">{d.name}</span>
                 <span className="block text-xs text-fg-muted">
                   Removed {d.deletedAt ? formatDateTime(d.deletedAt) : ''} · {formatBytes(d.size)}
+                  {goesOn(d.deletedAt) && ` · deleted for good on ${goesOn(d.deletedAt)}`}
                 </span>
               </span>
-              {canEdit && (
-                <Button variant="secondary" busy={busy === d.id} onClick={() => void restore(d.id)}>
-                  <RotateCcw className="size-4" aria-hidden /> Restore
-                </Button>
-              )}
+              <span className="flex shrink-0 gap-2">
+                {canEdit && (
+                  <Button
+                    variant="secondary"
+                    busy={busy === d.id}
+                    onClick={() => void restore(d.id)}
+                  >
+                    <RotateCcw className="size-4" aria-hidden /> Restore
+                  </Button>
+                )}
+                {isAdmin &&
+                  (confirming === d.id ? (
+                    <Button
+                      variant="danger"
+                      busy={busy === `purge-${d.id}`}
+                      onClick={() => void act(`purge-${d.id}`, `documents/${d.id}/purge`)}
+                    >
+                      Sure? Delete for good
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      aria-label={`Delete ${d.name} for good`}
+                      onClick={() => setConfirming(d.id)}
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </Button>
+                  ))}
+              </span>
             </li>
           ))}
         </ul>

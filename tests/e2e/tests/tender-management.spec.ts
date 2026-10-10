@@ -64,6 +64,19 @@ test('an estimator runs a tender from queries and addenda through the EMD, check
   await expect(addenda).toContainText('Submission moved');
   await addenda.getByLabel('Acknowledged in the bid').click();
   await expect(addenda.getByLabel('Acknowledged in the bid')).toBeChecked();
+  // The corrigendum itself, kept with the addendum (and in the tender's documents).
+  const attaching = page.waitForEvent('filechooser');
+  await addenda.getByRole('button', { name: 'Attach documents to Corrigendum 1' }).click();
+  await (
+    await attaching
+  ).setFiles({
+    name: 'Corrigendum 1.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4 corrigendum'),
+  });
+  await expect(addenda.getByRole('list', { name: 'Documents of Corrigendum 1' })).toContainText(
+    'Corrigendum 1.pdf',
+  );
   await page.screenshot(shot('tender-mgmt-01-queries'));
 
   // 2. The EMD as a bank guarantee, handed to the client.
