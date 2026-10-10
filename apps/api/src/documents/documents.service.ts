@@ -2,6 +2,7 @@
 // documents, every upload a version, the trash, ZIP downloads and search. Everyone reads; changes need
 // `documents.edit`. Restricted folders (our prices, vendor quotes) and what is in them are visible only to roles
 // with `pricing.edit`, the same people who see bid pricing; to everyone else they do not exist.
+import type { LinkKind } from './links.js';
 import {
   BadRequestException,
   ConflictException,
@@ -173,6 +174,15 @@ export class DocumentsService implements OnApplicationBootstrap {
     return clamdScan(path, { ...clamd, timeoutMs: 60_000 });
   }
 
+  private async mayLink(claims: TenantClaims, kind: LinkKind) {
+    if (kind === 'rfq_vendor' && !(await this.permissions.can(claims, 'rfq.edit')))
+      throw new ForbiddenException({
+        code: 'forbidden',
+        permission: 'rfq.edit',
+        message: 'Linking documents to vendor quotes needs the RFQ permission.',
+      });
+  }
+
   private seesRestricted(claims: TenantClaims) {
     return this.permissions.can(claims, 'pricing.edit');
   }
@@ -338,6 +348,58 @@ export class DocumentsService implements OnApplicationBootstrap {
       WHERE d.id = ${documentId} ${lock ? db`FOR UPDATE OF d` : db``}`;
     if (!d || (d.restricted && !see)) throw new NotFoundException({ code: 'document_not_found' });
     return d;
+  }
+
+  /**
+   * Links a document to what it belongs to, in the same tender: a vendor on an RFQ ("<rfq id>/<party id>"), a
+   * checklist item or an addendum. A vendor's quote is part of the enquiry, so it also takes `rfq.edit`.
+   */
+  async link(claims: TenantClaims, documentId: string, kind: LinkKind, targetId: string) {
+    await this.mayLink(claims, kind);
+    const db = await this.tenants.forTenant(claims.ten);
+    const d = await this.visibleDocument(db, documentId, await this.seesRestricted(claims));
+    if (d.deletedAt) throw new ConflictException({ code: 'document_deleted' });
+    let tenderOk = false;
+    if (kind === 'rfq_vendor') {
+      const [rfqId, partyId] = targetId.split('/');
+      const [r] =
+        /^[0-9a-f-]{36}$/.test(rfqId ?? '') && /^[0-9a-f-]{36}$/.test(partyId ?? '')
+          ? await db<{ tender_id: string }[]>`
+            SELECT r.tender_id FROM tender.rfq r JOIN tender.rfq_vendor v ON v.rfq_id = r.id
+            WHERE r.id = ${rfqId!} AND v.party_id = ${partyId!}`
+          : [];
+      tenderOk = r?.tender_id === d.tenderId;
+    } else if (/^[0-9a-f-]{36}$/.test(targetId)) {
+      const [r] = await db<{ tender_id: string }[]>`
+        SELECT tender_id FROM ${db(kind === 'checklist_item' ? 'tender.checklist_item' : 'tender.addendum')}
+        WHERE id = ${targetId}`;
+      tenderOk = r?.tender_id === d.tenderId;
+    }
+    if (!tenderOk)
+      throw new NotFoundException({
+        code: 'link_target_not_found',
+        message: 'That is not in the same tender as the document.',
+      });
+    await db.begin(async (tx) => {
+      await tx`INSERT INTO doc.document_link (document_id, target_kind, target_id, tender_id, created_by)
+        VALUES (${documentId}, ${kind}, ${targetId}, ${d.tenderId}, ${claims.sub}) ON CONFLICT DO NOTHING`;
+      await tx`INSERT INTO platform.audit_log (actor_id, action, entity, entity_id, data)
+        VALUES (${claims.sub}, 'document.link', 'document', ${documentId}, ${tx.json({ kind, targetId })})`;
+    });
+    return { documentId, kind, targetId };
+  }
+
+  async unlink(claims: TenantClaims, documentId: string, kind: LinkKind, targetId: string) {
+    await this.mayLink(claims, kind);
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.visibleDocument(db, documentId, await this.seesRestricted(claims));
+    await db.begin(async (tx) => {
+      await tx`DELETE FROM doc.document_link
+        WHERE document_id = ${documentId} AND target_kind = ${kind} AND target_id = ${targetId}`;
+      await tx`INSERT INTO platform.audit_log (actor_id, action, entity, entity_id, data)
+        VALUES (${claims.sub}, 'document.unlink', 'document', ${documentId}, ${tx.json({ kind, targetId })})`;
+    });
+    return { documentId, kind, targetId };
   }
 
   /** The bytes of one version (the latest by default), named as the document is now. */

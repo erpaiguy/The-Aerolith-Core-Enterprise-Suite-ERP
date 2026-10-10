@@ -59,6 +59,7 @@ test('an estimator asks two subcontractors, compares their quotes and prices the
   await page.getByLabel('Terms').fill('Rates for complete work with 10-year guarantee.');
   await page.getByRole('button', { name: 'Create RFQ' }).click();
   await expect(page.getByRole('heading', { name: 'Waterproofing package' })).toBeVisible();
+  const rfqUrl = page.url();
   await page.getByRole('button', { name: 'From the BOQ' }).click();
   await page
     .getByRole('list', { name: 'BOQ lines to ask for' })
@@ -138,4 +139,36 @@ test('an estimator asks two subcontractors, compares their quotes and prices the
   await page.getByRole('link', { name: /Boys hostel, Yavatmal/ }).click();
   await expect(page.getByText(/Quote from DryTech Waterproofing on RFQ\//)).toBeVisible();
   await expect(page.getByText(/put into the estimate: 2 BOQ item\(s\)/)).toBeVisible();
+
+  // 8. Negotiation: DryTech comes down to 340 on the terrace, now GST extra. Their first quote is kept as round 1.
+  await page.goto(rfqUrl);
+  await dry.getByRole('button', { name: 'Type the quote of DryTech Waterproofing' }).click();
+  await expect(form.getByRole('radio', { name: /A revised quote: keep round 1/ })).toBeChecked();
+  await form.getByLabel('GST', { exact: true }).selectOption('extra');
+  await form.getByLabel('Rate for line 1').fill('340');
+  await form.getByLabel('Rate for line 2').fill('180');
+  await form.getByRole('button', { name: /Save quote \(2 of 2 lines\)/ }).click();
+  await expect(form).toBeHidden();
+  await expect(dry.getByText('Round 2', { exact: true })).toBeVisible();
+  const rounds = page.getByRole('region', { name: 'Rounds of DryTech Waterproofing' });
+  await expect(rounds.getByTestId('round-total')).toHaveText(['42,200.00', '41,200.00']);
+  await expect(rounds.getByRole('row').nth(1)).toContainText('-2.9 %');
+
+  // 9. Aqua Seal's covering letter is kept with their quote (and in the tender's documents).
+  const attaching = page.waitForEvent('filechooser');
+  await aqua.getByRole('button', { name: 'Attach documents of Aqua Seal Systems' }).click();
+  await (
+    await attaching
+  ).setFiles({
+    name: 'Aqua Seal covering letter.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4 covering letter'),
+  });
+  await expect(
+    page.getByText('Attached Aqua Seal covering letter.pdf, kept in the tender documents.'),
+  ).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Documents of Aqua Seal Systems' })).toContainText(
+    'Aqua Seal covering letter.pdf',
+  );
+  await page.screenshot(shot('rfq-02-negotiation'));
 });

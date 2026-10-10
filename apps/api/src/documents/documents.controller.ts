@@ -69,6 +69,11 @@ function fileHeaders(reply: FastifyReply) {
   reply.header('Cache-Control', 'private, no-store');
 }
 
+const linkBody = z.object({
+  kind: z.enum(['rfq_vendor', 'checklist_item', 'addendum']),
+  targetId: z.string().min(1).max(80),
+});
+
 /**
  * Tender documents (docs/wave1-plan.md step 10). Everyone reads (restricted folders need `pricing.edit`); changes
  * need `documents.edit`.
@@ -200,6 +205,31 @@ export class DocumentsController {
   @RequiresFeatures()
   remove(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
     return this.docs.remove(c, id);
+  }
+
+  /** Links the document to a vendor's quote on an RFQ, a checklist item or an addendum of its tender. */
+  @Post('documents/:id/links')
+  @HttpCode(200)
+  @RequiresPermission('documents.edit')
+  @RequiresFeatures()
+  link(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(linkBody)) b: z.infer<typeof linkBody>,
+  ) {
+    return this.docs.link(c, id, b.kind, b.targetId);
+  }
+
+  @Post('documents/:id/links/delete')
+  @HttpCode(200)
+  @RequiresPermission('documents.edit')
+  @RequiresFeatures()
+  unlink(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(linkBody)) b: z.infer<typeof linkBody>,
+  ) {
+    return this.docs.unlink(c, id, b.kind, b.targetId);
   }
 
   @Post('documents/:id/restore')

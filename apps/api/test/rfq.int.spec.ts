@@ -3,7 +3,7 @@
 // statement, choosing vendors, putting the chosen rates into the BOQ (and not into a frozen one), and a materials RFQ
 // that sets a resource's rate.
 import 'reflect-metadata';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -47,7 +47,16 @@ interface Rfq {
     partyId: string;
     name: string;
     status: string;
-    quote: { gstMode: string; source: string } | null;
+    quote: { gstMode: string; source: string; round: number } | null;
+    documents: { id: string; name: string; versionNo: number }[];
+  }[];
+  rounds: {
+    partyId: string;
+    round: number;
+    receivedOn: string;
+    gstMode: string;
+    rates: Record<string, string>;
+    total: string;
   }[];
   cs: {
     vendors: {
@@ -119,6 +128,27 @@ describe.skipIf(!controlUrl || !adminUrl)('RFQs (integration)', () => {
     }
     return Buffer.from(await wb.xlsx.writeBuffer());
   };
+  const uploadDocument = async (tender: string, name: string, folderId?: string) => {
+    const boundary = `----aerolith${randomBytes(6).toString('hex')}`;
+    const payload = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\n` +
+          'Content-Type: application/pdf\r\n\r\n',
+      ),
+      Buffer.from(`%PDF-1.4 ${name}`),
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    return (
+      await ok<{ document: { id: string } }>(
+        app.inject({
+          method: 'POST',
+          url: `/api/tenant/tenders/${tender}/documents/upload${folderId ? `?folderId=${folderId}` : ''}`,
+          payload,
+          headers: { ...t.admin, 'content-type': `multipart/form-data; boundary=${boundary}` },
+        }),
+      )
+    ).document.id;
+  };
   const rows = async (id: string) =>
     (await ok<{ rows: BoqRow[] }>(get(`/tenant/boqs/${id}/rows?limit=500`))).rows;
 
@@ -159,6 +189,7 @@ describe.skipIf(!controlUrl || !adminUrl)('RFQs (integration)', () => {
       RATE_LIMIT_SCALE: '50',
       PUBLIC_API_URL: 'https://api.example.in',
       IMPORT_DIR: await mkdtemp(join(tmpdir(), 'aerolith-rfq-test-')),
+      DOCUMENT_DIR: await mkdtemp(join(tmpdir(), 'aerolith-rfq-docs-')),
     });
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = configureApp(
@@ -470,5 +501,213 @@ describe.skipIf(!controlUrl || !adminUrl)('RFQs (integration)', () => {
     expect(rates[1]!.source).toContain('Vidarbha Cement Traders');
     const vendors = await ok<{ name: string }[]>(get('/tenant/parties?kind=vendor'));
     expect(vendors.map((p) => p.name)).toContain('Vidarbha Cement Traders');
+  });
+
+  it('keeps a quote replaced in negotiation as a round, and compares the rounds before GST', async () => {
+    // DryTech's first quote included 18 % GST: 413 and 212.40, i.e. 350 and 180 before GST.
+    rfq = await ok<Rfq>(
+      post(`/tenant/rfqs/${rfq.id}/vendors/${dry}/quote`, {
+        receivedOn: '2026-11-22',
+        gstMode: 'extra',
+        gstPct: '18',
+        lines: [
+          { lineId: rfq.lines[0]!.id, rate: '340' },
+          { lineId: rfq.lines[1]!.id, rate: '175' },
+          { lineId: rfq.lines[2]!.id, rate: '45' },
+        ],
+      }),
+    );
+    const [l1, l2, l3] = rfq.lines;
+    expect(rfq.vendors.find((v) => v.partyId === dry)!.quote).toMatchObject({
+      round: 2,
+      gstMode: 'extra',
+    });
+    expect(l1!.cells[dry]).toMatchObject({ basic: '340.0000', rank: 1 });
+    // Aqua quoted once: no rounds. The coving line has no quantity, so it is in no total.
+    expect(rfq.rounds).toEqual([
+      {
+        partyId: dry,
+        round: 1,
+        receivedOn: '2026-11-18',
+        gstMode: 'included',
+        rates: { [l1!.id]: '350.0000', [l2!.id]: '180.0000' },
+        total: '42200.00',
+      },
+      {
+        partyId: dry,
+        round: 2,
+        receivedOn: '2026-11-22',
+        gstMode: 'extra',
+        rates: { [l1!.id]: '340.0000', [l2!.id]: '175.0000', [l3!.id]: '45.0000' },
+        total: '41000.00',
+      },
+    ]);
+    // A third round keeps the second.
+    rfq = await ok<Rfq>(
+      post(`/tenant/rfqs/${rfq.id}/vendors/${dry}/quote`, {
+        receivedOn: '2026-11-24',
+        gstMode: 'extra',
+        gstPct: '18',
+        lines: [{ lineId: l1!.id, rate: '335' }],
+      }),
+    );
+    expect(rfq.rounds.map((r) => [r.round, r.total])).toEqual([
+      [1, '42200.00'],
+      [2, '41000.00'],
+      [3, '33500.00'],
+    ]);
+    // A typing slip corrected in round 3 stays round 3.
+    rfq = await ok<Rfq>(
+      post(`/tenant/rfqs/${rfq.id}/vendors/${dry}/quote`, {
+        receivedOn: '2026-11-24',
+        gstMode: 'extra',
+        gstPct: '18',
+        lines: [{ lineId: l1!.id, rate: '336' }],
+        newRound: false,
+      }),
+    );
+    expect(rfq.rounds.map((r) => [r.round, r.total])).toEqual([
+      [1, '42200.00'],
+      [2, '41000.00'],
+      [3, '33600.00'],
+    ]);
+    const [last] = await db<{ data: { round: number } }[]>`
+      SELECT data FROM tender.tender_event WHERE tender_id = ${tenderId} AND kind = 'rfq_quote' ORDER BY id DESC LIMIT 1`;
+    expect(last!.data.round).toBe(3);
+  });
+
+  it('reminds the RFQ owner the day before quotes are due and on the day, until every vendor has replied', async () => {
+    const inDays = (n: number) =>
+      new Date(Date.now() + n * 86_400_000).toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Kolkata',
+      });
+    const reminders = (id: string) => db<
+      { kind: string; title: string; body: string; due: string }[]
+    >`
+      SELECT kind, title, body, to_char(due_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') AS due
+      FROM platform.notification WHERE source = ${`rfq:${id}`} ORDER BY due_at`;
+    let r = await ok<Rfq>(
+      post(`/tenant/tenders/${tenderId}/rfqs`, {
+        title: 'Plumbing package',
+        kind: 'work',
+        dueOn: inDays(10),
+      }),
+    );
+    r = await ok<Rfq>(post(`/tenant/rfqs/${r.id}/vendors`, { name: 'Wardha Plumbing Works' }));
+    r = await ok<Rfq>(post(`/tenant/rfqs/${r.id}/vendors`, { name: 'Nagpur Sanitary Fittings' }));
+    // Still a draft: nothing is out, so no reminder.
+    expect(await reminders(r.id)).toEqual([]);
+    const [wardha, nagpur] = [r.vendors[1]!.partyId, r.vendors[0]!.partyId];
+    r = await ok<Rfq>(post(`/tenant/rfqs/${r.id}/vendors/${wardha}`, { status: 'sent' }));
+    expect(r.status).toBe('sent');
+    expect(await reminders(r.id)).toEqual([
+      {
+        kind: 'rfq_due',
+        title: `Quotes due tomorrow: ${r.number} Plumbing package`,
+        body: '2 of 2 vendors yet to quote.',
+        due: `${inDays(9)} 09:30`,
+      },
+      {
+        kind: 'rfq_due',
+        title: `Quotes due today: ${r.number} Plumbing package`,
+        body: '2 of 2 vendors yet to quote.',
+        due: `${inDays(10)} 09:30`,
+      },
+    ]);
+    // A new due date moves them; one vendor declining and the other quoting ends them.
+    r = await ok<Rfq>(post(`/tenant/rfqs/${r.id}`, { rowVersion: r.rowVersion, dueOn: inDays(5) }));
+    expect((await reminders(r.id)).map((n) => n.due)).toEqual([
+      `${inDays(4)} 09:30`,
+      `${inDays(5)} 09:30`,
+    ]);
+    r = await ok<Rfq>(post(`/tenant/rfqs/${r.id}/vendors/${nagpur}`, { status: 'declined' }));
+    expect((await reminders(r.id)).map((n) => n.body)).toEqual([
+      '1 of 2 vendors yet to quote.',
+      '1 of 2 vendors yet to quote.',
+    ]);
+    r = (
+      await ok<{ rfq: Rfq }>(
+        post(`/tenant/rfqs/${r.id}/lines`, { free: { description: 'Rough-in' } }),
+      )
+    ).rfq;
+    await ok(
+      post(`/tenant/rfqs/${r.id}/vendors/${wardha}/quote`, {
+        receivedOn: inDays(0),
+        gstMode: 'extra',
+        gstPct: '18',
+        lines: [{ lineId: r.lines[0]!.id, rate: '12000' }],
+      }),
+    );
+    expect(await reminders(r.id)).toEqual([]);
+  });
+
+  it("links a vendor's quote documents to the RFQ; restricted ones only for those who see prices", async () => {
+    const letter = await uploadDocument(tenderId, 'Aqua Seal covering letter.pdf');
+    const vault = await ok<{ folders: { id: string; name: string }[] }>(
+      post(`/tenant/tenders/${tenderId}/folders`, { name: 'Vendor quotes', restricted: true }),
+    );
+    const quotes = vault.folders.find((f) => f.name === 'Vendor quotes')!.id;
+    const priced = await uploadDocument(tenderId, 'Aqua Seal priced quote.pdf', quotes);
+    for (const id of [letter, priced])
+      await ok(
+        post(`/tenant/documents/${id}/links`, {
+          kind: 'rfq_vendor',
+          targetId: `${rfq.id}/${aqua}`,
+        }),
+      );
+    // Linking twice is harmless.
+    await ok(
+      post(`/tenant/documents/${letter}/links`, {
+        kind: 'rfq_vendor',
+        targetId: `${rfq.id}/${aqua}`,
+      }),
+    );
+    const seen = (r: Rfq) =>
+      r.vendors.find((v) => v.partyId === aqua)!.documents.map((d) => d.name);
+    expect(seen(await ok<Rfq>(get(`/tenant/rfqs/${rfq.id}`)))).toEqual([
+      'Aqua Seal covering letter.pdf',
+      'Aqua Seal priced quote.pdf',
+    ]);
+    expect(seen(await ok<Rfq>(get(`/tenant/rfqs/${rfq.id}`, worker)))).toEqual([
+      'Aqua Seal covering letter.pdf',
+    ]);
+    // Workers cannot link; a target outside the document's tender, or that does not exist, is refused.
+    expect(
+      (
+        await post(
+          `/tenant/documents/${letter}/links`,
+          { kind: 'rfq_vendor', targetId: `${rfq.id}/${dry}` },
+          worker,
+        )
+      ).statusCode,
+    ).toBe(403);
+    const other = (await ok<{ id: string }>(post('/tenant/tenders', { title: 'Library, Wardha' })))
+      .id;
+    const elsewhere = await uploadDocument(other, 'Unrelated.pdf');
+    expect(
+      (
+        await post(`/tenant/documents/${elsewhere}/links`, {
+          kind: 'rfq_vendor',
+          targetId: `${rfq.id}/${aqua}`,
+        })
+      ).json(),
+    ).toMatchObject({ code: 'link_target_not_found' });
+    expect(
+      (
+        await post(`/tenant/documents/${letter}/links`, {
+          kind: 'addendum',
+          targetId: randomUUID(),
+        })
+      ).json(),
+    ).toMatchObject({ code: 'link_target_not_found' });
+    // Unlinked, or deleted to the trash: gone from the RFQ.
+    await ok(
+      post(`/tenant/documents/${letter}/links/delete`, {
+        kind: 'rfq_vendor',
+        targetId: `${rfq.id}/${aqua}`,
+      }),
+    );
+    await ok(post(`/tenant/documents/${priced}/delete`));
+    expect(seen(await ok<Rfq>(get(`/tenant/rfqs/${rfq.id}`)))).toEqual([]);
   });
 });

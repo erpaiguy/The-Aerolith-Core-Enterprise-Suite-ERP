@@ -1102,3 +1102,33 @@ in dollars and changes the exchange rate.
 the new scored, reset; the company checklist added to a tender, duplicates refused; the calendar's date range; names
 by the user and by the admin). The browser test renames the admin, sets two criteria and a checklist item, scores a
 tender 80 on them and finds it in the month calendar.
+
+### Part 5: RFQ negotiation rounds, quote reminders, quote documents
+
+- **Negotiation rounds** (E8): a vendor's quote saved again (typed or imported) keeps the earlier one as a round. When
+  you edit a typed quote you choose between **a revised quote**, which becomes the next round, and **a correction**,
+  which fixes a typing slip and keeps the round. **Negotiation rounds** on the RFQ shows each vendor who revised: every
+  round's rates and total, all before GST so a round quoted with GST compares with one without, and the change from
+  the first round. The comparative statement always uses the latest round.
+- **Quotes-due reminders:** while an RFQ is out (status Sent) with a due date and some vendor has neither quoted nor
+  declined, its owner (or whoever made it) gets a **Quotes due** reminder on Home at 09:30 IST the day before and on
+  the due day, saying how many vendors are still to quote. Changing the date moves them; the last reply ends them.
+- **Quote documents** (E10): **Attach** on a vendor files their PDFs, covering letters or drawings in the tender's
+  documents (in "07 Vendor and subcontractor quotes" when the tender has the standard folders, which are restricted)
+  and links them to the vendor's quote; they are listed under the vendor, open from there, and can be unlinked. A
+  document in a restricted folder is listed only to roles that see bid pricing.
+
+**Decisions:** linking to a vendor's quote needs the RFQ permission as well as the documents one (workers upload
+documents but do not run enquiries). A link points at the document; deleting the document to the trash takes it off
+the RFQ. The same link table also accepts checklist items and addenda; their screens come with part 6.
+
+**API:** `newRound` (default true) on `POST /rfqs/:id/vendors/:partyId/quote`; `quote.round`, `rounds` and
+`vendors[].documents` on `GET /rfqs/:id`; `POST /documents/:id/links` and `POST /documents/:id/links/delete`
+(`{kind: rfq_vendor | checklist_item | addendum, targetId}`, an RFQ vendor being `<rfq id>/<party id>`); notifications
+of kind `rfq_due`. Migration `0019_rfq_rounds_and_links.sql`.
+
+**Tests:** 3 API integration tests (three rounds compared before GST and a correction keeping its round; reminders
+not for a draft, scheduled at 09:30 IST, moved with the date, counting the declined, ended by the last quote;
+documents linked, restricted ones hidden from a worker, workers refused, a target in another tender or missing
+refused, unlinked and trashed documents gone). The RFQ browser test now records a second round from DryTech and
+attaches Aqua Seal's covering letter.

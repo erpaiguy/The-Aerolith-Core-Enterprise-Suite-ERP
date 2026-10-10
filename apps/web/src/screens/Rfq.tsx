@@ -19,10 +19,11 @@ import {
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Download, Plus, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, Download, FileText, Paperclip, Plus, Trash2, Upload, X } from 'lucide-react';
 import { useDeferredValue, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { api, saveFile } from '../api/client';
 import type {
+  DocVault,
   Party,
   QuoteGstMode,
   Resource,
@@ -31,6 +32,7 @@ import type {
   RfqKind,
   RfqLine,
   RfqQuoteImport,
+  RfqRound,
   RfqStatus,
   RfqSummary,
   RfqVendor,
@@ -66,6 +68,8 @@ const GST_LABEL: Record<QuoteGstMode, (pct: string) => string> = {
 };
 
 const trimZeros = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v);
+/** The standard folder for vendors' quotes (apps/api/src/documents/documents.service.ts). */
+const QUOTES_FOLDER = '07 Vendor and subcontractor quotes';
 const today = () => {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -354,6 +358,7 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
       )}
       <Lines rfq={r} canEdit={canEdit} action={action} />
       <Vendors rfq={r} canEdit={canEdit} action={action} />
+      {r.rounds.length > 0 && <Negotiation rfq={r} />}
       <Comparative rfq={r} canEdit={canEditRfq && r.status !== 'cancelled'} action={action} />
     </div>
   );
@@ -852,12 +857,61 @@ function FreeLine({
 // --- vendors and quotes ---
 
 function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; action: Action }) {
+  const qc = useQueryClient();
   const canSend = usePermission('rfq.edit');
   const [quoting, setQuoting] = useState<string | null>(null);
   const [imported, setImported] = useState<{ vendor: string; out: RfqQuoteImport } | null>(null);
   const fileFor = useRef<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const docFor = useRef<string | null>(null);
+  const docInput = useRef<HTMLInputElement>(null);
+  const canAttach = usePermission('documents.edit') && canSend;
+  const [attached, setAttached] = useState<string | null>(null);
   const who = rfq.kind === 'work' ? 'subcontractor' : 'supplier';
+
+  /** The vendor's file goes into the tender's documents (the quotes folder when it has one) and is linked here. */
+  const attach = async (files: File[]) => {
+    const partyId = docFor.current;
+    if (!partyId || files.length === 0) return;
+    setAttached(null);
+    let where = 'the tender documents';
+    const out = await action.run(`attach-${partyId}`, async () => {
+      const vault = await api.request<DocVault>(`/api/tenant/tenders/${rfq.tenderId}/documents`);
+      const folder = vault.folders.find((f) => f.name === QUOTES_FOLDER);
+      if (folder) where = `“${QUOTES_FOLDER}”`;
+      for (const file of files) {
+        const { document } = await api.upload<{ document: { id: string } }>(
+          `/api/tenant/tenders/${rfq.tenderId}/documents/upload${folder ? `?folderId=${folder.id}` : ''}`,
+          file,
+        );
+        await post(`documents/${document.id}/links`, {
+          kind: 'rfq_vendor',
+          targetId: `${rfq.id}/${partyId}`,
+        });
+      }
+      return api.request<RfqDetail>(`/api/tenant/rfqs/${rfq.id}`);
+    });
+    if (out) {
+      setAttached(
+        `Attached ${files.length === 1 ? files[0]!.name : `${files.length} files`}, kept in ${where}.`,
+      );
+      void qc.invalidateQueries({ queryKey: ['documents', rfq.tenderId] });
+    }
+  };
+  const openDocument = (id: string) =>
+    void action.run(`doc-${id}`, async () => {
+      const { blob, fileName } = await api.download(`/api/tenant/documents/${id}/file`);
+      saveFile(blob, fileName);
+      return rfq;
+    });
+  const detach = (partyId: string, documentId: string) =>
+    void action.run(`detach-${documentId}`, async () => {
+      await post(`documents/${documentId}/links/delete`, {
+        kind: 'rfq_vendor',
+        targetId: `${rfq.id}/${partyId}`,
+      });
+      return api.request<RfqDetail>(`/api/tenant/rfqs/${rfq.id}`);
+    });
 
   const download = (v: RfqVendor) =>
     void action.run(`pack-${v.partyId}`, async () => {
@@ -901,6 +955,24 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
           if (f) void importFile(f);
         }}
       />
+      <input
+        ref={docInput}
+        type="file"
+        multiple
+        className="sr-only"
+        aria-label="Quote documents"
+        tabIndex={-1}
+        onChange={(e) => {
+          const fs = [...(e.target.files ?? [])];
+          e.target.value = '';
+          void attach(fs);
+        }}
+      />
+      {attached && (
+        <div className="mb-3">
+          <Alert tone="success">{attached}</Alert>
+        </div>
+      )}
       {imported && (
         <div className="mb-3">
           <Alert tone={imported.out.issues.length ? 'warning' : 'success'}>
@@ -957,7 +1029,45 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
                       {v.quote.source === 'file' &&
                         v.quote.fileName &&
                         ` (from ${v.quote.fileName})`}
+                      {v.quote.round > 1 && (
+                        <>
+                          {' '}
+                          <Badge tone="accent">Round {v.quote.round}</Badge>
+                        </>
+                      )}
                     </div>
+                  )}
+                  {v.documents.length > 0 && (
+                    <ul
+                      className="mt-1 flex flex-wrap gap-1.5"
+                      aria-label={`Documents of ${v.name}`}
+                    >
+                      {v.documents.map((d) => (
+                        <li
+                          key={d.id}
+                          className="inline-flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-xs"
+                        >
+                          <FileText className="size-3.5 text-fg-muted" aria-hidden />
+                          <button
+                            type="button"
+                            className="hover:underline"
+                            onClick={() => openDocument(d.id)}
+                          >
+                            {d.name}
+                          </button>
+                          {canAttach && (
+                            <button
+                              type="button"
+                              className="rounded text-fg-muted hover:text-danger"
+                              aria-label={`Unlink ${d.name}`}
+                              onClick={() => detach(v.partyId, d.id)}
+                            >
+                              <X className="size-3.5" aria-hidden />
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1007,6 +1117,19 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
                         {v.quote ? 'Edit quote' : 'Type quote'}
                       </Button>
                     </>
+                  )}
+                  {canAttach && rfq.status !== 'cancelled' && (
+                    <Button
+                      variant="secondary"
+                      busy={action.busy === `attach-${v.partyId}`}
+                      aria-label={`Attach documents of ${v.name}`}
+                      onClick={() => {
+                        docFor.current = v.partyId;
+                        docInput.current?.click();
+                      }}
+                    >
+                      <Paperclip className="size-4" aria-hidden /> Attach
+                    </Button>
                   )}
                   {canEdit && v.status !== 'declined' && !v.quote && (
                     <Button
@@ -1145,6 +1268,7 @@ function QuoteForm({
     gstPct: trimZeros(q?.gstPct ?? '18'),
     terms: q?.terms ?? '',
   });
+  const [revised, setRevised] = useState(true);
   const [rates, setRates] = useState<Record<string, { rate: string; remark: string }>>(() =>
     Object.fromEntries(
       rfq.lines.map((l) => {
@@ -1165,6 +1289,7 @@ function QuoteForm({
           gstMode: head.gstMode,
           gstPct: head.gstMode === 'exempt' ? '0' : head.gstPct,
           terms: head.terms,
+          newRound: !q || revised,
           lines: filled.map((l) => ({
             lineId: l.id,
             rate: rates[l.id]!.rate.trim(),
@@ -1183,6 +1308,19 @@ function QuoteForm({
       className="mt-3 space-y-3 rounded-md border border-line bg-surface-2 p-3"
       aria-label={`Quote of ${vendor.name}`}
     >
+      {q && (
+        <fieldset className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <legend className="sr-only">What this is</legend>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={revised} onChange={() => setRevised(true)} />A revised
+            quote: keep round {q.round} and record this as round {q.round + 1}
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={!revised} onChange={() => setRevised(false)} />A correction
+            to round {q.round}
+          </label>
+        </fieldset>
+      )}
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Field label="Received on">
           <Input
@@ -1282,11 +1420,94 @@ function QuoteForm({
         <Button type="button" variant="ghost" onClick={onDone}>
           Cancel
         </Button>
-        {q && (
-          <span className="text-xs text-fg-muted">Saving replaces the quote recorded earlier.</span>
-        )}
       </div>
     </form>
+  );
+}
+
+// --- negotiation ---
+
+/** How each vendor who revised their quote moved, line by line and in total, every rate before GST. */
+function Negotiation({ rfq }: { rfq: RfqDetail }) {
+  const byVendor = new Map<string, RfqRound[]>();
+  for (const r of rfq.rounds) byVendor.set(r.partyId, [...(byVendor.get(r.partyId) ?? []), r]);
+  const change = (from: string | undefined, to: string | undefined) => {
+    if (!from || !to || Number(from) === 0) return null;
+    const pct = ((Number(to) - Number(from)) / Number(from)) * 100;
+    return (
+      <span className={cx('tabular-nums', pct < 0 ? 'text-success' : pct > 0 ? 'text-danger' : '')}>
+        {pct > 0 ? '+' : ''}
+        {pct.toFixed(1)} %
+      </span>
+    );
+  };
+  return (
+    <Card title="Negotiation rounds">
+      <p className="mb-3 text-sm text-fg-muted">
+        Every revised quote keeps the earlier ones. Rates are before GST, so rounds quoted with GST
+        and without compare.
+      </p>
+      <div className="space-y-5">
+        {[...byVendor].map(([partyId, rounds]) => {
+          const name = rfq.vendors.find((v) => v.partyId === partyId)?.name ?? '';
+          const first = rounds[0]!;
+          const last = rounds[rounds.length - 1]!;
+          const lines = rfq.lines.filter((l) => rounds.some((r) => r.rates[l.id] !== undefined));
+          return (
+            <section key={partyId} aria-label={`Rounds of ${name}`}>
+              <h3 className="mb-1 text-sm font-medium">{name}</h3>
+              <Table minWidth="36rem">
+                <thead>
+                  <tr>
+                    <th className="w-12">No.</th>
+                    <th>Description</th>
+                    {rounds.map((r) => (
+                      <th key={r.round} className="text-right">
+                        Round {r.round}
+                        <div className="text-xs font-normal text-fg-muted">
+                          {formatDate(r.receivedOn)}
+                        </div>
+                      </th>
+                    ))}
+                    <th className="text-right">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l) => (
+                    <tr key={l.id}>
+                      <td className="tabular-nums">{l.seq}</td>
+                      <td>
+                        <div className="line-clamp-1">{l.description}</div>
+                      </td>
+                      {rounds.map((r) => (
+                        <td key={r.round} className="text-right tabular-nums">
+                          {r.rates[l.id] !== undefined ? formatRate(r.rates[l.id]!) : '–'}
+                        </td>
+                      ))}
+                      <td className="text-right">{change(first.rates[l.id], last.rates[l.id])}</td>
+                    </tr>
+                  ))}
+                  <tr className="font-medium">
+                    <td />
+                    <td>Total before GST</td>
+                    {rounds.map((r) => (
+                      <td
+                        key={r.round}
+                        className="text-right tabular-nums"
+                        data-testid="round-total"
+                      >
+                        {formatAmount(r.total)}
+                      </td>
+                    ))}
+                    <td className="text-right">{change(first.total, last.total)}</td>
+                  </tr>
+                </tbody>
+              </Table>
+            </section>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 

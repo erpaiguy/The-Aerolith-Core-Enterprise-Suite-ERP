@@ -106,6 +106,7 @@ const quoteBody = z.object({
       }),
     )
     .max(2000),
+  newRound: z.boolean().default(true),
 });
 const importQuery = z.object({ partyId: z.uuid().optional() });
 const selectBody = z

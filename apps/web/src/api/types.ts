@@ -721,6 +721,8 @@ export interface RfqQuote {
   terms: string;
   source: 'typed' | 'file';
   fileName: string | null;
+  /** Negotiation round: 1 for the first quote, one more for each revised quote. */
+  round: number;
 }
 
 export interface RfqVendor {
@@ -732,6 +734,19 @@ export interface RfqVendor {
   sentOn: string | null;
   notes: string;
   quote: RfqQuote | null;
+  /** Tender documents linked to this vendor's quote. */
+  documents: { id: string; name: string; versionNo: number }[];
+}
+
+/** One negotiation round of a vendor, every rate before GST. */
+export interface RfqRound {
+  partyId: string;
+  round: number;
+  receivedOn: string;
+  gstMode: QuoteGstMode;
+  /** line id -> rate before GST */
+  rates: Record<string, string>;
+  total: string;
 }
 
 export interface RfqVendorTotal {
@@ -762,6 +777,8 @@ export interface RfqDetail {
   tender: { id: string; number: string; title: string };
   lines: RfqLine[];
   vendors: RfqVendor[];
+  /** Vendors who revised their quote: every round, the current one last. */
+  rounds: RfqRound[];
   cs: {
     vendors: RfqVendorTotal[];
     totals: {

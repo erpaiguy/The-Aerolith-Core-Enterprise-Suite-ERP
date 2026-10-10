@@ -16,12 +16,14 @@ import type { TenantClaims } from '../auth/auth.service.js';
 import { PermissionsService } from '../auth/permissions.js';
 import { BoqService } from '../boq/boq.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { linkedDocuments, rfqVendorTarget } from '../documents/links.js';
+import { dec, fmt, mul } from '../rates/decimal.js';
 import { RatesService } from '../rates/rates.service.js';
 import { nextNumber } from '../tender/numbering.js';
 import { audit, event } from '../tender/tender-records.js';
 import type { Patch } from '../tender/tender.service.js';
 import { enquiryWorkbook, readQuoteWorkbook } from './rfq-files.js';
-import { comparativeStatement, rateToApply, type GstMode } from './rfq-rules.js';
+import { basicRate, comparativeStatement, rateToApply, type GstMode } from './rfq-rules.js';
 
 export type RfqKind = 'work' | 'material';
 export type RfqStatus = 'draft' | 'sent' | 'closed' | 'cancelled';
@@ -35,6 +37,8 @@ export interface QuoteInput {
   gstPct: string;
   terms: string;
   lines: { lineId: string; rate: string; remark: string }[];
+  /** False corrects the quote already in (a typing slip) instead of keeping it as a negotiation round. */
+  newRound?: boolean;
 }
 
 const today = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
@@ -131,6 +135,7 @@ export class RfqService {
             terms: string;
             source: string;
             fileName: string | null;
+            round: number;
           } | null;
         }[]
       >`
@@ -139,7 +144,7 @@ export class RfqService {
           CASE WHEN q.id IS NULL THEN NULL ELSE json_build_object(
             'receivedOn', to_char(q.received_on, 'YYYY-MM-DD'), 'validUntil', to_char(q.valid_until, 'YYYY-MM-DD'),
             'reference', q.reference, 'gstMode', q.gst_mode, 'gstPct', q.gst_pct::text, 'terms', q.terms,
-            'source', q.source, 'fileName', q.file_name) END AS quote
+            'source', q.source, 'fileName', q.file_name, 'round', q.round) END AS quote
         FROM tender.rfq_vendor v JOIN platform.party p ON p.id = v.party_id
         LEFT JOIN tender.rfq_quote q ON q.rfq_id = v.rfq_id AND q.party_id = v.party_id
         WHERE v.rfq_id = ${rfqId} ORDER BY lower(p.name)`,
@@ -161,11 +166,83 @@ export class RfqService {
         ),
       }));
     const cs = comparativeStatement(lines, quotes);
+    // Negotiation: each vendor's rounds (earlier quotes, then the current one), with every rate before GST so rounds
+    // quoted differently compare, and what each came to.
+    const earlier = await db<
+      {
+        partyId: string;
+        round: number;
+        receivedOn: string;
+        gstMode: GstMode;
+        gstPct: string;
+        rates: Record<string, { rate: string }>;
+      }[]
+    >`
+      SELECT party_id AS "partyId", round, to_char(received_on, 'YYYY-MM-DD') AS "receivedOn", gst_mode AS "gstMode",
+        gst_pct::text AS "gstPct", rates
+      FROM tender.rfq_quote_round WHERE rfq_id = ${rfqId} ORDER BY party_id, round`;
+    const qty = new Map(lines.map((l) => [l.id, l.qty]));
+    const round = (
+      partyId: string,
+      n: number,
+      receivedOn: string,
+      mode: GstMode,
+      pct: string,
+      quoted: [string, string][],
+    ) => {
+      const basic = quoted.map(([lineId, rate]) => [lineId, fmt(basicRate(rate, mode, pct), 4)]);
+      const total = basic.reduce((a, [lineId, b]) => {
+        const q = qty.get(lineId!);
+        return q ? a + dec(fmt(mul(dec(b!), dec(q)), 2)) : a;
+      }, 0n);
+      return {
+        partyId,
+        round: n,
+        receivedOn,
+        gstMode: mode,
+        rates: Object.fromEntries(basic) as Record<string, string>,
+        total: fmt(total, 2),
+      };
+    };
+    const rounds = [
+      ...earlier.map((e) =>
+        round(
+          e.partyId,
+          e.round,
+          e.receivedOn,
+          e.gstMode,
+          e.gstPct,
+          Object.entries(e.rates).map(([k, v]) => [k, v.rate]),
+        ),
+      ),
+      ...vendors
+        .filter((v) => v.quote && v.quote.round > 1)
+        .map((v) =>
+          round(
+            v.partyId,
+            v.quote!.round,
+            v.quote!.receivedOn,
+            v.quote!.gstMode,
+            v.quote!.gstPct,
+            rates.filter((r) => r.partyId === v.partyId).map((r) => [r.lineId, r.rate]),
+          ),
+        ),
+    ].sort((a, b) => a.partyId.localeCompare(b.partyId) || a.round - b.round);
+    const docs = await linkedDocuments(
+      db,
+      'rfq_vendor',
+      vendors.map((v) => rfqVendorTarget(rfqId, v.partyId)),
+      await this.permissions.can(claims, 'pricing.edit'),
+    );
     return {
       ...rfq,
       lines: cs.lines.map((l, i) => ({ ...l, gone: lines[i]!.gone })),
-      vendors,
+      vendors: vendors.map((v) => ({
+        ...v,
+        documents: docs.get(rfqVendorTarget(rfqId, v.partyId)) ?? [],
+      })),
       cs: { vendors: cs.vendors, totals: cs.totals },
+      rounds,
     };
   }
 
@@ -223,6 +300,7 @@ export class RfqService {
           { number: r.number, from: r.status, to: input.status },
           claims.sub,
         );
+      await rescheduleRfq(tx, rfqId, new Date());
     });
     return this.get(claims, rfqId);
   }
@@ -516,12 +594,28 @@ export class RfqService {
         });
       if (new Set(input.lines.map((l) => l.lineId)).size !== input.lines.length)
         throw new BadRequestException({ code: 'duplicate_line' });
+      // A quote already in becomes a negotiation round: its rates are kept, the new quote is the next round. A
+      // correction replaces it and keeps its round.
+      const [current] = await tx<{ round: number }[]>`
+        SELECT round FROM tender.rfq_quote WHERE rfq_id = ${rfqId} AND party_id = ${partyId}`;
+      const newRound = input.newRound !== false;
+      const [kept] = !newRound
+        ? []
+        : await tx<{ round: number }[]>`
+        INSERT INTO tender.rfq_quote_round (rfq_id, party_id, round, received_on, reference, gst_mode, gst_pct, source,
+          rates, replaced_by)
+        SELECT q.rfq_id, q.party_id, q.round, q.received_on, q.reference, q.gst_mode, q.gst_pct, q.source,
+          coalesce((SELECT jsonb_object_agg(ql.line_id, jsonb_build_object('rate', ql.rate::text, 'remark', ql.remark))
+            FROM tender.rfq_quote_line ql WHERE ql.quote_id = q.id), '{}'::jsonb), ${claims.sub}
+        FROM tender.rfq_quote q WHERE q.rfq_id = ${rfqId} AND q.party_id = ${partyId}
+        RETURNING round`;
+      const round = kept ? kept.round + 1 : (current?.round ?? 1);
       await tx`DELETE FROM tender.rfq_quote WHERE rfq_id = ${rfqId} AND party_id = ${partyId}`;
       const [q] = await tx<{ id: string }[]>`
         INSERT INTO tender.rfq_quote (rfq_id, party_id, received_on, valid_until, reference, gst_mode, gst_pct, terms,
-          source, file_name, created_by, updated_by)
+          source, file_name, created_by, updated_by, round)
         VALUES (${rfqId}, ${partyId}, ${input.receivedOn}, ${input.validUntil}, ${input.reference}, ${input.gstMode},
-          ${input.gstPct}, ${input.terms}, ${source}, ${fileName}, ${claims.sub}, ${claims.sub})
+          ${input.gstPct}, ${input.terms}, ${source}, ${fileName}, ${claims.sub}, ${claims.sub}, ${round})
         RETURNING id`;
       if (input.lines.length)
         await tx`INSERT INTO tender.rfq_quote_line ${tx(
@@ -538,7 +632,7 @@ export class RfqService {
         tx,
         r.tender_id,
         'rfq_quote',
-        { number: r.number, vendor: v.name, lines: input.lines.length, source },
+        { number: r.number, vendor: v.name, lines: input.lines.length, source, round },
         claims.sub,
       );
       await this.touch(tx, rfqId, claims);
@@ -792,6 +886,7 @@ export class RfqService {
 
   private async touch(tx: TransactionSql, rfqId: string, claims: TenantClaims) {
     await tx`UPDATE tender.rfq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${rfqId}`;
+    await rescheduleRfq(tx, rfqId, new Date());
   }
 }
 
@@ -806,3 +901,43 @@ const stale = () =>
     code: 'stale_row',
     message: 'Someone else changed this RFQ. Reload to see their changes.',
   });
+
+/**
+ * Reminders for quotes due (docs/04-features.md E8): to the RFQ's owner (or whoever made it), the day before the due
+ * date and on it, at 09:30 IST, while the RFQ is out and some vendor has not quoted or declined. Replaced on every
+ * change to the RFQ.
+ */
+export async function rescheduleRfq(tx: TransactionSql, rfqId: string, now: Date) {
+  const source = `rfq:${rfqId}`;
+  await tx`DELETE FROM platform.notification WHERE source = ${source} AND due_at > ${now}`;
+  const [r] = await tx<
+    {
+      number: string;
+      title: string;
+      status: string;
+      due_on: string | null;
+      user_id: string | null;
+      waiting: number;
+      vendors: number;
+    }[]
+  >`
+    SELECT r.number, r.title, r.status, to_char(r.due_on, 'YYYY-MM-DD') AS due_on,
+      coalesce(r.owner_id, r.created_by) AS user_id,
+      (SELECT count(*)::int FROM tender.rfq_vendor v WHERE v.rfq_id = r.id
+        AND v.status NOT IN ('quoted', 'declined')) AS waiting,
+      (SELECT count(*)::int FROM tender.rfq_vendor v WHERE v.rfq_id = r.id) AS vendors
+    FROM tender.rfq r WHERE r.id = ${rfqId}`;
+  if (!r || r.status !== 'sent' || !r.due_on || !r.user_id || r.waiting === 0) return;
+  const at = (offsetDays: number) => {
+    const d = new Date(`${r.due_on}T09:30:00+05:30`);
+    return new Date(d.getTime() - offsetDays * 86_400_000);
+  };
+  const plans = [
+    { dueAt: at(1), title: `Quotes due tomorrow: ${r.number} ${r.title}` },
+    { dueAt: at(0), title: `Quotes due today: ${r.number} ${r.title}` },
+  ].filter((p) => p.dueAt > now);
+  const body = `${r.waiting} of ${r.vendors} vendor${r.vendors === 1 ? '' : 's'} yet to quote.`;
+  for (const p of plans)
+    await tx`INSERT INTO platform.notification (user_id, kind, title, body, link, due_at, source)
+      VALUES (${r.user_id}, 'rfq_due', ${p.title}, ${body}, ${`/rfqs/${rfqId}`}, ${p.dueAt}, ${source})`;
+}
