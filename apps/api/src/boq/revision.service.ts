@@ -5,6 +5,7 @@
 // time they change in a revision (boq.service.ts, preImage). The state of any version N is, for each line, its
 // pre-image with the smallest frozen_version >= N if there is one, otherwise its current row; lines created after N
 // are left out. The current version's state is simply the current rows.
+import { boqEvent } from './boq-events.js';
 import {
   BadRequestException,
   ConflictException,
@@ -45,7 +46,7 @@ export interface VersionRow {
  * sort_key, depth, node_type, code, unit, qty, rate, amount, subtotal, created_version, fv (the pre-image's
  * frozen_version, NULL for a current row) and, with `withText`, description and notes resolved through the history.
  */
-function stateAt(
+export function stateAt(
   db: Db,
   boqId: string,
   v: number,
@@ -152,13 +153,13 @@ export class RevisionService {
         node_count: number;
         item_count: number;
         rate_date: string;
-        tender_id: string;
+        tender_id: string | null;
         estimate: string | null;
       }[]
     >`
       SELECT b.name, b.status, b.archived_at IS NOT NULL AS archived, b.version_no, b.total::text AS total, b.node_count,
         b.item_count, b.rate_date::text, b.tender_id, t.estimated_value::text AS estimate
-      FROM est.boq b JOIN tender.tender t ON t.id = b.tender_id WHERE b.id = ${boqId} FOR UPDATE OF b`;
+      FROM est.boq b LEFT JOIN tender.tender t ON t.id = b.tender_id WHERE b.id = ${boqId} FOR UPDATE OF b`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
     refuseArchived(b);
     if (b.status !== 'draft')
@@ -182,8 +183,7 @@ export class RevisionService {
         updated_at = now(), updated_by = ${actorId}, row_version = row_version + 1
       WHERE id = ${boqId}`;
     const data = { boqId, name: b.name, version: b.version_no, kind: input.kind, total: b.total };
-    await tx`INSERT INTO tender.tender_event (tender_id, kind, data, actor_id)
-      VALUES (${b.tender_id}, 'boq_frozen', ${tx.json(data)}, ${actorId})`;
+    await boqEvent(tx, boqId, 'boq_frozen', data, actorId);
     await audit(tx, actorId, 'boq.freeze', boqId, data);
   }
 
@@ -207,8 +207,7 @@ export class RevisionService {
           updated_by = ${claims.sub}, row_version = row_version + 1
         WHERE id = ${boqId}`;
       const data = { boqId, name: b.name, version: b.version_no + 1, note };
-      await tx`INSERT INTO tender.tender_event (tender_id, kind, data, actor_id)
-        VALUES (${b.tender_id}, 'boq_revision_started', ${tx.json(data)}, ${claims.sub})`;
+      await boqEvent(tx, boqId, 'boq_revision_started', data, claims.sub);
       await audit(tx, claims.sub, 'boq.revise', boqId, data);
     });
     return this.versions(claims, boqId);
@@ -228,7 +227,7 @@ export class RevisionService {
       });
     await db.begin(async (tx) => {
       const [b] = await tx<
-        { name: string; tender_id: string; archived: boolean; submitted: boolean }[]
+        { name: string; tender_id: string | null; archived: boolean; submitted: boolean }[]
       >`
         SELECT name, tender_id, archived_at IS NOT NULL AS archived,
           EXISTS (SELECT 1 FROM est.boq_version v WHERE v.boq_id = b.id AND v.kind = 'submitted') AS submitted
@@ -245,8 +244,7 @@ export class RevisionService {
           row_version = row_version + 1
         WHERE id = ${boqId}`;
       const kind = archived ? 'boq_archived' : 'boq_restored';
-      await tx`INSERT INTO tender.tender_event (tender_id, kind, data, actor_id)
-        VALUES (${b.tender_id}, ${kind}, ${tx.json({ boqId, name: b.name })}, ${claims.sub})`;
+      await boqEvent(tx, boqId, kind, { boqId, name: b.name }, claims.sub);
       await audit(tx, claims.sub, archived ? 'boq.archive' : 'boq.restore', boqId, {});
     });
   }

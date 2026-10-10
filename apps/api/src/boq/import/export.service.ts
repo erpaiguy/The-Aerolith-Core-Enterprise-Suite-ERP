@@ -99,7 +99,8 @@ export class ExportService {
         message: 'Quoted rates come from the current version only.',
       });
     const [b] = await db<{ name: string; number: string; total: string }[]>`
-      SELECT b.name, t.number, b.total::text AS total FROM est.boq b JOIN tender.tender t ON t.id = b.tender_id
+      SELECT b.name, coalesce(t.number, p.number) AS number, b.total::text AS total FROM est.boq b
+      LEFT JOIN tender.tender t ON t.id = b.tender_id LEFT JOIN proj.project p ON p.id = b.project_id
       WHERE b.id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
     const base =

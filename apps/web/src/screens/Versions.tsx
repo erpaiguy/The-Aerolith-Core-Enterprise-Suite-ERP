@@ -360,8 +360,8 @@ export function BoqVersionsScreen({ boqId }: { boqId: string }) {
         params={{ boqId }}
         className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
       >
-        <ArrowLeft className="size-4" aria-hidden /> {header.data?.tender?.number} ·{' '}
-        {header.data?.name}
+        <ArrowLeft className="size-4" aria-hidden />{' '}
+        {header.data?.tender?.number ?? header.data?.project?.number} · {header.data?.name}
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>

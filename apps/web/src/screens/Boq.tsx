@@ -35,7 +35,7 @@ import {
   useImportFinished,
   useLatestImport,
 } from '../boq/ImportWizard';
-import { formatAmount, type BoqHeader, type BoqRow } from '../boq/model';
+import { BOQ_KIND_LABEL, formatAmount, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
 
@@ -224,6 +224,15 @@ export function BoqScreen({ boqId }: { boqId: string }) {
           <ArrowLeft className="size-4" aria-hidden /> {h.tender.number} · {h.tender.title}
         </Link>
       )}
+      {h.project && (
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId: h.project.id }}
+          className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> {h.project.number} · {h.project.name}
+        </Link>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">{h.name}</h1>
@@ -239,6 +248,9 @@ export function BoqScreen({ boqId }: { boqId: string }) {
               </Badge>
             </Link>
             {archived && <Badge tone="danger">Archived</Badge>}
+            {h.kind && h.kind !== 'estimate' && (
+              <Badge tone="neutral">{BOQ_KIND_LABEL[h.kind]}</Badge>
+            )}
             <span>
               {h.itemCount.toLocaleString('en-IN')} items · {h.nodeCount.toLocaleString('en-IN')}{' '}
               lines
@@ -288,7 +300,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             </Button>
           )}
           <ExportMenu boqId={boqId} />
-          {canPrice && (
+          {canPrice && !h.project && (
             <Link
               to="/boqs/$boqId/pricing"
               params={{ boqId }}

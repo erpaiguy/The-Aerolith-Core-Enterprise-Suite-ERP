@@ -15,7 +15,7 @@ import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { TENDER_STATUSES } from '../tender/tender-rules.js';
 import { analysisReportXlsx, costSummaryXlsx, pipelineXlsx } from './report-excel.js';
-import { ReportsService, type BoqHead } from './reports.service.js';
+import { ReportsService, boqOwnerLine, type BoqHead } from './reports.service.js';
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const pipelineQuery = z.object({
@@ -29,7 +29,7 @@ const pipelineQuery = z.object({
 });
 
 const fileName = (b: BoqHead, what: string) =>
-  `${`${b.tender.number} ${b.name} - ${what}`.replace(/[^\w.\- ()&]+/g, '_').trim() || 'report'}.xlsx`;
+  `${`${boqOwnerLine(b).number} ${b.name} - ${what}`.replace(/[^\w.\- ()&]+/g, '_').trim() || 'report'}.xlsx`;
 const xlsx = (body: Buffer, name: string) =>
   new StreamableFile(body, { type: XLSX, disposition: attachment(name) });
 

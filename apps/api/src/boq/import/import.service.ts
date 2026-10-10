@@ -8,6 +8,7 @@
 // The import is one transaction: it either lands whole or not at all. Sort keys, ids, subtotals and child counts are
 // computed here while streaming, so the database only receives plain multi-row INSERTs and one UPDATE per section
 // batch, and the stored totals obey the same invariants as interactive edits (boq.service.ts).
+import { boqEvent } from '../boq-events.js';
 import { randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdir, readdir, rm, stat } from 'node:fs/promises';
@@ -525,7 +526,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
           status: string;
           archived: boolean;
           node_count: number;
-          tender_id: string;
+          tender_id: string | null;
           version_no: number;
         }[]
       >`
@@ -640,8 +641,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
           updated_at = now(), updated_by = ${claims.sub}, row_version = row_version + 1
         WHERE id = ${boqId}`;
       const data = { boqId, jobId: job.id, file: job.file_name, lines, total };
-      await tx`INSERT INTO tender.tender_event (tender_id, kind, data, actor_id)
-        VALUES (${boq.tender_id}, 'boq_imported', ${tx.json(data)}, ${claims.sub})`;
+      await boqEvent(tx, boqId, 'boq_imported', data, claims.sub);
       await tx`INSERT INTO platform.audit_log (actor_id, action, entity, entity_id, data)
         VALUES (${claims.sub}, 'boq.import', 'boq', ${boqId}, ${tx.json(data)})`;
       await tick(99, true);
@@ -726,7 +726,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
         {
           status: string;
           archived: boolean;
-          tender_id: string;
+          tender_id: string | null;
           version_no: number;
           rate_date: string;
           updated_at: Date;
@@ -772,8 +772,7 @@ export class ImportService implements OnModuleInit, OnModuleDestroy {
         moved: s.moved,
         total: after!.total,
       };
-      await tx`INSERT INTO tender.tender_event (tender_id, kind, data, actor_id)
-        VALUES (${boq.tender_id}, 'boq_imported', ${tx.json(data)}, ${claims.sub})`;
+      await boqEvent(tx, boqId, 'boq_imported', data, claims.sub);
       await tx`INSERT INTO platform.audit_log (actor_id, action, entity, entity_id, data)
         VALUES (${claims.sub}, 'boq.import_revision', 'boq', ${boqId}, ${tx.json(data)})`;
       await tick(99, true);

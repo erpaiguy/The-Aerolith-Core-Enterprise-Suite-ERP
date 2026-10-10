@@ -76,7 +76,7 @@ const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "s
   n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId", n.measured, n.item_kind AS kind,
   n.foreign_currency AS currency, n.foreign_rate::text AS "foreignRate"`;
 
-const HEADER = `b.id, b.tender_id AS "tenderId", b.name, b.version_no AS "versionNo", b.status, b.currency,
+const HEADER = `b.id, b.tender_id AS "tenderId", b.project_id AS "projectId", b.kind, b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
   b.updated_at AS "updatedAt", b.row_version AS "rowVersion", b.rate_date::text AS "rateDate",
   b.archived_at AS "archivedAt"`;
@@ -155,8 +155,13 @@ export class BoqService {
   async header(claims: TenantClaims, boqId: string) {
     const db = await this.tenants.forTenant(claims.ten);
     const [b] = await db`
-      SELECT ${db.unsafe(HEADER)}, json_build_object('id', t.id, 'number', t.number, 'title', t.title) AS tender
-      FROM est.boq b JOIN tender.tender t ON t.id = b.tender_id WHERE b.id = ${boqId}`;
+      SELECT ${db.unsafe(HEADER)},
+        CASE WHEN t.id IS NULL THEN NULL ELSE json_build_object('id', t.id, 'number', t.number, 'title', t.title) END
+          AS tender,
+        CASE WHEN p.id IS NULL THEN NULL ELSE json_build_object('id', p.id, 'number', p.number, 'name', p.name) END
+          AS project
+      FROM est.boq b LEFT JOIN tender.tender t ON t.id = b.tender_id LEFT JOIN proj.project p ON p.id = b.project_id
+      WHERE b.id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
     return b;
   }
@@ -1404,7 +1409,7 @@ async function preImage(
  * Section subtotals and the BOQ total from scratch, deepest level first: one grouped UPDATE per level. Used after
  * bulk re-pricing, where per-line deltas would mean one statement per line.
  */
-async function recomputeTotals(tx: TransactionSql, boqId: string) {
+export async function recomputeTotals(tx: TransactionSql, boqId: string) {
   const [deepest] = await tx<{ max: number }[]>`
     SELECT coalesce(max(depth), 0)::int AS max FROM est.boq_node WHERE boq_id = ${boqId}`;
   const max = deepest?.max ?? 0;

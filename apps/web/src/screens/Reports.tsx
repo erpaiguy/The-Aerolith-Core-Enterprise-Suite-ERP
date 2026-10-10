@@ -202,8 +202,12 @@ function Heading({ title, lines, asOf }: { title: string; lines: ReactNode[]; as
 
 const boqLines = (b: ReportBoq) => [
   <>
-    <strong>{b.name}</strong> · {b.tender.number} · {b.tender.title}
-    {b.tender.client ? ` · ${b.tender.client}` : ''}
+    <strong>{b.name}</strong>
+    {b.tender
+      ? ` · ${b.tender.number} · ${b.tender.title}${b.tender.client ? ` · ${b.tender.client}` : ''}`
+      : b.project
+        ? ` · ${b.project.kind === 'contract' ? 'Contract BOQ' : 'Budget'} of ${b.project.number} · ${b.project.name}${b.project.client ? ` · ${b.project.client}` : ''}`
+        : ''}
   </>,
   `Version ${b.versionNo} (${b.status}${b.archived ? ', archived' : ''}) · rates as on ${formatDate(b.rateDate)}`,
 ];

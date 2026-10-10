@@ -47,7 +47,10 @@ export interface BoqRow {
 
 export interface BoqHeader {
   id: string;
-  tenderId: string;
+  /** A tender's estimate, or a project's contract BOQ or budget (docs/wave2a-plan.md step 2). */
+  tenderId: string | null;
+  projectId?: string | null;
+  kind?: 'estimate' | 'contract' | 'budget';
   name: string;
   status: 'draft' | 'locked' | 'submitted';
   /** The version being drafted, or the last one frozen. */
@@ -62,8 +65,15 @@ export interface BoqHeader {
   rateDate?: string;
   /** Set when the BOQ was archived (made by mistake): read only, left out of the bid. */
   archivedAt?: string | null;
-  tender?: { id: string; number: string; title: string };
+  tender?: { id: string; number: string; title: string } | null;
+  project?: { id: string; number: string; name: string } | null;
 }
+
+export const BOQ_KIND_LABEL = {
+  estimate: 'Estimate',
+  contract: 'Contract BOQ',
+  budget: 'Budget',
+} as const;
 
 export interface Changes {
   header: BoqHeader;

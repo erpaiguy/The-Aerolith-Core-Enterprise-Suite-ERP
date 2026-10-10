@@ -486,9 +486,11 @@ export class RatesService {
       SELECT DISTINCT a.id, a.code, a.description FROM est.rate_analysis_line l
       JOIN est.rate_analysis a ON a.id = l.analysis_id WHERE l.sub_analysis_id = ${id} ORDER BY a.code LIMIT 100`;
     const boqs = await db`
-      SELECT b.id, b.name, t.number AS "tenderNumber", count(*)::int AS items
-      FROM est.boq_node n JOIN est.boq b ON b.id = n.boq_id JOIN tender.tender t ON t.id = b.tender_id
-      WHERE n.rate_analysis_id = ${id} GROUP BY b.id, b.name, t.number ORDER BY t.number, b.name LIMIT 100`;
+      SELECT b.id, b.name, coalesce(t.number, p.number) AS "tenderNumber", count(*)::int AS items
+      FROM est.boq_node n JOIN est.boq b ON b.id = n.boq_id LEFT JOIN tender.tender t ON t.id = b.tender_id
+      LEFT JOIN proj.project p ON p.id = b.project_id
+      WHERE n.rate_analysis_id = ${id} GROUP BY b.id, b.name, t.number, p.number
+      ORDER BY 3, b.name LIMIT 100`;
     return { ...a, asOf, lines, costing, usedBy, boqs };
   }
 

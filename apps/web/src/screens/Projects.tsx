@@ -19,6 +19,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
+import { ProjectBoqs } from '../project/ProjectBoqs';
 import type {
   Party,
   Person,
@@ -423,7 +424,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
       ) : (
         <>
           {p.canEdit && p.allowedMoves.length > 0 && <StatusActions project={p} onDone={done} />}
-          <div className="grid gap-5 xl:grid-cols-[1fr_26rem]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_26rem]">
             <div className="space-y-5">
               <Card title="Details">
                 <dl className="grid grid-cols-[11rem_1fr] gap-y-2 text-sm">
@@ -454,11 +455,12 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
                   <p className="mt-3 whitespace-pre-wrap text-sm text-fg-muted">{p.description}</p>
                 )}
               </Card>
+              <ProjectBoqs project={p} />
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">
-                  The contract BOQ and budget from the won tender, the WBS and cost codes, the
-                  project schedule and progress come in the next steps of Wave 2a.
+                  The WBS and cost codes, the project schedule and progress come in the next steps
+                  of Wave 2a.
                 </p>
               </Card>
             </div>
@@ -504,6 +506,20 @@ function describeEvent(kind: string, d: Record<string, unknown>): string {
       return `${PROJECT_STATUS[d.from as ProjectStatus]} → ${PROJECT_STATUS[d.to as ProjectStatus]}${d.reason ? `: ${String(d.reason)}` : ''}`;
     case 'site_added':
       return `Site added: ${String(d.name)}`;
+    case 'boqs_from_tender':
+      return `Contract BOQ and budget made from the tender${d.scale && d.scale !== '1' ? `, rates at ${(Number(d.scale) * 100).toFixed(2)}% of quoted` : ''}`;
+    case 'boq_created':
+      return `BOQ added: ${String(d.name)}`;
+    case 'boq_frozen':
+      return `${String(d.name)}: version ${String(d.version)} frozen`;
+    case 'boq_revision_started':
+      return `${String(d.name)}: revision started`;
+    case 'boq_imported':
+      return `BOQ lines imported from ${String(d.file)}`;
+    case 'boq_archived':
+      return `BOQ archived: ${String(d.name)}`;
+    case 'boq_restored':
+      return `BOQ restored: ${String(d.name)}`;
     case 'team':
       return d.to
         ? `${String(d.user)} is now ${ROLE_LABEL[d.to as ProjectRole].toLowerCase()}`

@@ -33,7 +33,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | # | Step | Features | Notes |
 |---|------|----------|-------|
 | 1 | **Projects** (J1) | `proj` schema; project register and numbering; client, legal entity, dates, contract value, status flow; sites (with state, for GST place of supply); team with project roles; project-scoped visibility; **create a project from a won tender** | **Done** (see below) |
-| 2 | **Contract BOQ + budget** (J2) | BOQs owned by a project; from the won tender's submitted BOQ: contract BOQ at quoted rates, budget at estimate rates (a background copy for large BOQs); versions; budget against contract | |
+| 2 | **Contract BOQ + budget** (J2) | BOQs owned by a project; from the won tender's submitted BOQ: contract BOQ at quoted rates, budget at estimate rates (a background copy for large BOQs); versions; budget against contract | **Done** (see below) |
 | 3 | **WBS + cost codes** (J3) | WBS tree per project; company cost-code master; BOQ items mapped to WBS and cost codes (one by one and in bulk by range) | |
 | 4 | **Project schedules** (J4) | The Wave 1 engine for project plans: constraints, resources and assignments, multiple baselines, progress updates (data date, actuals, remaining duration), look-ahead; 50k activities | |
 | 5 | **Macro plans** (J5) | Roll-up of micro plans through the WBS, milestones, summary views by package, trade and zone | |
@@ -80,3 +80,65 @@ page. Completing records today as the finish date, and is refused while the star
 sees only projects they are on and only leads and editors change them; a lead always remains; status moves, reasons
 and the finish date; sites unique by name with their state code; the activity log append-only). A browser test wins
 a tender, makes it a project, adds a site and a teammate, starts it and puts it on hold.
+
+## Step 2 delivered: contract BOQ and budget
+
+**Journey:** a project made from a won tender shows **Contract BOQ and budget**: each live BOQ of the tender, the
+version that will be copied (the last one submitted), its total at the quoted rates and at the estimate rates, and
+the project's contract value. **Make the contract BOQ and budget** turns each tender BOQ into two BOQs of the project:
+- **Civil (contract)**: the quoted rates, i.e. the estimate rate × the bid's markup factor, rounded to paise as
+  exported for an item-rate submission (Wave 1 step 6). Provisional sums are copied unchanged; rate-only items and
+  alternates get quoted rates but no amount, as before.
+- **Civil (budget)**: the estimate rates, i.e. what the work should cost us.
+
+If the contract value is below the quoted total (the price was negotiated down), a tick box prices the contract BOQ
+to it: every quoted rate except provisional sums is multiplied by the same factor (e.g. 96.00%), and the few rupees
+that rounding leaves are recorded. The project page then lists its **BOQs** and sets the **budget against the contract**:
+totals, planned margin and its percentage, and each top-level section side by side. The BOQs are ordinary BOQs. The
+grid, import (including a revised BOQ), export, versions, bulk edit and reports work on them. Their page leads back
+to the project, and bid pricing is not offered. A team can also add an empty contract BOQ or budget (**New BOQ**)
+for work that came without a tender or for later packages.
+
+**Who sees and changes what:**
+- A project's BOQs are visible to the project's team only (and to admins and roles that see every project), on every
+  BOQ route: lines, search, export, reports, versions, import jobs. Everyone else gets "not found". A tender's BOQs
+  stay visible to everyone signed in, as in Wave 1.
+- Changing them needs **Create BOQs and edit their lines** *and* a place on the team as lead or member (or the right
+  to edit projects). Viewers read. Making the copies from the tender needs the lead (or someone who edits projects).
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] One copy per project.** Made once; later changes are revisions of the project's BOQs. The tender's BOQ
+  is never changed, and its later drafts do not reach the project.
+- **[Likely] A tender BOQ never frozen as submitted is copied as it is now**, at its selected scenario's factor, and
+  the project marks it "never submitted". Refusing would block a team that skipped freezing.
+- **[Certain] The contract value is compared before GST.** The submission form suggests the bid *with* GST, so a
+  contract value taken from it is above the quoted total. Rates are then not scaled up: the page asks whether the
+  value includes GST, and the contract BOQ stays at the quoted rates until the value is corrected. Scaling is refused
+  below half of the quoted total too (a typo, not a negotiation).
+- **[Likely] Lines keep their identity:** a contract line, its budget line and the tender line share one line key, so
+  later steps (progress, cost codes) and the margin by section can pair them even after renumbering.
+- **[Likely] The planned margin is visible to the project's team**, although bid markups are behind **See and change
+  bid pricing** for tenders: managing a project needs its budget. Say if only some roles should see it.
+- **Measurement sheets, rate analyses and foreign-currency rates are not copied:** quantities and rates come across
+  as values. The tender keeps the working.
+- **The copy runs in the background, in one transaction:** all of it or none. A 200,000-line BOQ took 42 s here
+  for both copies (the search indexes are most of it, as for imports); a million lines will take about four minutes.
+  A copy cut short by a server restart is shown as failed and can be started again.
+
+**API** (under `/api/tenant`): `GET /projects/:id/boqs`, `POST /projects/:id/boqs` (`{name, kind}`),
+`GET /projects/:id/boqs/from-tender` (what the copy gives, and how the last one went),
+`POST /projects/:id/boqs/from-tender` (`{matchContractValue}`), `GET /projects/:id/boq-summary`. A BOQ's header now
+carries `projectId`, `kind` (`estimate`, `contract`, `budget`) and `project`. Migration `0023_project_boqs.sql`.
+
+**Tests:** 6 API integration tests:
+- the preview, and the submitted version used rather than the later draft;
+- quoted rates scaled to a negotiated value, with provisional sums and rate-only items handled, the budget at
+  estimate rates, line keys shared, and the copy made once only;
+- the margin by section, and an empty BOQ added;
+- the team-only visibility and edit rules on BOQ routes, bid pricing refused, the project's log and the report and
+  export;
+- a project without a tender refused;
+- a copy that died with its server shown as failed.
+
+A browser test prices, submits and wins a tender, negotiates the contract value down, makes the contract BOQ and
+budget, checks the margin, and opens the contract BOQ.

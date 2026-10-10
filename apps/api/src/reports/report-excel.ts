@@ -1,6 +1,12 @@
 // The reports as Excel workbooks: the same figures as the screen, as numbers that sum, with the "as of" time.
 import ExcelJS from 'exceljs';
-import type { AnalysisReport, BoqHead, CostSummary, Pipeline } from './reports.service.js';
+import {
+  boqOwnerLine,
+  type AnalysisReport,
+  type BoqHead,
+  type CostSummary,
+  type Pipeline,
+} from './reports.service.js';
 
 const MONEY = '#,##0.00';
 const PART_LABEL: Record<string, string> = {
@@ -51,7 +57,7 @@ function title(ws: ExcelJS.Worksheet, lines: string[]) {
 function boqLines(b: BoqHead, report: string, asOf: string) {
   return [
     `${report}: ${b.name}`,
-    `${b.tender.number} · ${b.tender.title}${b.tender.client ? ` · ${b.tender.client}` : ''}`,
+    boqOwnerLine(b).line,
     `Version ${b.versionNo} (${b.status}), rates as on ${b.rateDate}. ${asOfText(asOf)}`,
   ];
 }

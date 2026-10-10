@@ -906,13 +906,21 @@ export interface ReportBoq {
   rateDate: string;
   total: string;
   archived: boolean;
+  /** One of the two: a tender's estimate, or a project's contract BOQ or budget. */
   tender: {
     id: string;
     number: string;
     title: string;
     client: string | null;
     estimatedValue: string | null;
-  };
+  } | null;
+  project: {
+    id: string;
+    number: string;
+    name: string;
+    client: string | null;
+    kind: 'contract' | 'budget';
+  } | null;
 }
 
 export type BreakdownPart =
@@ -1189,4 +1197,81 @@ export interface ProjectDetail extends ProjectSummary {
   myRole: ProjectRole | null;
   canEdit: boolean;
   allowedMoves: ProjectStatus[];
+}
+
+// --- a project's BOQs (docs/wave2a-plan.md step 2) ---
+
+export interface ProjectBoq {
+  id: string;
+  name: string;
+  kind: 'contract' | 'budget';
+  status: 'draft' | 'locked' | 'submitted';
+  versionNo: number;
+  total: string;
+  nodeCount: number;
+  itemCount: number;
+  sourceBoqId: string | null;
+  sourceVersionNo: number | null;
+  sourceName?: string | null;
+  rateBasis: { factor: string; scale: string; residual?: string; unsubmitted?: boolean } | null;
+  archivedAt: string | null;
+}
+
+export interface BoqCopyState {
+  status: 'copying' | 'done' | 'failed';
+  matchContractValue: boolean;
+  result: {
+    scale: string;
+    contractTotal: string;
+    budgetTotal: string;
+    residual: string | null;
+  } | null;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface BoqCopyPreview {
+  tenderId: string | null;
+  copied: boolean;
+  copy: BoqCopyState | null;
+  sources: {
+    id: string;
+    name: string;
+    version: number;
+    submitted: boolean;
+    factor: string;
+    quotedTotal: string;
+    estimateTotal: string;
+  }[];
+  contractValue: string | null;
+  quotedTotal: string;
+  estimateTotal: string;
+  /** Multiplies normal items' quoted rates to meet the contract value; null without one. */
+  scale: string | null;
+}
+
+export interface BoqSummary {
+  contractValue: string | null;
+  contract: string;
+  budget: string;
+  contracts: number;
+  budgets: number;
+  margin: string | null;
+  marginPct: string | null;
+  boqs: {
+    contractId: string;
+    name: string;
+    contract: string;
+    budgetId: string | null;
+    budget: string | null;
+    margin: string | null;
+    lines: {
+      code: string | null;
+      description: string;
+      contract: string;
+      budget: string | null;
+      margin: string | null;
+    }[];
+  }[];
 }

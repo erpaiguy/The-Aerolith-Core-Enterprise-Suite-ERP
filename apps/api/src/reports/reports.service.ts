@@ -20,6 +20,20 @@ import {
 } from '../tender/tender-rules.js';
 import { breakdown, type Breakdown } from './cost-breakdown.js';
 
+/** "TND/2026-27/0004 · Hostel block · Client", or the project's line for a project BOQ. */
+export function boqOwnerLine(b: BoqHead): { number: string; line: string } {
+  if (b.tender)
+    return {
+      number: b.tender.number,
+      line: `${b.tender.number} · ${b.tender.title}${b.tender.client ? ` · ${b.tender.client}` : ''}`,
+    };
+  const p = b.project!;
+  return {
+    number: p.number,
+    line: `${p.number} · ${p.name} (${p.kind === 'contract' ? 'contract BOQ' : 'budget'})${p.client ? ` · ${p.client}` : ''}`,
+  };
+}
+
 export interface BoqHead {
   id: string;
   name: string;
@@ -28,13 +42,22 @@ export interface BoqHead {
   rateDate: string;
   total: string;
   archived: boolean;
+  /** The tender of an estimate; null for a project's contract BOQ or budget. */
   tender: {
     id: string;
     number: string;
     title: string;
     client: string | null;
     estimatedValue: string | null;
-  };
+  } | null;
+  /** The project of a contract BOQ or budget (Wave 2a); null for an estimate. */
+  project: {
+    id: string;
+    number: string;
+    name: string;
+    client: string | null;
+    kind: 'contract' | 'budget';
+  } | null;
 }
 
 export interface CostSummary {
@@ -166,10 +189,13 @@ export class ReportsService {
     const [b] = await db<BoqHead[]>`
       SELECT b.id, b.name, b.status, b.version_no AS "versionNo", b.rate_date::text AS "rateDate",
         b.total::text AS total, b.archived_at IS NOT NULL AS archived,
-        json_build_object('id', t.id, 'number', t.number, 'title', t.title, 'client', c.name,
-          'estimatedValue', t.estimated_value::text) AS tender
-      FROM est.boq b JOIN tender.tender t ON t.id = b.tender_id
-      LEFT JOIN platform.party c ON c.id = t.client_id
+        CASE WHEN t.id IS NULL THEN NULL ELSE json_build_object('id', t.id, 'number', t.number, 'title', t.title,
+          'client', c.name, 'estimatedValue', t.estimated_value::text) END AS tender,
+        CASE WHEN p.id IS NULL THEN NULL ELSE json_build_object('id', p.id, 'number', p.number, 'name', p.name,
+          'client', c.name, 'kind', b.kind) END AS project
+      FROM est.boq b LEFT JOIN tender.tender t ON t.id = b.tender_id
+      LEFT JOIN proj.project p ON p.id = b.project_id
+      LEFT JOIN platform.party c ON c.id = coalesce(t.client_id, p.client_id)
       WHERE b.id = ${boqId}`;
     if (!b) throw new NotFoundException({ code: 'boq_not_found' });
     return b;
@@ -253,7 +279,8 @@ export class ReportsService {
 
     const canPrice = await this.permissions.can(claims, 'pricing.edit');
     let bid: CostSummary['bid'] = null;
-    if (canPrice) {
+    // A bid is a tender BOQ's: a project's contract BOQ is at the agreed rates already.
+    if (canPrice && boq.tender) {
       const s = (await this.pricing.summary(claims, boqId)).scenarios.find((x) => x.selected);
       if (s)
         bid = {
