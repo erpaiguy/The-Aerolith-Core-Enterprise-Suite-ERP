@@ -104,6 +104,29 @@ test('an estimator marks provisional sums and alternates, edits rates in bulk an
   await expect(page.getByTestId('boq-total')).toHaveText('₹0');
   await page.screenshot(shot('kinds-02-from-template'));
 
+  // 4. An imported item priced in dollars: USD at ₹83.50, then ₹84.
+  await page.getByRole('button', { name: 'Currencies' }).click();
+  const fx = page.getByRole('dialog', { name: 'Currencies' });
+  await fx.getByLabel('Currency').fill('USD');
+  await fx.getByLabel('Rupees for one').fill('83.5');
+  await fx.getByRole('button', { name: 'Save rate' }).click();
+  await expect(fx.getByRole('list', { name: 'Exchange rates' })).toContainText('₹83.5');
+  await fx.getByRole('button', { name: 'Close' }).click();
+  await cell(page, 'Passenger lift', 'qty').dblclick();
+  await page.keyboard.type('1');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('USD 2500');
+  await page.keyboard.press('Enter');
+  await expect(row(page, 'Passenger lift').getByTestId('foreign-rate')).toHaveText('USD 2,500.00');
+  await expect(cell(page, 'Passenger lift', 'amount')).toHaveText('2,08,750.00');
+  await page.getByRole('button', { name: 'Currencies' }).click();
+  await fx.getByRole('button', { name: 'Change' }).click();
+  await fx.getByLabel('Rupees for one').fill('84');
+  await fx.getByRole('button', { name: 'Save rate' }).click();
+  await expect(fx.getByText('1 item re-priced at the new rate.')).toBeVisible();
+  await fx.getByRole('button', { name: 'Close' }).click();
+  await expect(cell(page, 'Passenger lift', 'amount')).toHaveText('2,10,000.00');
+
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'BOQ templates' })

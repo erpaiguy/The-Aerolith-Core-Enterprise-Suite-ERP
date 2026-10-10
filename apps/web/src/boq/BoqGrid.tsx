@@ -52,6 +52,7 @@ import {
   mergeChanges,
   parseClipboard,
   parseDecimal,
+  parseForeignRate,
   prependRows,
   type BoqHeader,
   type BoqRow,
@@ -347,6 +348,32 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
     const row = rowById(id);
     if (!row || !editable(row, col)) return true;
     let value: string | null;
+    // A rate in another currency ("USD 1200"): the server works out the rupee rate at the BOQ's exchange rate.
+    const foreign = col === 'rate' ? parseForeignRate(input) : null;
+    if (foreign) {
+      if ('error' in foreign) {
+        setEditing({ id, col, value: input, error: foreign.error });
+        return false;
+      }
+      if (row.currency === foreign.currency && Number(row.foreignRate) === Number(foreign.value))
+        return true;
+      if (record) undoStack.current.push({ kind: 'edit', id, col, prev: row.rate });
+      void enqueue(() => {
+        const current = rowById(id);
+        return current
+          ? [
+              {
+                op: 'update',
+                id,
+                rowVersion: current.rowVersion,
+                foreignRate: foreign.value,
+                currency: foreign.currency,
+              },
+            ]
+          : null;
+      });
+      return true;
+    }
     if (col === 'qty' || col === 'rate') {
       const parsed = parseDecimal(input);
       if ('error' in parsed) {
@@ -1155,6 +1182,15 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                           >
                             <title>Rate from a rate analysis</title>
                           </Calculator>
+                        )}
+                        {row.type === 'item' && row.currency && row.foreignRate && (
+                          <span
+                            className="shrink-0 rounded bg-surface-3 px-1 text-[10px] text-fg-muted"
+                            title={`Priced in ${row.currency}; the rate follows the BOQ's exchange rate`}
+                            data-testid="foreign-rate"
+                          >
+                            {row.currency} {formatRate(row.foreignRate)}
+                          </span>
                         )}
                         {row.type === 'item' ? formatRate(row.rate) : ''}
                       </span>,

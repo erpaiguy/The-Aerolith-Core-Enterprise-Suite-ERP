@@ -120,6 +120,18 @@ export async function costSummaryXlsx(s: CostSummary): Promise<Buffer> {
     row.getCell(3).numFmt = '0';
   }
 
+  if (s.currencies.length) {
+    r++;
+    header(ws.getRow(r++), ['Currency', 'Items priced in it', 'Value in it', 'Value (₹)']);
+    for (const c of s.currencies)
+      ws.getRow(r++).values = [
+        `${c.code} at ₹${c.rate}`,
+        c.items,
+        num(c.foreignValue),
+        num(c.value),
+      ];
+  }
+
   if (s.bid) {
     r++;
     header(ws.getRow(r++), ['', `Bid: ${s.bid.scenario}`, 'Amount (₹)', '%']);

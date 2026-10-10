@@ -1162,4 +1162,110 @@ describe.skipIf(!controlUrl || !adminUrl)('BOQ import and export (integration)',
       expect(cmp.rows).toEqual([expect.objectContaining({ rateA: '100.0000', rateB: '120.0000' })]);
     });
   });
+  describe('items priced in another currency', () => {
+    // An imported lift at USD 1,200 a unit, 2 units, with USD at ₹83.50: rate ₹1,00,200, amount ₹2,00,400.
+    let boqId: string;
+    type FxRow = BoqRow & { currency: string | null; foreignRate: string | null };
+    const lift = async () => ((await allRows(boqId)) as FxRow[])[0]!;
+
+    it('prices an item from its foreign rate at the BOQ exchange rate', async () => {
+      boqId = await newBoq('Imported equipment');
+      const missing = await post(`/tenant/boqs/${boqId}/changes`, {
+        ops: [
+          {
+            op: 'insert',
+            tempId: 'tx',
+            parentId: null,
+            afterId: null,
+            type: 'item',
+            description: 'Lift',
+            unit: 'no',
+            qty: '2',
+            foreignRate: '1200',
+            currency: 'usd',
+          },
+        ],
+      });
+      expect(missing.json()).toMatchObject({ code: 'no_exchange_rate' });
+      const set = await post(`/tenant/boqs/${boqId}/currencies/USD`, { rate: '83.5' });
+      expect(set.json()).toMatchObject({
+        changed: 0,
+        currencies: [{ code: 'USD', rate: '83.500000', items: 0 }],
+      });
+      const r = await post(`/tenant/boqs/${boqId}/changes`, {
+        ops: [
+          {
+            op: 'insert',
+            tempId: 'tx',
+            parentId: null,
+            afterId: null,
+            type: 'item',
+            description: 'Lift',
+            unit: 'no',
+            qty: '2',
+            foreignRate: '1200',
+            currency: 'usd',
+          },
+        ],
+      });
+      expect(r.statusCode).toBe(200);
+      expect(await lift()).toMatchObject({
+        currency: 'USD',
+        foreignRate: '1200.0000',
+        rate: '100200.0000',
+        amount: '200400.00',
+      });
+      expect((await header(boqId)).total).toBe('200400.00');
+    });
+
+    it('re-prices the items when the exchange rate changes', async () => {
+      // ₹84: 1,00,800 a unit, 2,01,600.
+      const r = await post(`/tenant/boqs/${boqId}/currencies/USD`, { rate: '84' });
+      expect(r.json()).toMatchObject({
+        changed: 1,
+        total: '201600.00',
+        currencies: [{ code: 'USD', items: 1 }],
+      });
+      expect(await lift()).toMatchObject({ rate: '100800.0000', amount: '201600.00' });
+      // A bulk 10 % rise raises the foreign rate: USD 1,320 at ₹84 = ₹1,10,880.
+      const row = await lift();
+      const b = await post(`/tenant/boqs/${boqId}/bulk`, {
+        from: row.sortKey,
+        to: row.sortKey,
+        action: { kind: 'scale', pct: '10' },
+      });
+      expect(b.json()).toMatchObject({ changed: 1, total: '221760.00' });
+      expect(await lift()).toMatchObject({ foreignRate: '1320.0000', rate: '110880.0000' });
+      const s = (await get(`/tenant/boqs/${boqId}/cost-summary`)).json<{ currencies: object[] }>();
+      expect(s.currencies).toEqual([
+        { code: 'USD', rate: '84.000000', items: 1, foreignValue: '2640.00', value: '221760.00' },
+      ]);
+    });
+
+    it('ends foreign pricing when a rupee rate is typed, and keeps rates in use', async () => {
+      expect((await post(`/tenant/boqs/${boqId}/currencies/USD/delete`)).json()).toMatchObject({
+        code: 'currency_in_use',
+      });
+      const row = await lift();
+      await post(`/tenant/boqs/${boqId}/changes`, {
+        ops: [{ op: 'update', id: row.id, rowVersion: row.rowVersion, rate: '95000' }],
+      });
+      expect(await lift()).toMatchObject({
+        currency: null,
+        foreignRate: null,
+        rate: '95000.0000',
+        amount: '190000.00',
+      });
+      expect((await post(`/tenant/boqs/${boqId}/currencies/USD/delete`)).json()).toEqual([]);
+      expect((await post(`/tenant/boqs/${boqId}/currencies/usd`, { rate: '84' })).statusCode).toBe(
+        400,
+      );
+      expect((await post(`/tenant/boqs/${boqId}/currencies/EUR`, { rate: '0' })).statusCode).toBe(
+        400,
+      );
+      expect(
+        (await post(`/tenant/boqs/${boqId}/currencies/EUR`, { rate: '90' }, worker)).statusCode,
+      ).toBe(403);
+    });
+  });
 });

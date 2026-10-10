@@ -17,12 +17,14 @@ import {
   Search,
   X,
   LayoutTemplate,
+  Coins,
 } from 'lucide-react';
 import { useCallback, useDeferredValue, useRef, useState, type FormEvent } from 'react';
 import { api, saveFile } from '../api/client';
 import type { AnalysisSummary, BoqTemplate } from '../api/types';
 import { BoqGrid, type GridHandle } from '../boq/BoqGrid';
 import { MeasurementSheet } from '../boq/MeasurementSheet';
+import { CurrenciesDialog } from '../boq/Currencies';
 import { BoqReportsMenu } from './Reports';
 import { VERTICALS } from './TenderForm';
 import { SaveTemplateDialog } from './Templates';
@@ -149,6 +151,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
   const [measuring, setMeasuring] = useState<BoqRow | null>(null);
   const [freezing, setFreezing] = useState(false);
   const [templating, setTemplating] = useState(false);
+  const [currencies, setCurrencies] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const canPrice = usePermission('pricing.edit');
   const [picking, setPicking] = useState<{
@@ -267,6 +270,13 @@ export function BoqScreen({ boqId }: { boqId: string }) {
               <History className="size-4" aria-hidden /> Versions
             </Link>
           )}
+          <Button
+            variant="ghost"
+            onClick={() => setCurrencies(true)}
+            title="Exchange rates of this BOQ"
+          >
+            <Coins className="size-4" aria-hidden /> Currencies
+          </Button>
           <BoqReportsMenu boqId={boqId} />
           {canEditBoq && h.nodeCount > 0 && (
             <Button
@@ -348,6 +358,14 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             onBulkDone={reload}
           />
         </div>
+      )}
+      {currencies && (
+        <CurrenciesDialog
+          boqId={boqId}
+          canEdit={canEdit}
+          onChanged={reload}
+          onClose={() => setCurrencies(false)}
+        />
       )}
       {templating && (
         <SaveTemplateDialog boqId={boqId} boqName={h.name} onClose={() => setTemplating(false)} />

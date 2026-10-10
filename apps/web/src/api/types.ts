@@ -903,6 +903,7 @@ export interface CostSummary {
     rateOnly: { items: number; priced: number };
     alternates: { items: number; value: string };
   };
+  currencies: { code: string; rate: string; items: number; foreignValue: string; value: string }[];
   breakdown: {
     total: string;
     parts: { part: BreakdownPart; amount: string; pct: string | null }[];

@@ -378,6 +378,19 @@ function CostSummaryBody({ s }: { s: CostSummary }) {
             )}
           </ul>
         )}
+        {s.currencies.some((c) => c.items > 0) && (
+          <p className="mt-1" data-testid="currencies">
+            Priced in other currencies:{' '}
+            {s.currencies
+              .filter((c) => c.items > 0)
+              .map(
+                (c) =>
+                  `${c.code} ${money(c.foreignValue)} (${c.items} item${c.items === 1 ? '' : 's'}) = ₹${money(c.value)} at ₹${Number(c.rate)}`,
+              )
+              .join('; ')}
+            .
+          </p>
+        )}
       </Section>
 
       {s.bid ? (

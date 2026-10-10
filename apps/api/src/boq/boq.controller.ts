@@ -38,6 +38,14 @@ const lineFields = {
   unit: z.string().trim().max(20).nullable().optional(),
   qty: decimal4.optional(),
   rate: decimal4.optional(),
+  foreignRate: decimal4.optional(),
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{3}$/, 'A currency code: USD, EUR...')
+    .nullable()
+    .optional(),
   kind: z.enum(['normal', 'provisional', 'rate_only', 'alternate']).optional(),
 };
 
@@ -71,6 +79,15 @@ const opSchema = z.discriminatedUnion('op', [
     afterId: lineRef.nullable(),
   }),
 ]);
+const currencyBody = z.object({
+  rate: z
+    .union([z.string().trim(), z.number()])
+    .transform((v) => String(v))
+    .refine((v) => /^\d{1,12}(\.\d{1,6})?$/.test(v) && Number(v) > 0, {
+      message: 'Rupees for one unit, up to 6 decimals',
+    }),
+});
+const currencyCode = z.string().regex(/^[A-Z]{3}$/, 'A currency code: USD, EUR...');
 const changesBody = z.object({ ops: z.array(opSchema).min(1).max(MAX_OPS) });
 const bulkBody = z.object({
   from: sortKey,
@@ -331,6 +348,37 @@ export class BoqController {
     @Body(new ZodPipe(measurementBody)) b: z.infer<typeof measurementBody>,
   ) {
     return this.boqs.setMeasurements(c, id, lineIdParam, b.rowVersion, b.rows);
+  }
+
+  @Get('boqs/:id/currencies')
+  currencies(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.boqs.currencies(c, id);
+  }
+
+  /** Sets an exchange rate and re-prices the items priced in that currency. */
+  @Post('boqs/:id/currencies/:code')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  setCurrency(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('code', new ZodPipe(currencyCode)) code: string,
+    @Body(new ZodPipe(currencyBody)) b: z.infer<typeof currencyBody>,
+  ) {
+    return this.boqs.setCurrency(c, id, code, b.rate);
+  }
+
+  @Post('boqs/:id/currencies/:code/delete')
+  @HttpCode(200)
+  @RequiresPermission('boq.edit')
+  @RequiresFeatures()
+  removeCurrency(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('code', new ZodPipe(currencyCode)) code: string,
+  ) {
+    return this.boqs.removeCurrency(c, id, code);
   }
 
   /** One change to every item in a range of lines (bulk edit). */

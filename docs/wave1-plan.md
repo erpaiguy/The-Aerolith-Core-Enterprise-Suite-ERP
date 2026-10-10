@@ -1062,3 +1062,22 @@ around a provisional sum, the Type column exported and imported back, the cost s
 quantities and rates, names, archiving, permissions; bulk changes by range including sections and bottom-up
 selections, refused percentages, permissions, and a frozen version kept). The browser test marks a provisional sum and
 an alternate, raises a selection's rates by 10 %, saves a template and starts the next BOQ from it.
+
+### Part 3: items priced in another currency
+
+**Currencies** on a BOQ holds its exchange rates (rupees for one unit). Typing **USD 2500** in an item's rate prices
+it in dollars: the line shows the foreign rate, and its rupee rate is that at the BOQ's exchange rate. Changing an
+exchange rate re-prices every item in that currency, with the totals (a frozen version keeps the old figures). A
+rupee rate typed over it, a rate analysis applied, or a bulk "set rate" ends the foreign pricing; a bulk percentage
+change raises the foreign rate itself. The cost summary shows the value priced in each currency and in rupees.
+
+**Decisions:** amounts and totals stay in the BOQ's currency (rupees); the rupee rate is rounded to paise. An exchange
+rate in use cannot be removed. Exports carry the rupee rates; the foreign rates stay in the app.
+
+**API:** `foreignRate` with `currency` on line inserts and updates; `GET /boqs/:id/currencies`,
+`POST /boqs/:id/currencies/:code` (`{rate}`), `POST /boqs/:id/currencies/:code/delete`. Migration
+`0018_currencies.sql`.
+
+**Tests:** 3 API integration tests (a rate missing, priced from the exchange rate, re-priced when it changes, a bulk
+rise, the cost summary, a rupee rate ending it, removing a rate in use, permissions); the browser test prices a lift
+in dollars and changes the exchange rate.

@@ -16,6 +16,7 @@ import type { PendingQuery, Row, Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { measuredQty, sumQty, type MeasurementInput } from '../pricing/pricing.js';
+import { dec, fmt, mul } from '../rates/decimal.js';
 import { RatesService } from '../rates/rates.service.js';
 import { refuseArchived } from './archived.js';
 import { counted, type ItemKind } from './kinds.js';
@@ -45,6 +46,9 @@ export interface LineFields {
   rate?: string | null | undefined;
   /** Items only. */
   kind?: ItemKind | undefined;
+  /** A rate in another currency (with `currency`); the rupee rate follows the BOQ's exchange rate. */
+  foreignRate?: string | null | undefined;
+  currency?: string | null | undefined;
 }
 
 export type Op =
@@ -69,7 +73,8 @@ const MAX_TOUCHED_ROWS = 1000;
 const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "sortKey", n.depth,
   n.node_type AS type, n.code, t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate,
   n.amount::text AS amount, n.subtotal::text AS subtotal, n.child_count AS "childCount",
-  n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId", n.measured, n.item_kind AS kind`;
+  n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId", n.measured, n.item_kind AS kind,
+  n.foreign_currency AS currency, n.foreign_rate::text AS "foreignRate"`;
 
 const HEADER = `b.id, b.tender_id AS "tenderId", b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
@@ -96,6 +101,9 @@ export interface BoqRow {
   /** The quantity is the total of the item's measurement sheet. */
   measured: boolean;
   kind: ItemKind;
+  /** Priced in another currency: the rate in it; `rate` is that at the BOQ's exchange rate. */
+  currency: string | null;
+  foreignRate: string | null;
 }
 
 interface NodeRef {
@@ -112,6 +120,7 @@ interface NodeRef {
   subtotal: string;
   row_version: number;
   item_kind: ItemKind;
+  foreign_currency?: string | null;
   /** Only read by lockNode. */
   measured?: boolean;
 }
@@ -508,6 +517,8 @@ export class BoqService {
         )
         UPDATE est.boq_node n SET code = x.code, unit = x.unit, qty = x.qty, rate = coalesce(x.rate, n.rate),
           rate_analysis_id = CASE WHEN x.rate IS NULL THEN n.rate_analysis_id END,
+          foreign_currency = CASE WHEN x.rate IS NULL THEN n.foreign_currency END,
+          foreign_rate = CASE WHEN x.rate IS NULL THEN n.foreign_rate END,
           item_kind = CASE WHEN n.node_type = 'item' THEN x.kind ELSE n.item_kind END,
           amount = CASE WHEN n.node_type = 'item' AND x.kind IN ('normal', 'provisional')
             THEN round(x.qty * coalesce(x.rate, n.rate), 2) END,
@@ -543,7 +554,8 @@ export class BoqService {
       ? await this.fromAnalysis(ctx, op.rateAnalysisId, op.unit ?? null)
       : null;
     const unit = op.unit ?? link?.unit ?? null;
-    const rate = link ? link.rate : (op.rate ?? null);
+    const foreign = link ? null : await this.foreignRate(ctx, op);
+    const rate = link ? link.rate : foreign ? foreign.rate : (op.rate ?? null);
     const description = op.description || link?.description || '';
     const parent = await this.parentNode(ctx, op.parentId);
     const key = await this.keyFor(ctx, parent, op.afterId, null);
@@ -552,11 +564,12 @@ export class BoqService {
 
     const [row] = await tx<{ id: string; value: string }[]>`
       INSERT INTO est.boq_node (boq_id, parent_id, sort_key, depth, node_type, code, unit, qty, rate, amount,
-        rate_analysis_id, created_version, item_kind)
+        rate_analysis_id, created_version, item_kind, foreign_currency, foreign_rate)
       VALUES (${boqId}, ${parent?.id ?? null}, ${key}, ${depth}, ${op.type}, ${op.code ?? null}, ${unit},
               ${op.qty ?? null}::numeric, ${rate}::numeric,
               ${counted(kind) ? tx`round(${op.qty ?? null}::numeric * ${rate}::numeric, 2)` : tx`NULL`},
-              ${op.rateAnalysisId ?? null}, ${ctx.version}, ${kind})
+              ${op.rateAnalysisId ?? null}, ${ctx.version}, ${kind}, ${foreign?.currency ?? null},
+              ${foreign?.foreignRate ?? null}::numeric)
       RETURNING id::text, coalesce(amount, 0)::text AS value`;
     await tx`INSERT INTO est.boq_node_text (boq_id, node_id, description, notes)
       VALUES (${boqId}, ${row!.id}, ${description}, ${op.notes ?? ''})`;
@@ -599,6 +612,14 @@ export class BoqService {
     let unit = next('unit');
     let rate = next('rate');
     let link = tx`rate_analysis_id`;
+    // A foreign rate sets the rupee rate; a rupee rate typed (or an analysis applied) ends the foreign pricing.
+    let foreignSet = tx`foreign_currency = foreign_currency, foreign_rate = foreign_rate`;
+    const foreign = await this.foreignRate(ctx, op);
+    if (foreign) {
+      rate = foreign.rate;
+      foreignSet = tx`foreign_currency = ${foreign.currency}, foreign_rate = ${foreign.foreignRate}::numeric`;
+    } else if (op.rate !== undefined || op.rateAnalysisId || op.currency === null)
+      foreignSet = tx`foreign_currency = NULL, foreign_rate = NULL`;
     if (op.rateAnalysisId) {
       const l = await this.fromAnalysis(ctx, op.rateAnalysisId, unit);
       rate = l.rate;
@@ -612,7 +633,7 @@ export class BoqService {
         qty = ${next('qty')}::numeric, rate = ${rate}::numeric,
         amount = CASE WHEN node_type = 'item' AND ${counted(kind)}
           THEN round(${next('qty')}::numeric * ${rate}::numeric, 2) END,
-        rate_analysis_id = ${link}, item_kind = ${kind},
+        rate_analysis_id = ${foreign ? tx`NULL` : link}, item_kind = ${kind}, ${foreignSet},
         row_version = row_version + 1
       WHERE boq_id = ${boqId} AND id = ${node.id}
       RETURNING (coalesce(amount, 0) - ${node.amount ?? '0'}::numeric)::text AS delta`;
@@ -757,6 +778,29 @@ export class BoqService {
     await tx`UPDATE est.boq SET total = total + ${delta}::numeric WHERE id = ${boqId}`;
   }
 
+  /** The rupee rate of a foreign rate in an op (`foreignRate` with `currency`), or null when the op has none. */
+  private async foreignRate(ctx: BatchContext, op: LineFields) {
+    if (op.foreignRate == null || !op.currency) return null;
+    if (!ctx.fx)
+      ctx.fx = new Map(
+        (
+          await ctx.tx<{ code: string; rate: string }[]>`
+            SELECT code, rate::text FROM est.boq_currency WHERE boq_id = ${ctx.boqId}`
+        ).map((r) => [r.code, r.rate]),
+      );
+    const fx = ctx.fx.get(op.currency);
+    if (!fx)
+      throw new BadRequestException({
+        code: 'no_exchange_rate',
+        message: `Set the exchange rate for ${op.currency} first (Currencies, on the BOQ).`,
+      });
+    return {
+      currency: op.currency,
+      foreignRate: op.foreignRate,
+      rate: fmt(mul(dec(op.foreignRate), dec(fx)), 2),
+    };
+  }
+
   private resolve(ctx: BatchContext, id: string): string {
     return ctx.idMap.get(id) ?? id;
   }
@@ -765,7 +809,7 @@ export class BoqService {
     const id = this.resolve(ctx, rawId);
     const [n] = await ctx.tx<NodeRef[]>`
       SELECT id::text, parent_id::text, sort_key, depth, node_type, code, unit, qty::text, rate::text,
-        amount::text, subtotal::text, row_version, measured, item_kind
+        amount::text, subtotal::text, row_version, measured, item_kind, foreign_currency
       FROM est.boq_node WHERE boq_id = ${ctx.boqId} AND id = ${id} FOR UPDATE`;
     if (!n) throw new NotFoundException({ code: 'line_not_found', id: rawId });
     // Rows inserted earlier in this batch have no version on the client yet.
@@ -997,6 +1041,84 @@ export class BoqService {
     return { rate: a.boqRate, unit: a.unit, description: a.description };
   }
 
+  // --- currencies (migration 0018) ---
+
+  /** The BOQ's exchange rates, with how many items are priced in each and their value. */
+  async currencies(claims: TenantClaims, boqId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    return db`
+      SELECT c.code, c.rate::text AS rate, c.updated_at AS "updatedAt",
+        (SELECT count(*)::int FROM est.boq_node n WHERE n.boq_id = c.boq_id AND n.foreign_currency = c.code) AS items
+      FROM est.boq_currency c WHERE c.boq_id = ${boqId} ORDER BY c.code`;
+  }
+
+  /**
+   * Sets (or adds) an exchange rate and re-prices every item priced in that currency at it, with the totals.
+   */
+  async setCurrency(claims: TenantClaims, boqId: string, code: string, rate: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const changed = await db.begin(async (tx) => {
+      const boq = await this.draftForChange(tx, boqId);
+      await tx`
+        INSERT INTO est.boq_currency (boq_id, code, rate, updated_by) VALUES (${boqId}, ${code}, ${rate}, ${claims.sub})
+        ON CONFLICT (boq_id, code) DO UPDATE SET rate = EXCLUDED.rate, updated_at = now(),
+          updated_by = EXCLUDED.updated_by`;
+      const these = tx`n.foreign_currency = ${code}`;
+      const rev = { tx, boqId, version: boq.version_no };
+      await preImage(rev, these);
+      const [r] = await tx<{ changed: number }[]>`
+        WITH upd AS (
+          UPDATE est.boq_node n SET rate = round(n.foreign_rate * ${rate}::numeric, 2),
+            amount = CASE WHEN n.item_kind IN ('normal', 'provisional')
+              THEN round(n.qty * round(n.foreign_rate * ${rate}::numeric, 2), 2) END,
+            row_version = n.row_version + 1
+          WHERE n.boq_id = ${boqId} AND ${these} AND n.rate IS DISTINCT FROM round(n.foreign_rate * ${rate}::numeric, 2)
+          RETURNING 1
+        ) SELECT count(*)::int AS changed FROM upd`;
+      if (r!.changed > 0) {
+        await preImage(rev, tx`n.node_type = 'section'`);
+        await recomputeTotals(tx, boqId);
+      }
+      await tx`UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${boqId}`;
+      await audit(tx, claims.sub, 'boq.currency', boqId, { code, rate, changed: r!.changed });
+      return r!.changed;
+    });
+    const [h] = await db<{ total: string }[]>`SELECT total::text FROM est.boq WHERE id = ${boqId}`;
+    return { changed, total: h!.total, currencies: await this.currencies(claims, boqId) };
+  }
+
+  /** Removes an exchange rate no item is priced in. */
+  async removeCurrency(claims: TenantClaims, boqId: string, code: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await db.begin(async (tx) => {
+      await this.draftForChange(tx, boqId);
+      const [used] = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM est.boq_node WHERE boq_id = ${boqId} AND foreign_currency = ${code}`;
+      if (used!.n > 0)
+        throw new ConflictException({
+          code: 'currency_in_use',
+          message: `${used!.n} item${used!.n === 1 ? ' is' : 's are'} priced in ${code}. Price them in rupees first.`,
+        });
+      await tx`DELETE FROM est.boq_currency WHERE boq_id = ${boqId} AND code = ${code}`;
+    });
+    return this.currencies(claims, boqId);
+  }
+
+  /** Locks a draft BOQ for a set-based change (refused while archived, frozen or importing). */
+  private async draftForChange(tx: TransactionSql, boqId: string) {
+    const [boq] = await tx<{ status: string; archived: boolean; version_no: number }[]>`
+      SELECT status, archived_at IS NOT NULL AS archived, version_no FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
+    if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+    refuseArchived(boq);
+    if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
+    if (await importRunning(tx, boqId))
+      throw new ConflictException({
+        code: 'boq_importing',
+        message: 'A file is being imported into this BOQ. Try again when it has finished.',
+      });
+    return boq;
+  }
+
   /**
    * One change to every item in a range of lines (by sort key, sections' contents included): a unit, a kind, a rate,
    * rates raised or lowered by a percentage, or rates cleared. Set-based, so a selection of 50,000 items is one
@@ -1029,10 +1151,18 @@ export class BoqService {
           : action.kind === 'item_kind'
             ? tx`item_kind = ${action.itemKind}`
             : action.kind === 'rate'
-              ? tx`rate = ${action.rate}::numeric, rate_analysis_id = NULL`
+              ? tx`rate = ${action.rate}::numeric, rate_analysis_id = NULL, foreign_currency = NULL,
+                  foreign_rate = NULL`
               : action.kind === 'scale'
-                ? tx`rate = round(n.rate * (1 + ${action.pct}::numeric / 100), 2), rate_analysis_id = NULL`
-                : tx`rate = NULL, rate_analysis_id = NULL`;
+                ? // A foreign-currency item: its foreign rate changes, and the rupee rate follows the exchange rate.
+                  tx`foreign_rate = round(n.foreign_rate * (1 + ${action.pct}::numeric / 100), 4),
+                    rate = CASE WHEN n.foreign_currency IS NULL
+                      THEN round(n.rate * (1 + ${action.pct}::numeric / 100), 2)
+                      ELSE round(round(n.foreign_rate * (1 + ${action.pct}::numeric / 100), 4)
+                        * (SELECT c.rate FROM est.boq_currency c
+                           WHERE c.boq_id = n.boq_id AND c.code = n.foreign_currency), 2) END,
+                    rate_analysis_id = NULL`
+                : tx`rate = NULL, rate_analysis_id = NULL, foreign_currency = NULL, foreign_rate = NULL`;
       const only = action.kind === 'scale' ? tx`AND n.rate IS NOT NULL` : tx``;
       const rev = { tx, boqId, version: boq.version_no };
       await preImage(rev, tx`${inRange} ${only}`);
@@ -1121,10 +1251,10 @@ export class BoqService {
             kept AS (
               INSERT INTO est.boq_node_hist (boq_id, line_key, frozen_version, id, parent_id, sort_key, depth,
                 node_type, code, unit, qty, rate, amount, subtotal, child_count, rate_analysis_id, measured,
-                created_version, item_kind)
+                created_version, item_kind, foreign_currency, foreign_rate)
               SELECT n.boq_id, n.line_key, ${prev}, n.id, n.parent_id, n.sort_key, n.depth, n.node_type, n.code,
                 n.unit, n.qty, n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured,
-                n.created_version, n.item_kind
+                n.created_version, n.item_kind, n.foreign_currency, n.foreign_rate
               FROM est.boq_node n JOIN x ON n.rate_analysis_id = x.id
               WHERE ${prev} > 0 AND n.boq_id = ${boqId} AND n.rate IS DISTINCT FROM x.rate
                 AND n.created_version <= ${prev} AND n.hist_version < ${prev}
@@ -1180,6 +1310,8 @@ interface BatchContext {
   touched: Set<string>;
   deleted: Set<string>;
   reload: boolean;
+  /** Exchange rates of the BOQ, loaded on first use. */
+  fx?: Map<string, string>;
   /** Set by setMeasurements: the one place allowed to change a measured item's quantity. */
   measuring?: boolean;
   /**
@@ -1212,13 +1344,15 @@ async function preImage(
       UPDATE est.boq_node n SET hist_version = ${prev}
       WHERE n.boq_id = ${boqId} AND (${where}) AND n.created_version <= ${prev} AND n.hist_version < ${prev}
       RETURNING n.boq_id, n.line_key, n.id, n.parent_id, n.sort_key, n.depth, n.node_type, n.code, n.unit, n.qty,
-        n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured, n.created_version, n.item_kind
+        n.rate, n.amount, n.subtotal, n.child_count, n.rate_analysis_id, n.measured, n.created_version, n.item_kind,
+        n.foreign_currency, n.foreign_rate
     )
     INSERT INTO est.boq_node_hist (boq_id, line_key, frozen_version, id, parent_id, sort_key, depth, node_type, code,
       unit, qty, rate, amount, subtotal, child_count, rate_analysis_id, measured, created_version, item_kind,
-      description, notes)
+      foreign_currency, foreign_rate, description, notes)
     SELECT s.boq_id, s.line_key, ${prev}, s.id, s.parent_id, s.sort_key, s.depth, s.node_type, s.code, s.unit, s.qty,
       s.rate, s.amount, s.subtotal, s.child_count, s.rate_analysis_id, s.measured, s.created_version, s.item_kind,
+      s.foreign_currency, s.foreign_rate,
       ${withText ? tx`t.description, t.notes` : tx`NULL, NULL`}
     FROM saved s
     ${withText ? tx`JOIN est.boq_node_text t ON t.boq_id = s.boq_id AND t.node_id = s.id` : tx``}`;

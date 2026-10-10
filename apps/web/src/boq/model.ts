@@ -40,6 +40,9 @@ export interface BoqRow {
   /** The quantity is the total of the item's measurement sheet. */
   measured?: boolean;
   kind?: ItemKind;
+  /** Priced in another currency: the rate in it (`rate` is that at the BOQ's exchange rate). */
+  currency?: string | null;
+  foreignRate?: string | null;
 }
 
 export interface BoqHeader {
@@ -167,6 +170,8 @@ export const formatAmount = (v: string | null): string =>
 
 /** The value shown in a cell editor: the stored value without trailing zeros. */
 export function editValue(row: BoqRow, col: EditableColumn): string {
+  if (col === 'rate' && row.currency && row.foreignRate)
+    return `${row.currency} ${trimZeros(row.foreignRate)}`;
   const v = row[col];
   if (v === null) return '';
   return col === 'qty' || col === 'rate' ? trimZeros(v) : v;
@@ -269,4 +274,16 @@ export function parseClipboard(text: string): string[][] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   if (lines.at(-1) === '') lines.pop();
   return lines.map((l) => l.split('\t'));
+}
+
+/** "USD 1200" or "eur 85.5" typed as a rate: a rate in another currency. Null when it is not one. */
+export function parseForeignRate(
+  input: string,
+): { currency: string; value: string } | { error: string } | null {
+  const m = /^\s*([A-Za-z]{3})\s+(.+)$/.exec(input);
+  if (!m) return null;
+  const parsed = parseDecimal(m[2]!);
+  if ('error' in parsed) return parsed;
+  if (parsed.value === null) return { error: 'Type the rate after the currency: USD 1200' };
+  return { currency: m[1]!.toUpperCase(), value: parsed.value };
 }

@@ -49,6 +49,8 @@ export interface CostSummary {
     rateOnly: { items: number; priced: number };
     alternates: { items: number; value: string };
   };
+  /** Items priced in other currencies, per currency: the exposure to its exchange rate. */
+  currencies: { code: string; rate: string; items: number; foreignValue: string; value: string }[];
   breakdown: Breakdown;
   /** Analyses with a resource that has no rate on the BOQ's rate date: their split leaves that resource out. */
   incomplete: { code: string; description: string; missing: string[] }[];
@@ -214,6 +216,13 @@ export class ReportsService {
         count(*) FILTER (WHERE item_kind = 'alternate')::int AS "altItems",
         coalesce(sum(round(qty * rate, 2)) FILTER (WHERE item_kind = 'alternate'), 0)::text AS "altValue"
       FROM est.boq_node WHERE boq_id = ${boqId} AND item_kind <> 'normal'`;
+    const currencies = await db<CostSummary['currencies']>`
+      SELECT c.code, c.rate::text AS rate, count(n.id)::int AS items,
+        coalesce(sum(round(n.qty * n.foreign_rate, 2)) FILTER (WHERE n.amount IS NOT NULL), 0)::text AS "foreignValue",
+        coalesce(sum(n.amount), 0)::text AS value
+      FROM est.boq_currency c
+      LEFT JOIN est.boq_node n ON n.boq_id = c.boq_id AND n.foreign_currency = c.code
+      WHERE c.boq_id = ${boqId} GROUP BY c.code, c.rate ORDER BY c.code`;
 
     const ids = groups.map((g) => g.analysisId).filter((x): x is string => x !== null);
     const engine = await this.rates.engineFor(db, ids, boq.rateDate);
@@ -275,6 +284,11 @@ export class ReportsService {
         rateOnly: { items: kinds!.roItems, priced: kinds!.roPriced },
         alternates: { items: kinds!.altItems, value: fmt(dec(kinds!.altValue), 2) },
       },
+      currencies: currencies.map((c) => ({
+        ...c,
+        foreignValue: fmt(dec(c.foreignValue), 2),
+        value: fmt(dec(c.value), 2),
+      })),
       breakdown: breakdown(groups, (id) => costed.get(id) ?? null),
       incomplete,
       bid,
