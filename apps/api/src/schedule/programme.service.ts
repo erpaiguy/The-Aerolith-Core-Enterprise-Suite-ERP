@@ -264,7 +264,8 @@ export class ProgrammeService {
           to_char(a.early_start, 'YYYY-MM-DD') AS "earlyStart", to_char(a.early_finish, 'YYYY-MM-DD') AS "earlyFinish",
           to_char(a.late_start, 'YYYY-MM-DD') AS "lateStart", to_char(a.late_finish, 'YYYY-MM-DD') AS "lateFinish",
           a.total_float AS "totalFloat", a.free_float AS "freeFloat", a.critical,
-          a.wbs_id AS "wbsId", w.code AS "wbsCode", to_char(a.actual_start, 'YYYY-MM-DD') AS "actualStart",
+          a.wbs_id AS "wbsId", w.code AS "wbsCode", a.package, a.trade, a.zone,
+          to_char(a.actual_start, 'YYYY-MM-DD') AS "actualStart",
           to_char(a.actual_finish, 'YYYY-MM-DD') AS "actualFinish", a.remaining, a.remaining_left AS "remainingLeft",
           a.status, to_char(b.start_on, 'YYYY-MM-DD') AS "baselineStart",
           to_char(b.finish_on, 'YYYY-MM-DD') AS "baselineFinish"
@@ -330,7 +331,8 @@ export class ProgrammeService {
           if (o.calendarId && !before.calendars.some((c) => c.id === o.calendarId))
             throw new BadRequestException({ code: 'calendar_not_found' });
           const progress = o.op === 'update' && o.progress !== undefined;
-          if ((o.wbsId !== undefined || progress) && plan.kind !== 'project_schedule')
+          const grouped = o.package !== undefined || o.trade !== undefined || o.zone !== undefined;
+          if ((o.wbsId !== undefined || progress || grouped) && plan.kind !== 'project_schedule')
             throw new BadRequestException({
               code: 'not_for_tender_programme',
               message: "A tender's programme has no WBS or progress.",
@@ -934,6 +936,9 @@ export class ProgrammeService {
             constraint_date: a.constraintDate,
             notes: a.notes,
             wbs_id: a.wbsId ?? null,
+            package: a.package ?? null,
+            trade: a.trade ?? null,
+            zone: a.zone ?? null,
           })),
         )} RETURNING id::text`;
       fresh.forEach((a, i) => idMap.set(a.id, rows[i]!.id));
@@ -969,6 +974,9 @@ export class ProgrammeService {
         free_float: c.start ? c.freeFloat : null,
         critical: c.critical,
         wbs_id: a.wbsId ?? null,
+        package: a.package ?? null,
+        trade: a.trade ?? null,
+        zone: a.zone ?? null,
         actual_start: a.actualStart ?? null,
         actual_finish: a.actualFinish ?? null,
         remaining: a.remaining ?? null,
@@ -988,6 +996,9 @@ export class ProgrammeService {
         o.constraintDate !== a.constraintDate ||
         o.notes !== a.notes ||
         (o.wbsId ?? null) !== row.wbs_id ||
+        (o.package ?? null) !== row.package ||
+        (o.trade ?? null) !== row.trade ||
+        (o.zone ?? null) !== row.zone ||
         (o.actualStart ?? null) !== row.actual_start ||
         (o.actualFinish ?? null) !== row.actual_finish ||
         (o.remaining ?? null) !== row.remaining;
@@ -1023,6 +1034,7 @@ export class ProgrammeService {
           constraint_date = x.constraint_date, notes = x.notes, early_start = x.early_start,
           early_finish = x.early_finish, late_start = x.late_start, late_finish = x.late_finish,
           total_float = x.total_float, free_float = x.free_float, critical = x.critical, wbs_id = x.wbs_id,
+          package = x.package, trade = x.trade, zone = x.zone,
           actual_start = x.actual_start, actual_finish = x.actual_finish, remaining = x.remaining,
           remaining_left = x.remaining_left, status = x.status, row_version = a.row_version + 1
         FROM unnest(
@@ -1033,10 +1045,11 @@ export class ProgrammeService {
           ${col(b, 'early_finish')}::date[], ${col(b, 'late_start')}::date[], ${col(b, 'late_finish')}::date[],
           ${col(b, 'total_float')}::int[], ${col(b, 'free_float')}::int[], ${b.map((r) => String(r.critical)) as never}::text[]::bool[],
           ${col(b, 'wbs_id')}::uuid[], ${col(b, 'actual_start')}::date[], ${col(b, 'actual_finish')}::date[],
-          ${col(b, 'remaining')}::int[], ${col(b, 'remaining_left')}::int[], ${col(b, 'status')}::text[]
+          ${col(b, 'remaining')}::int[], ${col(b, 'remaining_left')}::int[], ${col(b, 'status')}::text[],
+          ${col(b, 'package')}::text[], ${col(b, 'trade')}::text[], ${col(b, 'zone')}::text[]
         ) AS x(id, parent_id, pos, kind, code, name, duration, calendar_id, constraint_type, constraint_date, notes,
           early_start, early_finish, late_start, late_finish, total_float, free_float, critical, wbs_id,
-          actual_start, actual_finish, remaining, remaining_left, status)
+          actual_start, actual_finish, remaining, remaining_left, status, package, trade, zone)
         WHERE a.plan_id = ${plan.id} AND a.id = x.id`;
     }
 

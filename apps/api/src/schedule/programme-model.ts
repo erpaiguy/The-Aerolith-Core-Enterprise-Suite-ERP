@@ -28,6 +28,10 @@ export interface Activity {
   notes: string;
   /** Project schedules: the WBS element it belongs to, and its progress. */
   wbsId?: string | null;
+  /** Project schedules: how it is grouped besides the WBS (macro plans). */
+  package?: string | null;
+  trade?: string | null;
+  zone?: string | null;
   actualStart?: string | null;
   actualFinish?: string | null;
   remaining?: number | null;
@@ -62,6 +66,9 @@ export type Op =
       calendarId?: string | null | undefined;
       constraint?: { type: ConstraintType; date: string } | null | undefined;
       wbsId?: string | null | undefined;
+      package?: string | null | undefined;
+      trade?: string | null | undefined;
+      zone?: string | null | undefined;
     }
   | {
       op: 'update';
@@ -73,6 +80,9 @@ export type Op =
       constraint?: { type: ConstraintType; date: string } | null | undefined;
       notes?: string | undefined;
       wbsId?: string | null | undefined;
+      package?: string | null | undefined;
+      trade?: string | null | undefined;
+      zone?: string | null | undefined;
       /** Progress as of the data date; null clears it (not started). */
       progress?: ActivityProgress | null | undefined;
     }
@@ -231,6 +241,9 @@ export class Programme {
             constraintDate: o.constraint?.date ?? null,
             notes: '',
             wbsId: o.wbsId ?? null,
+            package: o.package ?? null,
+            trade: o.trade ?? null,
+            zone: o.zone ?? null,
           });
           break;
         }
@@ -250,6 +263,9 @@ export class Programme {
           }
           if (o.notes !== undefined) a.notes = o.notes;
           if (o.wbsId !== undefined) a.wbsId = o.wbsId;
+          if (o.package !== undefined) a.package = o.package;
+          if (o.trade !== undefined) a.trade = o.trade;
+          if (o.zone !== undefined) a.zone = o.zone;
           if (o.progress !== undefined) {
             const p = o.progress;
             if (p && !p.actualStart && (p.actualFinish || p.remaining !== null))

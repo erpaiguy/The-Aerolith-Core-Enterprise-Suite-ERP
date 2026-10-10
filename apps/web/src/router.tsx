@@ -36,6 +36,7 @@ import {
 import { ProjectScreen, ProjectsScreen } from './screens/Projects';
 import { CostCodesScreen } from './screens/CostCodes';
 import { WbsScreen } from './screens/Wbs';
+import { MacroScreen } from './screens/Macro';
 import { RfqScreen } from './screens/Rfq';
 import { TemplatesScreen } from './screens/Templates';
 import { TenderSettingsScreen } from './screens/TenderSettings';
@@ -93,6 +94,14 @@ const projectRoute = createRoute({
   component: function ProjectPage() {
     const { projectId } = projectRoute.useParams();
     return <ProjectScreen key={projectId} projectId={projectId} />;
+  },
+});
+const macroRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/macro',
+  component: function MacroPage() {
+    const { projectId } = macroRoute.useParams();
+    return <MacroScreen key={projectId} projectId={projectId} />;
   },
 });
 const wbsRoute = createRoute({
@@ -230,6 +239,7 @@ const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/projects', component: ProjectsScreen }),
     projectRoute,
     wbsRoute,
+    macroRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/cost-codes',

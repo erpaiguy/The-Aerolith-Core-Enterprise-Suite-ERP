@@ -37,6 +37,9 @@ export interface ProgrammeActivity {
   /** Project schedules. */
   wbsId?: string | null;
   wbsCode?: string | null;
+  package?: string | null;
+  trade?: string | null;
+  zone?: string | null;
   actualStart?: string | null;
   actualFinish?: string | null;
   /** Reported working days left (started, not finished); null: worked out from the duration. */
@@ -122,6 +125,9 @@ export type Op =
       constraint?: { type: ConstraintType; date: string } | null;
       notes?: string;
       wbsId?: string | null;
+      package?: string | null;
+      trade?: string | null;
+      zone?: string | null;
       progress?: {
         actualStart: string | null;
         actualFinish: string | null;

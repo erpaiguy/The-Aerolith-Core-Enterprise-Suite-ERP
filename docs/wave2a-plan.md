@@ -36,7 +36,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 2 | **Contract BOQ + budget** (J2) | BOQs owned by a project; from the won tender's submitted BOQ: contract BOQ at quoted rates, budget at estimate rates (a background copy for large BOQs); versions; budget against contract | **Done** (see below) |
 | 3 | **WBS + cost codes** (J3) | WBS tree per project; company cost-code master; BOQ items mapped to WBS and cost codes (one by one and in bulk by range) | **Done** (see below) |
 | 4 | **Project schedules** (J4) | The Wave 1 engine for project plans: constraints, resources and assignments, multiple baselines, progress updates (data date, actuals, remaining duration), look-ahead; 50k activities | **Done** (see below) |
-| 5 | **Macro plans** (J5) | Roll-up of micro plans through the WBS, milestones, summary views by package, trade and zone | |
+| 5 | **Macro plans** (J5) | Roll-up of micro plans through the WBS, milestones, summary views by package, trade and zone | **Done** (see below) |
 | 6 | **Progress measurement** (J6) | Physical % per BOQ item and activity, measurement-based progress, progress value against the contract BOQ | |
 | 7 | **Project dashboard and reports** | Progress, schedule variance, budget against contract, look-ahead | |
 
@@ -289,3 +289,48 @@ place on the team (or the right to edit projects). Viewers read.
 - A browser test: a resource, a won tender made a project with a two-element WBS, a schedule on it, a link, a
   baseline, the data date and progress (+2 days against the baseline), masons on an activity and their weekly load,
   and the look-ahead.
+
+## Step 5 delivered: macro plans
+
+**Journey:**
+- Activities of a project schedule get a **package** (a contract or subcontract package: Civil, MEP…), a **trade**
+  (Masonry, Electrical…) and a **zone** (block, floor, area) in the activity panel. Each is free text, suggested
+  from the values the project already uses.
+- The project's **Macro plan** (from its Schedules card) rolls up every live schedule (the micro plans; archived
+  ones are left out):
+  - **By WBS:** each element with the activities on it and under it. It shows the span (start, finish), a bar to
+    one time scale with the baseline span under it, progress, the slip of its finish against the baselines shown,
+    and activities done out of all (critical ones counted). Activities on no WBS element come last.
+  - **Milestones:** every milestone of the schedules, with its schedule, WBS element, date (actual once reached),
+    baseline date and slip.
+  - **By package, by trade, by zone:** the same roll-up for each value, "not set" last.
+  - The project's totals on top, and each schedule with its data date, finish and baseline.
+- It prints from the browser.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] The macro plan is computed, not kept.** It is always the live schedules as they are. A frozen
+  "macro baseline" is each schedule's own baselines rolled up the same way.
+- **[Likely] Progress is by working days:** for each activity, its duration less the days still to do, over all the
+  durations. Milestones weigh nothing. Physical progress against the BOQ (step 6) may replace it as the measure.
+- **[Likely] Three fixed groupings (package, trade, zone)** rather than Primavera-style activity codes of any
+  number and kind. They are what Indian sites plan by. More kinds can be added if pilots need them.
+- **[Certain] Slip is in calendar days** (finish against baseline finish), as people say "two days late". Float
+  stays in working days in the schedules.
+- **Groups do not come in from imported files yet.** P6 activity codes and MS Project text fields could be mapped to
+  them later.
+
+**API** (under `/api/tenant`):
+- `GET /projects/:id/macro`: schedules, project totals, WBS roll-up, unassigned, milestones, by package, trade and
+  zone.
+- `GET /projects/:id/activity-groups`: the values in use.
+- Activity edits take `package`, `trade` and `zone` (blank clears).
+- Migration `0026_macro_plans.sql`.
+
+**Tests:**
+- 3 API integration tests, with every figure worked by hand on the site calendar:
+  - two schedules rolled up through a two-level WBS: spans, slip against a baseline, progress by days at 20%,
+    12.5% and 7.1%, an unassigned activity, the milestone's slip;
+  - the roll-ups by package, trade and zone (blank as not set), and the values offered;
+  - archived schedules left out, the team only, and no groups on a tender's programme.
+- A browser test: a schedule on the WBS, a package and trade on an activity, a milestone, a baseline, and the
+  macro plan's WBS, milestone, package and trade views.

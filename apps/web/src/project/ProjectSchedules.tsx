@@ -140,6 +140,21 @@ export function ProjectSchedules({ project: p }: { project: ProjectDetail }) {
           No schedule yet. Start one on the WBS, or import one from MS Project or Primavera.
         </p>
       )}
+      {list.data && list.data.some((x) => !x.archivedAt) && (
+        <p className="mb-2 text-sm">
+          <Link
+            to="/projects/$projectId/macro"
+            params={{ projectId: p.id }}
+            className="text-accent hover:underline"
+          >
+            Macro plan
+          </Link>
+          <span className="text-fg-muted">
+            : the schedules rolled up through the WBS, by package, trade and zone, and the
+            milestones.
+          </span>
+        </p>
+      )}
       {list.data && list.data.length > 0 && (
         <Table minWidth="30rem">
           <thead>

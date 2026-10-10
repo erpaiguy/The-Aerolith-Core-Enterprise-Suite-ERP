@@ -20,6 +20,7 @@ import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
 import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { MacroService } from './macro.service.js';
 import { ProgrammeService } from './programme.service.js';
 
 const rowVersion = z.number().int().positive();
@@ -33,6 +34,14 @@ const constraint = z
 const duration = z.number().int().min(0).max(36500);
 const code = z.string().trim().min(1).max(40);
 const name = z.string().trim().max(500);
+/** Package, trade or zone of a project schedule's activity: blank clears it. */
+const group = z
+  .string()
+  .trim()
+  .max(60)
+  .transform((v) => v || null)
+  .nullable()
+  .optional();
 
 const op = z.discriminatedUnion('op', [
   z.object({
@@ -46,6 +55,9 @@ const op = z.discriminatedUnion('op', [
     calendarId: z.uuid().nullable().optional(),
     constraint: constraint.optional(),
     wbsId: z.uuid().nullable().optional(),
+    package: group,
+    trade: group,
+    zone: group,
   }),
   z.object({
     op: z.literal('update'),
@@ -57,6 +69,9 @@ const op = z.discriminatedUnion('op', [
     constraint: constraint.optional(),
     notes: z.string().max(2000).optional(),
     wbsId: z.uuid().nullable().optional(),
+    package: group,
+    trade: group,
+    zone: group,
     progress: z
       .object({
         actualStart: date.nullable(),
@@ -130,7 +145,22 @@ type Claims = TenantClaims;
 @Controller('tenant')
 @UseGuards(TenantAuthGuard, PermissionGuard)
 export class ProgrammeController {
-  constructor(private readonly programmes: ProgrammeService) {}
+  constructor(
+    private readonly programmes: ProgrammeService,
+    private readonly macros: MacroService,
+  ) {}
+
+  /** The project's schedules rolled up through its WBS, by package, trade and zone, and its milestones. */
+  @Get('projects/:id/macro')
+  macro(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.macros.macro(c, id);
+  }
+
+  /** Packages, trades and zones already used in the project's schedules. */
+  @Get('projects/:id/activity-groups')
+  activityGroups(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.macros.groupValues(c, id);
+  }
 
   @Get('tenders/:id/programmes')
   list(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {

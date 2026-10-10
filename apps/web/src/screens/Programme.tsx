@@ -1068,6 +1068,7 @@ function ActivityPanel({
               <ProgressForm plan={plan} activity={a} canEdit={canEdit} onSave={onSave} />
             )}
             <WbsPicker plan={plan} activity={a} canEdit={canEdit} onSave={onSave} />
+            <GroupFields plan={plan} activity={a} canEdit={canEdit} onSave={onSave} />
           </div>
           {a.kind === 'task' && (
             <ActivityResources planId={plan.id} activityId={a.id} canEdit={canEdit} />
@@ -1202,6 +1203,71 @@ function WbsPicker({
         ))}
       </Select>
     </Field>
+  );
+}
+
+/** Package, trade and zone: how the macro plan groups the activity besides its WBS element. */
+function GroupFields({
+  plan,
+  activity: a,
+  canEdit,
+  onSave,
+}: {
+  plan: ProgrammeDetail;
+  activity: ProgrammeActivity;
+  canEdit: boolean;
+  onSave: (op: Op) => void;
+}) {
+  const [v, setV] = useState({
+    package: a.package ?? '',
+    trade: a.trade ?? '',
+    zone: a.zone ?? '',
+  });
+  const used = useQuery({
+    queryKey: ['activity-groups', plan.projectId],
+    queryFn: () =>
+      api.request<Record<'package' | 'trade' | 'zone', string[]>>(
+        `/api/tenant/projects/${plan.projectId}/activity-groups`,
+      ),
+  });
+  const changed =
+    v.package !== (a.package ?? '') || v.trade !== (a.trade ?? '') || v.zone !== (a.zone ?? '');
+  return (
+    <form
+      aria-label="Groups"
+      className="space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave({ op: 'update', id: a.id, ...v });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-3">
+        {(['package', 'trade', 'zone'] as const).map((k) => (
+          <div key={k}>
+            <Field label={k === 'package' ? 'Package' : k === 'trade' ? 'Trade' : 'Zone'}>
+              <Input
+                value={v[k]}
+                list={`groups-${k}`}
+                maxLength={60}
+                disabled={!canEdit}
+                onChange={(e) => setV({ ...v, [k]: e.target.value })}
+                placeholder={k === 'zone' ? 'Block, floor, area' : undefined}
+              />
+            </Field>
+            <datalist id={`groups-${k}`}>
+              {used.data?.[k].map((x) => (
+                <option key={x} value={x} />
+              ))}
+            </datalist>
+          </div>
+        ))}
+      </div>
+      {canEdit && changed && (
+        <Button type="submit" variant="secondary">
+          Save groups
+        </Button>
+      )}
+    </form>
   );
 }
 
