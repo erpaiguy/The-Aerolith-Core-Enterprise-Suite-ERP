@@ -43,6 +43,8 @@ export interface BoqRow {
   /** Priced in another currency: the rate in it (`rate` is that at the BOQ's exchange rate). */
   currency?: string | null;
   foreignRate?: string | null;
+  /** A project BOQ's item: its WBS element and cost code (codes); null when unmapped. */
+  map?: { wbs: string | null; costCode: string | null } | null;
 }
 
 export interface BoqHeader {

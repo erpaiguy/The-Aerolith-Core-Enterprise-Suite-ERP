@@ -7,7 +7,13 @@ import { Link } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
-import type { BoqCopyPreview, BoqSummary, ProjectBoq, ProjectDetail } from '../api/types';
+import type {
+  BoqCopyPreview,
+  BoqSummary,
+  ProjectBoq,
+  ProjectBreakdown,
+  ProjectDetail,
+} from '../api/types';
 import { BOQ_KIND_LABEL } from '../boq/model';
 import { describeError, formatDateTime, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
@@ -92,6 +98,7 @@ export function ProjectBoqs({ project: p }: { project: ProjectDetail }) {
         )}
       </Card>
       {summary.data && summary.data.contracts > 0 && <Margin s={summary.data} />}
+      {boqs.data.length > 0 && <WbsSummary projectId={p.id} />}
     </>
   );
 }
@@ -276,6 +283,39 @@ function NewBoq({ projectId }: { projectId: string }) {
       </Button>
       {error && <Alert tone="danger">{error}</Alert>}
     </form>
+  );
+}
+
+/** How far the project's BOQ lines are mapped to the WBS and cost codes, with the way to the WBS screen. */
+function WbsSummary({ projectId }: { projectId: string }) {
+  const d = useQuery({
+    queryKey: ['project-breakdown', projectId],
+    queryFn: () => api.request<ProjectBreakdown>(`/api/tenant/projects/${projectId}/breakdown`),
+  });
+  const items = d.data?.totals.contract.lines ?? 0;
+  return (
+    <Card
+      title="WBS and cost codes"
+      actions={
+        <Link
+          to="/projects/$projectId/wbs"
+          params={{ projectId }}
+          className="text-sm text-accent hover:underline"
+        >
+          Open the WBS
+        </Link>
+      }
+    >
+      {d.data && (
+        <p className="text-sm text-fg-muted">
+          {d.data.wbs.length === 0
+            ? 'No WBS yet. Make it from the contract BOQ, or by hand.'
+            : `${d.data.wbs.length} WBS elements. `}
+          {items > 0 &&
+            `Of ${items.toLocaleString('en-IN')} contract items, ${(items - d.data.unmapped.wbs.contract.lines).toLocaleString('en-IN')} are mapped to the WBS and ${(items - d.data.unmapped.costCode.contract.lines).toLocaleString('en-IN')} to cost codes.`}
+        </p>
+      )}
+    </Card>
   );
 }
 

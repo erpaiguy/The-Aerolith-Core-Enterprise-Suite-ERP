@@ -1275,3 +1275,51 @@ export interface BoqSummary {
     }[];
   }[];
 }
+
+// --- WBS and cost codes (docs/wave2a-plan.md step 3) ---
+
+export type CostKind = 'material' | 'labour' | 'equipment' | 'subcontract' | 'overhead' | 'other';
+
+export interface CostCode {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  kind: CostKind;
+  active: boolean;
+  rowVersion: number;
+  /** BOQ lines mapped to it, in every project. */
+  lines: number;
+  depth: number;
+}
+
+export interface WbsNode {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  position: number;
+  rowVersion: number;
+  /** BOQ lines mapped to it directly. */
+  lines: number;
+  depth: number;
+}
+
+interface Rolled {
+  contract: string;
+  budget: string;
+  margin: string;
+  /** Contract BOQ items under it (its children's included). */
+  contractLines: number;
+}
+
+export interface ProjectBreakdown {
+  totals: Record<'contract' | 'budget', { lines: number; amount: string }>;
+  unmapped: Record<
+    'wbs' | 'costCode',
+    Record<'contract' | 'budget', { lines: number; amount: string }>
+  >;
+  wbs: (WbsNode & Rolled)[];
+  costCodes: (Pick<CostCode, 'id' | 'parentId' | 'code' | 'name' | 'kind' | 'active' | 'depth'> &
+    Rolled)[];
+}

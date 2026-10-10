@@ -5,5 +5,7 @@ services:
     environment:
       EMAIL_TRANSPORT: file
       RATE_LIMIT_SCALE: '10'
+      # Every test signs up a company (two emails or more): the production cap of 60 an hour is too low for the suite.
+      EMAIL_MAX_PER_HOUR: '10000'
     volumes:
       - ${E2E_MAIL_DIR:?set E2E_MAIL_DIR to an absolute host folder}:/app/.mail-outbox

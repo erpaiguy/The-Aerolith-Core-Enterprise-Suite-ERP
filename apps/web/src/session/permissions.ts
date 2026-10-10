@@ -10,7 +10,10 @@ export type Permission =
   | 'pricing.edit'
   | 'rfq.edit'
   | 'documents.edit'
-  | 'programme.edit';
+  | 'programme.edit'
+  | 'projects.edit'
+  | 'projects.all'
+  | 'costcodes.edit';
 
 export function usePermission(p: Permission): boolean {
   const { user, licence } = useSession();

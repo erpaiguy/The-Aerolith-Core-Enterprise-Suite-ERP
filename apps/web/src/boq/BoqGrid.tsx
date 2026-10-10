@@ -19,6 +19,7 @@ import {
   IndentDecrease,
   IndentIncrease,
   ListChecks,
+  Network,
   MoveDown,
   MoveUp,
   Ruler,
@@ -40,6 +41,7 @@ import {
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
 import { BulkEditDialog } from './BulkEdit';
+import { MapLinesDialog, type MappingOptions } from './MapLines';
 import { PositionBar } from './PositionBar';
 import { load, save } from '../lib/storage';
 import {
@@ -76,6 +78,11 @@ const OVERSCAN = 10;
 const MAX_COLLAPSED = 1000;
 const PASTE_LIMIT = 5000;
 const GRID_COLUMNS = 'grid-cols-[5.5rem_minmax(12rem,1fr)_4.5rem_7rem_7rem_9rem]';
+/** A project BOQ also shows each item's WBS element and cost code. */
+const GRID_COLUMNS_MAPPED =
+  'grid-cols-[5.5rem_minmax(12rem,1fr)_4.5rem_7rem_7rem_5.5rem_6rem_9rem]';
+type CellColumn = EditableColumn | 'amount' | 'wbs' | 'costCode';
+const READ_ONLY = new Set<CellColumn>(['amount', 'wbs', 'costCode']);
 // Amount stays visible when the grid scrolls sideways on narrow screens.
 const STICKY_AMOUNT = 'sticky right-0 z-[1] border-l border-line';
 
@@ -104,6 +111,8 @@ interface Props {
   onPickAnalysis?: ((row: BoqRow) => Promise<string | null>) | undefined;
   /** A bulk change was made on the server: the grid and the header need reading again. */
   onBulkDone?: (() => void) | undefined;
+  /** A project BOQ: its WBS and cost codes, shown per item and mapped from here. */
+  mapping?: MappingOptions | undefined;
 }
 
 /** A range of lines by sort key (Shift+click): `to`'s subtree is in it, so a section brings its contents. */
@@ -121,11 +130,15 @@ const editable = (row: BoqRow, col: EditableColumn) =>
   row.type === 'item' || col === 'description' || (col === 'code' && row.type === 'section');
 
 export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
-  { boqId, canEdit, onHeader, onSaving, onPickAnalysis, onMeasure, onBulkDone },
+  { boqId, canEdit, onHeader, onSaving, onPickAnalysis, onMeasure, onBulkDone, mapping },
   ref,
 ) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const canMap = Boolean(mapping?.canMap);
+  const canSelect = canEdit || canMap;
+  const columns = mapping ? GRID_COLUMNS_MAPPED : GRID_COLUMNS;
   const storageKey = `aerolith.boq.${boqId}.collapsed`;
   const [slice, setSlice] = useState<Slice>({ rows: [], hasBefore: false, hasAfter: false });
   const [collapsed, setCollapsed] = useState<Map<string, string>>(() => {
@@ -768,14 +781,9 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
   const last = Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
   const visible = rows.slice(first, last);
 
-  const cell = (
-    row: BoqRow,
-    col: EditableColumn | 'amount',
-    content: React.ReactNode,
-    extra = '',
-  ) => {
-    const isActive = active?.id === row.id && active.col === col;
-    const isEditing = editing?.id === row.id && editing.col === col;
+  const cell = (row: BoqRow, col: CellColumn, content: React.ReactNode, extra = '') => {
+    const isActive = active?.id === row.id && (active.col as CellColumn) === col;
+    const isEditing = editing?.id === row.id && (editing.col as CellColumn) === col;
     return (
       <div
         role="gridcell"
@@ -787,22 +795,24 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
           e.preventDefault();
           scroller.current?.focus();
           // Shift+click: select the lines from the active one to this one (for a bulk change).
-          if (e.shiftKey && canEdit && activeRow) {
+          if (e.shiftKey && canSelect && activeRow) {
             setSelection({ anchor: activeRow.sortKey, to: row.sortKey });
             return;
           }
           setSelection(null);
-          if (col === 'amount') return;
-          setActive({ id: row.id, col });
+          if (READ_ONLY.has(col)) return;
+          setActive({ id: row.id, col: col as EditableColumn });
         }}
         onDoubleClick={() => {
-          if (col === 'amount' || !canEdit || !editable(row, col)) return;
-          setActive({ id: row.id, col });
+          if (READ_ONLY.has(col) || !canEdit) return;
+          const c = col as EditableColumn;
+          if (!editable(row, c)) return;
+          setActive({ id: row.id, col: c });
           if (col === 'qty' && row.measured) {
             onMeasure?.(row);
             return;
           }
-          setEditing({ id: row.id, col, value: editValue(row, col) });
+          setEditing({ id: row.id, col: c, value: editValue(row, c) });
         }}
       >
         {isEditing ? (
@@ -843,6 +853,23 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+      {mapOpen && mapping && (selection || activeRow) && (
+        <MapLinesDialog
+          boqId={boqId}
+          range={
+            selection
+              ? { ...selection, single: false }
+              : { anchor: activeRow!.sortKey, to: activeRow!.sortKey, single: true }
+          }
+          options={mapping}
+          onClose={() => setMapOpen(false)}
+          onDone={() => {
+            setMapOpen(false);
+            setSelection(null);
+            onBulkDone?.();
+          }}
+        />
+      )}
       {bulkOpen && selection && (
         <BulkEditDialog
           boqId={boqId}
@@ -956,6 +983,16 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
               </option>
             ))}
           </select>
+          {canMap && (
+            <Button
+              variant="secondary"
+              disabled={!selection && !activeRow}
+              onClick={() => setMapOpen(true)}
+              title="Map the selected lines (or this line) to a WBS element and a cost code"
+            >
+              <Network className="size-4" aria-hidden /> Map
+            </Button>
+          )}
           {selection ? (
             <>
               <Button variant="secondary" onClick={() => setBulkOpen(true)}>
@@ -995,7 +1032,26 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
         </div>
       )}
       {!canEdit && (
-        <div className="flex gap-1">
+        <div className="flex flex-wrap items-center gap-1">
+          {canMap && (
+            <>
+              <Button
+                variant="secondary"
+                disabled={!selection && !activeRow}
+                onClick={() => setMapOpen(true)}
+                title="Map the selected lines (or this line) to a WBS element and a cost code"
+              >
+                <Network className="size-4" aria-hidden /> Map
+              </Button>
+              {selection ? (
+                <Button variant="ghost" onClick={() => setSelection(null)}>
+                  Clear selection
+                </Button>
+              ) : (
+                <span className="px-1 text-xs text-fg-subtle">Shift+click to select lines</span>
+              )}
+            </>
+          )}
           <Button
             variant="ghost"
             onClick={() => void collapseAll()}
@@ -1062,9 +1118,9 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
           onKeyDown={onGridKey}
           onPaste={onPaste}
         >
-          <div className="min-w-[45rem]">
+          <div className={mapping ? 'min-w-[57rem]' : 'min-w-[45rem]'}>
             <div
-              className={`sticky top-0 z-10 grid ${GRID_COLUMNS} items-center border-b border-line bg-surface-2 text-xs font-medium text-fg-muted [&>div]:px-2`}
+              className={`sticky top-0 z-10 grid ${columns} items-center border-b border-line bg-surface-2 text-xs font-medium text-fg-muted [&>div]:px-2`}
               style={{ height: HEADER_H }}
               role="row"
             >
@@ -1077,6 +1133,12 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
               <div role="columnheader" className="text-right">
                 Rate
               </div>
+              {mapping && (
+                <>
+                  <div role="columnheader">WBS</div>
+                  <div role="columnheader">Cost code</div>
+                </>
+              )}
               <div
                 role="columnheader"
                 className={`h-full bg-surface-2 text-right leading-[36px] ${STICKY_AMOUNT}`}
@@ -1097,7 +1159,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                     aria-expanded={isSection && row.childCount > 0 ? !isCollapsed : undefined}
                     data-row-id={row.id}
                     aria-selected={inSelection(selection, row.sortKey) || undefined}
-                    className={`absolute left-0 right-0 grid ${GRID_COLUMNS} border-b border-line text-sm ${isSection ? 'bg-surface-2/60 font-semibold' : ''} ${active?.id === row.id ? 'bg-accent/5' : ''} ${inSelection(selection, row.sortKey) ? '!bg-accent/15' : ''}`}
+                    className={`absolute left-0 right-0 grid ${columns} border-b border-line text-sm ${isSection ? 'bg-surface-2/60 font-semibold' : ''} ${active?.id === row.id ? 'bg-accent/5' : ''} ${inSelection(selection, row.sortKey) ? '!bg-accent/15' : ''}`}
                     style={{ top: i * ROW_H, height: ROW_H }}
                   >
                     {cell(
@@ -1199,6 +1261,22 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                         {row.type === 'item' ? formatRate(row.rate) : ''}
                       </span>,
                     )}
+                    {mapping &&
+                      cell(
+                        row,
+                        'wbs',
+                        <span className="truncate font-mono text-xs" data-testid="map-wbs">
+                          {row.map?.wbs ?? ''}
+                        </span>,
+                      )}
+                    {mapping &&
+                      cell(
+                        row,
+                        'costCode',
+                        <span className="truncate font-mono text-xs" data-testid="map-cost">
+                          {row.map?.costCode ?? ''}
+                        </span>,
+                      )}
                     {cell(
                       row,
                       'amount',
@@ -1230,7 +1308,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                           ''
                         )}
                       </span>,
-                      'bg-surface-2/40',
+                      `${STICKY_AMOUNT} bg-surface-2`,
                     )}
                   </div>
                 );

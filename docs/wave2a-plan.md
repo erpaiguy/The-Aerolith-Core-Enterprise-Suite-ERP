@@ -34,7 +34,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 |---|------|----------|-------|
 | 1 | **Projects** (J1) | `proj` schema; project register and numbering; client, legal entity, dates, contract value, status flow; sites (with state, for GST place of supply); team with project roles; project-scoped visibility; **create a project from a won tender** | **Done** (see below) |
 | 2 | **Contract BOQ + budget** (J2) | BOQs owned by a project; from the won tender's submitted BOQ: contract BOQ at quoted rates, budget at estimate rates (a background copy for large BOQs); versions; budget against contract | **Done** (see below) |
-| 3 | **WBS + cost codes** (J3) | WBS tree per project; company cost-code master; BOQ items mapped to WBS and cost codes (one by one and in bulk by range) | |
+| 3 | **WBS + cost codes** (J3) | WBS tree per project; company cost-code master; BOQ items mapped to WBS and cost codes (one by one and in bulk by range) | **Done** (see below) |
 | 4 | **Project schedules** (J4) | The Wave 1 engine for project plans: constraints, resources and assignments, multiple baselines, progress updates (data date, actuals, remaining duration), look-ahead; 50k activities | |
 | 5 | **Macro plans** (J5) | Roll-up of micro plans through the WBS, milestones, summary views by package, trade and zone | |
 | 6 | **Progress measurement** (J6) | Physical % per BOQ item and activity, measurement-based progress, progress value against the contract BOQ | |
@@ -142,3 +142,66 @@ carries `projectId`, `kind` (`estimate`, `contract`, `budget`) and `project`. Mi
 
 A browser test prices, submits and wins a tender, negotiates the contract value down, makes the contract BOQ and
 budget, checks the margin, and opens the contract BOQ.
+
+## Step 3 delivered: WBS and cost codes
+
+**Journey:**
+- **Cost codes** (new in the menu) are the company's codes for costs: groups and codes, each of a kind (material,
+  labour, plant and equipment, subcontract, overhead, other). **Load the standard list** gives 23 to start from
+  (materials, labour, plant, subcontracts and site overheads, with the usual codes under each). Codes are added,
+  renamed, moved under another group, and **retired** rather than deleted.
+- A project's **WBS and cost codes** page (from the project's page) shows the WBS tree. **Make the WBS** from a BOQ
+  (normally the contract BOQ): each section down to the levels chosen becomes an element, numbered 1, 1.1, 1.2…,
+  and every item is mapped to the element of its section. Elements can then be added, renamed, re-coded, moved under
+  another element, reordered, and removed if nothing is under them.
+- In a project's BOQ, the grid shows each item's **WBS** and **Cost code**. **Map** maps the selected lines
+  (Shift+click; a section brings everything under it), or the line in hand, to a WBS element and/or a cost code. Each
+  side can be left as it is, set or cleared. Mapping works on frozen versions too: it describes the line and is not
+  part of the BOQ's content.
+- The WBS page breaks the **contract and budget down** by WBS element (each with everything under it: contract,
+  budget, margin, items) and by cost code (groups with their codes), with what is still **not mapped**. The project
+  page sums up how much of the contract is mapped.
+
+**Who does what:**
+- Everyone signed in reads the cost codes; the new permission **Edit the company's cost codes** (managers by
+  default) changes them.
+- A project's WBS is shaped by its lead or someone who edits projects. Its BOQ lines are mapped by its team's leads
+  and members. Viewers read. Others do not see the project at all.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] One mapping per line of the project, not per BOQ.** A contract line and its budget line share their
+  line key (step 2), so mapping one maps both, and the budget is broken down exactly like the contract. The mapping
+  also survives revisions: a revised contract BOQ keeps its lines' WBS and cost codes. A line added only to the
+  budget, or only in a later revision, is mapped on its own.
+- **[Likely] Items only.** Sections and notes are not mapped. Selecting a section maps the items under it.
+- **[Certain] Cost codes are company-wide master data** (P10), shared by all projects, so procurement (2b) and
+  accounts (Wave 3) can book to the same codes. Codes are unique regardless of case and go four levels deep at most.
+  A retired code stays on the lines already mapped to it but is no longer offered.
+- **WBS codes are free text** (letters, digits, `. _ / -`), unique in the project. The WBS goes ten levels deep at
+  most. The tree made from a BOQ is numbered by position; re-code it as you like.
+- **The tender's programme is still not used** (Wave 1 decision). Step 4's project schedule will hang its activities
+  on this WBS.
+
+**Speed** (200,000-line BOQ, this machine): making the WBS from its sections and mapping every item took 4.6 s;
+mapping all 200,000 lines to a cost code 3.7 s; the breakdown 0.7 s; a page of the grid with its mapping 13 ms.
+A million lines would take about five times as long for the first three, which is still within a request.
+
+**API** (under `/api/tenant`):
+- Cost codes: `GET /cost-codes`, `POST /cost-codes`, `POST /cost-codes/:id`, `POST /cost-codes/standard`.
+- WBS: `GET /projects/:id/wbs`, `POST /projects/:id/wbs`, `POST /projects/:id/wbs/from-boq` (`{boqId, depth}`),
+  `POST /wbs/:id`, `POST /wbs/:id/move` (`{direction}`), `POST /wbs/:id/delete`.
+- Mapping and breakdown: `POST /boqs/:id/mapping` (`{from, to, wbsId?, costCodeId?}`, where `null` clears),
+  `GET /projects/:id/breakdown`. Grid rows carry `map: {wbs, costCode}`.
+- Permission `costcodes.edit`. Migration `0024_wbs_cost_codes.sql`.
+
+**Tests:** 6 API integration tests:
+- the standard list, unique codes, retiring codes and cycles refused;
+- the WBS made from the contract's sections with items mapped, on the contract and its budget;
+- a range mapped to a cost code and a line to a WBS element; clearing; refusals (retired code, a tender's BOQ, a
+  viewer); mapping kept through freezing and revising;
+- the breakdown by WBS and by cost code with what is unmapped;
+- hand editing: add, duplicate refused, reorder, move, cycle refused, removal only when empty; and the project hidden
+  from a worker off the team.
+
+A browser test loads the standard cost codes, wins a tender with a two-section BOQ, makes the contract BOQ, makes
+the WBS from it, adds and removes an element, maps a section to a cost code from the grid, and reads the breakdown.

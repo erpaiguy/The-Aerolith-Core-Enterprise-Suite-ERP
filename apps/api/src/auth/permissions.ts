@@ -51,6 +51,10 @@ export const PERMISSIONS = {
     label: 'See every project, not only those they are on the team of',
     defaults: { manager: true, worker: false },
   },
+  'costcodes.edit': {
+    label: "Edit the company's cost codes",
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

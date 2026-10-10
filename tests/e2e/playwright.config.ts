@@ -24,6 +24,8 @@ const apiEnv = [
   `WEBSITE_URL=http://127.0.0.1:${WEB_PORT}`,
   'RATE_LIMIT_SCALE=10',
   'EMAIL_TRANSPORT=file',
+  // Every test signs up a company (two emails or more): the production cap of 60 an hour is too low for the suite.
+  'EMAIL_MAX_PER_HOUR=10000',
   `DOCUMENT_DIR=${join(tmpdir(), 'aerolith-e2e-documents')}`,
   `EMAIL_FILE_DIR=${MAIL_DIR}`,
   `EMAIL_FROM='Aerolith Core <no-reply@aerolith.test>'`,

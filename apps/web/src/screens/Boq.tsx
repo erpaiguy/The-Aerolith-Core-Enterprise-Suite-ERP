@@ -35,6 +35,7 @@ import {
   useImportFinished,
   useLatestImport,
 } from '../boq/ImportWizard';
+import { useMappingOptions } from '../boq/MapLines';
 import { BOQ_KIND_LABEL, formatAmount, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
@@ -147,6 +148,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
     queryKey: ['boq', boqId],
     queryFn: () => api.request<BoqHeader>(`/api/tenant/boqs/${boqId}`),
   });
+  const mapping = useMappingOptions(header.data?.projectId);
   const [wizard, setWizard] = useState(false);
   const [measuring, setMeasuring] = useState<BoqRow | null>(null);
   const [freezing, setFreezing] = useState(false);
@@ -368,6 +370,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             onPickAnalysis={pickAnalysis}
             onMeasure={setMeasuring}
             onBulkDone={reload}
+            mapping={mapping}
           />
         </div>
       )}

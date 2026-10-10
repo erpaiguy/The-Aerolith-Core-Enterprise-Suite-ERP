@@ -34,6 +34,8 @@ import {
   ReportsScreen,
 } from './screens/Reports';
 import { ProjectScreen, ProjectsScreen } from './screens/Projects';
+import { CostCodesScreen } from './screens/CostCodes';
+import { WbsScreen } from './screens/Wbs';
 import { RfqScreen } from './screens/Rfq';
 import { TemplatesScreen } from './screens/Templates';
 import { TenderSettingsScreen } from './screens/TenderSettings';
@@ -91,6 +93,14 @@ const projectRoute = createRoute({
   component: function ProjectPage() {
     const { projectId } = projectRoute.useParams();
     return <ProjectScreen key={projectId} projectId={projectId} />;
+  },
+});
+const wbsRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/wbs',
+  component: function WbsPage() {
+    const { projectId } = wbsRoute.useParams();
+    return <WbsScreen key={projectId} projectId={projectId} />;
   },
 });
 const boqRoute = createRoute({
@@ -209,6 +219,12 @@ const routeTree = rootRoute.addChildren([
     boqRoute,
     createRoute({ getParentRoute: () => appLayout, path: '/projects', component: ProjectsScreen }),
     projectRoute,
+    wbsRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/cost-codes',
+      component: CostCodesScreen,
+    }),
     createRoute({ getParentRoute: () => appLayout, path: '/clients', component: ClientsScreen }),
     createRoute({
       getParentRoute: () => appLayout,

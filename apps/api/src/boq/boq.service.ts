@@ -70,11 +70,17 @@ export type ShiftDirection = 'up' | 'down' | 'in' | 'out';
 export const MAX_DEPTH = 30;
 const MAX_TOUCHED_ROWS = 1000;
 
+// Rows of the grid. Mapped items of a project BOQ also carry their WBS and cost codes.
 const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "sortKey", n.depth,
   n.node_type AS type, n.code, t.description, t.notes, n.unit, n.qty::text AS qty, n.rate::text AS rate,
   n.amount::text AS amount, n.subtotal::text AS subtotal, n.child_count AS "childCount",
   n.row_version AS "rowVersion", n.rate_analysis_id AS "rateAnalysisId", n.measured, n.item_kind AS kind,
-  n.foreign_currency AS currency, n.foreign_rate::text AS "foreignRate"`;
+  n.foreign_currency AS currency, n.foreign_rate::text AS "foreignRate",
+  CASE WHEN n.node_type = 'item' THEN (
+    SELECT json_build_object('wbs', w.code, 'costCode', cc.code)
+    FROM est.boq ob JOIN proj.boq_line_map lm ON lm.project_id = ob.project_id AND lm.line_key = n.line_key
+    LEFT JOIN proj.wbs w ON w.id = lm.wbs_id LEFT JOIN platform.cost_code cc ON cc.id = lm.cost_code_id
+    WHERE ob.id = n.boq_id) END AS map`;
 
 const HEADER = `b.id, b.tender_id AS "tenderId", b.project_id AS "projectId", b.kind, b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
@@ -104,6 +110,8 @@ export interface BoqRow {
   /** Priced in another currency: the rate in it; `rate` is that at the BOQ's exchange rate. */
   currency: string | null;
   foreignRate: string | null;
+  /** A project BOQ's item: its WBS element and cost code (docs/wave2a-plan.md step 3); null when unmapped. */
+  map: { wbs: string | null; costCode: string | null } | null;
 }
 
 interface NodeRef {

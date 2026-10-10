@@ -15,6 +15,7 @@ import {
   KeyRound,
   LogOut,
   ScrollText,
+  Tags,
   Users,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -173,6 +174,9 @@ export function AppShell() {
             </div>
             <NavItem to="/projects" icon={<Building2 className="size-4" />}>
               Projects
+            </NavItem>
+            <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
+              Cost codes
             </NavItem>
             <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>
           </nav>
