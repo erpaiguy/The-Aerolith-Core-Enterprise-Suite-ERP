@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ApprovalModule } from './approvals/approval.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { RateLimitGuard } from './auth/rate-limit.js';
 import { ConfigModule } from './config/config.module.js';
@@ -9,6 +10,7 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { EmailModule } from './email/email.module.js';
 import { HealthController } from './health/health.controller.js';
 import { LicensingModule } from './licensing/licensing.module.js';
+import { ProcurementModule } from './procurement/procurement.module.js';
 import { ProjectModule } from './project/project.module.js';
 import { ProvisioningModule } from './provisioning/provisioning.module.js';
 import { ReportsModule } from './reports/reports.module.js';
@@ -29,6 +31,8 @@ import { TenderModule } from './tender/tender.module.js';
     ReportsModule,
     DashboardModule,
     ProjectModule,
+    ApprovalModule,
+    ProcurementModule,
   ],
   controllers: [HealthController],
   // Runs before route guards; only acts on routes marked with @RateLimit.

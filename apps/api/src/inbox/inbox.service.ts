@@ -2,6 +2,7 @@
 // Chat, to-do lists and richer productivity features are v2 (Wave 7).
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { TenantClaims } from '../auth/auth.service.js';
+import { waitingCount } from '../approvals/approval.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 
 const ITEM_COLUMNS =
@@ -18,7 +19,7 @@ export class InboxService {
   async inbox(claims: TenantClaims, now = new Date()) {
     const db = await this.tenants.forTenant(claims.ten);
     const mine = db`(user_id = ${claims.sub} OR user_id IS NULL)`;
-    const [items, upcoming, [unread], pending] = await Promise.all([
+    const [items, upcoming, [unread], pending, approvals] = await Promise.all([
       db.unsafe(
         `SELECT ${ITEM_COLUMNS} FROM platform.notification WHERE (user_id = $1 OR user_id IS NULL)
         AND (due_at IS NULL OR due_at <= $2) ORDER BY coalesce(due_at, created_at) DESC LIMIT 100`,
@@ -36,12 +37,13 @@ export class InboxService {
             { n: number }[]
           >`SELECT count(*)::int AS n FROM platform.password_reset_request WHERE status = 'pending'`
         : Promise.resolve([{ n: 0 }]),
+      waitingCount(db, claims),
     ]);
     return {
       items,
       upcoming,
       unread: unread?.n ?? 0,
-      pending: { passwordResets: pending[0]?.n ?? 0 },
+      pending: { passwordResets: pending[0]?.n ?? 0, approvals },
     };
   }
 

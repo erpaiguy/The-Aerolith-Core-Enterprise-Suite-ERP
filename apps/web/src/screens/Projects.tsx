@@ -20,6 +20,7 @@ import { ArrowLeft, Gauge, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
+import { ProjectRequisitions } from '../project/ProjectRequisitions';
 import { ProjectSchedules } from '../project/ProjectSchedules';
 import type {
   Party,
@@ -466,11 +467,12 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               </Card>
               <ProjectBoqs project={p} />
               <ProjectSchedules project={p} />
+              <ProjectRequisitions project={p} />
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">
-                  Wave 2b: approvals, purchase requisitions and orders from the BOQ and schedule,
-                  stores, and daily site reports.
+                  Next in Wave 2b: material demand from the BOQ and schedule, enquiries, purchase
+                  orders, goods receipt, stores, and daily site reports.
                 </p>
               </Card>
             </div>

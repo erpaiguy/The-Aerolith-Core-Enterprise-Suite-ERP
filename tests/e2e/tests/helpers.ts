@@ -200,6 +200,31 @@ export async function signInNewAdmin(
 }
 
 /**
+ * A staff member the admin added, signing in on a fresh browser context (`page`): the device is activated with the
+ * tenant's licence key (from the admin's email), then the one-time password is changed for their own.
+ */
+export async function signInStaff(
+  page: Page,
+  adminEmail: string,
+  username: string,
+  oneTimePassword: string,
+  newPassword: string,
+): Promise<void> {
+  const key = licenceKeyIn(await waitForEmail(adminEmail, 'Your Aerolith Core licence key'));
+  await page.goto('/');
+  await page.getByLabel('Licence key').fill(key);
+  await page.getByRole('button', { name: 'Activate' }).click();
+  await page.getByLabel('Username or admin email').fill(username);
+  await page.getByLabel('Password').fill(oneTimePassword);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByLabel('One-time password').fill(oneTimePassword);
+  await page.getByLabel('New password', { exact: true }).fill(newPassword);
+  await page.getByLabel('Repeat new password').fill(newPassword);
+  await page.getByRole('button', { name: 'Save password' }).click();
+  await page.getByRole('link', { name: 'Home' }).waitFor();
+}
+
+/**
  * On failure, prints where the page was and what it showed. CI keeps traces as artifacts, but this puts the essentials
  * in the job log itself, readable where artifacts cannot be downloaded.
  */

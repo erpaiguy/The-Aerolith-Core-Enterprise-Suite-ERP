@@ -37,7 +37,12 @@ import { ProjectScreen, ProjectsScreen } from './screens/Projects';
 import { CostCodesScreen } from './screens/CostCodes';
 import { WbsScreen } from './screens/Wbs';
 import { MacroScreen } from './screens/Macro';
+import { ApprovalDetailScreen } from './screens/ApprovalDetail';
+import { ApprovalRulesScreen } from './screens/ApprovalRules';
+import { ApprovalsScreen } from './screens/Approvals';
 import { ProgressScreen } from './screens/Progress';
+import { RequisitionScreen } from './screens/Requisition';
+import { RequisitionsScreen } from './screens/Requisitions';
 import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
 import { TemplatesScreen } from './screens/Templates';
@@ -112,6 +117,22 @@ const projectDashboardRoute = createRoute({
   component: function ProjectDashboardPage() {
     const { projectId } = projectDashboardRoute.useParams();
     return <ProjectDashboardScreen key={projectId} projectId={projectId} />;
+  },
+});
+const approvalRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/approvals/$approvalId',
+  component: function ApprovalPage() {
+    const { approvalId } = approvalRoute.useParams();
+    return <ApprovalDetailScreen key={approvalId} approvalId={approvalId} />;
+  },
+});
+const requisitionRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/requisitions/$requisitionId',
+  component: function RequisitionPage() {
+    const { requisitionId } = requisitionRoute.useParams();
+    return <RequisitionScreen key={requisitionId} requisitionId={requisitionId} />;
   },
 });
 const macroRoute = createRoute({
@@ -260,6 +281,27 @@ const routeTree = rootRoute.addChildren([
     macroRoute,
     progressRoute,
     projectDashboardRoute,
+    approvalRoute,
+    requisitionRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/approvals',
+      component: ApprovalsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/requisitions',
+      component: RequisitionsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/settings/approvals',
+      component: () => (
+        <AdminOnly>
+          <ApprovalRulesScreen />
+        </AdminOnly>
+      ),
+    }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/cost-codes',

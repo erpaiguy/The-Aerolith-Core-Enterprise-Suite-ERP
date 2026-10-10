@@ -111,3 +111,11 @@ Wave 1's exit criterion, a pilot contractor pricing and submitting a real tender
 
 Wave 2a's exit criterion, a won tender running as a live project on a baseline schedule, needs the pilot as well:
 nothing here has run on a real project yet.
+
+## Wave 2b build progress ([plan](wave2b-plan.md))
+
+| Step | What | Status |
+|------|------|--------|
+| 1 | Approvals (rules by amount, levels, stand-ins) and purchase requisitions | **Done** |
+| 2 | Material budget and demand from the BOQ and schedule | Next |
+| 3-9 | Vendor enquiries, purchase orders, goods receipt, inventory, daily site reports, project documents, reports | |

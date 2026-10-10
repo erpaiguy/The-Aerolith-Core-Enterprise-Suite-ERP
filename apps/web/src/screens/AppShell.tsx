@@ -9,6 +9,9 @@ import {
   Boxes,
   BriefcaseBusiness,
   Calculator,
+  CheckCheck,
+  ListChecks,
+  ShoppingCart,
   Building2,
   Contact,
   FileStack,
@@ -125,6 +128,13 @@ export function AppShell() {
             <NavItem to="/" icon={<Bell className="size-4" />} badge={inbox.data?.unread}>
               Home
             </NavItem>
+            <NavItem
+              to="/approvals"
+              icon={<CheckCheck className="size-4" />}
+              badge={inbox.data?.pending.approvals}
+            >
+              Approvals
+            </NavItem>
             {isAdmin && (
               <>
                 <NavItem to="/users" icon={<Users className="size-4" />}>
@@ -139,6 +149,9 @@ export function AppShell() {
                 </NavItem>
                 <NavItem to="/settings/tenders" icon={<Settings2 className="size-4" />}>
                   Tender settings
+                </NavItem>
+                <NavItem to="/settings/approvals" icon={<ListChecks className="size-4" />}>
+                  Approval rules
                 </NavItem>
               </>
             )}
@@ -178,7 +191,10 @@ export function AppShell() {
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes
             </NavItem>
-            <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>
+            <NavItem to="/requisitions" icon={<ShoppingCart className="size-4" />}>
+              Requisitions
+            </NavItem>
+            <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Orders and stores</Upcoming>
           </nav>
           <div className="px-4 pb-4">
             <Link to="/licences" className="text-xs text-fg-subtle hover:underline">
