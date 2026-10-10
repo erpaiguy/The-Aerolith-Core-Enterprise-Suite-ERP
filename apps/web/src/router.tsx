@@ -11,6 +11,7 @@ import { ResetRequestsScreen, UsersScreen } from './screens/Admin';
 import { ActivateScreen } from './screens/Activate';
 import { AppShell } from './screens/AppShell';
 import { HomeScreen } from './screens/Home';
+import { LicencesScreen } from './screens/Licences';
 import { ChangePasswordScreen, ForgotScreen, SetPasswordScreen } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
 import { BoqScreen } from './screens/Boq';
@@ -40,7 +41,7 @@ const DashboardScreen = lazy(() =>
 );
 
 /** Pages opened from email links: usable in any browser, with or without an activated licence or session. */
-const PUBLIC_PATHS = ['/account/set-password', '/account/reset-password'];
+const PUBLIC_PATHS = ['/account/set-password', '/account/reset-password', '/licences'];
 const SIGNED_OUT_PATHS = ['/sign-in', '/forgot'];
 
 /** Decides what the user may see from the session state; routes below only render their screen. */
@@ -246,6 +247,7 @@ const routeTree = rootRoute.addChildren([
     component: PipelineReport,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInScreen }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/licences', component: LicencesScreen }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/forgot',

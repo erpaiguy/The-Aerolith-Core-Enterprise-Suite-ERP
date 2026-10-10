@@ -94,6 +94,12 @@ test('an estimator reads the dashboards, adds a tile and drills into the pipelin
   expect(wb.getWorksheet('Summary')!.getRow(6).values).toEqual(
     expect.arrayContaining(['Pipeline value', 4250000]),
   );
+  // The third-party licences travel with the app, ECharts' Apache NOTICE included.
+  await page.getByRole('link', { name: 'Third-party licences' }).click();
+  const licences = page.getByLabel('Third-party licences');
+  await expect(licences).toContainText('echarts 6.0.0');
+  await expect(licences).toContainText('Copyright 2017-2025 The Apache Software Foundation');
+  await page.goBack();
   // Printing leaves the menus off the paper.
   await page.emulateMedia({ media: 'print' });
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();

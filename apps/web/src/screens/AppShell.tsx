@@ -163,6 +163,11 @@ export function AppShell() {
             <Upcoming icon={<Building2 className="size-4" />}>Projects</Upcoming>
             <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Procurement</Upcoming>
           </nav>
+          <div className="px-4 pb-4">
+            <Link to="/licences" className="text-xs text-fg-subtle hover:underline">
+              Third-party licences
+            </Link>
+          </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">

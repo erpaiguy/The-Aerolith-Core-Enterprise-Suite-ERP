@@ -20,3 +20,6 @@ tests/e2e/.mail/
 
 # Tender documents in development (DOCUMENT_DIR unset)
 .documents/
+
+# Generated third-party notices for the desktop installer (tools/notices.mjs)
+apps/desktop/notices/

@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Owner console: served only on the loopback owner listener (docs/owner-console.md)",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && node ../../tools/notices.mjs --product \"Aerolith Core owner console\" --filter \"@aerolith/owner...\" --out dist",
     "dev": "vite",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",

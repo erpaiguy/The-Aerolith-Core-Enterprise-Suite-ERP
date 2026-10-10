@@ -21,6 +21,7 @@ COPY packages/shared packages/shared
 COPY packages/ui packages/ui
 COPY apps/web apps/web
 COPY apps/owner apps/owner
+COPY tools/notices.mjs tools/
 RUN pnpm install --offline --frozen-lockfile --filter @aerolith/web... --filter @aerolith/owner... \
  && pnpm --filter @aerolith/shared build \
  && pnpm --filter @aerolith/web build \

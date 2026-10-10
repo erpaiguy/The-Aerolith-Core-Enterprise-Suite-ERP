@@ -12,6 +12,10 @@ extraResources:
     to: web
   - from: resources/app-config.json
     to: app-config.json
+  # Third-party licences and SBOM of everything in the installer (docs/licensing-policy.md §3.2); the web bundle's own
+  # copy is shown in the app. Electron's and Chromium's licence files are added by electron-builder itself.
+  - from: notices
+    to: .
 win:
   target:
     - target: nsis

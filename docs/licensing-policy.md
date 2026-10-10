@@ -22,7 +22,12 @@ AGPL/GPL tools may run **only as internal ops tooling** that is never distribute
 ## 3. Enforcement
 
 1. CI licence scan on every build (fails on unknown or banned licences), including transitive dependencies.
-2. Generated SBOM (CycloneDX) and a bundled `THIRD_PARTY_NOTICES` file in every installer and image.
+2. Generated SBOM (CycloneDX) and a bundled `THIRD_PARTY_NOTICES` file in every installer and image. **Built**
+   (`tools/notices.mjs`): the web and owner builds write `THIRD_PARTY_NOTICES.txt` and `sbom.cdx.json` into their
+   bundles (the app shows them under "Third-party licences"); the API image has them in `/app`; the desktop installer
+   has its own pair in its resources folder, Electron included (electron-builder adds Electron's and Chromium's licence
+   files). Each package's licence file and NOTICE file are reproduced as shipped; for the few packages published
+   without a licence file, the standard MIT or ISC text with the package's author.
 3. Dependency additions require a one-line entry in `docs/dependencies.md` (name, licence, why).
 4. Pin versions. Re-check the licence on every major upgrade, because projects change licences (Redis, Elastic, MinIO, HashiCorp, Sentry all did).
 

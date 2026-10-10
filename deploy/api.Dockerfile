@@ -18,10 +18,12 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     pnpm fetch --frozen-lockfile
 COPY packages/shared packages/shared
 COPY apps/api apps/api
+COPY tools/notices.mjs tools/
 RUN pnpm install --offline --frozen-lockfile --filter @aerolith/api... \
  && pnpm --filter @aerolith/shared build \
  && pnpm --filter @aerolith/api build \
- && pnpm --filter @aerolith/api deploy --prod --legacy /out
+ && pnpm --filter @aerolith/api deploy --prod --legacy /out \
+ && node tools/notices.mjs --product "Aerolith Core API" --filter "@aerolith/api..." --out /out
 
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000

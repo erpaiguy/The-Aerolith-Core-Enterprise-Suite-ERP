@@ -13,7 +13,8 @@
     "lint": "eslint src",
     "start": "electron .",
     "smoke": "electron . --smoke-test",
-    "dist:win": "electron-builder --win --publish never",
+    "notices": "node ../../tools/notices.mjs --product \"Aerolith Core desktop\" --filter \"@aerolith/web...\" --filter \"@aerolith/desktop...\" --add electron:. --out notices",
+    "dist:win": "pnpm notices && electron-builder --win --publish never",
     "test": "vitest run"
   },
   "devDependencies": {
