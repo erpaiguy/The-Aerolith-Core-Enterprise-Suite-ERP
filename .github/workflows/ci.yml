@@ -48,6 +48,8 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      - name: File names that differ only in case (Windows sees one file)
+        run: pnpm case:check
       - name: Licence gate (docs/licensing-policy.md)
         run: pnpm licenses:check
 

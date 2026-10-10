@@ -51,7 +51,7 @@ import type {
 } from '../api/types';
 import { describeError, formatDate, formatDateTime } from '../lib/format';
 import { Thumbnail } from '../documents/Thumbnail';
-import { saveThumbnail, thumbnailSource } from '../documents/thumbnail';
+import { saveThumbnail, thumbnailSource } from '../documents/make-thumbnail';
 import { usePermission } from '../session/permissions';
 import { useSession } from '../session/session';
 
