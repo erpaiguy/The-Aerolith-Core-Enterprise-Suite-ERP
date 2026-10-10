@@ -35,7 +35,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 1 | **Projects** (J1) | `proj` schema; project register and numbering; client, legal entity, dates, contract value, status flow; sites (with state, for GST place of supply); team with project roles; project-scoped visibility; **create a project from a won tender** | **Done** (see below) |
 | 2 | **Contract BOQ + budget** (J2) | BOQs owned by a project; from the won tender's submitted BOQ: contract BOQ at quoted rates, budget at estimate rates (a background copy for large BOQs); versions; budget against contract | **Done** (see below) |
 | 3 | **WBS + cost codes** (J3) | WBS tree per project; company cost-code master; BOQ items mapped to WBS and cost codes (one by one and in bulk by range) | **Done** (see below) |
-| 4 | **Project schedules** (J4) | The Wave 1 engine for project plans: constraints, resources and assignments, multiple baselines, progress updates (data date, actuals, remaining duration), look-ahead; 50k activities | |
+| 4 | **Project schedules** (J4) | The Wave 1 engine for project plans: constraints, resources and assignments, multiple baselines, progress updates (data date, actuals, remaining duration), look-ahead; 50k activities | **Done** (see below) |
 | 5 | **Macro plans** (J5) | Roll-up of micro plans through the WBS, milestones, summary views by package, trade and zone | |
 | 6 | **Progress measurement** (J6) | Physical % per BOQ item and activity, measurement-based progress, progress value against the contract BOQ | |
 | 7 | **Project dashboard and reports** | Progress, schedule variance, budget against contract, look-ahead | |
@@ -205,3 +205,87 @@ A million lines would take about five times as long for the first three, which i
 
 A browser test loads the standard cost codes, wins a tender with a two-section BOQ, makes the contract BOQ, makes
 the WBS from it, adds and removes an element, maps a section to a cost code from the grid, and reads the breakdown.
+
+## Step 4 delivered: project schedules
+
+**Journey:**
+- A project's page lists its **Schedules**. **New schedule** starts one, by default laid out on the project's WBS:
+  each element becomes a summary (with elements under it) or an activity of five days, carrying the element's code,
+  name and link. **Import file** brings one in from MS Project (XML) or Primavera (XER). The tender's programme is
+  still not copied (Wave 1 decision).
+- A schedule opens in the programme editor of Wave 1: activities and links typed in the grid, calendars, constraints,
+  summaries, the bar chart, recalculated on every change, MS Project, Primavera and Excel exports, the A3 print. On a
+  project schedule it adds the following:
+  - **Data date** (Settings): progress is as of that day.
+  - **Progress** (the activity panel): actual start, actual finish, or the working days still to do.
+    - A started activity carries on by its days left from the data date (blank: its duration less the working days
+      since it started).
+    - A finished one sits on its actual dates.
+    - Nothing not done is planned before the data date.
+    - Actual dates after the data date are refused.
+    - Rows show ◐ in progress and ✓ finished. The bar chart darkens the work done up to the data date and greys
+      finished work.
+  - **Baselines** (Settings): *Take a baseline* freezes the dates as they are, kept for good. The first one is shown
+    at once; any other can be chosen. With a baseline shown, the header gives the finish against it ("+2 days"), the
+    grid adds a **Var** column (each activity's finish against its baseline finish, late in red), and the chart
+    draws the baseline as a thin bar under each activity.
+  - **WBS element** per activity (the activity panel).
+  - **Resources a working day** per activity, from the rate library (labour, materials, equipment…).
+    **Resources** shows what the schedule needs week by week from the data date, shaded by load, with what comes
+    later and the total.
+  - **Look-ahead**: activities on or due to start in the next 1 to 12 weeks from the data date, by start, with what
+    they sit under, their WBS, days left and float, critical ones in red. It is a page of its own, printed or saved
+    as PDF from the browser (A4 landscape) for the weekly site meeting.
+- A project schedule holds up to **50,000 activities** (a tender programme stays at 20,000).
+
+**Who does what:** a project's schedules are seen by its team only (and admins and those who see every project), on
+every schedule route, as for its BOQs. Changing one needs **Create and edit tender programmes** and a lead or member
+place on the team (or the right to edit projects). Viewers read.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Progress override, not retained logic.** The rest of a started activity goes on from the data date even
+  if one of its predecessors is not finished. That is what site teams report, and what most tools do by default. P6's
+  retained logic (the remainder waits for its predecessors) can be an option later.
+- **[Certain] Progress is reported in days (dates and days left), not in percent.** Physical percent complete,
+  measured against BOQ quantities, is step 6. A percent typed by hand would compete with it.
+- **[Certain] Baselines are kept for good** (never edited or deleted), like frozen BOQ versions. A baseline keeps
+  each activity's dates as they were; activities added later have no baseline dates.
+- **[Likely] Resources are per working day**, with no levelling. The weekly view shows overloads; moving work to
+  smooth them stays with the planner.
+- **Imports carry no progress yet.** A file's actual dates are dropped with a warning, as for tender programmes. The
+  exports do not include progress either.
+- **WBS elements with schedule activities on them cannot be removed** until the activities are moved to another
+  element.
+
+**Speed** at 50,000 activities (50 summaries of 999 chained tasks), on this machine:
+- **[Certain]** Opening the schedule took 0.9 s, about 28 MB of JSON before compression (production compresses
+  through Caddy).
+- **[Certain]** One edit that moves the finish took 3.2–3.6 s: reading 0.4 s, scheduling 0.5 s, writing the dates
+  and float of every activity 1.2 s, and sending the whole plan back about 0.9 s.
+- **[Likely]** A typical 5,000-activity schedule edits in well under a second.
+- **[Guessing]** Sending back only what changed would save most of that last 0.9 s; it needs the editor to merge
+  changes, and is left for when a pilot's schedule shows it matters.
+
+**API** (under `/api/tenant`):
+- Schedules: `GET /projects/:id/schedules`, `POST /projects/:id/schedules` (`{name, startOn, fromWbs}`),
+  `POST /projects/:id/schedules/import`.
+- `POST /programmes/:id` takes `dataDate` and `baselineId`. Activity edits take `wbsId` and
+  `progress: {actualStart, actualFinish, remaining}`.
+- Baselines and resources: `POST /programmes/:id/baselines` (`{name}`),
+  `GET /programmes/:id/activities/:activityId/resources`,
+  `POST /programmes/:id/assignments` (`{activityId, resourceId, unitsPerDay}`, where `null` removes),
+  `GET /programmes/:id/resources?weeks=`.
+- Look-ahead: `GET /programmes/:id/lookahead?weeks=`.
+- Migration `0025_project_schedules.sql`. The engine (`packages/shared/src/schedule.ts`) takes a data date and each
+  activity's progress.
+
+**Tests:**
+- 4 engine tests worked by hand on the site calendar: days left from the data date, a finished activity on its
+  actual dates, nothing before the data date, a milestone reached, constraints ignored once started, summaries
+  rolled up.
+- 6 API integration tests: a schedule laid out on the WBS and kept to the team; scheduling and a baseline; progress
+  and the slip against the baseline, actuals after the data date refused, none on a tender's programme; the
+  look-ahead; resources and their weekly load; a WBS element kept while activities are on it.
+- A browser test: a resource, a won tender made a project with a two-element WBS, a schedule on it, a link, a
+  baseline, the data date and progress (+2 days against the baseline), masons on an activity and their weekly load,
+  and the look-ahead.

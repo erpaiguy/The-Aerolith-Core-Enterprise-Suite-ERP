@@ -59,7 +59,7 @@ const mapBody = z.object({
 /**
  * WBS and cost codes (docs/wave2a-plan.md step 3). The company's cost codes are read by everyone and changed with
  * `costcodes.edit`; a project's WBS is shaped by its lead (or editors of projects) and its BOQ lines are mapped by its
- * team (checked per project in the service, and on BOQ routes by ProjectBoqAccess).
+ * team (checked per project in the service, and on BOQ routes by ProjectAccess).
  */
 @Controller('tenant')
 @UseGuards(TenantAuthGuard, PermissionGuard)

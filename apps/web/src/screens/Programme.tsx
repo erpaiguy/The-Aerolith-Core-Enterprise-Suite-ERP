@@ -1,6 +1,7 @@
-// The tender programme (docs/wave1-plan.md step 11): the Programme tab of a tender, the programme editor (activities
-// grid beside the bar chart, recalculated on every change by the server) and its print view. A submission document:
-// nothing here links to a live project.
+// Plans: the Programme tab of a tender (docs/wave1-plan.md step 11), and the editor shared by a tender's programme and
+// a project's schedule (docs/wave2a-plan.md step 4): activities grid beside the bar chart, recalculated on every change
+// by the server, and its print view. A project schedule adds progress as of a data date, WBS elements, baselines,
+// resources, the resources needed week by week, and the look-ahead.
 import {
   Alert,
   Badge,
@@ -29,9 +30,11 @@ import {
   IndentIncrease,
   Plus,
   Printer,
+  ListChecks,
   Settings,
   Trash2,
   Upload,
+  Users,
 } from 'lucide-react';
 import {
   useEffect,
@@ -283,7 +286,7 @@ function usePlan(planId: string) {
   const [error, setError] = useState<string | null>(null);
   const store = (p: ProgrammeDetail) => {
     qc.setQueryData(['programme', planId], p);
-    void qc.invalidateQueries({ queryKey: ['programmes', p.tenderId] });
+    void qc.invalidateQueries({ queryKey: ['programmes', p.tenderId ?? p.projectId] });
   };
   const run = async (fn: (p: ProgrammeDetail) => Promise<ProgrammeDetail>) => {
     const p = qc.getQueryData<ProgrammeDetail>(['programme', planId]);
@@ -387,6 +390,15 @@ function Cell({
 }
 
 const COLS = 'grid-cols-[2.25rem_5rem_minmax(11rem,1fr)_3.25rem_5.25rem_5.25rem_7rem_3rem]';
+const COLS_BASELINE =
+  'grid-cols-[2.25rem_5rem_minmax(11rem,1fr)_3.25rem_5.25rem_5.25rem_7rem_3rem_3rem]';
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+/** " (+3 days)" when the finish moved from the baseline's, in calendar days. */
+const variance = (base: string | null, now: string | null) => {
+  if (!base || !now) return '';
+  const n = dayNo(now) - dayNo(base);
+  return n === 0 ? ', on time' : ` (${signed(n)} day${Math.abs(n) === 1 ? '' : 's'})`;
+};
 
 export function ProgrammeScreen({ planId }: { planId: string }) {
   const canEditRole = usePermission('programme.edit');
@@ -395,7 +407,7 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState<Zoom>('week');
   const [scrollTop, setScrollTop] = useState(0);
-  const [panel, setPanel] = useState<'calendars' | 'settings' | null>(null);
+  const [panel, setPanel] = useState<'calendars' | 'settings' | 'resources' | null>(null);
   const gridBox = useRef<HTMLDivElement>(null);
   const [viewH, setViewH] = useState(600);
   const tempSeq = useRef(0);
@@ -433,6 +445,9 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
   if (plan.isError) return <Alert tone="danger">{describeError(plan.error)}</Alert>;
   const d = plan.data;
   const canEdit = canEditRole && !d.archivedAt && !busy;
+  const schedule = d.kind === 'project_schedule';
+  const baseline = d.baselines?.find((b) => b.id === d.baselineId) ?? null;
+  const cols = baseline ? COLS_BASELINE : COLS;
   const sel = d.activities.find((a) => a.id === selected) ?? null;
   const siblings = (parentId: string | null) => d.activities.filter((a) => a.parentId === parentId);
   const defaultCal = d.calendars.find((c) => c.id === d.calendarId);
@@ -519,19 +534,39 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
 
   return (
     <div className="space-y-4">
-      <Link
-        to="/tenders/$tenderId"
-        params={{ tenderId: d.tenderId }}
-        className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
-      >
-        <ArrowLeft className="size-4" aria-hidden /> {d.tender.number} · {d.tender.title}
-      </Link>
+      {d.owner.kind === 'tender' ? (
+        <Link
+          to="/tenders/$tenderId"
+          params={{ tenderId: d.owner.id }}
+          className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> {d.owner.number} · {d.owner.title}
+        </Link>
+      ) : (
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId: d.owner.id }}
+          className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> {d.owner.number} · {d.owner.title}
+        </Link>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{d.name}</h1>
           <p className="mt-1 text-sm text-fg-muted" data-testid="programme-summary">
             {shortDate(d.startOn)} to {shortDate(d.finishOn)} · {d.duration ?? 0} working days ·{' '}
             {d.activityCount} activities{d.archivedAt && ' · archived'}
+            {schedule && ` · data date ${shortDate(d.dataDate ?? d.startOn)}`}
+            {baseline && (
+              <>
+                {' · '}
+                <span data-testid="baseline-variance">
+                  against {baseline.name}: finish {shortDate(baseline.finishOn)}
+                  {variance(baseline.finishOn, d.finishOn)}
+                </span>
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -541,6 +576,23 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
           >
             <CalendarDays className="size-4" aria-hidden /> Calendars
           </Button>
+          {schedule && (
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setPanel(panel === 'resources' ? null : 'resources')}
+              >
+                <Users className="size-4" aria-hidden /> Resources
+              </Button>
+              <Link
+                to="/programmes/$planId/lookahead"
+                params={{ planId }}
+                className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3"
+              >
+                <ListChecks className="size-4" aria-hidden /> Look-ahead
+              </Link>
+            </>
+          )}
           {canEditRole && (
             <Button
               variant="secondary"
@@ -563,6 +615,7 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
       {error && <Alert tone="danger">{error}</Alert>}
       {panel === 'settings' && (
         <SettingsPanel
+          key={`${d.baselineId ?? ''}-${d.baselines?.length ?? 0}`}
           plan={d}
           busy={busy}
           onSave={(body) =>
@@ -571,8 +624,10 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
             )
           }
           onArchive={(archived) => void post('/archive', () => ({ archived }))}
+          onBaseline={(name) => post('/baselines', () => ({ name }))}
         />
       )}
+      {panel === 'resources' && <ResourceLoad planId={planId} />}
       {panel === 'calendars' && (
         <CalendarsPanel
           plan={d}
@@ -673,22 +728,42 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
           aria-label="Programme activities"
           aria-rowcount={rows.length}
         >
-          <div style={{ height: HEAD_H + rows.length * ROW_H + 40, minWidth: '42rem' }}>
+          <div
+            style={{
+              height: HEAD_H + rows.length * ROW_H + 40,
+              minWidth: baseline ? '45rem' : '42rem',
+            }}
+          >
             <div
               role="row"
               className={cx(
                 'sticky top-0 z-10 grid items-end border-b border-line bg-surface pb-1.5 text-xs font-medium text-fg-muted',
-                COLS,
+                cols,
               )}
               style={{ height: HEAD_H }}
             >
-              {['#', 'ID', 'Activity', 'Days', 'Start', 'Finish', 'Predecessors', 'Float'].map(
-                (h) => (
-                  <div key={h} role="columnheader" className="px-2">
-                    {h}
-                  </div>
-                ),
-              )}
+              {[
+                '#',
+                'ID',
+                'Activity',
+                'Days',
+                'Start',
+                'Finish',
+                'Predecessors',
+                'Float',
+                ...(baseline ? ['Var'] : []),
+              ].map((h) => (
+                <div
+                  key={h}
+                  role="columnheader"
+                  className="px-2"
+                  title={
+                    h === 'Var' ? `Finish against ${baseline?.name}, in days (+ late)` : undefined
+                  }
+                >
+                  {h}
+                </div>
+              ))}
             </div>
             {rows.slice(first, last).map((a, k) => {
               const i = first + k;
@@ -704,7 +779,7 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
                   {...(summary ? { 'aria-expanded': !collapsed.has(a.id) } : {})}
                   className={cx(
                     'absolute left-0 right-0 grid items-center border-b border-line/60',
-                    COLS,
+                    cols,
                     isSel && 'bg-accent/10',
                     a.critical && !summary && 'text-danger',
                     summary && 'font-semibold',
@@ -745,6 +820,18 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
                     ) : (
                       <span className="w-4 shrink-0" />
                     )}
+                    {a.status && a.status !== 'not_started' && !summary && (
+                      <span
+                        className={cx(
+                          'mr-1 shrink-0 text-xs',
+                          a.status === 'finished' ? 'text-success' : 'text-accent',
+                        )}
+                        title={a.status === 'finished' ? 'Finished' : 'In progress'}
+                        data-testid={`status-${a.code}`}
+                      >
+                        {a.status === 'finished' ? '✓' : '◐'}
+                      </span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <Cell
                         label={`Name of ${a.code}`}
@@ -777,6 +864,21 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
                   <div role="gridcell" className="px-2 text-right text-xs tabular-nums">
                     {a.totalFloat ?? ''}
                   </div>
+                  {baseline && (
+                    <div
+                      role="gridcell"
+                      className={cx(
+                        'px-2 text-right text-xs tabular-nums',
+                        a.baselineFinish && a.earlyFinish && a.earlyFinish > a.baselineFinish
+                          ? 'text-danger'
+                          : '',
+                      )}
+                    >
+                      {a.baselineFinish && a.earlyFinish
+                        ? signed(dayNo(a.earlyFinish) - dayNo(a.baselineFinish))
+                        : ''}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -796,7 +898,7 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
           rows={rows}
           links={d.links}
           calendar={defaultCal}
-          dataDate={d.startOn}
+          dataDate={d.dataDate ?? d.startOn}
           from={from}
           to={to}
           zoom={zoom}
@@ -959,7 +1061,270 @@ function ActivityPanel({
           </form>
         )}
       </div>
+      {plan.kind === 'project_schedule' && (
+        <div className="mt-4 grid gap-4 border-t border-line pt-4 lg:grid-cols-[1fr_1fr]">
+          <div className="space-y-4">
+            {!summary && (
+              <ProgressForm plan={plan} activity={a} canEdit={canEdit} onSave={onSave} />
+            )}
+            <WbsPicker plan={plan} activity={a} canEdit={canEdit} onSave={onSave} />
+          </div>
+          {a.kind === 'task' && (
+            <ActivityResources planId={plan.id} activityId={a.id} canEdit={canEdit} />
+          )}
+        </div>
+      )}
     </Card>
+  );
+}
+
+/** Progress as of the data date: when it started and finished, or the working days still to do. */
+function ProgressForm({
+  plan,
+  activity: a,
+  canEdit,
+  onSave,
+}: {
+  plan: ProgrammeDetail;
+  activity: ProgrammeActivity;
+  canEdit: boolean;
+  onSave: (op: Op) => void;
+}) {
+  const milestone = a.kind === 'milestone';
+  const [start, setStart] = useState(a.actualStart ?? '');
+  const [finish, setFinish] = useState(a.actualFinish ?? '');
+  const [left, setLeft] = useState(
+    a.remaining === null || a.remaining === undefined ? '' : String(a.remaining),
+  );
+  const asOf = plan.dataDate ?? plan.startOn;
+  return (
+    <form
+      className="space-y-2"
+      aria-label="Progress"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave({
+          op: 'update',
+          id: a.id,
+          progress: start
+            ? {
+                actualStart: start,
+                actualFinish: milestone ? null : finish || null,
+                remaining: finish || milestone || left === '' ? null : Number(left),
+              }
+            : null,
+        });
+      }}
+    >
+      <h3 className="text-sm font-medium">
+        Progress as of {shortDate(asOf)}{' '}
+        {a.status === 'finished' ? (
+          <Badge tone="success">finished</Badge>
+        ) : a.status === 'in_progress' ? (
+          <Badge tone="accent">in progress, {a.remainingLeft ?? 0} days left</Badge>
+        ) : (
+          <Badge tone="neutral">not started</Badge>
+        )}
+      </h3>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label={milestone ? 'Reached on' : 'Actual start'}>
+          <Input
+            type="date"
+            value={start}
+            max={asOf}
+            onChange={(e) => setStart(e.target.value)}
+            disabled={!canEdit}
+          />
+        </Field>
+        {!milestone && (
+          <>
+            <Field label="Actual finish">
+              <Input
+                type="date"
+                value={finish}
+                min={start || undefined}
+                max={asOf}
+                onChange={(e) => setFinish(e.target.value)}
+                disabled={!canEdit || !start}
+              />
+            </Field>
+            <Field label="Days left" hint="Blank: worked out from the duration.">
+              <Input
+                inputMode="numeric"
+                value={left}
+                onChange={(e) => setLeft(e.target.value.replace(/[^0-9]/g, ''))}
+                disabled={!canEdit || !start || Boolean(finish)}
+              />
+            </Field>
+          </>
+        )}
+      </div>
+      {canEdit && (
+        <Button type="submit" variant="secondary">
+          Save progress
+        </Button>
+      )}
+    </form>
+  );
+}
+
+function WbsPicker({
+  plan,
+  activity: a,
+  canEdit,
+  onSave,
+}: {
+  plan: ProgrammeDetail;
+  activity: ProgrammeActivity;
+  canEdit: boolean;
+  onSave: (op: Op) => void;
+}) {
+  const wbs = useQuery({
+    queryKey: ['project-wbs', plan.projectId],
+    queryFn: () =>
+      api.request<{ id: string; code: string; name: string; depth: number }[]>(
+        `/api/tenant/projects/${plan.projectId}/wbs`,
+      ),
+  });
+  return (
+    <Field label="WBS element">
+      <Select
+        value={a.wbsId ?? ''}
+        disabled={!canEdit || !wbs.data}
+        onChange={(e) => onSave({ op: 'update', id: a.id, wbsId: e.target.value || null })}
+      >
+        <option value="">None</option>
+        {wbs.data?.map((w) => (
+          <option key={w.id} value={w.id}>
+            {'\u00a0\u00a0'.repeat(w.depth)}
+            {w.code} · {w.name}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+}
+
+interface Assignment {
+  resourceId: string;
+  code: string;
+  name: string;
+  unit: string;
+  kind: string;
+  unitsPerDay: string;
+}
+
+/** The rate library's resources the activity needs each working day. */
+function ActivityResources({
+  planId,
+  activityId,
+  canEdit,
+}: {
+  planId: string;
+  activityId: string;
+  canEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const key = ['activity-resources', planId, activityId];
+  const list = useQuery({
+    queryKey: key,
+    queryFn: () =>
+      api.request<Assignment[]>(
+        `/api/tenant/programmes/${planId}/activities/${activityId}/resources`,
+      ),
+  });
+  const [q, setQ] = useState('');
+  const [resourceId, setResourceId] = useState('');
+  const [units, setUnits] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const found = useQuery({
+    queryKey: ['resource-search', q],
+    queryFn: () =>
+      api.request<{ items: { id: string; code: string; name: string; unit: string }[] }>(
+        `/api/tenant/resources?limit=20&q=${encodeURIComponent(q)}`,
+      ),
+    enabled: canEdit,
+  });
+  const save = async (rid: string, unitsPerDay: string | null) => {
+    setError(null);
+    try {
+      qc.setQueryData(
+        key,
+        await api.request<Assignment[]>(`/api/tenant/programmes/${planId}/assignments`, {
+          method: 'POST',
+          body: { activityId, resourceId: rid, unitsPerDay },
+        }),
+      );
+      void qc.invalidateQueries({ queryKey: ['programme-resources', planId] });
+      return true;
+    } catch (err) {
+      setError(describeError(err));
+      return false;
+    }
+  };
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium">Resources a working day</h3>
+      {list.data?.length ? (
+        <ul className="space-y-1 text-sm" aria-label="Activity resources">
+          {list.data.map((r) => (
+            <li key={r.resourceId} className="flex items-center gap-2">
+              <span className="font-mono text-xs">{r.code}</span>
+              <span className="min-w-0 flex-1 truncate">{r.name}</span>
+              <span className="tabular-nums">
+                {Number(r.unitsPerDay).toLocaleString('en-IN')} {r.unit}
+              </span>
+              {canEdit && (
+                <Button
+                  variant="ghost"
+                  aria-label={`Take ${r.code} off`}
+                  onClick={() => void save(r.resourceId, null)}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-fg-muted">None.</p>
+      )}
+      {canEdit && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save(resourceId, units.trim()).then((ok) => ok && setUnits(''));
+          }}
+        >
+          <Field label="Find a resource">
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Code or name" />
+          </Field>
+          <Field label="Resource">
+            <Select value={resourceId} onChange={(e) => setResourceId(e.target.value)}>
+              <option value="">Choose…</option>
+              {found.data?.items.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.code} · {r.name} ({r.unit})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Units a day">
+            <Input
+              inputMode="decimal"
+              value={units}
+              onChange={(e) => setUnits(e.target.value)}
+              className="w-24"
+            />
+          </Field>
+          <Button type="submit" variant="secondary" disabled={!resourceId || !units.trim()}>
+            Add
+          </Button>
+        </form>
+      )}
+      {error && <Alert tone="danger">{error}</Alert>}
+    </div>
   );
 }
 
@@ -968,32 +1333,58 @@ function SettingsPanel({
   busy,
   onSave,
   onArchive,
+  onBaseline,
 }: {
   plan: ProgrammeDetail;
   busy: boolean;
-  onSave: (body: { name: string; startOn: string; calendarId: string; notes: string }) => void;
+  onSave: (body: {
+    name: string;
+    startOn: string;
+    calendarId: string;
+    notes: string;
+    dataDate?: string | null;
+    baselineId?: string | null;
+  }) => void;
   onArchive: (archived: boolean) => void;
+  onBaseline: (name: string) => Promise<boolean>;
 }) {
+  const schedule = plan.kind === 'project_schedule';
   const [v, setV] = useState({
     name: plan.name,
     startOn: plan.startOn,
     calendarId: plan.calendarId,
     notes: plan.notes,
+    dataDate: plan.dataDate ?? '',
+    baselineId: plan.baselineId ?? '',
   });
+  const [baselineName, setBaselineName] = useState('');
   return (
-    <Card title="Programme settings">
+    <Card title={schedule ? 'Schedule settings' : 'Programme settings'}>
       <form
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave(v);
+          const { dataDate, baselineId, ...base } = v;
+          // Only what was changed here: a baseline taken meanwhile stays shown.
+          onSave({
+            ...base,
+            ...(schedule && (dataDate || null) !== plan.dataDate
+              ? { dataDate: dataDate || null }
+              : {}),
+            ...(schedule && (baselineId || null) !== plan.baselineId
+              ? { baselineId: baselineId || null }
+              : {}),
+          });
         }}
       >
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Programme name">
+          <Field label={schedule ? 'Schedule name' : 'Programme name'}>
             <Input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} required />
           </Field>
-          <Field label="Data date" hint="Nothing starts before it.">
+          <Field
+            label={schedule ? 'Start' : 'Data date'}
+            hint={schedule ? 'Nothing is planned before it.' : 'Nothing starts before it.'}
+          >
             <Input
               type="date"
               value={v.startOn}
@@ -1013,6 +1404,33 @@ function SettingsPanel({
               ))}
             </Select>
           </Field>
+          {schedule && (
+            <>
+              <Field
+                label="Data date"
+                hint="Progress is as of this day; what is not done is planned from it."
+              >
+                <Input
+                  type="date"
+                  value={v.dataDate}
+                  onChange={(e) => setV({ ...v, dataDate: e.target.value })}
+                />
+              </Field>
+              <Field label="Baseline shown">
+                <Select
+                  value={v.baselineId}
+                  onChange={(e) => setV({ ...v, baselineId: e.target.value })}
+                >
+                  <option value="">None</option>
+                  {plan.baselines.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({shortDate(b.dataDate)})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </>
+          )}
         </div>
         <Field label="Notes">
           <Textarea
@@ -1026,13 +1444,141 @@ function SettingsPanel({
             Save and recalculate
           </Button>
           <Button type="button" variant="ghost" onClick={() => onArchive(!plan.archivedAt)}>
-            {plan.archivedAt ? 'Restore programme' : 'Archive programme'}
+            {plan.archivedAt
+              ? `Restore ${schedule ? 'schedule' : 'programme'}`
+              : `Archive ${schedule ? 'schedule' : 'programme'}`}
           </Button>
         </div>
       </form>
+      {schedule && (
+        <form
+          className="mt-4 flex flex-wrap items-end gap-2 border-t border-line pt-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onBaseline(baselineName.trim()).then((ok) => ok && setBaselineName(''));
+          }}
+        >
+          <Field
+            label="Take a baseline"
+            hint={`The dates as they are now, kept for good to measure slippage against. ${plan.baselines.length} taken.`}
+          >
+            <Input
+              value={baselineName}
+              onChange={(e) => setBaselineName(e.target.value)}
+              placeholder="e.g. Approved schedule"
+              maxLength={100}
+            />
+          </Field>
+          <Button type="submit" variant="secondary" disabled={!baselineName.trim() || busy}>
+            Take baseline
+          </Button>
+        </form>
+      )}
     </Card>
   );
 }
+
+/** The resources the schedule needs week by week from the data date. */
+function ResourceLoad({ planId }: { planId: string }) {
+  const [weeks, setWeeks] = useState(12);
+  const load = useQuery({
+    queryKey: ['programme-resources', planId, weeks],
+    queryFn: () =>
+      api.request<ResourceLoadView>(`/api/tenant/programmes/${planId}/resources?weeks=${weeks}`),
+  });
+  return (
+    <Card
+      title="Resources needed"
+      actions={
+        <div className="w-32 shrink-0">
+          <Select
+            aria-label="Weeks"
+            className="w-32"
+            value={weeks}
+            onChange={(e) => setWeeks(Number(e.target.value))}
+          >
+            {[4, 8, 12, 26, 52].map((n) => (
+              <option key={n} value={n}>
+                {n} weeks
+              </option>
+            ))}
+          </Select>
+        </div>
+      }
+    >
+      {load.isPending ? (
+        <Spinner />
+      ) : load.isError ? (
+        <Alert tone="danger">{describeError(load.error)}</Alert>
+      ) : load.data.resources.length === 0 ? (
+        <p className="text-sm text-fg-muted">
+          No resources on activities still to do. Put them on activities in the activity panel.
+        </p>
+      ) : (
+        <Table minWidth={`${16 + load.data.weeks.length * 4}rem`}>
+          <thead>
+            <tr>
+              <th>Resource</th>
+              {load.data.weeks.map((w) => (
+                <th key={w} className="text-right" title={`Week of ${w}`}>
+                  {shortDate(w)}
+                </th>
+              ))}
+              <th className="text-right">Later</th>
+              <th className="text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody aria-label="Resources by week">
+            {load.data.resources.map((r) => {
+              const peak = Math.max(...r.byWeek, 0);
+              return (
+                <tr key={r.id}>
+                  <td>
+                    <span className="mr-2 font-mono text-xs">{r.code}</span>
+                    {r.name} <span className="text-xs text-fg-muted">({r.unit})</span>
+                  </td>
+                  {r.byWeek.map((n, i) => (
+                    <td
+                      key={i}
+                      className="text-right tabular-nums"
+                      style={{
+                        background:
+                          n > 0 && peak > 0
+                            ? `color-mix(in srgb, var(--accent) ${Math.round((n / peak) * 35)}%, transparent)`
+                            : undefined,
+                      }}
+                    >
+                      {n ? formatUnits(n) : ''}
+                    </td>
+                  ))}
+                  <td className="text-right tabular-nums">{r.later ? formatUnits(r.later) : ''}</td>
+                  <td className="text-right font-medium tabular-nums">{formatUnits(r.total)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+interface ResourceLoadView {
+  from: string;
+  weeks: string[];
+  resources: {
+    id: string;
+    code: string;
+    name: string;
+    unit: string;
+    kind: string;
+    byWeek: number[];
+    later: number;
+    total: number;
+  }[];
+}
+
+const formatUnits = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 function CalendarsPanel({
   plan,
@@ -1296,10 +1842,10 @@ function PrintPage({
     >
       <rect width={PAGE.w} height={PAGE.h} fill="#fff" />
       <text x={M} y={40} fontSize={20} fontWeight={600}>
-        {d.tender.title}
+        {d.owner.title}
       </text>
       <text x={M} y={62} fontSize={13} fill="#444">
-        {d.tender.number} · {d.name} · Data date {shortDate(d.startOn)} · Finish{' '}
+        {d.owner.number} · {d.name} · Data date {shortDate(d.dataDate ?? d.startOn)} · Finish{' '}
         {shortDate(d.finishOn)} · {d.duration ?? 0} working days
       </text>
       <text x={PAGE.w - M} y={40} fontSize={12} textAnchor="end" fill="#444">
@@ -1405,5 +1951,129 @@ function PrintPage({
         </text>
       </g>
     </svg>
+  );
+}
+
+interface Lookahead {
+  from: string;
+  to: string;
+  weeks: number;
+  activities: {
+    id: string;
+    code: string;
+    name: string;
+    kind: string;
+    status: 'not_started' | 'in_progress';
+    start: string;
+    finish: string;
+    actualStart: string | null;
+    remaining: number | null;
+    totalFloat: number | null;
+    critical: boolean;
+    wbsCode: string | null;
+    summary: string | null;
+  }[];
+}
+
+/**
+ * The look-ahead: activities on or due to start in the next weeks from the data date, by start, for the site's weekly
+ * meeting; printed on A4 landscape from the browser.
+ */
+export function LookaheadPrint({ planId }: { planId: string }) {
+  const [weeks, setWeeks] = useState(3);
+  const plan = useQuery({
+    queryKey: ['programme', planId],
+    queryFn: () => api.request<ProgrammeDetail>(`/api/tenant/programmes/${planId}`),
+  });
+  const la = useQuery({
+    queryKey: ['programme-lookahead', planId, weeks],
+    queryFn: () =>
+      api.request<Lookahead>(`/api/tenant/programmes/${planId}/lookahead?weeks=${weeks}`),
+  });
+  if (plan.isPending || la.isPending) return <Spinner />;
+  if (plan.isError) return <Alert tone="danger">{describeError(plan.error)}</Alert>;
+  if (la.isError) return <Alert tone="danger">{describeError(la.error)}</Alert>;
+  const d = plan.data;
+  const l = la.data;
+  return (
+    <div className="min-h-screen bg-white p-6 text-black">
+      <style>
+        {'@page { size: A4 landscape; margin: 12mm } @media print { .no-print { display: none } }'}
+      </style>
+      <div className="no-print mb-4 flex flex-wrap items-center gap-3">
+        <Link
+          to="/programmes/$planId"
+          params={{ planId }}
+          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:underline"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> Back to the schedule
+        </Link>
+        <div className="w-44">
+          <Select
+            aria-label="Weeks ahead"
+            className="w-36"
+            value={weeks}
+            onChange={(e) => setWeeks(Number(e.target.value))}
+          >
+            {[1, 2, 3, 4, 6, 8, 12].map((n) => (
+              <option key={n} value={n}>
+                {n} week{n === 1 ? '' : 's'} ahead
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Button onClick={() => window.print()}>
+          <Printer className="size-4" aria-hidden /> Print or save as PDF
+        </Button>
+      </div>
+      <h1 className="text-lg font-semibold">
+        Look-ahead · {d.owner.number} · {d.owner.title}
+      </h1>
+      <p className="mb-3 text-sm text-gray-700" data-testid="lookahead-range">
+        {d.name}: {shortDate(l.from)} to {shortDate(l.to)} ({l.weeks} week{l.weeks === 1 ? '' : 's'}
+        ), as of the data date {shortDate(l.from)} · {l.activities.length} activities
+      </p>
+      <table className="w-full border-collapse text-sm" aria-label="Look-ahead">
+        <thead>
+          <tr className="border-b-2 border-black text-left">
+            {[
+              'ID',
+              'Activity',
+              'Under',
+              'WBS',
+              'Start',
+              'Finish',
+              'Days left',
+              'Float',
+              'Status',
+            ].map((h) => (
+              <th key={h} className="px-1.5 py-1 font-semibold">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {l.activities.map((a) => (
+            <tr key={a.id} className={cx('border-b border-gray-200', a.critical && 'text-red-700')}>
+              <td className="px-1.5 py-1 font-mono text-xs">{a.code}</td>
+              <td className="px-1.5 py-1">{a.name}</td>
+              <td className="px-1.5 py-1 text-gray-600">{a.summary ?? ''}</td>
+              <td className="px-1.5 py-1 font-mono text-xs">{a.wbsCode ?? ''}</td>
+              <td className="px-1.5 py-1 tabular-nums">{shortDate(a.start)}</td>
+              <td className="px-1.5 py-1 tabular-nums">{shortDate(a.finish)}</td>
+              <td className="px-1.5 py-1 text-right tabular-nums">{a.remaining ?? ''}</td>
+              <td className="px-1.5 py-1 text-right tabular-nums">{a.totalFloat ?? ''}</td>
+              <td className="px-1.5 py-1">
+                {a.status === 'in_progress' ? 'In progress' : a.critical ? 'Critical' : 'To start'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {l.activities.length === 0 && (
+        <p className="mt-3 text-sm text-gray-600">Nothing on or due in these weeks.</p>
+      )}
+    </div>
   );
 }

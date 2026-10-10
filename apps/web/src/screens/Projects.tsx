@@ -20,6 +20,7 @@ import { ArrowLeft, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
+import { ProjectSchedules } from '../project/ProjectSchedules';
 import type {
   Party,
   Person,
@@ -456,11 +457,12 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
                 )}
               </Card>
               <ProjectBoqs project={p} />
+              <ProjectSchedules project={p} />
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">
-                  The WBS and cost codes, the project schedule and progress come in the next steps
-                  of Wave 2a.
+                  Macro plans, progress measured against the BOQ, and the project dashboard come in
+                  the next steps of Wave 2a.
                 </p>
               </Card>
             </div>
@@ -520,6 +522,16 @@ function describeEvent(kind: string, d: Record<string, unknown>): string {
       return `BOQ archived: ${String(d.name)}`;
     case 'boq_restored':
       return `BOQ restored: ${String(d.name)}`;
+    case 'schedule_created':
+      return `Schedule started: ${String(d.name)}`;
+    case 'programme_imported':
+      return `Schedule imported: ${String(d.name)}`;
+    case 'baseline_taken':
+      return `Baseline taken: ${String(d.name)}`;
+    case 'programme_archived':
+      return `Schedule archived: ${String(d.name)}`;
+    case 'programme_restored':
+      return `Schedule restored: ${String(d.name)}`;
     case 'team':
       return d.to
         ? `${String(d.user)} is now ${ROLE_LABEL[d.to as ProjectRole].toLowerCase()}`

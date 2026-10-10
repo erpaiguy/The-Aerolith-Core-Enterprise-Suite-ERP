@@ -1,6 +1,8 @@
 // The bar chart of a programme on a canvas (docs/02-tech-stack.md: a custom canvas Gantt). Only the rows and days in
 // view are drawn, so a long programme costs no more than a short one. Bars: tasks (red on the critical path), their
 // float, milestones (diamonds), summaries; links as elbows with arrowheads; non-working days shaded; the data date.
+// On a project schedule: the work done up to the data date darker, finished work grey, and the baseline shown as a
+// thin bar under each one.
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   MONTHS,
@@ -235,8 +237,22 @@ export function Gantt({
           g.lineTo(x(dayNo(r.lateFinish) + 1), mid + 0.5);
           g.stroke();
         }
-        g.fillStyle = r.critical ? c.critical : c.bar;
+        g.fillStyle = r.status === 'finished' ? c.subtle : r.critical ? c.critical : c.bar;
         g.fillRect(s, top + 7, Math.max(2, f - s), ROW_H - 14);
+        if (r.status === 'in_progress') {
+          // Done so far: from its start to the data date.
+          const done = Math.min(f, x(dayNo(dataDate))) - s;
+          if (done > 0) {
+            g.fillStyle = `${c.fg}66`;
+            g.fillRect(s, top + 7, done, ROW_H - 14);
+          }
+        }
+      }
+      if (r.baselineStart && r.baselineFinish && r.kind !== 'summary') {
+        const bs = x(dayNo(r.baselineStart));
+        const bf = x(dayNo(r.baselineFinish) + 1);
+        g.fillStyle = c.muted;
+        g.fillRect(bs, top + ROW_H - 6, Math.max(2, bf - bs), 3);
       }
       if (zoom !== 'month' || f - s > 0) {
         g.fillStyle = c.muted;

@@ -26,7 +26,7 @@ import { BoqPricingScreen } from './screens/Pricing';
 import { BoqVersionsScreen } from './screens/Versions';
 import { AnalysisEditor, RateAnalysesScreen } from './screens/RateAnalyses';
 import { ResourcesScreen } from './screens/Resources';
-import { ProgrammePrint, ProgrammeScreen } from './screens/Programme';
+import { LookaheadPrint, ProgrammePrint, ProgrammeScreen } from './screens/Programme';
 import {
   AnalysisReportPrint,
   CostSummaryReport,
@@ -167,6 +167,16 @@ const programmePrintRoute = createRoute({
   },
 });
 
+/** The look-ahead, like the print view, is the paper: what is on and coming in the next weeks. */
+const lookaheadRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/programmes/$planId/lookahead',
+  component: function LookaheadPage() {
+    const { planId } = lookaheadRoute.useParams();
+    return <LookaheadPrint planId={planId} />;
+  },
+});
+
 const dashboardRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/dashboards/$name',
@@ -292,6 +302,7 @@ const routeTree = rootRoute.addChildren([
     }),
   ]),
   programmePrintRoute,
+  lookaheadRoute,
   costSummaryRoute,
   analysisReportRoute,
   createRoute({

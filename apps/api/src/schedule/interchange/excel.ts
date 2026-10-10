@@ -22,7 +22,7 @@ export async function writeProgrammeXlsx(p: ProgrammeView): Promise<Buffer> {
     { width: 18 },
     { width: 22 },
   ];
-  ws.getCell('A1').value = `${p.tender.number} · ${p.tender.title}`;
+  ws.getCell('A1').value = `${p.owner.number} · ${p.owner.title}`;
   ws.getCell('A1').font = { bold: true, size: 13 };
   ws.getCell('A2').value =
     `${p.name}: ${p.startOn} to ${p.finishOn ?? p.startOn}, ${p.duration ?? 0} working days`;

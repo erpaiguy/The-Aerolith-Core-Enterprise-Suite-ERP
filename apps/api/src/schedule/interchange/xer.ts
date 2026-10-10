@@ -256,7 +256,7 @@ export function readXer(content: string): ImportedPlan {
   walk(null, null, []);
   if (progress)
     warnings.push(
-      `${progress} activities have progress in P6; a tender programme carries no progress, so their original durations were used.`,
+      `${progress} activities have progress in P6; progress is not imported, so their original durations were used.`,
     );
 
   const known = new Set(tasks.map((x) => x.task_id));

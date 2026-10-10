@@ -186,19 +186,23 @@ export class WbsService {
     const projectId = await this.projectOf(db, id);
     await this.may(db, claims, projectId, 'shape');
     await db.begin(async (tx) => {
-      const [u] = await tx<{ kids: number; lines: number; code: string }[]>`
+      const [u] = await tx<{ kids: number; lines: number; activities: number; code: string }[]>`
         SELECT w.code,
           (SELECT count(*)::int FROM proj.wbs c WHERE c.project_id = w.project_id AND c.parent_id = w.id) AS kids,
           (SELECT count(*)::int FROM proj.boq_line_map m WHERE m.project_id = w.project_id AND m.wbs_id = w.id)
-            AS lines
+            AS lines,
+          (SELECT count(*)::int FROM sched.plan p JOIN sched.activity a ON a.plan_id = p.id
+            WHERE p.project_id = w.project_id AND a.wbs_id = w.id) AS activities
         FROM proj.wbs w WHERE w.id = ${id} FOR UPDATE`;
       if (!u) throw new NotFoundException({ code: 'wbs_not_found' });
-      if (u.kids || u.lines)
+      if (u.kids || u.lines || u.activities)
         throw new ConflictException({
           code: 'wbs_in_use',
           message: u.kids
             ? 'It has elements under it. Move or remove them first.'
-            : `${u.lines} BOQ lines are mapped to it. Map them elsewhere first.`,
+            : u.lines
+              ? `${u.lines} BOQ lines are mapped to it. Map them elsewhere first.`
+              : `${u.activities} schedule activities are on it. Move them to another element first.`,
         });
       await tx`DELETE FROM proj.wbs WHERE id = ${id}`;
       await audit(tx, claims.sub, 'wbs.delete', 'wbs', id, { projectId, code: u.code });

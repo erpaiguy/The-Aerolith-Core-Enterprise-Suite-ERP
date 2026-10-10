@@ -1,5 +1,6 @@
-// The tender programme on the client (docs/wave1-plan.md step 11): the plan as the API returns it, predecessors as
-// people type them ("A1010, A1020SS+2"), and the edits a row change turns into.
+// Plans on the client: a tender's programme (docs/wave1-plan.md step 11) or a project's schedule (docs/wave2a-plan.md
+// step 4) as the API returns it, predecessors as people type them ("A1010, A1020SS+2"), and the edits a row change
+// turns into.
 
 export type LinkType = 'FS' | 'SS' | 'FF' | 'SF';
 export type ConstraintType = 'SNET' | 'SNLT' | 'FNET' | 'FNLT' | 'MSO' | 'MFO';
@@ -33,6 +34,30 @@ export interface ProgrammeActivity {
   totalFloat: number | null;
   freeFloat: number | null;
   critical: boolean;
+  /** Project schedules. */
+  wbsId?: string | null;
+  wbsCode?: string | null;
+  actualStart?: string | null;
+  actualFinish?: string | null;
+  /** Reported working days left (started, not finished); null: worked out from the duration. */
+  remaining?: number | null;
+  /** Working days still to do, as scheduled. */
+  remainingLeft?: number | null;
+  status?: ActivityStatus;
+  baselineStart?: string | null;
+  baselineFinish?: string | null;
+}
+
+export type ActivityStatus = 'not_started' | 'in_progress' | 'finished';
+
+export interface ProgrammeBaseline {
+  id: string;
+  name: string;
+  dataDate: string;
+  finishOn: string | null;
+  activityCount: number;
+  takenAt: string;
+  takenBy: string | null;
 }
 
 export interface ProgrammeLink {
@@ -44,10 +69,18 @@ export interface ProgrammeLink {
 
 export interface ProgrammeDetail {
   id: string;
-  tenderId: string;
-  tender: { number: string; title: string };
+  kind: 'tender_programme' | 'project_schedule';
+  tenderId: string | null;
+  projectId: string | null;
+  tender: { id: string; number: string; title: string } | null;
+  /** The tender or project it belongs to. */
+  owner: { kind: 'tender' | 'project'; id: string; number: string; title: string };
   name: string;
   startOn: string;
+  /** Project schedules: progress is as of this day (null: the start). */
+  dataDate: string | null;
+  baselineId: string | null;
+  baselines: ProgrammeBaseline[];
   calendarId: string;
   notes: string;
   finishOn: string | null;
@@ -88,6 +121,12 @@ export type Op =
       calendarId?: string | null;
       constraint?: { type: ConstraintType; date: string } | null;
       notes?: string;
+      wbsId?: string | null;
+      progress?: {
+        actualStart: string | null;
+        actualFinish: string | null;
+        remaining: number | null;
+      } | null;
     }
   | { op: 'move'; id: string; parentId: string | null; afterId: string | null }
   | { op: 'delete'; id: string }

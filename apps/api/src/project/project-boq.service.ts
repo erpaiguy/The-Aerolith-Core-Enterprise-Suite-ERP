@@ -5,7 +5,7 @@
 // be scaled to the project's contract value. Contract minus budget is the planned margin.
 //
 // The copies are ordinary BOQs (est.boq with a project_id): the grid, import/export, revisions and bulk edit work on
-// them unchanged; ProjectBoqAccess keeps them to the project's team.
+// them unchanged; ProjectAccess keeps them to the project's team.
 import {
   BadRequestException,
   ConflictException,

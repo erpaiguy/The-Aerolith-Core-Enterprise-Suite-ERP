@@ -6,6 +6,7 @@ import {
   ScheduleError,
   schedule,
   type ActivityKind,
+  type ActivityProgress,
   type CalendarSpec,
   type ConstraintType,
   type LinkType,
@@ -25,6 +26,11 @@ export interface Activity {
   constraintType: ConstraintType | null;
   constraintDate: string | null;
   notes: string;
+  /** Project schedules: the WBS element it belongs to, and its progress. */
+  wbsId?: string | null;
+  actualStart?: string | null;
+  actualFinish?: string | null;
+  remaining?: number | null;
 }
 
 export interface Link {
@@ -55,6 +61,7 @@ export type Op =
       duration?: number | undefined;
       calendarId?: string | null | undefined;
       constraint?: { type: ConstraintType; date: string } | null | undefined;
+      wbsId?: string | null | undefined;
     }
   | {
       op: 'update';
@@ -65,6 +72,9 @@ export type Op =
       calendarId?: string | null | undefined;
       constraint?: { type: ConstraintType; date: string } | null | undefined;
       notes?: string | undefined;
+      wbsId?: string | null | undefined;
+      /** Progress as of the data date; null clears it (not started). */
+      progress?: ActivityProgress | null | undefined;
     }
   | { op: 'move'; id: string; parentId: string | null; afterId: string | null }
   | { op: 'delete'; id: string }
@@ -81,7 +91,9 @@ export class ProgrammeError extends Error {
   }
 }
 
+/** A tender programme; a project schedule holds up to MAX_SCHEDULE_ACTIVITIES. */
 export const MAX_ACTIVITIES = 20_000;
+export const MAX_SCHEDULE_ACTIVITIES = 50_000;
 export const MAX_DEPTH = 10;
 
 export const toSpec = (c: Calendar): CalendarSpec => ({
@@ -112,7 +124,11 @@ export class Programme {
   readonly acts = new Map<string, Activity>();
   links = new Map<string, Link>();
 
-  constructor(activities: Activity[], links: Link[]) {
+  constructor(
+    activities: Activity[],
+    links: Link[],
+    readonly limit = MAX_ACTIVITIES,
+  ) {
     for (const a of activities) this.acts.set(a.id, { ...a });
     for (const l of links) this.links.set(`${l.pred}>${l.succ}`, { ...l });
   }
@@ -198,11 +214,8 @@ export class Programme {
               'bad_temp_id',
               'New rows need a fresh temporary id starting with "t".',
             );
-          if (this.acts.size >= MAX_ACTIVITIES)
-            throw new ProgrammeError(
-              'too_many',
-              `A programme holds up to ${MAX_ACTIVITIES} activities.`,
-            );
+          if (this.acts.size >= this.limit)
+            throw new ProgrammeError('too_many', `A plan holds up to ${this.limit} activities.`);
           this.checkParent(o.parentId);
           const code = o.code?.trim() || nextCode([...this.acts.values()].map((a) => a.code));
           this.acts.set(o.tempId, {
@@ -217,6 +230,7 @@ export class Programme {
             constraintType: o.constraint?.type ?? null,
             constraintDate: o.constraint?.date ?? null,
             notes: '',
+            wbsId: o.wbsId ?? null,
           });
           break;
         }
@@ -235,6 +249,25 @@ export class Programme {
             a.constraintDate = o.constraint?.date ?? null;
           }
           if (o.notes !== undefined) a.notes = o.notes;
+          if (o.wbsId !== undefined) a.wbsId = o.wbsId;
+          if (o.progress !== undefined) {
+            const p = o.progress;
+            if (p && !p.actualStart && (p.actualFinish || p.remaining !== null))
+              throw new ProgrammeError(
+                'bad_progress',
+                `${a.code}: a finish or remaining days need an actual start.`,
+                [a.code],
+              );
+            if (p?.actualStart && p.actualFinish && p.actualFinish < p.actualStart)
+              throw new ProgrammeError(
+                'bad_progress',
+                `${a.code} cannot finish before it started.`,
+                [a.code],
+              );
+            a.actualStart = p?.actualStart ?? null;
+            a.actualFinish = p?.actualStart ? (p.actualFinish ?? null) : null;
+            a.remaining = p?.actualStart && !p.actualFinish ? (p.remaining ?? null) : null;
+          }
           break;
         }
         case 'move': {
@@ -307,16 +340,40 @@ export class Programme {
         a.kind = 'summary';
         a.constraintType = null;
         a.constraintDate = null;
+        // A summary's progress is its children's.
+        a.actualStart = null;
+        a.actualFinish = null;
+        a.remaining = null;
       } else a.kind = a.duration === 0 ? 'milestone' : 'task';
     }
   }
 
   /** Schedules the plan; a loop of links or a broken rule is reported with the activity IDs involved. */
-  schedule(start: string, calendarId: string, calendars: Calendar[]): ScheduleResult {
+  schedule(
+    start: string,
+    calendarId: string,
+    calendars: Calendar[],
+    dataDate: string | null = null,
+  ): ScheduleResult {
     const codeOf = (id: string) => this.acts.get(id)?.code ?? id;
+    // Nothing is done after the day progress is reported for.
+    const asOf = dataDate ?? start;
+    const ahead = [...this.acts.values()].filter(
+      (a) => (a.actualStart && a.actualStart > asOf) || (a.actualFinish && a.actualFinish > asOf),
+    );
+    if (ahead.length)
+      throw new ProgrammeError(
+        'actual_after_data_date',
+        `Actual dates cannot be after the data date (${asOf}): ${ahead
+          .slice(0, 8)
+          .map((a) => a.code)
+          .join(', ')}${ahead.length > 8 ? '…' : ''}.`,
+        ahead.map((a) => a.code),
+      );
     try {
       return schedule({
         start,
+        dataDate: dataDate ?? undefined,
         calendarId,
         calendars: Object.fromEntries(calendars.map((c) => [c.id, toSpec(c)])),
         activities: this.ordered().map((a) => ({
@@ -329,6 +386,13 @@ export class Programme {
             a.constraintType && a.constraintDate
               ? { type: a.constraintType, date: a.constraintDate }
               : null,
+          progress: a.actualStart
+            ? {
+                actualStart: a.actualStart,
+                actualFinish: a.actualFinish ?? null,
+                remaining: a.remaining ?? null,
+              }
+            : null,
         })),
         links: [...this.links.values()],
       });

@@ -186,6 +186,118 @@ describe('critical path on working calendars', () => {
   });
 });
 
+describe('progress as of a data date', () => {
+  // Excavation 5d → Footings 4d → Plinth; Survey 2d alone. Progress reported on Thursday 5 November.
+  const DATA = '2026-11-05';
+  const plan = (
+    progress: Record<string, ScheduleActivity['progress']>,
+    extra: ScheduleActivity[] = [],
+  ) => {
+    const r = schedule({
+      start: START,
+      dataDate: DATA,
+      calendarId: 'site',
+      calendars: { site: SITE, office: OFFICE },
+      activities: [
+        task('exc', 5, { progress: progress.exc ?? null }),
+        task('foot', 4, { progress: progress.foot ?? null }),
+        task('plinth', 0, { kind: 'milestone', progress: progress.plinth ?? null }),
+        task('survey', 2, { progress: progress.survey ?? null }),
+        ...extra,
+      ],
+      links: [fs('exc', 'foot'), fs('foot', 'plinth')],
+    });
+    return Object.fromEntries(r.activities.map((a) => [a.id, a]));
+  };
+  const started = (actualStart: string, remaining: number | null = null) => ({
+    actualStart,
+    actualFinish: null,
+    remaining,
+  });
+
+  it('carries on a started task by its remaining days from the data date', () => {
+    // Started Monday; three working days gone, so two left by default: Thu, Fri.
+    let r = plan({ exc: started('2026-11-02') });
+    expect(r.exc).toMatchObject({
+      start: '2026-11-02',
+      finish: '2026-11-06',
+      remaining: 2,
+      status: 'in_progress',
+    });
+    // Footings: Sat 7, (Mon 9 a holiday), Tue 10, Wed 11, Thu 12.
+    expect(r.foot).toMatchObject({
+      start: '2026-11-07',
+      finish: '2026-11-12',
+      status: 'not_started',
+    });
+    // Four days left after all: Thu 5, Fri 6, Sat 7, Tue 10; footings Wed 11 to Sat 14.
+    r = plan({ exc: started('2026-11-02', 4) });
+    expect(r.exc).toMatchObject({ finish: '2026-11-10', remaining: 4 });
+    expect(r.foot).toMatchObject({ start: '2026-11-11', finish: '2026-11-14' });
+    expect(r.plinth).toMatchObject({ start: '2026-11-14', critical: true });
+  });
+
+  it('puts a finished task on its actual days, and starts nothing before the data date', () => {
+    const r = plan({
+      exc: { actualStart: '2026-11-02', actualFinish: '2026-11-04', remaining: null },
+    });
+    expect(r.exc).toMatchObject({
+      start: '2026-11-02',
+      finish: '2026-11-04',
+      remaining: 0,
+      status: 'finished',
+      totalFloat: 0,
+      critical: false,
+    });
+    // Finished early on Wednesday, but nothing starts before Thursday the 5th.
+    expect(r.foot).toMatchObject({ start: '2026-11-05', finish: '2026-11-10' });
+    expect(r.survey).toMatchObject({ start: '2026-11-05', finish: '2026-11-06' });
+  });
+
+  it('marks a milestone reached on its day, and ignores the constraint of a started task', () => {
+    const r = plan(
+      {
+        exc: { actualStart: '2026-11-02', actualFinish: '2026-11-04', remaining: null },
+        survey: started('2026-11-03', 1),
+      },
+      [
+        task('gate', 0, { kind: 'milestone', progress: started('2026-11-04') }),
+        task('fence', 3, {
+          constraint: { type: 'MSO', date: '2026-11-20' },
+          progress: started('2026-11-03'),
+        }),
+      ],
+    );
+    expect(r.gate).toMatchObject({ start: '2026-11-04', finish: '2026-11-04', status: 'finished' });
+    expect(r.fence).toMatchObject({ start: '2026-11-03', status: 'in_progress' });
+    // One day left from Thursday: survey finishes on Thursday.
+    expect(r.survey).toMatchObject({ finish: '2026-11-05', remaining: 1 });
+  });
+
+  it('rolls progress up to summaries, and refuses a finish before the start', () => {
+    const r = schedule({
+      start: START,
+      dataDate: DATA,
+      calendarId: 'site',
+      calendars: { site: SITE },
+      activities: [
+        { id: 'sum', kind: 'summary', duration: 0, calendarId: null, parentId: null },
+        task('a', 2, {
+          parentId: 'sum',
+          progress: { actualStart: '2026-11-02', actualFinish: '2026-11-03', remaining: null },
+        }),
+        task('b', 2, { parentId: 'sum' }),
+      ],
+      links: [fs('a', 'b')],
+    });
+    const sum = r.activities.find((a) => a.id === 'sum')!;
+    expect(sum).toMatchObject({ start: '2026-11-02', finish: '2026-11-06', status: 'in_progress' });
+    expect(() =>
+      plan({ exc: { actualStart: '2026-11-04', actualFinish: '2026-11-02', remaining: null } }),
+    ).toThrow(ScheduleError);
+  });
+});
+
 describe('against the Wave 0 benchmark engine', () => {
   it('agrees on a random network of 5,000 activities on a 7-day calendar, and is fast at 50,000', () => {
     const every: CalendarSpec = { workWeek: Array(7).fill(true), holidays: [] };

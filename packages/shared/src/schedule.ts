@@ -6,6 +6,11 @@
 // activity's early start `es` is the position of its first working day and `ef = es + duration` the position just
 // after its last, in its own calendar. Within one calendar every link is integer arithmetic (as fast as the Wave 0
 // benchmark); a link between activities on different calendars goes through the real day boundary in between.
+//
+// Progress (project schedules, docs/wave2a-plan.md step 4). As of the data date, a finished activity sits on its
+// actual dates and drives its successors from there; a started one keeps its actual start and does its remaining
+// working days from the data date (progress override: the remainder does not wait for unfinished predecessors);
+// nothing else starts before the data date. Constraints apply to what has not started.
 
 export type LinkType = 'FS' | 'SS' | 'FF' | 'SF';
 export type ConstraintType = 'SNET' | 'SNLT' | 'FNET' | 'FNLT' | 'MSO' | 'MFO';
@@ -20,6 +25,16 @@ export interface CalendarSpec {
   workingDays?: readonly string[];
 }
 
+export interface ActivityProgress {
+  /** The day it started (by the data date). */
+  actualStart: string | null;
+  /** The day it finished; only with a start. */
+  actualFinish: string | null;
+  /** Working days left from the data date, for one started and not finished; null: its duration less the working
+   * days since it started. */
+  remaining: number | null;
+}
+
 export interface ScheduleActivity {
   id: string;
   kind: ActivityKind;
@@ -30,6 +45,7 @@ export interface ScheduleActivity {
   /** The summary row it sits under, if any. */
   parentId: string | null;
   constraint?: { type: ConstraintType; date: string } | null;
+  progress?: ActivityProgress | null;
 }
 
 export interface ScheduleLink {
@@ -41,8 +57,10 @@ export interface ScheduleLink {
 }
 
 export interface ScheduleInput {
-  /** The data date: nothing starts before it. */
+  /** The plan's start: nothing starts before it. */
   start: string;
+  /** Progress is as of this day; work not done starts on or after it. Defaults to `start`. */
+  dataDate?: string | undefined;
   calendarId: string;
   calendars: Record<string, CalendarSpec>;
   activities: readonly ScheduleActivity[];
@@ -62,6 +80,9 @@ export interface ScheduledActivity {
   /** Working days it can slip without moving any successor. */
   freeFloat: number;
   critical: boolean;
+  /** Working days still to do (0 when finished). */
+  remaining: number;
+  status: 'not_started' | 'in_progress' | 'finished';
 }
 
 export interface ScheduleResult {
@@ -269,6 +290,21 @@ export function schedule(input: ScheduleInput): ScheduleResult {
   const cons = acts.map((a) =>
     a.constraint ? { type: a.constraint.type, day: dayNumber(a.constraint.date) } : null,
   );
+  const dataDay = input.dataDate ? dayNumber(input.dataDate) : startDay;
+  const floorDay = Math.max(startDay, dataDay);
+  const prog = acts.map((a, i) => {
+    const p = a.progress;
+    if (!p?.actualStart || isSummary[i]) return null;
+    const startD = dayNumber(p.actualStart);
+    const finishD = p.actualFinish ? dayNumber(p.actualFinish) : null;
+    if (finishD !== null && finishD < startD)
+      throw new ScheduleError('bad_activity', 'an activity finished before it started', [a.id]);
+    return { startD, finishD, remaining: p.remaining };
+  });
+  // A milestone reached is finished on that day.
+  prog.forEach((p, i) => {
+    if (p && acts[i]!.kind === 'milestone' && p.finishD === null) p.finishD = p.startD;
+  });
 
   // Forward pass. Bounds on a successor come in its own calendar's positions.
   const es = new Int32Array(n);
@@ -277,7 +313,20 @@ export function schedule(input: ScheduleInput): ScheduleResult {
     const a = order[o]!;
     if (isSummary[a]) continue;
     const C = calOf[a]!;
-    let start = C.cum(startDay);
+    const p = prog[a];
+    if (p) {
+      es[a] = C.cum(p.startD);
+      if (p.finishD !== null) {
+        // Finished: on its actual days (the position after its last working day on or before the finish).
+        ef[a] = Math.max(es[a]!, C.cum(p.finishD + 1));
+      } else {
+        const resume = Math.max(es[a]!, C.cum(dataDay));
+        const left = p.remaining ?? Math.max(0, dur[a]! - (resume - es[a]!));
+        ef[a] = resume + Math.max(0, Math.round(left));
+      }
+      continue;
+    }
+    let start = C.cum(floorDay);
     for (let q = inStart[a]!; q < inStart[a + 1]!; q++) {
       const k = inRel[q]!;
       const p = lp[k]!;
@@ -318,6 +367,9 @@ export function schedule(input: ScheduleInput): ScheduleResult {
     if (b > finishB) finishB = b;
   }
 
+  // What an activity occupies: its duration, or for one with progress, from its actual start to its finish.
+  const span = Int32Array.from({ length: n }, (_, i) => ef[i]! - es[i]!);
+
   // Backward pass, in the activity's own positions.
   const lf = new Int32Array(n);
   const lsA = new Int32Array(n);
@@ -325,6 +377,12 @@ export function schedule(input: ScheduleInput): ScheduleResult {
     const a = order[o]!;
     if (isSummary[a]) continue;
     const A = calOf[a]!;
+    if (prog[a]?.finishD != null) {
+      // Done: its late dates are its actual ones.
+      lf[a] = ef[a]!;
+      lsA[a] = es[a]!;
+      continue;
+    }
     let finish = A.cum(finishB);
     for (let q = outStart[a]!; q < outStart[a + 1]!; q++) {
       const k = outRel[q]!;
@@ -337,17 +395,18 @@ export function schedule(input: ScheduleInput): ScheduleResult {
           bound = same ? lsA[s]! - lag[k]! : A.cum(S.startB(lsA[s]! - lag[k]!));
           break;
         case 1: // SS: start of a ≤ start of s − lag
-          bound = (same ? lsA[s]! - lag[k]! : A.cum(S.startB(lsA[s]! - lag[k]!) + 1) - 1) + dur[a]!;
+          bound =
+            (same ? lsA[s]! - lag[k]! : A.cum(S.startB(lsA[s]! - lag[k]!) + 1) - 1) + span[a]!;
           break;
         case 2: // FF: finish of a ≤ finish of s − lag
           bound = same ? lf[s]! - lag[k]! : A.cum(S.startB(lf[s]! - lag[k]!));
           break;
         default: // SF: start of a ≤ finish of s − lag
-          bound = (same ? lf[s]! - lag[k]! : A.cum(S.startB(lf[s]! - lag[k]!) + 1) - 1) + dur[a]!;
+          bound = (same ? lf[s]! - lag[k]! : A.cum(S.startB(lf[s]! - lag[k]!) + 1) - 1) + span[a]!;
       }
       if (bound < finish) finish = bound;
     }
-    const c = cons[a];
+    const c = prog[a] ? null : cons[a];
     if (c) {
       if (c.type === 'FNLT') finish = Math.min(finish, A.cum(c.day + 1));
       else if (c.type === 'SNLT') finish = Math.min(finish, A.cum(c.day + 1) - 1 + dur[a]!);
@@ -355,7 +414,7 @@ export function schedule(input: ScheduleInput): ScheduleResult {
       else if (c.type === 'MFO') finish = A.cum(c.day) + 1;
     }
     lf[a] = finish;
-    lsA[a] = finish - dur[a]!;
+    lsA[a] = finish - span[a]!;
   }
 
   // Free float: slack to the nearest successor's early dates (or to the plan's finish).
@@ -410,7 +469,35 @@ export function schedule(input: ScheduleInput): ScheduleResult {
         totalFloat: 0,
         freeFloat: 0,
         critical: false,
+        remaining: 0,
+        status: 'not_started' as const,
       };
+    const p = prog[i];
+    if (p) {
+      const C = calOf[i]!;
+      const done = p.finishD !== null;
+      // Its actual start; its actual finish, or the last working day of what is left.
+      const finish = done
+        ? p.finishD!
+        : ef[i]! > es[i]!
+          ? C.day(ef[i]! - 1)
+          : Math.max(p.startD, dataDay);
+      const lateFinish = done ? p.finishD! : lf[i]! > lsA[i]! ? C.day(lf[i]! - 1) : finish;
+      const tf = done ? 0 : lf[i]! - ef[i]!;
+      return {
+        id: a.id,
+        duration: dur[i]!,
+        start: isoDay(p.startD),
+        finish: isoDay(finish),
+        lateStart: isoDay(p.startD),
+        lateFinish: isoDay(lateFinish),
+        totalFloat: tf,
+        freeFloat: done ? 0 : free[i]!,
+        critical: !done && tf <= 0,
+        remaining: done ? 0 : ef[i]! - Math.max(es[i]!, C.cum(dataDay)),
+        status: done ? ('finished' as const) : ('in_progress' as const),
+      };
+    }
     const early = dates(i, es[i]!, ef[i]!);
     const late = dates(i, lsA[i]!, lf[i]!);
     const tf = lsA[i]! - es[i]!;
@@ -424,6 +511,8 @@ export function schedule(input: ScheduleInput): ScheduleResult {
       totalFloat: tf,
       freeFloat: free[i]!,
       critical: tf <= 0,
+      remaining: dur[i]!,
+      status: 'not_started' as const,
     };
   });
 
@@ -466,7 +555,9 @@ export function schedule(input: ScheduleInput): ScheduleResult {
       kids[0]!.lateFinish,
     );
     const C = calOf[i]!;
-    const tf = Math.min(...kids.map((k) => k.totalFloat));
+    // Float of what is left to do under it (none once all of it is done).
+    const live = kids.filter((k) => k.status !== 'finished');
+    const tf = live.length ? Math.min(...live.map((k) => k.totalFloat)) : 0;
     out[i] = {
       id: acts[i]!.id,
       duration: C.cum(dayNumber(finish) + 1) - C.cum(dayNumber(start)),
@@ -476,7 +567,13 @@ export function schedule(input: ScheduleInput): ScheduleResult {
       lateFinish,
       totalFloat: tf,
       freeFloat: Math.min(...kids.map((k) => k.freeFloat)),
-      critical: tf <= 0,
+      critical: kids.some((k) => k.critical),
+      remaining: Math.max(...kids.map((k) => k.remaining)),
+      status: kids.every((k) => k.status === 'finished')
+        ? 'finished'
+        : kids.every((k) => k.status === 'not_started')
+          ? 'not_started'
+          : 'in_progress',
     };
   }
 

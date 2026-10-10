@@ -1,8 +1,8 @@
-// Project BOQs follow their project's visibility (docs/wave2a-plan.md step 2). Every route that acts on one BOQ
-// (`/boqs/:id/...`, an import job's `/imports/:id/...`, a pricing scenario's `/scenarios/:id/...`) passes here after
-// authentication: a BOQ of a project the caller may not see does not exist for them; changing one needs a lead or
-// member of the team (or someone who edits projects); bid pricing is for tender BOQs only. Tender BOQs pass untouched.
-// One place, so no BOQ route can be added without it.
+// A project's BOQs and schedules follow its visibility (docs/wave2a-plan.md steps 2 and 4). Every route that acts on
+// one BOQ (`/boqs/:id/...`, an import job's `/imports/:id/...`, a pricing scenario's `/scenarios/:id/...`) or one plan
+// (`/programmes/:id/...`) passes here after authentication: one of a project the caller may not see does not exist
+// for them; changing one needs a lead or member of the team (or someone who edits projects); bid pricing is for
+// tender BOQs only. A tender's BOQs and programmes pass untouched. One place, so no such route can be added without it.
 import {
   ConflictException,
   ForbiddenException,
@@ -21,6 +21,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BOQ_ROUTE = /\/tenant\/boqs\/:id(\/|$)/;
 const IMPORT_ROUTE = /\/tenant\/imports\/:id(\/|$)/;
 const SCENARIO_ROUTE = /\/tenant\/scenarios\/:id(\/|$)/;
+const PLAN_ROUTE = /\/tenant\/programmes\/:id(\/|$)/;
 /** Bid pricing belongs to tenders: a contract BOQ's rates are the client's, a budget's are our costs. */
 const TENDER_ONLY = /\/tenant\/(boqs\/:id\/(pricing|scenarios)|scenarios\/:id)(\/|$)/;
 
@@ -32,7 +33,7 @@ interface Req {
 }
 
 @Injectable()
-export class ProjectBoqAccess implements NestInterceptor {
+export class ProjectAccess implements NestInterceptor {
   constructor(
     private readonly tenants: TenantConnections,
     private readonly projects: ProjectService,
@@ -51,7 +52,9 @@ export class ProjectBoqAccess implements NestInterceptor {
         ? 'import'
         : SCENARIO_ROUTE.test(url)
           ? 'scenario'
-          : null;
+          : PLAN_ROUTE.test(url)
+            ? 'plan'
+            : null;
     if (!kind) return next.handle();
     await this.check(claims, kind, id, req.method, TENDER_ONLY.test(url));
     return next.handle();
@@ -59,20 +62,25 @@ export class ProjectBoqAccess implements NestInterceptor {
 
   private async check(
     claims: TenantClaims,
-    kind: 'boq' | 'import' | 'scenario',
+    kind: 'boq' | 'import' | 'scenario' | 'plan',
     id: string,
     method: string,
     tenderOnly: boolean,
   ) {
     const db = await this.tenants.forTenant(claims.ten);
-    const [b] = await db<{ project_id: string | null }[]>`
-      SELECT b.project_id FROM est.boq b WHERE b.id = ${
-        kind === 'boq'
-          ? id
-          : kind === 'import'
-            ? db`(SELECT j.target_id FROM platform.import_job j WHERE j.id = ${id} AND j.kind = 'boq')`
-            : db`(SELECT s.boq_id FROM est.pricing_scenario s WHERE s.id = ${id})`
-      }`;
+    const [b] =
+      kind === 'plan'
+        ? await db<
+            { project_id: string | null }[]
+          >`SELECT project_id FROM sched.plan WHERE id = ${id}`
+        : await db<{ project_id: string | null }[]>`
+          SELECT b.project_id FROM est.boq b WHERE b.id = ${
+            kind === 'boq'
+              ? id
+              : kind === 'import'
+                ? db`(SELECT j.target_id FROM platform.import_job j WHERE j.id = ${id} AND j.kind = 'boq')`
+                : db`(SELECT s.boq_id FROM est.pricing_scenario s WHERE s.id = ${id})`
+          }`;
     if (!b?.project_id) return; // a tender's BOQ, or nothing: the route answers as before
     // Not on the team (and not allowed to see every project): not found.
     const access = await this.projects.access(db, claims, b.project_id);
@@ -85,7 +93,7 @@ export class ProjectBoqAccess implements NestInterceptor {
     if (writes && !access.canEdit && access.role !== 'member')
       throw new ForbiddenException({
         code: 'forbidden',
-        message: "Only the project's team (not its viewers) changes its BOQs.",
+        message: "Only the project's team (not its viewers) changes its BOQs and schedules.",
       });
   }
 }

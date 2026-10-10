@@ -45,6 +45,7 @@ const op = z.discriminatedUnion('op', [
     duration: duration.optional(),
     calendarId: z.uuid().nullable().optional(),
     constraint: constraint.optional(),
+    wbsId: z.uuid().nullable().optional(),
   }),
   z.object({
     op: z.literal('update'),
@@ -55,6 +56,15 @@ const op = z.discriminatedUnion('op', [
     calendarId: z.uuid().nullable().optional(),
     constraint: constraint.optional(),
     notes: z.string().max(2000).optional(),
+    wbsId: z.uuid().nullable().optional(),
+    progress: z
+      .object({
+        actualStart: date.nullable(),
+        actualFinish: date.nullable().default(null),
+        remaining: duration.nullable().default(null),
+      })
+      .nullable()
+      .optional(),
   }),
   z.object({
     op: z.literal('move'),
@@ -74,12 +84,31 @@ const op = z.discriminatedUnion('op', [
 ]);
 const changes = z.object({ rowVersion, ops: z.array(op).min(1).max(5000) });
 const create = z.object({ name: z.string().trim().min(1).max(200), startOn: date });
+const createSchedule = create.extend({ fromWbs: z.boolean().default(false) });
+const baseline = z.object({ name: z.string().trim().min(1).max(100) });
+const assign = z.object({
+  activityId: z.string().regex(/^\d{1,18}$/),
+  resourceId: z.uuid(),
+  unitsPerDay: z
+    .union([z.string().trim(), z.number()])
+    .transform((v) => String(v))
+    .refine((v) => /^\d{1,10}(\.\d{1,4})?$/.test(v) && Number(v) > 0, {
+      message: 'Units a working day, more than 0, up to 4 decimals',
+    })
+    .nullable(),
+});
+const weeksQuery = (max: number, dflt: number) =>
+  z.object({ weeks: z.coerce.number().int().min(1).max(max).default(dflt) });
+const lookaheadQuery = weeksQuery(12, 3);
+const loadQuery = weeksQuery(104, 12);
 const update = z.object({
   rowVersion,
   name: z.string().trim().min(1).max(200).optional(),
   startOn: date.optional(),
   calendarId: z.uuid().optional(),
   notes: z.string().trim().max(4000).optional(),
+  dataDate: date.nullable().optional(),
+  baselineId: z.uuid().nullable().optional(),
 });
 const calendar = z.object({
   rowVersion,
@@ -94,7 +123,10 @@ const IMPORT_MAX_BYTES = 20 * 1024 * 1024;
 
 type Claims = TenantClaims;
 
-/** Tender programmes (docs/wave1-plan.md step 11). Everyone reads; changes need `programme.edit`. */
+/**
+ * Tender programmes (docs/wave1-plan.md step 11) and project schedules (docs/wave2a-plan.md step 4). Changes need
+ * `programme.edit`; a tender's programmes are read by everyone, a project's schedules by its team (ProjectAccess).
+ */
 @Controller('tenant')
 @UseGuards(TenantAuthGuard, PermissionGuard)
 export class ProgrammeController {
@@ -126,20 +158,90 @@ export class ProgrammeController {
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: FastifyRequest,
   ) {
-    if (!req.isMultipart())
-      throw new BadRequestException({
-        code: 'not_multipart',
-        message: 'Send the file as form data.',
-      });
-    const file = await req.file({ limits: { fileSize: IMPORT_MAX_BYTES, files: 1 } });
-    if (!file) throw new BadRequestException({ code: 'no_file', message: 'No file was sent.' });
-    const buffer = await file.toBuffer().catch(() => null);
-    if (!buffer || file.file.truncated)
-      throw new BadRequestException({
-        code: 'file_too_large',
-        message: 'A programme file is at most 20 MB.',
-      });
-    return this.programmes.importFile(c, id, { name: file.filename, buffer });
+    return this.programmes.importFile(c, { tenderId: id }, await uploaded(req));
+  }
+
+  @Get('projects/:id/schedules')
+  listSchedules(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.programmes.listForProject(c, id);
+  }
+
+  @Post('projects/:id/schedules')
+  @RequiresPermission('programme.edit')
+  @RequiresFeatures()
+  createSchedule(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(createSchedule)) b: z.infer<typeof createSchedule>,
+  ) {
+    return this.programmes.createForProject(c, id, b);
+  }
+
+  /** A project schedule from an MS Project XML or Primavera XER file. */
+  @Post('projects/:id/schedules/import')
+  @HttpCode(200)
+  @RequiresPermission('programme.edit')
+  @RequiresFeatures()
+  async importSchedule(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.programmes.importFile(c, { projectId: id }, await uploaded(req));
+  }
+
+  @Post('programmes/:id/baselines')
+  @HttpCode(200)
+  @RequiresPermission('programme.edit')
+  @RequiresFeatures()
+  baseline(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(baseline)) b: z.infer<typeof baseline>,
+  ) {
+    return this.programmes.takeBaseline(c, id, b.name);
+  }
+
+  @Get('programmes/:id/activities/:activityId/resources')
+  activityResources(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('activityId') activityId: string,
+  ) {
+    if (!/^\d{1,18}$/.test(activityId))
+      throw new BadRequestException({ code: 'activity_not_found' });
+    return this.programmes.assignments(c, id, activityId);
+  }
+
+  @Post('programmes/:id/assignments')
+  @HttpCode(200)
+  @RequiresPermission('programme.edit')
+  @RequiresFeatures()
+  assign(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(assign)) b: z.infer<typeof assign>,
+  ) {
+    return this.programmes.assign(c, id, b);
+  }
+
+  /** The resources needed week by week from the data date. */
+  @Get('programmes/:id/resources')
+  resources(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(loadQuery)) q: z.infer<typeof loadQuery>,
+  ) {
+    return this.programmes.resourceLoad(c, id, q.weeks);
+  }
+
+  @Get('programmes/:id/lookahead')
+  lookahead(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(lookaheadQuery)) q: z.infer<typeof lookaheadQuery>,
+  ) {
+    return this.programmes.lookahead(c, id, q.weeks);
   }
 
   /** The programme as MS Project XML, Primavera XER or Excel. Reading, so open on a read-only licence too. */
@@ -221,4 +323,22 @@ export class ProgrammeController {
   ) {
     return this.programmes.saveCalendar(c, id, calendarId, b);
   }
+}
+
+/** The programme file sent as form data (field `file`). */
+async function uploaded(req: FastifyRequest) {
+  if (!req.isMultipart())
+    throw new BadRequestException({
+      code: 'not_multipart',
+      message: 'Send the file as form data.',
+    });
+  const file = await req.file({ limits: { fileSize: IMPORT_MAX_BYTES, files: 1 } });
+  if (!file) throw new BadRequestException({ code: 'no_file', message: 'No file was sent.' });
+  const buffer = await file.toBuffer().catch(() => null);
+  if (!buffer || file.file.truncated)
+    throw new BadRequestException({
+      code: 'file_too_large',
+      message: 'A programme file is at most 20 MB.',
+    });
+  return { name: file.filename, buffer };
 }

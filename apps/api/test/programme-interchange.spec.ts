@@ -348,7 +348,7 @@ describe('Primavera XER', () => {
     ]);
     expect(p.warnings).toEqual([
       'A1020 is a level-of-effort activity in P6; here it is an ordinary task.',
-      '1 activities have progress in P6; a tender programme carries no progress, so their original durations were used.',
+      '1 activities have progress in P6; progress is not imported, so their original durations were used.',
     ]);
   });
 
@@ -362,6 +362,7 @@ const view = {
   id: 'p1',
   tenderId: 't1',
   tender: { number: 'TND/2026-27/0004', title: 'Hostel block, Yavatmal' },
+  owner: { kind: 'tender', id: 't1', number: 'TND/2026-27/0004', title: 'Hostel block, Yavatmal' },
   name: 'Submission programme',
   startOn: '2026-11-02',
   calendarId: 'c1',
