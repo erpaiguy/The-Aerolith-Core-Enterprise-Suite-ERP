@@ -50,6 +50,8 @@ import type {
   DocVault,
 } from '../api/types';
 import { describeError, formatDate, formatDateTime } from '../lib/format';
+import { Thumbnail } from '../documents/Thumbnail';
+import { saveThumbnail, thumbnailSource } from '../documents/thumbnail';
 import { usePermission } from '../session/permissions';
 import { useSession } from '../session/session';
 
@@ -127,6 +129,14 @@ function useUploads(tenderId: string, onDone: () => void) {
             state: 'done',
             message: `${OUTCOME[r.outcome]}${r.outcome === 'new_version' ? ` (v${r.document.versionNo})` : ''}`,
           });
+          // This browser has the file: it makes the thumbnail, so nobody has to download it for one.
+          if (r.outcome !== 'unchanged')
+            await saveThumbnail(
+              r.document.id,
+              r.document.versionNo,
+              next.file,
+              thumbnailSource(next.file.type, next.file.name),
+            );
         } catch (err) {
           update(next.key, { state: 'failed', message: describeError(err) });
         }
@@ -481,6 +491,7 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
           <DocumentPanel
             key={openDoc}
             documentId={openDoc}
+            hasThumbnail={vd.documents.find((x) => x.id === openDoc)?.hasThumbnail ?? true}
             folders={folders}
             canEdit={canEdit}
             onClose={() => setOpenDoc(null)}
@@ -864,26 +875,31 @@ function DocumentList({
               />
             </td>
             <td className="min-w-0">
-              <button
-                type="button"
-                className="text-left font-medium text-accent hover:underline"
-                onClick={() => onOpenDoc(d.id)}
-              >
-                {d.name}
-              </button>{' '}
-              {d.versionNo > 1 && <Badge tone="neutral">v{d.versionNo}</Badge>}
-              {(d.tags.length > 0 || showFolder) && (
-                <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-fg-muted">
-                  {showFolder && (
-                    <span>{d.folderId ? folders.get(d.folderId)?.name : 'Top level'}</span>
+              <div className="flex items-start gap-2">
+                <Thumbnail documentId={d.id} versionNo={d.versionNo} has={d.hasThumbnail} />
+                <div className="min-w-0">
+                  <button
+                    type="button"
+                    className="text-left font-medium text-accent hover:underline"
+                    onClick={() => onOpenDoc(d.id)}
+                  >
+                    {d.name}
+                  </button>{' '}
+                  {d.versionNo > 1 && <Badge tone="neutral">v{d.versionNo}</Badge>}
+                  {(d.tags.length > 0 || showFolder) && (
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-xs text-fg-muted">
+                      {showFolder && (
+                        <span>{d.folderId ? folders.get(d.folderId)?.name : 'Top level'}</span>
+                      )}
+                      {d.tags.map((t) => (
+                        <Badge key={t} tone="accent">
+                          {t}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
-                  {d.tags.map((t) => (
-                    <Badge key={t} tone="accent">
-                      {t}
-                    </Badge>
-                  ))}
                 </div>
-              )}
+              </div>
             </td>
             <td className="whitespace-nowrap text-right tabular-nums">{formatBytes(d.size)}</td>
             <td className="whitespace-nowrap text-xs text-fg-muted">
@@ -898,16 +914,36 @@ function DocumentList({
 }
 
 /** Shows a PDF, image or text file inside the app, from bytes fetched with the user's session. */
+/** Whether a PDF's words were read for search. */
+function TextStatus({ text }: { text: NonNullable<DocDetail['versions'][number]['text']> }) {
+  const say =
+    text.status === 'done'
+      ? text.pages
+        ? `Searchable: the text of ${text.pages} page${text.pages === 1 ? '' : 's'} was read.`
+        : 'Searchable.'
+      : text.status === 'pending' || text.status === 'working'
+        ? 'Its text is being read for search.'
+        : `Found by its name only: its text could not be read${text.note ? ` (${text.note})` : ''}. A scanned PDF has no text to read.`;
+  return (
+    <p className="text-xs text-fg-muted" data-testid="text-status">
+      {say}
+    </p>
+  );
+}
+
 function Preview({
   documentId,
   version,
   mime,
   size,
+  onFile,
 }: {
   documentId: string;
   version: number;
   mime: string;
   size: number;
+  /** The file, once fetched for the preview (to make a missing thumbnail from). */
+  onFile?: ((blob: Blob) => void) | undefined;
 }) {
   const [asked, setAsked] = useState(size <= AUTO_PREVIEW_BYTES);
   const file = useQuery({
@@ -918,6 +954,7 @@ function Preview({
       );
       // The type comes from the server's check of the bytes, never from the response alone.
       const typed = new Blob([blob], { type: mime });
+      onFile?.(typed);
       return mime.startsWith('text/')
         ? { text: (await typed.slice(0, 200_000).text()) as string, url: null }
         : { text: null, url: URL.createObjectURL(typed) };
@@ -973,6 +1010,7 @@ function Preview({
 
 function DocumentPanel({
   documentId,
+  hasThumbnail,
   folders,
   canEdit,
   onClose,
@@ -980,6 +1018,7 @@ function DocumentPanel({
   onNewVersion,
 }: {
   documentId: string;
+  hasThumbnail: boolean;
   folders: DocFolder[];
   canEdit: boolean;
   onClose: () => void;
@@ -1117,11 +1156,23 @@ function DocumentPanel({
             onCancel={() => setEditing(false)}
           />
         )}
+        {latest.text && <TextStatus text={latest.text} />}
         <Preview
           documentId={documentId}
           version={latest.versionNo}
           mime={latest.mime}
           size={latest.size}
+          onFile={
+            canEdit && !hasThumbnail
+              ? (blob) =>
+                  void saveThumbnail(
+                    documentId,
+                    latest.versionNo,
+                    blob,
+                    thumbnailSource(latest.mime),
+                  ).then((ok) => ok && onChanged())
+              : undefined
+          }
         />
         <div>
           <h3 className="mb-2 text-sm font-semibold">Versions</h3>
@@ -1411,6 +1462,36 @@ function TrashList({
 
 // --- every tender's documents ---
 
+/** The passage of a PDF a search found, its words marked (the server puts them between \u0002 and \u0003). */
+function Snippet({ text }: { text: string }) {
+  // Plain text and marked words alternate: "before \u0002word\u0003 after".
+  const parts: { text: string; marked: boolean }[] = [];
+  for (const chunk of text.split('\u0002')) {
+    const end = chunk.indexOf('\u0003');
+    if (end < 0) parts.push({ text: chunk, marked: false });
+    else
+      parts.push(
+        { text: chunk.slice(0, end), marked: true },
+        { text: chunk.slice(end + 1), marked: false },
+      );
+  }
+  return (
+    <p className="mt-1 max-w-xl text-xs text-fg-muted" data-testid="snippet">
+      …
+      {parts.map((p, i) =>
+        p.marked ? (
+          <mark key={i} className="rounded bg-warning/20 px-0.5 text-fg">
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+      …
+    </p>
+  );
+}
+
 export function DocumentsScreen() {
   const [search, setSearch] = useState('');
   const [tag, setTag] = useState('');
@@ -1498,16 +1579,22 @@ export function DocumentsScreen() {
               {results.data.items.map((d) => (
                 <tr key={d.id}>
                   <td>
-                    <div className="font-medium">
-                      {d.name} {d.versionNo > 1 && <Badge tone="neutral">v{d.versionNo}</Badge>}
-                    </div>
-                    <div className="flex flex-wrap gap-1 text-xs text-fg-muted">
-                      {d.folder ?? 'Top level'}
-                      {d.tags.map((t) => (
-                        <Badge key={t} tone="accent">
-                          {t}
-                        </Badge>
-                      ))}
+                    <div className="flex items-start gap-2">
+                      <Thumbnail documentId={d.id} versionNo={d.versionNo} has={d.hasThumbnail} />
+                      <div className="min-w-0">
+                        <div className="font-medium">
+                          {d.name} {d.versionNo > 1 && <Badge tone="neutral">v{d.versionNo}</Badge>}
+                        </div>
+                        <div className="flex flex-wrap gap-1 text-xs text-fg-muted">
+                          {d.folder ?? 'Top level'}
+                          {d.tags.map((t) => (
+                            <Badge key={t} tone="accent">
+                              {t}
+                            </Badge>
+                          ))}
+                        </div>
+                        {d.snippet && <Snippet text={d.snippet} />}
+                      </div>
                     </div>
                   </td>
                   <td>

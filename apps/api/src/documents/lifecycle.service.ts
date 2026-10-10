@@ -2,7 +2,8 @@
 // delete a document in the trash for good, empty a tender's trash, or set how many days the trash keeps documents.
 // The database deletes only through doc.purge_document (migration 0020), which takes nothing but a trashed document
 // and records what went. Files are removed afterwards, hourly, once no version in the tenant uses them, and never
-// within an hour of being kept or reused (an upload of the same bytes may be about to point at them).
+// within an hour of being kept or reused (an upload of the same bytes may be about to point at them). The same hourly
+// round reads PDFs whose text is still waiting (text.service.ts).
 import {
   BadRequestException,
   ConflictException,
@@ -28,6 +29,7 @@ import {
   type FolderTemplate,
 } from './document-settings.js';
 import { DocumentsService } from './documents.service.js';
+import { DocumentText } from './text.service.js';
 
 const HOUR = 3600_000;
 const BATCH = 100;
@@ -36,11 +38,13 @@ const BATCH = 100;
 export class DocumentLifecycle implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('Documents');
   private timer: NodeJS.Timeout | undefined;
+  private first: NodeJS.Timeout | undefined;
   private running = false;
 
   constructor(
     private readonly tenants: TenantConnections,
     private readonly docs: DocumentsService,
+    private readonly text: DocumentText,
     @Inject(CONTROL_DB) private readonly control: Sql,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
@@ -49,10 +53,14 @@ export class DocumentLifecycle implements OnModuleInit, OnModuleDestroy {
     if (!this.config.documents.janitor) return;
     this.timer = setInterval(() => void this.janitor(), HOUR);
     this.timer.unref();
+    // Soon after a start too: PDFs uploaded just before a restart, or before text search existed, get read.
+    this.first = setTimeout(() => void this.janitor(), 60_000);
+    this.first.unref();
   }
 
   onModuleDestroy() {
     clearInterval(this.timer);
+    clearTimeout(this.first);
   }
 
   // --- settings (admin) ---
@@ -182,6 +190,7 @@ export class DocumentLifecycle implements OnModuleInit, OnModuleDestroy {
       for (const { tenant_id } of tenants) {
         try {
           const r = await this.housekeeping(tenant_id);
+          this.text.kick(tenant_id);
           if (r.purged || r.filesRemoved)
             this.log.log(
               `tenant ${tenant_id}: ${r.purged} document(s) deleted for good by the trash rule, ${r.filesRemoved} file(s) removed`,

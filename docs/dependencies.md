@@ -26,6 +26,7 @@ The CI licence gate (`pnpm licenses:check`) checks transitive dependencies autom
 | archiver | MIT | api | Tender documents downloaded as one ZIP, streamed (step 10) |
 | saxes | ISC | api | Streaming XML parser for MS Project XML programme files (step 11); already in the tree under exceljs, declared directly |
 | echarts (with zrender) | Apache-2.0 (zrender BSD-3-Clause) | web | Dashboard charts (08-dashboard.md §1); only bar, line and pie are imported, and the dashboard screen loads on demand. Its NOTICE ("Apache ECharts, Copyright 2017-2025 The Apache Software Foundation") must travel in THIRD_PARTY_NOTICES |
+| pdfjs-dist (pdf.js) | Apache-2.0 | api, web | Reading the text of PDFs for search, in a worker thread on the API (step 13 part 7), and drawing a PDF's first page as its thumbnail in the browser (loaded on demand). Its optional native `@napi-rs/canvas` is not installed (`ignoredOptionalDependencies` in pnpm-workspace.yaml); its `node-readable-to-web-readable-stream` (MIT) comes along |
 
 ## Development only
 

@@ -317,6 +317,50 @@ export class DocumentsController {
     });
   }
 
+  /** The latest version's thumbnail (a small picture made by a browser), or 404. */
+  @Get('documents/:id/thumbnail')
+  async thumbnail(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const t = await this.docs.thumbnail(c, id);
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
+    reply.header('Cache-Control', 'private, no-store');
+    reply.header('X-Version', String(t.versionNo));
+    return new StreamableFile(t.bytes, { type: t.mime, length: t.bytes.length });
+  }
+
+  /** multipart/form-data, field `file`: the thumbnail of a version, made by the browser that has the file. */
+  @Post('documents/:id/versions/:version/thumbnail')
+  @HttpCode(200)
+  @RequiresPermission('documents.edit')
+  @RequiresFeatures()
+  async saveThumbnail(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('version', new ZodPipe(z.coerce.number().int().positive())) version: number,
+    @Req() req: FastifyRequest,
+  ) {
+    if (!req.isMultipart())
+      throw new BadRequestException({
+        code: 'not_multipart',
+        message: 'Send the picture as form data.',
+      });
+    const file = await req.file({
+      limits: { fileSize: 200 * 1024 + 1, files: 1, fields: 0, parts: 1 },
+    });
+    if (!file) throw new BadRequestException({ code: 'no_file', message: 'No picture was sent.' });
+    const bytes = await file.toBuffer().catch(() => null);
+    if (!bytes || file.file.truncated)
+      throw new BadRequestException({
+        code: 'bad_thumbnail',
+        message: 'A thumbnail is at most 200 KB.',
+      });
+    return this.docs.saveThumbnail(c, id, version, bytes);
+  }
+
   /** A ZIP of a folder, chosen documents, or the whole vault (latest versions). */
   @Post('tenders/:id/documents/zip')
   @HttpCode(200)

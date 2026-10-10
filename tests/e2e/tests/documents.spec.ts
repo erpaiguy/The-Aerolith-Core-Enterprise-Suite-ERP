@@ -85,6 +85,10 @@ test('an estimator keeps the tender documents: folders, versions, preview, trash
     .setInputFiles([file('GA plan.pdf', 'GA plan rev A'), file('Sections.pdf', 'Sections')]);
   await expect(uploads(page)).toContainText('Uploaded 2 of 2');
   await expect(documents(page).getByRole('button', { name: 'GA plan.pdf' })).toBeVisible();
+  // This browser drew each PDF's first page as its thumbnail while uploading (fetched once the row is on screen).
+  const gaRow = documents(page).getByRole('row', { name: /GA plan\.pdf/ });
+  await gaRow.scrollIntoViewIfNeeded();
+  await expect(gaRow.getByTestId('thumbnail')).toBeVisible();
   await page.getByLabel('Files to upload').setInputFiles([file('GA plan.pdf', 'GA plan rev B')]);
   await expect(uploads(page)).toContainText('New version (v2)');
   await expect(documents(page).getByRole('row', { name: /GA plan\.pdf/ })).toContainText('v2');
@@ -173,6 +177,17 @@ test('an estimator keeps the tender documents: folders, versions, preview, trash
     documents(page).getByRole('button', { name: 'Turnover certificate.pdf' }),
   ).toBeVisible();
 
+  // 6d. A specification, found later by the words inside it.
+  await folders(page)
+    .getByRole('button', { name: /02 Drawings/ })
+    .click();
+  await page
+    .getByLabel('Files to upload')
+    .setInputFiles([file('Specification.pdf', 'Concrete M25 using OPC 53 grade cement')]);
+  await expect(documents(page).getByRole('button', { name: 'Specification.pdf' })).toBeVisible();
+  await documents(page).getByRole('button', { name: 'Specification.pdf' }).click();
+  await expect(page.getByTestId('text-status')).toContainText(/Searchable|being read/);
+
   // 7. Found from the Documents page by tag.
   await page
     .getByRole('navigation', { name: 'Main' })
@@ -185,4 +200,13 @@ test('an estimator keeps the tender documents: folders, versions, preview, trash
   await expect(
     results.getByRole('link', { name: 'Sub-district hospital, Malkapur' }),
   ).toBeVisible();
+  // And by words inside a PDF, with the passage shown (its text is read in the background).
+  await expect(async () => {
+    await page.getByLabel('Search documents').fill('');
+    await page.getByLabel('Search documents').fill('OPC cement');
+    await expect(results.getByTestId('snippet')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+  await expect(results).toContainText('Specification.pdf');
+  await expect(results.getByTestId('snippet').locator('mark')).toHaveText(['OPC', 'cement']);
+  await page.screenshot(shot('documents-02-search'));
 });

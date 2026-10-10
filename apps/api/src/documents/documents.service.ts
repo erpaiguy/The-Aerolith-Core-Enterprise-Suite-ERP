@@ -42,6 +42,25 @@ import { clamdScan, type ScanResult } from './scanner.js';
 /** Folders deep enough for "Drawings / Structural / Revision 2"; deeper trees are usually a copied disk. */
 const MAX_VAULT = 20_000;
 const MAX_ZIP = 2_000;
+const PDF = 'application/pdf';
+const THUMBNAIL_MAX = 200 * 1024;
+
+/** A picture's type from its first bytes: WebP, PNG or JPEG, or null. */
+export function thumbnailType(b: Buffer): 'image/webp' | 'image/png' | 'image/jpeg' | null {
+  if (
+    b.length >= 12 &&
+    b.toString('latin1', 0, 4) === 'RIFF' &&
+    b.toString('latin1', 8, 12) === 'WEBP'
+  )
+    return 'image/webp';
+  if (
+    b.length >= 8 &&
+    b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return 'image/png';
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  return null;
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The folders most Indian works tenders need; the commercial ones are restricted. */
@@ -68,7 +87,12 @@ export interface DocumentRow {
   uploadedAt: string;
   uploadedBy: string | null;
   deletedAt: string | null;
+  /** The latest version has a thumbnail (GET /documents/:id/thumbnail). */
+  hasThumbnail: boolean;
 }
+
+const HAS_THUMBNAIL = `EXISTS (SELECT 1 FROM doc.version_thumbnail th
+  WHERE th.document_id = d.id AND th.version_no = d.version_no) AS "hasThumbnail"`;
 
 export type UploadOutcome = 'created' | 'new_version' | 'unchanged';
 
@@ -121,6 +145,9 @@ export class DocumentsService implements OnApplicationBootstrap {
     @Inject(CONTROL_DB) private readonly control: Sql,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
+
+  /** Set by the text reader (text.service.ts): a PDF version is waiting to be read. */
+  onPdfUploaded: ((tenantId: string) => void) | undefined;
 
   get maxBytes() {
     return this.config.documents.maxBytes;
@@ -256,7 +283,8 @@ export class DocumentsService implements OnApplicationBootstrap {
     return db<DocumentRow[]>`
       SELECT d.id, d.folder_id AS "folderId", d.name, d.description, d.tags, d.version_no AS "versionNo",
         d.row_version AS "rowVersion", v.size_bytes::float8 AS size, v.mime, v.scan_status AS "scanStatus",
-        v.uploaded_at AS "uploadedAt", u.display_name AS "uploadedBy", d.deleted_at AS "deletedAt"
+        v.uploaded_at AS "uploadedAt", u.display_name AS "uploadedBy", d.deleted_at AS "deletedAt",
+        ${db.unsafe(HAS_THUMBNAIL)}
       FROM doc.document d
       JOIN doc.document_version v ON v.document_id = d.id AND v.version_no = d.version_no
       LEFT JOIN doc.folder f ON f.id = d.folder_id
@@ -289,12 +317,17 @@ export class DocumentsService implements OnApplicationBootstrap {
           uploadedAt: string;
           uploadedBy: string | null;
           sha256: string;
+          /** PDFs: whether their text was read for search, and how many pages. */
+          text: { status: string; pages: number | null; note: string | null } | null;
         }[]
       >`
         SELECT v.version_no AS "versionNo", v.size_bytes::float8 AS size, v.mime, v.original_name AS "originalName",
           v.note, v.scan_status AS "scanStatus", v.uploaded_at AS "uploadedAt", u.display_name AS "uploadedBy",
-          v.storage_key AS sha256
+          v.storage_key AS sha256,
+          CASE WHEN t.document_id IS NULL THEN NULL
+            ELSE json_build_object('status', t.status, 'pages', t.pages, 'note', t.note) END AS text
         FROM doc.document_version v LEFT JOIN platform."user" u ON u.id = v.uploaded_by
+        LEFT JOIN doc.version_text t ON t.document_id = v.document_id AND t.version_no = v.version_no
         WHERE v.document_id = ${documentId} ORDER BY v.version_no DESC`,
       d.folderId
         ? this.folderPath(db, d.folderId)
@@ -421,6 +454,42 @@ export class DocumentsService implements OnApplicationBootstrap {
     return { stream, size: v.size, mime: v.mime, fileName: versionedName(d.name, no, d.versionNo) };
   }
 
+  // --- thumbnails ---
+
+  /**
+   * Keeps the thumbnail a browser made of a version (the first page of a PDF, a small copy of an image). Only small
+   * WebP, PNG or JPEG pictures, recognised by their bytes; served back only as that picture.
+   */
+  async saveThumbnail(claims: TenantClaims, documentId: string, version: number, bytes: Buffer) {
+    const mime = thumbnailType(bytes);
+    if (!mime || bytes.length > THUMBNAIL_MAX)
+      throw new BadRequestException({
+        code: 'bad_thumbnail',
+        message: 'A thumbnail is a WebP, PNG or JPEG picture of at most 200 KB.',
+      });
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.visibleDocument(db, documentId, await this.seesRestricted(claims));
+    const [v] = await db`SELECT 1 FROM doc.document_version
+      WHERE document_id = ${documentId} AND version_no = ${version}`;
+    if (!v) throw new NotFoundException({ code: 'version_not_found' });
+    await db`INSERT INTO doc.version_thumbnail (document_id, version_no, mime, bytes, created_by)
+      VALUES (${documentId}, ${version}, ${mime}, ${bytes}, ${claims.sub})
+      ON CONFLICT (document_id, version_no) DO UPDATE SET mime = EXCLUDED.mime, bytes = EXCLUDED.bytes,
+        created_at = now(), created_by = EXCLUDED.created_by`;
+    return { documentId, versionNo: version };
+  }
+
+  /** The thumbnail of the latest version. */
+  async thumbnail(claims: TenantClaims, documentId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const d = await this.visibleDocument(db, documentId, await this.seesRestricted(claims));
+    const [t] = await db<{ mime: string; bytes: Buffer }[]>`
+      SELECT mime, bytes FROM doc.version_thumbnail
+      WHERE document_id = ${documentId} AND version_no = ${d.versionNo}`;
+    if (!t) throw new NotFoundException({ code: 'no_thumbnail' });
+    return { ...t, versionNo: d.versionNo };
+  }
+
   /** Documents by name, description or tag, across every tender (or one), newest first. */
   async search(
     claims: TenantClaims,
@@ -434,28 +503,49 @@ export class DocumentsService implements OnApplicationBootstrap {
         tenderId: string;
         tender: { number: string; title: string };
         folder: string | null;
+        /** Found by the PDF's text, not its name: a line around the words, with them between \u0002 and \u0003. */
+        snippet: string | null;
       })[]
     >`
+      WITH hits AS (
+        SELECT d.id, v.uploaded_at,
+          ${
+            pattern
+              ? db`(d.name ILIKE ${pattern} OR d.description ILIKE ${pattern}
+                  OR EXISTS (SELECT 1 FROM unnest(d.tags) x WHERE x ILIKE ${pattern}))`
+              : db`true`
+          } AS by_name,
+          ${opts.q ? db`coalesce(vt.tsv @@ websearch_to_tsquery('simple', ${opts.q}), false)` : db`false`} AS by_text
+        FROM doc.document d
+        JOIN doc.document_version v ON v.document_id = d.id AND v.version_no = d.version_no
+        LEFT JOIN doc.folder f ON f.id = d.folder_id
+        LEFT JOIN doc.version_text vt ON vt.document_id = d.id AND vt.version_no = d.version_no
+          AND vt.status = 'done'
+        WHERE d.deleted_at IS NULL ${see ? db`` : db`AND (f.id IS NULL OR NOT f.restricted)`}
+          ${opts.tenderId ? db`AND d.tender_id = ${opts.tenderId}` : db``}
+          ${opts.tag ? db`AND EXISTS (SELECT 1 FROM unnest(d.tags) x WHERE lower(x) = lower(${opts.tag}))` : db``}
+      ), found AS (
+        -- Name matches first, then the newest.
+        SELECT * FROM hits WHERE by_name OR by_text
+        ORDER BY by_name DESC, uploaded_at DESC LIMIT ${opts.limit + 1}
+      )
       SELECT d.id, d.folder_id AS "folderId", f.name AS folder, d.name, d.description, d.tags,
         d.version_no AS "versionNo", d.row_version AS "rowVersion", v.size_bytes::float8 AS size, v.mime,
         v.scan_status AS "scanStatus", v.uploaded_at AS "uploadedAt", u.display_name AS "uploadedBy",
-        d.deleted_at AS "deletedAt", d.tender_id AS "tenderId",
-        json_build_object('number', t.number, 'title', t.title) AS tender
-      FROM doc.document d
+        d.deleted_at AS "deletedAt", d.tender_id AS "tenderId", ${db.unsafe(HAS_THUMBNAIL)},
+        json_build_object('number', t.number, 'title', t.title) AS tender,
+        CASE WHEN found.by_text AND NOT found.by_name THEN ts_headline('simple', left(vt.text, 300000),
+          websearch_to_tsquery('simple', ${opts.q ?? ''}),
+          'StartSel=' || chr(2) || ', StopSel=' || chr(3) || ', MaxWords=30, MinWords=12, MaxFragments=1')
+        END AS snippet
+      FROM found
+      JOIN doc.document d ON d.id = found.id
       JOIN tender.tender t ON t.id = d.tender_id
       JOIN doc.document_version v ON v.document_id = d.id AND v.version_no = d.version_no
       LEFT JOIN doc.folder f ON f.id = d.folder_id
       LEFT JOIN platform."user" u ON u.id = v.uploaded_by
-      WHERE d.deleted_at IS NULL ${see ? db`` : db`AND (f.id IS NULL OR NOT f.restricted)`}
-        ${opts.tenderId ? db`AND d.tender_id = ${opts.tenderId}` : db``}
-        ${
-          pattern
-            ? db`AND (d.name ILIKE ${pattern} OR d.description ILIKE ${pattern}
-                OR EXISTS (SELECT 1 FROM unnest(d.tags) x WHERE x ILIKE ${pattern}))`
-            : db``
-        }
-        ${opts.tag ? db`AND EXISTS (SELECT 1 FROM unnest(d.tags) x WHERE lower(x) = lower(${opts.tag}))` : db``}
-      ORDER BY v.uploaded_at DESC LIMIT ${opts.limit + 1}`;
+      LEFT JOIN doc.version_text vt ON vt.document_id = d.id AND vt.version_no = d.version_no
+      ORDER BY found.by_name DESC, found.uploaded_at DESC`;
     return { items: rows.slice(0, opts.limit), hasMore: rows.length > opts.limit };
   }
 
@@ -795,6 +885,8 @@ export class DocumentsService implements OnApplicationBootstrap {
         if (existing) {
           const no = existing.version_no + 1;
           await tx`INSERT INTO doc.document_version ${tx({ ...version, document_id: existing.id, version_no: no })}`;
+          if (mime === PDF)
+            await tx`INSERT INTO doc.version_text (document_id, version_no) VALUES (${existing.id}, ${no})`;
           await tx`UPDATE doc.document SET version_no = ${no}, updated_at = now(), updated_by = ${claims.sub},
             row_version = row_version + 1 WHERE id = ${existing.id}`;
           await audit(tx, claims.sub, 'document.version', 'document', existing.id, {
@@ -811,6 +903,8 @@ export class DocumentsService implements OnApplicationBootstrap {
           INSERT INTO doc.document (tender_id, folder_id, name, created_by, updated_by)
           VALUES (${tenderId}, ${folderId}, ${name}, ${claims.sub}, ${claims.sub}) RETURNING id`;
         await tx`INSERT INTO doc.document_version ${tx({ ...version, document_id: d!.id, version_no: 1 })}`;
+        if (mime === PDF)
+          await tx`INSERT INTO doc.version_text (document_id, version_no) VALUES (${d!.id}, 1)`;
         await audit(tx, claims.sub, 'document.upload', 'document', d!.id, {
           tenderId,
           name,
@@ -822,13 +916,16 @@ export class DocumentsService implements OnApplicationBootstrap {
           document: { id: d!.id, name, folderId, versionNo: 1 },
         };
       });
+    let out: Awaited<ReturnType<typeof write>>;
     try {
-      return await write();
+      out = await write();
     } catch (err) {
       // Two uploads of the same new name at once: the second becomes a version of the first.
-      if (isUnique(err)) return write();
-      throw err;
+      if (isUnique(err)) out = await write();
+      else throw err;
     }
+    if (mime === PDF && out.outcome !== 'unchanged') this.onPdfUploaded?.(claims.ten);
+    return out;
   }
 
   async update(

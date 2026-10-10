@@ -1174,3 +1174,42 @@ the trash and only by the admin, the record kept, the database function refusing
 kept until its last user goes, the trash rule, emptying the trash; documents linked to an addendum and a checklist
 item). The browser tests now delete a document for good and move a folder, attach a corrigendum to its addendum, and
 set a company folder and the trash rule.
+
+### Part 7: searching inside PDFs, thumbnails
+
+- **Search inside PDFs:** the text of every PDF uploaded is read in the background and indexed; the Documents search
+  finds a document by the words in it, shows the passage with the words marked, and lists name matches first. A
+  document's panel says whether its text was read ("Searchable: the text of 12 pages was read"), is being read, or
+  could not be (a scanned PDF has no text; a password-protected one cannot be opened). PDFs uploaded before this are
+  read by the first housekeeping round after the update.
+- **Thumbnails:** the browser that uploads a PDF or an image draws its first page (or a small copy) and keeps it with
+  the version; lists and search results show it. A document uploaded without one (from before, or through the API)
+  gets it the first time someone who may edit documents opens its preview.
+
+**Decisions:**
+- **[Certain] Text is read on the server, pictures are drawn in the browser.** Reading text needs no drawing; drawing
+  pages on the server would need a native canvas library in every image. The uploader's browser already has the
+  file, so the thumbnail costs no extra download.
+- **[Certain] Reading runs in a worker thread with a memory limit (512 MB) and a time limit (2 minutes)**: a huge or
+  hostile PDF costs that thread, never the API's responsiveness. One PDF at a time per API process; files over
+  100 MB, pages past 500 and text past 2 million characters are not read. pdf.js never runs a PDF's JavaScript, and
+  eval is switched off.
+- **Words, not fragments:** the text index matches whole words (any order; "quotes" for a phrase), with no stemming
+  and no language rules, so codes like "IS 456" and Hindi or Marathi words match as written. Names still match any
+  fragment, as before. Only the first 300,000 characters of a document are indexed.
+- **No OCR.** Scanned drawings and certificates are found by their names, tags and descriptions only; free OCR
+  (Tesseract) is a large native dependency, and its Indian-language accuracy has not been checked.
+- **Thumbnails are pictures the server checks by their bytes** (WebP, PNG or JPEG, at most 200 KB) and serves back
+  only as that picture, with the same headers as files. A new version has no thumbnail until a browser makes one.
+
+**API:** `GET /documents?q=` also matches the text and returns `snippet` (marked words between U+0002 and U+0003);
+`versions[].text` (`status`, `pages`, `note`) on `GET /documents/:id`; `hasThumbnail` on documents;
+`GET /documents/:id/thumbnail`; `POST /documents/:id/versions/:version/thumbnail` (multipart, `documents.edit`).
+Migration `0021_document_text_thumbnails.sql`.
+
+**Tests:** 5 unit tests (every page read in order, the page and character limits, a file that is not a readable PDF
+given up for good, a read stopped for taking too long; thumbnails recognised by their bytes, SVG and GIF refused);
+2 API integration tests (found by words in the text with the passage marked, phrases, restricted documents never
+found by a worker, name matches first, an unreadable file marked so; a thumbnail kept and served back as that
+picture, SVG and oversized pictures refused, none for a new version). The browser test now sees the thumbnail drawn
+while uploading and finds a specification by the words inside it.

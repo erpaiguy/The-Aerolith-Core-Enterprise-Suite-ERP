@@ -41,6 +41,8 @@ export interface FileStore {
   commit(file: StagedFile): Promise<string>;
   discard(file: StagedFile): Promise<void>;
   open(key: string): Promise<Readable>;
+  /** Where the file is on this server's disk, to be read in place (the PDF text reader); null if it is not. */
+  localPath(key: string): Promise<string | null>;
   /**
    * Removes a kept file no version uses any more (the caller has checked), unless it was kept or reused within
    * `minAgeMs`: an upload of the same bytes may be about to write its row.
@@ -109,6 +111,11 @@ export class LocalFileStore implements FileStore {
     const path = this.pathOf(key);
     if (!(await stat(path).catch(() => null))) throw new FileMissingError(key);
     return createReadStream(path);
+  }
+
+  async localPath(key: string): Promise<string | null> {
+    const path = this.pathOf(key);
+    return (await stat(path).catch(() => null)) ? path : null;
   }
 
   async remove(key: string, minAgeMs: number, now = Date.now()): Promise<boolean> {

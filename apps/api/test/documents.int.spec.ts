@@ -17,7 +17,9 @@ import { configureApp } from '../src/bootstrap.js';
 import { migrate } from '../src/db/migrate.js';
 import { DocumentsService } from '../src/documents/documents.service.js';
 import { DocumentLifecycle } from '../src/documents/lifecycle.service.js';
+import { DocumentText } from '../src/documents/text.service.js';
 import { TenantConnections } from '../src/provisioning/tenant-connections.js';
+import { textPdf } from './helpers/pdf.js';
 import { readyTenant } from './helpers/tenant.js';
 
 const controlUrl = process.env.TEST_CONTROL_DATABASE_URL;
@@ -47,6 +49,7 @@ interface Doc {
   size: number;
   mime: string;
   scanStatus: string;
+  hasThumbnail: boolean;
 }
 interface Vault {
   folders: Folder[];
@@ -763,6 +766,98 @@ describe.skipIf(!controlUrl || !adminUrl)('tender documents (integration)', () =
           })
         ).json(),
       ).toMatchObject({ code: 'link_target_not_found' });
+    });
+    it('finds PDFs by the words inside them, never restricted ones for those who may not see them', async () => {
+      const reader = app.get(DocumentText);
+      const vault0 = await ok<Vault>(
+        post(`/tenant/tenders/${tid}/folders`, { name: 'Price workings', restricted: true }),
+      );
+      const prices = vault0.folders.find((f) => f.name === 'Price workings')!;
+      const spec = (
+        await uploaded(
+          tid,
+          'Technical specifications.pdf',
+          textPdf('Section 4: concrete', 'Cement shall be OPC 53 grade conforming to IS 269.'),
+        )
+      ).document;
+      await uploaded(tid, 'Our cement rates.pdf', textPdf('OPC 53 grade at 410 per bag'), {
+        folderId: prices.id,
+      });
+      await reader.idle();
+      const detail = await ok<{ versions: { text: { status: string; pages: number } | null }[] }>(
+        get(`/tenant/documents/${spec.id}`),
+      );
+      expect(detail.versions[0]!.text).toMatchObject({ status: 'done', pages: 2 });
+
+      type Found = { items: { id: string; name: string; snippet: string | null }[] };
+      const found = await ok<Found>(get('/tenant/documents?q=IS%20269'));
+      expect(found.items.map((d) => d.name)).toEqual(['Technical specifications.pdf']);
+      expect(found.items[0]!.snippet).toContain('\u0002IS\u0003 \u0002269\u0003');
+      // Words, not substrings of words; any order; quoted phrases.
+      expect((await ok<Found>(get('/tenant/documents?q=grade%20opc'))).items).toHaveLength(2);
+      expect((await ok<Found>(get('/tenant/documents?q=%22grade%20opc%22'))).items).toHaveLength(0);
+      // The worker does not find what is in a restricted folder, by name or by text.
+      expect(
+        (await ok<Found>(get('/tenant/documents?q=grade%20opc', worker))).items.map((d) => d.name),
+      ).toEqual(['Technical specifications.pdf']);
+      // A name match comes before a text match.
+      await uploaded(tid, 'Cement test certificate.pdf', textPdf('Lab report'));
+      await reader.idle();
+      const both = await ok<Found>(get('/tenant/documents?q=cement'));
+      expect(both.items[0]!.name).toBe('Cement test certificate.pdf');
+      expect(both.items[0]!.snippet).toBeNull();
+      // A file that is not a readable PDF is marked so, and found by its name only.
+      const broken = (await uploaded(tid, 'Scanned letter.pdf', pdf('just bytes'))).document;
+      await reader.idle();
+      const b = await ok<{ versions: { text: { status: string; note: string } | null }[] }>(
+        get(`/tenant/documents/${broken.id}`),
+      );
+      expect(b.versions[0]!.text).toMatchObject({
+        status: 'failed',
+        note: 'not a PDF that can be read',
+      });
+    });
+
+    it('keeps a thumbnail made by the browser, only a small picture, served back as that picture', async () => {
+      const doc = (await uploaded(tid, 'Site photo.pdf', textPdf('site'))).document;
+      const png = Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.alloc(64, 1),
+      ]);
+      const send = (body: Buffer, name = 'thumb.png', headers = t.admin) => {
+        const boundary = `----aerolith${randomBytes(6).toString('hex')}`;
+        return app.inject({
+          method: 'POST',
+          url: `/api/tenant/documents/${doc.id}/versions/1/thumbnail`,
+          payload: Buffer.concat([
+            Buffer.from(
+              `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\n` +
+                'Content-Type: application/octet-stream\r\n\r\n',
+            ),
+            body,
+            Buffer.from(`\r\n--${boundary}--\r\n`),
+          ]),
+          headers: { ...headers, 'content-type': `multipart/form-data; boundary=${boundary}` },
+        });
+      };
+      expect((await get(`/tenant/documents/${doc.id}/thumbnail`)).statusCode).toBe(404);
+      expect((await send(Buffer.from('<svg onload="alert(1)"/>'), 'x.svg')).json()).toMatchObject({
+        code: 'bad_thumbnail',
+      });
+      expect((await send(Buffer.concat([png, Buffer.alloc(210 * 1024)]))).json()).toMatchObject({
+        code: 'bad_thumbnail',
+      });
+      await ok(send(png));
+      const res = await get(`/tenant/documents/${doc.id}/thumbnail`);
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('image/png');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.rawPayload.equals(png)).toBe(true);
+      const v = await ok<Vault>(get(`/tenant/tenders/${tid}/documents`));
+      expect(v.documents.find((d) => d.id === doc.id)).toMatchObject({ hasThumbnail: true });
+      // A new version has none until a browser makes it.
+      await uploaded(tid, 'x.pdf', textPdf('site, again'), { documentId: doc.id });
+      expect((await get(`/tenant/documents/${doc.id}/thumbnail`)).statusCode).toBe(404);
     });
   });
 });

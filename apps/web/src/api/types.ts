@@ -839,6 +839,8 @@ export interface DocItem {
   uploadedAt: string;
   uploadedBy: string | null;
   deletedAt: string | null;
+  /** The latest version has a thumbnail. */
+  hasThumbnail: boolean;
 }
 
 export interface DocVault {
@@ -872,6 +874,12 @@ export interface DocDetail {
     scanStatus: 'clean' | 'not_scanned';
     uploadedAt: string;
     uploadedBy: string | null;
+    /** PDFs: whether their text was read for search. */
+    text: {
+      status: 'pending' | 'working' | 'done' | 'failed' | 'skipped';
+      pages: number | null;
+      note: string | null;
+    } | null;
   }[];
 }
 
@@ -884,6 +892,8 @@ export interface DocSearchHit extends DocItem {
   tenderId: string;
   tender: { number: string; title: string };
   folder: string | null;
+  /** Found by words inside the PDF: the passage, the words between \u0002 and \u0003. */
+  snippet: string | null;
 }
 
 // --- reports (step 12) ---
