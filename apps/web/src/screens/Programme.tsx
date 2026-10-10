@@ -1071,7 +1071,10 @@ function ActivityPanel({
             <GroupFields plan={plan} activity={a} canEdit={canEdit} onSave={onSave} />
           </div>
           {a.kind === 'task' && (
-            <ActivityResources planId={plan.id} activityId={a.id} canEdit={canEdit} />
+            <div className="space-y-4">
+              <ActivityLines plan={plan} activityId={a.id} canEdit={canEdit} />
+              <ActivityResources planId={plan.id} activityId={a.id} canEdit={canEdit} />
+            </div>
           )}
         </div>
       )}
@@ -1268,6 +1271,130 @@ function GroupFields({
         </Button>
       )}
     </form>
+  );
+}
+
+interface ActivityLinesView {
+  lines: {
+    lineKey: string;
+    boqId: string;
+    code: string | null;
+    description: string;
+    unit: string | null;
+    qty: string | null;
+    amount: string | null;
+    done: string;
+  }[];
+  value: string;
+  physicalPct: number | null;
+}
+
+/** The contract BOQ items the activity carries out: its physical progress is theirs (by contract value). */
+function ActivityLines({
+  plan,
+  activityId,
+  canEdit,
+}: {
+  plan: ProgrammeDetail;
+  activityId: string;
+  canEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const key = ['activity-lines', plan.id, activityId];
+  const url = `/api/tenant/programmes/${plan.id}/activities/${activityId}/lines`;
+  const data = useQuery({ queryKey: key, queryFn: () => api.request<ActivityLinesView>(url) });
+  const contracts = useQuery({
+    queryKey: ['project-boqs', plan.projectId],
+    queryFn: () =>
+      api.request<{ id: string; name: string; kind: string; archivedAt: string | null }[]>(
+        `/api/tenant/projects/${plan.projectId}/boqs`,
+      ),
+    select: (bs) => bs.filter((b) => b.kind === 'contract' && !b.archivedAt),
+  });
+  const [boqId, setBoqId] = useState('');
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const chosen = boqId || contracts.data?.[0]?.id || '';
+  const save = async (path: string, body: object) => {
+    setError(null);
+    try {
+      qc.setQueryData(
+        key,
+        await api.request<ActivityLinesView>(`${url}${path}`, { method: 'POST', body }),
+      );
+      return true;
+    } catch (err) {
+      setError(describeError(err));
+      return false;
+    }
+  };
+  const d = data.data;
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium">
+        BOQ items{' '}
+        {d && d.physicalPct !== null && (
+          <Badge tone="success">
+            <span data-testid="activity-physical">{d.physicalPct}% done</span>
+          </Badge>
+        )}
+      </h3>
+      {d?.lines.length ? (
+        <ul className="space-y-1 text-sm" aria-label="Activity BOQ items">
+          {d.lines.map((l) => (
+            <li key={l.lineKey} className="flex items-center gap-2">
+              <span className="font-mono text-xs">{l.code}</span>
+              <span className="min-w-0 flex-1 truncate">{l.description}</span>
+              <span className="whitespace-nowrap text-xs tabular-nums text-fg-muted">
+                {Number(l.done).toLocaleString('en-IN')} /{' '}
+                {Number(l.qty ?? 0).toLocaleString('en-IN')} {l.unit}
+              </span>
+              {canEdit && (
+                <Button
+                  variant="ghost"
+                  aria-label={`Unlink ${l.code}`}
+                  onClick={() => void save('/remove', { lineKey: l.lineKey })}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-fg-muted">
+          None. Link the items it carries out to measure its physical progress.
+        </p>
+      )}
+      {canEdit && (contracts.data?.length ?? 0) > 0 && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save('', { boqId: chosen, code: code.trim() }).then((ok) => ok && setCode(''));
+          }}
+        >
+          {(contracts.data?.length ?? 0) > 1 && (
+            <Field label="Contract BOQ">
+              <Select value={chosen} onChange={(e) => setBoqId(e.target.value)}>
+                {contracts.data?.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <Field label="Item or section code" hint="A section brings every item under it.">
+            <Input value={code} onChange={(e) => setCode(e.target.value)} className="w-36" />
+          </Field>
+          <Button type="submit" variant="secondary" disabled={!code.trim() || !chosen}>
+            Link
+          </Button>
+        </form>
+      )}
+      {error && <Alert tone="danger">{error}</Alert>}
+    </div>
   );
 }
 

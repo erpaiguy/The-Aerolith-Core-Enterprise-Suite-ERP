@@ -78,11 +78,18 @@ const OVERSCAN = 10;
 const MAX_COLLAPSED = 1000;
 const PASTE_LIMIT = 5000;
 const GRID_COLUMNS = 'grid-cols-[5.5rem_minmax(12rem,1fr)_4.5rem_7rem_7rem_9rem]';
-/** A project BOQ also shows each item's WBS element and cost code. */
+/** A project BOQ also shows each item's WBS element, cost code and the quantity done. */
 const GRID_COLUMNS_MAPPED =
-  'grid-cols-[5.5rem_minmax(12rem,1fr)_4.5rem_7rem_7rem_5.5rem_6rem_9rem]';
-type CellColumn = EditableColumn | 'amount' | 'wbs' | 'costCode';
-const READ_ONLY = new Set<CellColumn>(['amount', 'wbs', 'costCode']);
+  'grid-cols-[5.5rem_minmax(12rem,1fr)_4.5rem_7rem_7rem_5.5rem_6rem_7rem_9rem]';
+type CellColumn = EditableColumn | 'amount' | 'wbs' | 'costCode' | 'done';
+const READ_ONLY = new Set<CellColumn>(['amount', 'wbs', 'costCode', 'done']);
+/** "78 · 78%": the quantity done, and of the item's quantity. */
+const doneText = (row: BoqRow) => {
+  if (row.type !== 'item' || !row.done) return '';
+  const q = Number(row.qty);
+  const pct = q ? ` · ${Math.round((Number(row.done) / q) * 100)}%` : '';
+  return `${formatQty(row.done)}${pct}`;
+};
 // Amount stays visible when the grid scrolls sideways on narrow screens.
 const STICKY_AMOUNT = 'sticky right-0 z-[1] border-l border-line';
 
@@ -993,6 +1000,16 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
               <Network className="size-4" aria-hidden /> Map
             </Button>
           )}
+          {mapping?.onMeasure && (
+            <Button
+              variant="secondary"
+              disabled={activeRow?.type !== 'item'}
+              onClick={() => activeRow && mapping.onMeasure?.(activeRow)}
+              title="Record work done on this item (measurement book)"
+            >
+              <Ruler className="size-4" aria-hidden /> Work done
+            </Button>
+          )}
           {selection ? (
             <>
               <Button variant="secondary" onClick={() => setBulkOpen(true)}>
@@ -1043,6 +1060,16 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
               >
                 <Network className="size-4" aria-hidden /> Map
               </Button>
+              {mapping?.onMeasure && (
+                <Button
+                  variant="secondary"
+                  disabled={activeRow?.type !== 'item'}
+                  onClick={() => activeRow && mapping.onMeasure?.(activeRow)}
+                  title="Record work done on this item (measurement book)"
+                >
+                  <Ruler className="size-4" aria-hidden /> Work done
+                </Button>
+              )}
               {selection ? (
                 <Button variant="ghost" onClick={() => setSelection(null)}>
                   Clear selection
@@ -1118,7 +1145,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
           onKeyDown={onGridKey}
           onPaste={onPaste}
         >
-          <div className={mapping ? 'min-w-[57rem]' : 'min-w-[45rem]'}>
+          <div className={mapping ? 'min-w-[64rem]' : 'min-w-[45rem]'}>
             <div
               className={`sticky top-0 z-10 grid ${columns} items-center border-b border-line bg-surface-2 text-xs font-medium text-fg-muted [&>div]:px-2`}
               style={{ height: HEADER_H }}
@@ -1137,6 +1164,13 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                 <>
                   <div role="columnheader">WBS</div>
                   <div role="columnheader">Cost code</div>
+                  <div
+                    role="columnheader"
+                    className="text-right"
+                    title="Quantity done (measurement book)"
+                  >
+                    Done
+                  </div>
                 </>
               )}
               <div
@@ -1275,6 +1309,17 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
                         'costCode',
                         <span className="truncate font-mono text-xs" data-testid="map-cost">
                           {row.map?.costCode ?? ''}
+                        </span>,
+                      )}
+                    {mapping &&
+                      cell(
+                        row,
+                        'done',
+                        <span
+                          className={`w-full truncate text-right text-xs tabular-nums ${row.done && Number(row.qty) && Number(row.done) > Number(row.qty) ? 'text-danger' : ''}`}
+                          data-testid="done"
+                        >
+                          {doneText(row)}
                         </span>,
                       )}
                     {cell(

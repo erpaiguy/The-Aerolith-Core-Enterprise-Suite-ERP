@@ -37,7 +37,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 3 | **WBS + cost codes** (J3) | WBS tree per project; company cost-code master; BOQ items mapped to WBS and cost codes (one by one and in bulk by range) | **Done** (see below) |
 | 4 | **Project schedules** (J4) | The Wave 1 engine for project plans: constraints, resources and assignments, multiple baselines, progress updates (data date, actuals, remaining duration), look-ahead; 50k activities | **Done** (see below) |
 | 5 | **Macro plans** (J5) | Roll-up of micro plans through the WBS, milestones, summary views by package, trade and zone | **Done** (see below) |
-| 6 | **Progress measurement** (J6) | Physical % per BOQ item and activity, measurement-based progress, progress value against the contract BOQ | |
+| 6 | **Progress measurement** (J6) | Physical % per BOQ item and activity, measurement-based progress, progress value against the contract BOQ | **Done** (see below) |
 | 7 | **Project dashboard and reports** | Progress, schedule variance, budget against contract, look-ahead | |
 
 Each step ships with API tests and a browser test of the main journey, as in Wave 1.
@@ -334,3 +334,68 @@ place on the team (or the right to edit projects). Viewers read.
   - archived schedules left out, the team only, and no groups on a tender's programme.
 - A browser test: a schedule on the WBS, a package and trade on an activity, a milestone, a baseline, and the
   macro plan's WBS, milestone, package and trade views.
+
+## Step 6 delivered: progress measurement
+
+**Journey:**
+- In a project's **contract BOQ**, the grid shows each item's quantity **Done** and its percent of the BOQ quantity
+  (red when beyond it). The budget shows the same quantities, since its lines are the same work.
+- Choosing an item and pressing **Work done** opens its **measurement book**:
+  - the entries so far (date, quantity, description, who), and what is done of the BOQ quantity at the contract rate;
+  - a new entry on a day (not in the future, by India's date), from **dimensions** (rows of nos × length × breadth
+    × height, deductions, worked out as they are typed) or as one **quantity**.
+  - A wrong entry is **reversed** with a reason: an entry of the opposite quantity is added, and the wrong one stays
+    on the record, crossed out. Entries are never changed or deleted, by the app or in the database.
+- The project's **Progress** (from its page) reports the work done to a day and in a period (from the first of the
+  month by default):
+  - **physical progress**: the work done within each item's BOQ quantity, by contract value;
+  - the **value done** at contract rates (all of it, excesses included, as it will be billed);
+  - **this period's** value;
+  - the **same work at budget rates**;
+  - items started and items beyond their quantity.
+  - It breaks down by contract BOQ and its top-level sections, and by WBS element (through the step 3 mapping,
+    rolled up the tree).
+- A schedule activity's **BOQ items** (its activity panel): link an item by its code, or a section by its code with
+  every item under it; unlink one. The activity's **physical progress** is theirs, by contract value within their
+  quantities.
+
+**Who does what:** the project's team records, reverses and links: its leads, members and those who edit projects.
+No BOQ rights are needed, so a site engineer on the team can keep the book. Viewers read; others do not see the
+project.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] Measured against the contract BOQ, by line.** Entries follow the line through revisions of the
+  contract BOQ, and the budget's same line is valued from them. An item added only to the budget has nothing
+  measured against it.
+- **[Certain] The book is append-only.** That is how a paper measurement book works and what a bill can be checked
+  against. The database refuses changes and deletes, not only the screens.
+- **[Likely] Two figures, on purpose:**
+  - **physical progress** stops at each item's BOQ quantity, so an excess on one item does not hide work not done
+    on another;
+  - **value done** counts everything, because deviations are paid (Wave 3 bills from it).
+- **[Likely] No approval of entries yet.** The approval engine (P5) is Wave 2b's first step. Entries can be
+  approved then, before they are billed.
+- **[Likely] The schedule's progress is still entered by hand** (actual dates, days left; step 4). An activity's
+  physical progress is shown beside it, not used to move its dates: one is when, the other is how much. Step 7's
+  dashboard shows both.
+- **Measured quantities are not imported from files yet**, and the measurement book does not print yet.
+
+**API** (under `/api/tenant`):
+- Measurement book: `GET /boqs/:id/lines/:lineId/progress`, `POST /boqs/:id/lines/:lineId/progress`
+  (`{measuredOn, qty | dims[], description}`), `POST /boqs/:id/progress/:entryId/reverse` (`{reason}`).
+- Report: `GET /projects/:id/progress?from=&to=`.
+- Activity items: `GET|POST /programmes/:id/activities/:activityId/lines` (`{boqId, code}`), `POST …/lines/remove`
+  (`{lineKey}`).
+- Grid rows carry `done`. Migration `0027_progress_measurement.sql`.
+
+**Tests:**
+- 4 API integration tests, with every figure worked by hand:
+  - entries from dimensions with a deduction (48 cum), figures, an excess (120%), a wrong entry reversed once only,
+    and the done quantity in the grid;
+  - refusals: a future date, a section, a tender's BOQ, a viewer, a zero quantity; a member without BOQ rights
+    records; the database refuses changes and deletes;
+  - the report: value 49,000, done 27,280, physical 51.2%, this period 3,300, budget value 24,800, by section
+    (89% and 20.4%) and by WBS element;
+  - an activity's physical progress from a section's items (89%), and after one is unlinked (78%).
+- A browser test: a contract BOQ item measured from dimensions, a wrong figure reversed with a reason, the done
+  column, and the progress report at 50%.

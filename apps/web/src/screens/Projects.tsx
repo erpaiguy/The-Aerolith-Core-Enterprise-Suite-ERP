@@ -461,8 +461,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">
-                  Macro plans, progress measured against the BOQ, and the project dashboard come in
-                  the next steps of Wave 2a.
+                  The project dashboard comes in the last step of Wave 2a.
                 </p>
               </Card>
             </div>

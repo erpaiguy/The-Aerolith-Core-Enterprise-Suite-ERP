@@ -45,6 +45,8 @@ export interface BoqRow {
   foreignRate?: string | null;
   /** A project BOQ's item: its WBS element and cost code (codes); null when unmapped. */
   map?: { wbs: string | null; costCode: string | null } | null;
+  /** A project BOQ's item: the quantity done, from the measurement book. */
+  done?: string | null;
 }
 
 export interface BoqHeader {

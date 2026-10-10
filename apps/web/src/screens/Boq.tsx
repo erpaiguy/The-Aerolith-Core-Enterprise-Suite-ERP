@@ -36,6 +36,7 @@ import {
   useLatestImport,
 } from '../boq/ImportWizard';
 import { useMappingOptions } from '../boq/MapLines';
+import { MeasurementBook } from '../project/MeasurementBook';
 import { BOQ_KIND_LABEL, formatAmount, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
@@ -149,6 +150,8 @@ export function BoqScreen({ boqId }: { boqId: string }) {
     queryFn: () => api.request<BoqHeader>(`/api/tenant/boqs/${boqId}`),
   });
   const mapping = useMappingOptions(header.data?.projectId);
+  // A contract BOQ's items have a measurement book.
+  const [recording, setRecording] = useState<BoqRow | null>(null);
   const [wizard, setWizard] = useState(false);
   const [measuring, setMeasuring] = useState<BoqRow | null>(null);
   const [freezing, setFreezing] = useState(false);
@@ -370,9 +373,20 @@ export function BoqScreen({ boqId }: { boqId: string }) {
             onPickAnalysis={pickAnalysis}
             onMeasure={setMeasuring}
             onBulkDone={reload}
-            mapping={mapping}
+            mapping={
+              mapping && h.kind === 'contract' ? { ...mapping, onMeasure: setRecording } : mapping
+            }
           />
         </div>
+      )}
+      {recording && (
+        <MeasurementBook
+          boqId={boqId}
+          row={recording}
+          canRecord={Boolean(mapping?.canMap) && !archived}
+          onClose={() => setRecording(null)}
+          onChanged={reload}
+        />
       )}
       {currencies && (
         <CurrenciesDialog

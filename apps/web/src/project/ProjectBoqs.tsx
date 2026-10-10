@@ -16,6 +16,7 @@ import type {
 } from '../api/types';
 import { BOQ_KIND_LABEL } from '../boq/model';
 import { describeError, formatDateTime, formatInr } from '../lib/format';
+import type { ProgressReport } from '../screens/Progress';
 import { usePermission } from '../session/permissions';
 
 const STATUS_LABEL = { draft: 'draft', locked: 'locked', submitted: 'submitted' } as const;
@@ -98,6 +99,7 @@ export function ProjectBoqs({ project: p }: { project: ProjectDetail }) {
         )}
       </Card>
       {summary.data && summary.data.contracts > 0 && <Margin s={summary.data} />}
+      {summary.data && summary.data.contracts > 0 && <ProgressSummary projectId={p.id} />}
       {boqs.data.length > 0 && <WbsSummary projectId={p.id} />}
     </>
   );
@@ -283,6 +285,37 @@ function NewBoq({ projectId }: { projectId: string }) {
       </Button>
       {error && <Alert tone="danger">{error}</Alert>}
     </form>
+  );
+}
+
+/** Work done so far against the contract, with the way to the progress report. */
+function ProgressSummary({ projectId }: { projectId: string }) {
+  const r = useQuery({
+    queryKey: ['project-progress-summary', projectId],
+    queryFn: () => api.request<ProgressReport>(`/api/tenant/projects/${projectId}/progress`),
+  });
+  return (
+    <Card
+      title="Progress"
+      actions={
+        <Link
+          to="/projects/$projectId/progress"
+          params={{ projectId }}
+          className="text-sm text-accent hover:underline"
+        >
+          Open progress
+        </Link>
+      }
+    >
+      {r.data && (
+        <p className="text-sm text-fg-muted" data-testid="progress-summary">
+          {r.data.total.pct === null ? 'Nothing to measure yet.' : `${r.data.total.pct}% done`}
+          {r.data.total.pct !== null &&
+            ` · ${formatInr(r.data.total.done)} of ${formatInr(r.data.total.value)} at contract rates.`}{' '}
+          Record work done from the contract BOQ: choose an item, then <strong>Work done</strong>.
+        </p>
+      )}
+    </Card>
   );
 }
 
