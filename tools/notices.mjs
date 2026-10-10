@@ -28,15 +28,24 @@ if (!outDir || filters.length === 0) {
   process.exit(2);
 }
 
+/**
+ * Runs pnpm. Under `pnpm run`, the pnpm being used is npm_execpath (a JS file), run with this Node: that also works on
+ * Windows, where `pnpm` alone is a .cmd shim execFile cannot start. Otherwise `pnpm` from PATH (through the shell on
+ * Windows).
+ */
+function pnpm(args) {
+  const opts = { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 };
+  const exec = process.env.npm_execpath;
+  if (exec && /\.[cm]?js$/.test(exec)) return execFileSync(process.execPath, [exec, ...args], opts);
+  return execFileSync('pnpm', args, { ...opts, shell: process.platform === 'win32' });
+}
+
 const isOwn = (name) => name.startsWith('@aerolith/') || name === 'aerolith-core';
 
 /** name@version -> { name, version, license, homepage, path } */
 function collect() {
   const filterArgs = filters.flatMap((f) => ['--filter', f]);
-  const out = execFileSync('pnpm', [...filterArgs, 'licenses', 'list', '--json', '--prod'], {
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const out = pnpm([...filterArgs, 'licenses', 'list', '--json', '--prod']);
   const byLicense = JSON.parse(out || '{}');
   const pkgs = new Map();
   for (const [license, list] of Object.entries(byLicense))
