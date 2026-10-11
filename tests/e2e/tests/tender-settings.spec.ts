@@ -21,7 +21,7 @@ test("the admin sets the company's tender criteria and checklist; a tender is sc
 
   // 1. The admin's name is their email until they change it.
   await expect(page.getByRole('banner')).toContainText(email);
-  await page.getByRole('link', { name: 'Account' }).click();
+  await page.getByRole('link', { name: 'Account', exact: true }).click();
   await page.getByRole('form', { name: 'Your name' }).getByLabel('Name').fill('Anil Deshmukh');
   await page.getByRole('button', { name: 'Save name' }).click();
   await expect(page.getByRole('banner')).toContainText('Anil Deshmukh');

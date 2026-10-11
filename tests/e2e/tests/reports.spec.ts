@@ -109,7 +109,7 @@ test('an estimator prints the cost summary, sends an unpriced BOQ and reviews th
   // 4. The bid pipeline, from the Reports page.
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Reports' })
+    .getByRole('link', { name: 'Reports', exact: true })
     .click();
   await page.getByRole('link', { name: /Bid pipeline/ }).click();
   await expect(page.getByRole('heading', { name: 'Bid pipeline' })).toBeVisible();
