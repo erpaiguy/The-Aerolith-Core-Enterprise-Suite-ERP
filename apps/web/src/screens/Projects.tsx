@@ -20,6 +20,7 @@ import { ArrowLeft, Gauge, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
+import { ProjectEnquiries } from '../project/ProjectEnquiries';
 import { ProjectMaterialBudget } from '../project/ProjectMaterialBudget';
 import { ProjectRequisitions } from '../project/ProjectRequisitions';
 import { ProjectSchedules } from '../project/ProjectSchedules';
@@ -470,11 +471,12 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <ProjectSchedules project={p} />
               <ProjectMaterialBudget project={p} />
               <ProjectRequisitions project={p} />
+              <ProjectEnquiries project={p} />
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">
-                  Next in Wave 2b: enquiries to vendors, purchase orders, goods receipt, stores, and
-                  daily site reports.
+                  Next in Wave 2b: purchase orders from the vendors chosen, goods receipt, stores,
+                  and daily site reports.
                 </p>
               </Card>
             </div>
@@ -544,6 +546,12 @@ function describeEvent(kind: string, d: Record<string, unknown>): string {
       return `Schedule archived: ${String(d.name)}`;
     case 'programme_restored':
       return `Schedule restored: ${String(d.name)}`;
+    case 'rfq_created':
+      return `Enquiry ${String(d.number)} started: ${String(d.title)}`;
+    case 'rfq_status':
+      return `Enquiry ${String(d.number)}: ${String(d.from)} → ${String(d.to)}`;
+    case 'rfq_quote':
+      return `Enquiry ${String(d.number)}: quote from ${String(d.vendor)}`;
     case 'team':
       return d.to
         ? `${String(d.user)} is now ${ROLE_LABEL[d.to as ProjectRole].toLowerCase()}`

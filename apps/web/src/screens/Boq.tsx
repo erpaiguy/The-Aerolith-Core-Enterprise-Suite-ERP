@@ -357,6 +357,14 @@ export function BoqScreen({ boqId }: { boqId: string }) {
           This BOQ is archived: read only and left out of the tender&apos;s bid.
         </Alert>
       )}
+      {h.closedAt && (
+        <Alert tone="info">
+          <span data-testid="boq-closed">
+            This estimate is closed{h.closedReason ? ` (${h.closedReason})` : ''}: kept as it was,
+            never revised again.
+          </span>
+        </Alert>
+      )}
       {running && !wizard && importJob && <ImportBanner job={importJob} />}
       {wizard ? (
         <ImportWizard boqId={boqId} revising={h.nodeCount > 0} onClose={() => setWizard(false)} />

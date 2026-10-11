@@ -40,6 +40,7 @@ import type {
 } from '../api/types';
 import { formatAmount, formatQty, formatRate, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatDate, formatInr } from '../lib/format';
+import type { RequisitionRow } from '../procurement/model';
 import { usePermission } from '../session/permissions';
 
 export const RFQ_STATUS: Record<RfqStatus, string> = {
@@ -236,7 +237,11 @@ export function TenderRfqs({ tenderId }: { tenderId: string }) {
 // --- one RFQ ---
 
 /** Runs a change that answers with the RFQ, puts the answer in the cache, and shows any error. */
-function useRfqAction(rfqId: string, tenderId: string | undefined) {
+function useRfqAction(
+  rfqId: string,
+  tenderId: string | null | undefined,
+  projectId?: string | null,
+) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -249,6 +254,10 @@ function useRfqAction(rfqId: string, tenderId: string | undefined) {
       if (tenderId) {
         void qc.invalidateQueries({ queryKey: ['rfqs', tenderId] });
         void qc.invalidateQueries({ queryKey: ['tender', tenderId] });
+      }
+      if (projectId) {
+        void qc.invalidateQueries({ queryKey: ['project-rfqs', projectId] });
+        void qc.invalidateQueries({ queryKey: ['requisition'] });
       }
       return out;
     } catch (err) {
@@ -268,7 +277,7 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
     queryKey: ['rfq', rfqId],
     queryFn: () => api.request<RfqDetail>(`/api/tenant/rfqs/${rfqId}`),
   });
-  const action = useRfqAction(rfqId, rfq.data?.tenderId);
+  const action = useRfqAction(rfqId, rfq.data?.tenderId, rfq.data?.projectId);
   const [editing, setEditing] = useState(false);
 
   if (rfq.isPending) return <Spinner />;
@@ -284,13 +293,25 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
 
   return (
     <div className="space-y-5">
-      <Link
-        to="/tenders/$tenderId"
-        params={{ tenderId: r.tenderId }}
-        className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
-      >
-        <ArrowLeft className="size-4" aria-hidden /> {r.tender.number} · {r.tender.title}
-      </Link>
+      {r.tender ? (
+        <Link
+          to="/tenders/$tenderId"
+          params={{ tenderId: r.tender.id }}
+          className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> {r.tender.number} · {r.tender.title}
+        </Link>
+      ) : (
+        r.project && (
+          <Link
+            to="/projects/$projectId"
+            params={{ projectId: r.project.id }}
+            className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
+          >
+            <ArrowLeft className="size-4" aria-hidden /> {r.project.number} · {r.project.name}
+          </Link>
+        )
+      )}
       <PageHeader
         title={r.title}
         subtitle={
@@ -422,7 +443,7 @@ function EditRfq({ rfq, action, onDone }: { rfq: RfqDetail; action: Action; onDo
 // --- lines ---
 
 function Lines({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; action: Action }) {
-  const [adding, setAdding] = useState<'boq' | 'resources' | 'free' | null>(null);
+  const [adding, setAdding] = useState<'boq' | 'resources' | 'requisitions' | 'free' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const add = async (key: string, body: object) => {
     setNotice(null);
@@ -451,13 +472,22 @@ function Lines({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; act
         adding === null && (
           <div className="flex flex-wrap gap-2">
             {rfq.kind === 'work' ? (
-              <Button variant="secondary" onClick={() => setAdding('boq')}>
-                <Plus className="size-4" aria-hidden /> From the BOQ
-              </Button>
+              rfq.tenderId && (
+                <Button variant="secondary" onClick={() => setAdding('boq')}>
+                  <Plus className="size-4" aria-hidden /> From the BOQ
+                </Button>
+              )
             ) : (
-              <Button variant="secondary" onClick={() => setAdding('resources')}>
-                <Plus className="size-4" aria-hidden /> From resources
-              </Button>
+              <>
+                {rfq.projectId && (
+                  <Button variant="secondary" onClick={() => setAdding('requisitions')}>
+                    <Plus className="size-4" aria-hidden /> From requisitions
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={() => setAdding('resources')}>
+                  <Plus className="size-4" aria-hidden /> From resources
+                </Button>
+              </>
             )}
             <Button variant="ghost" onClick={() => setAdding('free')}>
               <Plus className="size-4" aria-hidden /> Other line
@@ -471,7 +501,15 @@ function Lines({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; act
           <Alert tone="success">{notice}</Alert>
         </div>
       )}
-      {adding === 'boq' && (
+      {adding === 'requisitions' && rfq.projectId && (
+        <RequisitionPicker
+          projectId={rfq.projectId}
+          busy={action.busy === 'add-req'}
+          onAdd={(requisitionIds) => add('add-req', { requisitionIds })}
+          onCancel={() => setAdding(null)}
+        />
+      )}
+      {adding === 'boq' && rfq.tenderId && (
         <BoqPicker
           tenderId={rfq.tenderId}
           busy={action.busy === 'add-boq'}
@@ -495,9 +533,13 @@ function Lines({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; act
       )}
       {rfq.lines.length === 0 ? (
         <p className="text-sm text-fg-muted">
-          {rfq.kind === 'work'
-            ? 'Add BOQ items: picking a section brings every item under it.'
-            : 'Add the materials to be quoted from the resource library.'}
+          {rfq.projectId
+            ? rfq.kind === 'work'
+              ? 'Add the work to be quoted as lines.'
+              : 'Add what approved requisitions need, or materials from the resource library.'
+            : rfq.kind === 'work'
+              ? 'Add BOQ items: picking a section brings every item under it.'
+              : 'Add the materials to be quoted from the resource library.'}
         </p>
       ) : (
         <Table minWidth="44rem">
@@ -559,12 +601,103 @@ function LineText({ line }: { line: RfqLine }) {
         {line.code && <span className="mr-1.5 font-mono text-xs text-fg-muted">{line.code}</span>}
         {line.description}
       </div>
+      {line.requisitions && line.requisitions.length > 0 && (
+        <div
+          className="mt-0.5 text-xs text-fg-subtle"
+          data-testid={`line-requisitions-${line.seq}`}
+        >
+          For{' '}
+          {line.requisitions.map((q, i) => (
+            <span key={q.requisitionId}>
+              {i > 0 && ', '}
+              <Link
+                to="/requisitions/$requisitionId"
+                params={{ requisitionId: q.requisitionId }}
+                className="hover:underline"
+              >
+                {q.number}
+              </Link>{' '}
+              ({formatQty(q.qty)})
+            </span>
+          ))}
+        </div>
+      )}
       {(line.boqName || line.gone) && (
         <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-subtle">
           {line.boqName && <span>BOQ: {line.boqName}</span>}
           {line.gone && <Badge tone="warning">removed from the BOQ</Badge>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The project's approved requisitions, to ask vendors for what their lines need. */
+function RequisitionPicker({
+  projectId,
+  busy,
+  onAdd,
+  onCancel,
+}: {
+  projectId: string;
+  busy: boolean;
+  onAdd: (ids: string[]) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const reqs = useQuery({
+    queryKey: ['requisitions', 'project', projectId, 'approved'],
+    queryFn: () =>
+      api.request<RequisitionRow[]>(
+        `/api/tenant/requisitions?projectId=${projectId}&status=approved`,
+      ),
+  });
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  return (
+    <div
+      className="mb-4 space-y-3 rounded-md border border-line p-3"
+      aria-label="Approved requisitions"
+      role="group"
+    >
+      {reqs.isPending ? (
+        <Spinner />
+      ) : !reqs.data?.length ? (
+        <Alert tone="info">No approved requisitions on this project yet.</Alert>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {reqs.data.map((q) => (
+            <li key={q.id}>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={picked.has(q.id)}
+                  onChange={(e) => {
+                    const n = new Set(picked);
+                    if (e.target.checked) n.add(q.id);
+                    else n.delete(q.id);
+                    setPicked(n);
+                  }}
+                />
+                <span className="font-mono text-xs">{q.number}</span> {q.title}
+                <span className="text-xs text-fg-muted">
+                  ({q.lines} line{q.lines === 1 ? '' : 's'}, {formatInr(q.amount)})
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-fg-muted">
+        A material asked for in several requisitions becomes one line with their quantities added
+        up; lines already asked for here are not added again.
+      </p>
+      <div className="flex gap-2">
+        <Button busy={busy} disabled={picked.size === 0} onClick={() => void onAdd([...picked])}>
+          Add their lines
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }
@@ -865,7 +998,8 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
   const fileInput = useRef<HTMLInputElement>(null);
   const docFor = useRef<string | null>(null);
   const docInput = useRef<HTMLInputElement>(null);
-  const canAttach = usePermission('documents.edit') && canSend;
+  // Quote documents are kept in the tender's documents; a project's RFQ waits for project documents (step 8).
+  const canAttach = usePermission('documents.edit') && canSend && rfq.tenderId !== null;
   const [attached, setAttached] = useState<string | null>(null);
   const who = rfq.kind === 'work' ? 'subcontractor' : 'supplier';
 
@@ -1739,7 +1873,13 @@ function Comparative({
           />
         </tfoot>
       </Table>
-      {canEdit && (
+      {canEdit && rfq.projectId && (
+        <p className="mt-4 border-t border-line pt-4 text-xs text-fg-muted" data-testid="rfq-next">
+          The vendors chosen here are ordered from: purchase orders come next (Wave 2b step 4). A
+          project&apos;s enquiry changes no estimate.
+        </p>
+      )}
+      {canEdit && rfq.tenderId && (
         <div className="mt-4 space-y-3 border-t border-line pt-4">
           <div className="flex flex-wrap items-center gap-3">
             <Button

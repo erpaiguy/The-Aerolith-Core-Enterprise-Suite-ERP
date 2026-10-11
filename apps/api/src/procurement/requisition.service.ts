@@ -472,6 +472,14 @@ export class RequisitionService implements OnModuleInit {
       ...h,
       lines,
       approval: await this.approvals.latestFor(db, claims, REQUISITION, id),
+      /** The enquiries to vendors asking for its lines (step 3). */
+      enquiries: await db<
+        { id: string; number: string; title: string; status: string; lines: number }[]
+      >`
+        SELECT r.id, r.number, r.title, r.status, count(DISTINCT x.position)::int AS lines
+        FROM proc.rfq_requisition_line x JOIN tender.rfq_line l ON l.id = x.rfq_line_id
+        JOIN tender.rfq r ON r.id = l.rfq_id
+        WHERE x.requisition_id = ${id} GROUP BY r.id ORDER BY r.number`,
       mayEdit: mayWork && EDITABLE.includes(r.status),
       maySubmit: mayWork && EDITABLE.includes(r.status) && lines.length > 0,
       mayCancel: mayWork && r.status !== 'submitted' && r.status !== 'cancelled',

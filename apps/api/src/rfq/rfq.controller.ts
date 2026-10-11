@@ -53,6 +53,7 @@ const linesAdd = z
     boqId: z.uuid().optional(),
     nodeIds: z.array(z.string().regex(/^\d+$/)).max(5000).optional(),
     resourceIds: z.array(z.uuid()).max(2000).optional(),
+    requisitionIds: z.array(z.uuid()).max(100).optional(),
     free: z
       .object({
         code: text(40).default(null),
@@ -63,7 +64,8 @@ const linesAdd = z
       .optional(),
   })
   .refine(
-    (b) => (b.boqId && b.nodeIds?.length) || b.resourceIds?.length || b.free,
+    (b) =>
+      (b.boqId && b.nodeIds?.length) || b.resourceIds?.length || b.requisitionIds?.length || b.free,
     'Nothing to add',
   );
 const lineUpdate = z.object({

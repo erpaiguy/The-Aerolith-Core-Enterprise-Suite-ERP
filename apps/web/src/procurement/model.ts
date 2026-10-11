@@ -89,6 +89,8 @@ export interface RequisitionHead {
 export interface Requisition extends RequisitionHead {
   lines: RequisitionLine[];
   approval: Approval | null;
+  /** Enquiries to vendors asking for its lines (step 3). */
+  enquiries: { id: string; number: string; title: string; status: string; lines: number }[];
   mayEdit: boolean;
   maySubmit: boolean;
   mayCancel: boolean;

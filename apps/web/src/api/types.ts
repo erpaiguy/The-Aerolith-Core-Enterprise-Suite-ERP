@@ -714,6 +714,8 @@ export interface RfqLine {
   l1: string | null;
   lowest: string | null;
   selected: { partyId: string; basic: string; amount: string | null } | null;
+  /** A project's RFQ: the approved requisitions the line asks for, and how much of each. */
+  requisitions?: { requisitionId: string; number: string; qty: string }[];
 }
 
 export interface RfqQuote {
@@ -770,7 +772,9 @@ export interface RfqVendorTotal {
 
 export interface RfqDetail {
   id: string;
-  tenderId: string;
+  /** A tender's RFQ (Wave 1), or a project's (Wave 2b step 3). */
+  tenderId: string | null;
+  projectId: string | null;
   number: string;
   title: string;
   kind: RfqKind;
@@ -778,7 +782,8 @@ export interface RfqDetail {
   status: RfqStatus;
   terms: string;
   rowVersion: number;
-  tender: { id: string; number: string; title: string };
+  tender: { id: string; number: string; title: string } | null;
+  project: { id: string; number: string; name: string } | null;
   lines: RfqLine[];
   vendors: RfqVendor[];
   /** Vendors who revised their quote: every round, the current one last. */

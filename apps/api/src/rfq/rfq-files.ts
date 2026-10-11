@@ -30,7 +30,8 @@ const GST_CHOICES = ['Extra on top of the rates', 'Included in the rates', 'Exem
 
 export interface PackInput {
   rfq: { id: string; number: string; title: string; dueOn: string | null; terms: string };
-  tender: { number: string; title: string };
+  /** What it is for: the tender (Wave 1) or the project (Wave 2b). */
+  owner: { label: 'Tender' | 'Project'; number: string; title: string };
   vendor: { id: string; name: string };
   lines: {
     seq: number;
@@ -60,7 +61,7 @@ export async function enquiryWorkbook(p: PackInput): Promise<Buffer> {
   const facts: [string, string][] = [
     ['RFQ', p.rfq.number],
     ['For', p.rfq.title],
-    ['Tender', `${p.tender.number} · ${p.tender.title}`],
+    [p.owner.label, `${p.owner.number} · ${p.owner.title}`],
     ['To', p.vendor.name],
     ['Quotes due by', p.rfq.dueOn ?? ''],
     ['Terms', p.rfq.terms],

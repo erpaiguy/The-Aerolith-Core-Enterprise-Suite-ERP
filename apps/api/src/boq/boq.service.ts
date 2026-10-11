@@ -89,7 +89,7 @@ const ROW = `n.id::text AS id, n.parent_id::text AS "parentId", n.sort_key AS "s
 const HEADER = `b.id, b.tender_id AS "tenderId", b.project_id AS "projectId", b.kind, b.name, b.version_no AS "versionNo", b.status, b.currency,
   b.node_count AS "nodeCount", b.item_count AS "itemCount", b.total::text AS total, b.notes,
   b.updated_at AS "updatedAt", b.row_version AS "rowVersion", b.rate_date::text AS "rateDate",
-  b.archived_at AS "archivedAt"`;
+  b.archived_at AS "archivedAt", b.closed_at AS "closedAt", b.closed_reason AS "closedReason"`;
 
 export interface BoqRow {
   id: string;

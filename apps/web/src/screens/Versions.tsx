@@ -373,6 +373,7 @@ export function BoqVersionsScreen({ boqId }: { boqId: string }) {
         </div>
         {canEdit &&
           !header.data?.archivedAt &&
+          !header.data?.closedAt &&
           (draft ? (
             <Button onClick={() => setFreezing(true)}>Freeze version {d.current.versionNo}</Button>
           ) : (

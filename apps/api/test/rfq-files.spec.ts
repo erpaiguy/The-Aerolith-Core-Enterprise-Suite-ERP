@@ -13,7 +13,7 @@ const pack = () =>
       dueOn: '2026-10-20',
       terms: 'Ex-works rates are not accepted.',
     },
-    tender: { number: 'TND/2026-27/0002', title: 'Hostel block' },
+    owner: { label: 'Tender', number: 'TND/2026-27/0002', title: 'Hostel block' },
     vendor: { id: '0b0e8d4f-6c1a-4f5e-9a2b-7c3d4e5f6a7b', name: 'Aqua Seal Systems' },
     lines: [
       { seq: 1, code: '2.1', description: 'Terrace', unit: 'sqm', qty: '100' },

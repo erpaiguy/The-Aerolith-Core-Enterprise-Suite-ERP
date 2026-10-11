@@ -339,6 +339,12 @@ describe.skipIf(!controlUrl || !adminUrl)('material budget (integration)', () =>
       code: 'boq_closed',
       message: expect.stringContaining('Won: the budget of project PRJ/'),
     });
+    expect(
+      await ok<{ closedAt: string | null; closedReason: string }>(get(`/tenant/boqs/${tenderBoq}`)),
+    ).toMatchObject({
+      closedAt: expect.any(String),
+      closedReason: expect.stringContaining('Won: the budget of project PRJ/'),
+    });
     // With no approval rule for budgets, submitting puts it in force.
     const inForce = await ok<Budget>(
       post(`/tenant/material-budgets/${b.id}/submit`, { rowVersion: b.rowVersion }, manager),

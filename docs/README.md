@@ -118,5 +118,6 @@ nothing here has run on a real project yet.
 |------|------|--------|
 | 1 | Approvals (rules by amount, levels, stand-ins) and purchase requisitions | **Done** |
 | 2 | Material budget from the tender's rate analyses, revised under approval; requisitions against it, from BOQ items and the look-ahead | **Done** |
-| 3 | Vendor enquiries for a project | Next |
-| 4-9 | Purchase orders, goods receipt, inventory, daily site reports, project documents, reports | |
+| 3 | Vendor enquiries for a project, from approved requisitions | **Done** |
+| 4 | Purchase and work orders | Next |
+| 5-9 | Goods receipt, inventory, daily site reports, project documents, reports | |

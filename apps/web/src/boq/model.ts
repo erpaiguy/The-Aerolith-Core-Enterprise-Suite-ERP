@@ -69,6 +69,9 @@ export interface BoqHeader {
   rateDate?: string;
   /** Set when the BOQ was archived (made by mistake): read only, left out of the bid. */
   archivedAt?: string | null;
+  /** A won tender's estimate, closed when its project took its budget (Wave 2b step 2): kept as it was. */
+  closedAt?: string | null;
+  closedReason?: string | null;
   tender?: { id: string; number: string; title: string } | null;
   project?: { id: string; number: string; name: string } | null;
 }

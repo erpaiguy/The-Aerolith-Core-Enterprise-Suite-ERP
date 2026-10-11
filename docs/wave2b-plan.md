@@ -41,7 +41,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 |---|------|----------|-------|
 | 1 | **Approvals + purchase requisitions** (P5, R1) | Approval rules by document type, levels by amount, approvers (project lead, managers, admins, a named person), delegation while away, comments, withdraw, "waiting on me"; requisitions for a project (materials from the rate library or typed in, quantities, needed-by dates, BOQ line and WBS element) as its first user | **Done** (see below) |
 | 2 | **Material budget and demand** (R1) | The project's material budget, copied from the tender's rate analyses and revised under approval; the estimate closed; requisitions against the budget, from BOQ items and from the look-ahead | **Done** (see below) |
-| 3 | **Vendor enquiries for a project** (R2) | Wave 1's RFQs and comparative statements for requisitioned materials | |
+| 3 | **Vendor enquiries for a project** (R2) | Wave 1's RFQs and comparative statements for requisitioned materials | **Done** (see below) |
 | 4 | **Purchase and work orders** (R3) | Terms, GST, amendments, approvals, supplier acknowledgement | |
 | 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | |
 | 6 | **Inventory** (R5) | Stores, issues to WBS, transfers, returns, stock ledger, valuation, reorder levels, stock take | |
@@ -192,3 +192,50 @@ and raises requisitions against it; the approval rules decide who approves a rev
 - A browser test: a price book and a PCC analysis; a tender item priced from it, won, its project's BOQs; the material
   budget from the tender (34.68 bags, ₹23,232) put in force; a requisition for 5 cum of the item, then 40 bags, shown
   5.32 over the budget; the budget revised to 45 bags and in force, revision 0 replaced.
+
+## Step 3 delivered: vendor enquiries for a project
+
+**Journey:**
+- An **approved** requisition has **Ask vendors**: it starts the project's enquiry (RFQ/2026-27/…, the same series as a
+  tender's) with the requisition's lines. A project's page has **Enquiries**: a new one with any of its approved
+  requisitions ticked, and the list (quotes in, lines chosen).
+- On the enquiry, lines come **from requisitions** (more can be added later), from the rate library, or typed in. A
+  material asked for in several requisitions is **one line with their quantities added up** (cement, 100 + 60 bags);
+  each line shows the requisitions it is for, and a requisition shows the enquiries asking for it. Lines already asked
+  for are not added twice.
+- Everything else is Wave 1's: suppliers from the party master or new, the enquiry workbook per supplier, quotes typed
+  in or imported, GST included or extra, negotiation rounds, the comparative statement before GST, the lowest per line
+  or a supplier for all, reminders before quotes are due.
+- A project's enquiry **changes no estimate**: "Put the chosen rates into the estimate" is a tender's. The suppliers
+  chosen are what purchase orders (step 4) are made from.
+- The **closed estimate** (step 2) now says so on its BOQ page, and no longer offers to start a revision.
+
+**Who does what:** the project's team reads its enquiries; others do not see them (as for its BOQs and schedules).
+Starting and working on one needs `rfq.edit` (managers by default) and a place on the team as lead or member (or the
+right to edit projects).
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] One RFQ engine for tenders and projects.** An RFQ belongs to a tender or to a project (exactly one, by
+  the database); a project's goes into the project's activity.
+- **[Certain] Only approved requisitions go to vendors**, checked before the enquiry is made (a refused one leaves no
+  empty RFQ behind, which the first version of this step did).
+- **[Likely] Work enquiries for a project are typed lines**: a subcontract package from the contract BOQ waits until
+  work orders (step 4) show what they need.
+- **[Likely] Quote documents are not attached on a project's enquiry yet**: Wave 1 files them in the tender's
+  documents, and project documents are step 8.
+
+**API** (under `/api/tenant`): `GET|POST /projects/:id/rfqs` (`{title, kind, dueOn, terms, requisitionIds}`);
+`POST /rfqs/:id/lines` also takes `{requisitionIds}`; an RFQ carries `projectId` and `project`, its lines their
+`requisitions`; a requisition its `enquiries`; `POST /rfqs/:id/apply` is refused for a project (`not_for_project`).
+A BOQ's header carries `closedAt` and `closedReason`. Migration `0030_project_rfqs.sql`.
+
+**Tests:**
+- 2 API integration tests: an enquiry from two approved requisitions (cement 100 + 60 = 160 bags on one line, wire
+  and sand as asked, each with its requisitions), a draft requisition refused with nothing left behind, a worker
+  without `rfq.edit` refused, nothing added twice, the requisition's enquiries and the project's list; two quotes, the
+  lowest chosen per line (₹84,925), "apply" refused, a viewer reads, someone off the team does not see it, the
+  project's activity.
+- The step 2 test also checks the closed estimate's header.
+- A browser test: a requisition from the library and a typed line, approved, sent to vendors with **Ask vendors**;
+  two suppliers quote, the lowest per line chosen (₹59,400); no "into the estimate"; the enquiry on the project's
+  page and the requisition's.

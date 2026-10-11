@@ -14,7 +14,7 @@ import {
   Textarea,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Plus, Send, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api } from '../api/client';
@@ -34,6 +34,7 @@ import { ResourcePicker } from '../procurement/ResourcePicker';
 import { formatQty } from '../boq/model';
 import { RequisitionLines } from '../procurement/RequisitionLines';
 import { shortDate } from '../schedule/model';
+import { usePermission } from '../session/permissions';
 
 interface LineDraft {
   resourceId: string | null;
@@ -243,6 +244,7 @@ function RequisitionView({
           <RequisitionLines lines={r.lines} total={r.amount} />
         </Card>
       )}
+      {r.status === 'approved' && <Enquiries r={r} />}
       {r.approval && (
         <Card
           title="Approval"
@@ -693,5 +695,62 @@ function DemandAdder({
       )}
       {error && <Alert tone="danger">{error}</Alert>}
     </div>
+  );
+}
+
+/** The enquiries to vendors asking for an approved requisition's lines, and a new one for it. */
+function Enquiries({ r }: { r: Requisition }) {
+  const navigate = useNavigate();
+  const canRfq = usePermission('rfq.edit');
+  const { run, busy, error } = useRun(() => undefined);
+  return (
+    <Card
+      title="Enquiries to vendors"
+      actions={
+        canRfq && (
+          <Button
+            variant="secondary"
+            busy={busy === 'ask'}
+            onClick={() =>
+              void run('ask', async () => {
+                const rfq = await api.request<{ id: string }>(
+                  `/api/tenant/projects/${r.project.id}/rfqs`,
+                  {
+                    method: 'POST',
+                    body: {
+                      title: `${r.number} · ${r.title}`.slice(0, 200),
+                      requisitionIds: [r.id],
+                    },
+                  },
+                );
+                await navigate({ to: '/rfqs/$rfqId', params: { rfqId: rfq.id } });
+              })
+            }
+          >
+            Ask vendors
+          </Button>
+        )
+      }
+    >
+      {r.enquiries.length === 0 ? (
+        <p className="text-sm text-fg-muted">Not asked for yet.</p>
+      ) : (
+        <ul className="space-y-1 text-sm" aria-label="Enquiries for it">
+          {r.enquiries.map((q) => (
+            <li key={q.id}>
+              <Link
+                to="/rfqs/$rfqId"
+                params={{ rfqId: q.id }}
+                className="text-accent hover:underline"
+              >
+                {q.number}
+              </Link>{' '}
+              {q.title} <span className="text-xs text-fg-muted">({q.lines} of its lines)</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <Alert tone="danger">{error}</Alert>}
+    </Card>
   );
 }

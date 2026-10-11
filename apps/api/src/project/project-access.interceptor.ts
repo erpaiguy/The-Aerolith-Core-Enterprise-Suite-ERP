@@ -1,6 +1,6 @@
 // A project's BOQs and schedules follow its visibility (docs/wave2a-plan.md steps 2 and 4). Every route that acts on
 // one BOQ (`/boqs/:id/...`, an import job's `/imports/:id/...`, a pricing scenario's `/scenarios/:id/...`) or one plan
-// (`/programmes/:id/...`) passes here after authentication: one of a project the caller may not see does not exist
+// (`/programmes/:id/...`), and one enquiry (`/rfqs/:id/...`, `/rfq-lines/:id/...`, Wave 2b step 3) passes here after authentication: one of a project the caller may not see does not exist
 // for them; changing one needs a lead or member of the team (or someone who edits projects); bid pricing is for
 // tender BOQs only. A tender's BOQs and programmes pass untouched. One place, so no such route can be added without it.
 import {
@@ -22,6 +22,8 @@ const BOQ_ROUTE = /\/tenant\/boqs\/:id(\/|$)/;
 const IMPORT_ROUTE = /\/tenant\/imports\/:id(\/|$)/;
 const SCENARIO_ROUTE = /\/tenant\/scenarios\/:id(\/|$)/;
 const PLAN_ROUTE = /\/tenant\/programmes\/:id(\/|$)/;
+const RFQ_ROUTE = /\/tenant\/rfqs\/:id(\/|$)/;
+const RFQ_LINE_ROUTE = /\/tenant\/rfq-lines\/:id(\/|$)/;
 /** Bid pricing belongs to tenders: a contract BOQ's rates are the client's, a budget's are our costs. */
 const TENDER_ONLY = /\/tenant\/(boqs\/:id\/(pricing|scenarios)|scenarios\/:id)(\/|$)/;
 
@@ -54,7 +56,11 @@ export class ProjectAccess implements NestInterceptor {
           ? 'scenario'
           : PLAN_ROUTE.test(url)
             ? 'plan'
-            : null;
+            : RFQ_ROUTE.test(url)
+              ? 'rfq'
+              : RFQ_LINE_ROUTE.test(url)
+                ? 'rfq_line'
+                : null;
     if (!kind) return next.handle();
     await this.check(claims, kind, id, req.method, TENDER_ONLY.test(url));
     return next.handle();
@@ -62,7 +68,7 @@ export class ProjectAccess implements NestInterceptor {
 
   private async check(
     claims: TenantClaims,
-    kind: 'boq' | 'import' | 'scenario' | 'plan',
+    kind: 'boq' | 'import' | 'scenario' | 'plan' | 'rfq' | 'rfq_line',
     id: string,
     method: string,
     tenderOnly: boolean,
@@ -73,7 +79,14 @@ export class ProjectAccess implements NestInterceptor {
         ? await db<
             { project_id: string | null }[]
           >`SELECT project_id FROM sched.plan WHERE id = ${id}`
-        : await db<{ project_id: string | null }[]>`
+        : kind === 'rfq'
+          ? await db<
+              { project_id: string | null }[]
+            >`SELECT project_id FROM tender.rfq WHERE id = ${id}`
+          : kind === 'rfq_line'
+            ? await db<{ project_id: string | null }[]>`
+                SELECT r.project_id FROM tender.rfq_line l JOIN tender.rfq r ON r.id = l.rfq_id WHERE l.id = ${id}`
+            : await db<{ project_id: string | null }[]>`
           SELECT b.project_id FROM est.boq b WHERE b.id = ${
             kind === 'boq'
               ? id
@@ -93,7 +106,8 @@ export class ProjectAccess implements NestInterceptor {
     if (writes && !access.canEdit && access.role !== 'member')
       throw new ForbiddenException({
         code: 'forbidden',
-        message: "Only the project's team (not its viewers) changes its BOQs and schedules.",
+        message:
+          "Only the project's team (not its viewers) changes its BOQs, schedules and enquiries.",
       });
   }
 }
