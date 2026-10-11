@@ -19,6 +19,7 @@ export type Permission =
   | 'stores.manage'
   | 'accounts.view'
   | 'accounts.post'
+  | 'billing.edit'
   | 'dsr.acknowledge';
 
 export function usePermission(p: Permission): boolean {

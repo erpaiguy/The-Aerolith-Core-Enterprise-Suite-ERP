@@ -29,6 +29,7 @@ import {
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
+import { ProjectClientBills } from '../project/ProjectClientBills';
 import { ProjectDailyReports } from '../project/ProjectDailyReports';
 import { ProjectEnquiries } from '../project/ProjectEnquiries';
 import { ProjectMaterialBudget } from '../project/ProjectMaterialBudget';
@@ -501,6 +502,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <ProjectOrders project={p} />
               <ProjectStores project={p} />
               <ProjectDailyReports project={p} />
+              <ProjectClientBills project={p} />
               <Sites project={p} onDone={done} />
             </div>
             <div className="space-y-5">

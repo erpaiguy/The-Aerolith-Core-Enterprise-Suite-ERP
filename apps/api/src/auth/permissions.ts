@@ -79,6 +79,10 @@ export const PERMISSIONS = {
       'Post and reverse vouchers (the chart, account map, locks and opening balances stay with admins)',
     defaults: { manager: true, worker: false },
   },
+  'billing.edit': {
+    label: "Prepare, submit and certify a project's client bills (as its lead or member)",
+    defaults: { manager: true, worker: false },
+  },
   'dsr.acknowledge': {
     label: "Acknowledge a project's daily site reports (as its lead)",
     defaults: { manager: true, worker: false },

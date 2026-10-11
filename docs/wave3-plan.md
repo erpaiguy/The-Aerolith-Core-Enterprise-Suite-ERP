@@ -91,6 +91,67 @@ opening balances, and the day book, ledger and trial balance. Every later money 
 - **Not in this step:** documents posting automatically (each money step adds its own posting), bill-wise party
   balances, multi-currency vouchers, cost-centre allocation percentages.
 
+## Step 2 in detail (planned before building)
+
+**Goal:** a project's running account bills to its client, from the measurement book, as GST tax invoices, with the
+contract's deductions; the client's certification recorded; the certified bill posted to the books.
+
+- **Contract terms, per project** (set once, changed later only for new bills; each bill keeps a copy of the terms it
+  used): the GST rate (18% by default, [Guessing] to be checked per contract), retention (a percentage of each bill's
+  gross value, with an optional cap in rupees), the mobilisation advance paid by the client (an amount) and its
+  recovery (a percentage of each bill's gross until recovered), and price variation (escalation).
+- **Escalation** by a CPWD 10CC-style formula: for each component (materials, labour, fuel or others, as the contract
+  names them), value of work done this bill × factor (0.85 by default) × the component's share × (this period's index −
+  base index) ÷ base index. The base indices are on the terms; each bill enters this period's index values. [Guessing]
+  Contracts differ: the factor and shares are editable, and a real contract is needed to check the formula.
+- **A bill:** "RA 1", "RA 2" per project. Made up to a date from the measurement book: for each priced item of the live
+  contract BOQs, the quantity measured up to that date (cumulative), less what the previous **certified** bill
+  certified, at the contract rate. The quantity billed can be edited down (billed less than measured). A new bill
+  needs the previous one certified or cancelled.
+- **The figures:** this bill's gross value (Σ this-bill quantity × rate, each line rounded to the paisa); escalation;
+  taxable value = gross + escalation; GST on top (CGST and SGST when the site is in the company's GST state, IGST
+  otherwise: works contract supply is where the site is); invoice total. Deductions after tax: retention, advance
+  recovery, and other deductions typed on the bill (each with the ledger it goes to: labour cess, water, materials
+  supplied by the client). Net payable = invoice total − deductions. Deductions never reduce the taxable value.
+- **Submit** (through the approval rules, document type `client_bill`), then **certify**: the client's certificate
+  number and date, and each line's certified cumulative quantity (often less). The certified figures are worked again;
+  the difference from what was submitted is shown line by line.
+- **Tax invoice and posting on certification:** [Likely] the tax invoice number (per company and year,
+  "INV/2026-27/0001") is given when the bill is certified, and the bill posts then: client Dr net payable, retention
+  receivable Dr, mobilisation advance Dr (its recovery), each other deduction's ledger Dr; contract revenue Cr the
+  taxable value (with the project), output tax Cr. A certified bill is not cancelled here; a credit note (step 6)
+  corrects it.
+- **Output:** the bill on screen and printable (abstract, this bill by item with previous, this and cumulative
+  quantities, deductions), and as Excel.
+- **Rights:** a new `billing.edit` (prepare, submit and certify client bills; managers by default), within the
+  project's team.
+- **Tests:** three bills in a row with cumulative quantities by hand; retention capped; the advance recovered over
+  the bills; escalation by the formula; CGST and SGST, then IGST; a certification for less; the voucher posted; a bill
+  refused while the previous is uncertified.
+
+## Step 3 in detail (planned before building)
+
+**Goal:** money from clients recorded against what it pays: certified bills (part or whole), retention released,
+mobilisation advances; with what the client deducted; and what is still owed, aged.
+
+- **A client receipt:** company, client, date, the bank or cash ledger it came into, the amount received, the TDS the
+  client deducted (to TDS receivable, matched to Form 26AS later), other deductions with their ledgers, the UTR or
+  cheque number. What it settles is the amount received + TDS + other deductions.
+- **Allocated** to the client's open items, each up to what is open: a certified bill's net payable (less earlier
+  receipts against it), a project's retention held (released), or a project's mobilisation advance (received). Every
+  rupee settled must be allocated; "oldest first" fills the bills in invoice order.
+- **Posted** as a receipt voucher: bank Dr the amount, TDS receivable Dr, each deduction's ledger Dr; the client Cr what
+  went to bills; retention receivable Cr what was released; mobilisation advance received Cr the advance (each with
+  its project).
+- **Cancelled** with a reason: its voucher reversed, its allocations no longer count.
+- **Receivables:** each client's certified bills with what is received and outstanding, retention held, advances
+  received and recovered; ageing of what is outstanding (0-30, 31-60, 61-90, over 90 days from the invoice date) as
+  at a date; as Excel. A bill shows its receipts.
+- **Rights:** `accounts.post` records and cancels receipts; `accounts.view` reads receivables.
+- **Not in this step:** interest on late payment (not calculated, as planned), 26AS matching (step 6).
+- **Tests:** a receipt across two bills with TDS and a part payment; outstanding and ageing by hand; retention released;
+  an advance received; an over-allocation refused; a cancellation reversing the voucher.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -398,3 +459,65 @@ Migration `0036_ledger.sql`.
 
 **For the CA review:** the seeded chart and its Schedule III grouping, the account map's roles, and whether journals
 should be allowed to touch bank and cash.
+
+## Step 2 delivered: client RA bills
+
+**Journey:**
+- A project's page has **Client bills**: the contract terms in one line, the bills (RA 1, RA 2, …) with their status,
+  work done, invoice total and net payable, and **New RA bill**.
+- **Contract terms:** GST % (18 by default), retention % with an optional cap, the mobilisation advance and the % of
+  each bill that recovers it, and escalation components (name, share %, base index) with the factor (0.85 by
+  default). Each bill keeps a copy of the terms it was made under.
+- **A bill** is made up to a date (and for a site, when the project has several: the site decides CGST and SGST or
+  IGST). It takes every priced item of the live contract BOQs measured to that date, less what the previous certified
+  bill certified. The quantity billed to date can be lowered (measured to date is shown beside it); the escalation
+  indices for the period and other deductions (with their ledgers) are entered; **Save and work out** shows the
+  abstract; **Take the measurement book again** starts the quantities over.
+- **Submit the bill:** under the approval rules for client bills (none: straight to the client; above a rule's amount:
+  waiting for approval, as requisitions do). A new bill waits until this one is certified or cancelled.
+- **The client's certificate:** the date, the certificate number, and each line's certified quantity to date (often
+  less). The bill is worked again on the certified quantities, becomes a **tax invoice** (INV/2026-27/0001, per
+  company and year) and posts a sales voucher. "Submitted for … certified … less" shows the difference.
+- **Print** and **Excel** (an abstract sheet and the items with previous, this-bill and cumulative quantities).
+
+**What it posts on certification:** the client Dr the net payable; retention receivable Dr the retention; mobilisation
+advance received Dr the recovery; each other deduction's ledger Dr; contract revenue Cr the taxable value; output CGST
+and SGST, or IGST, Cr. Every line names the project and site. The voucher cannot be reversed by hand ("posted by a
+document"); a certified bill is corrected by a credit note (step 6).
+
+**Who does what:** new `billing.edit` (managers by default), for the project's lead and members (or those who edit
+projects). The team reads the bills.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Tax invoice on certification,** dated the day of the certificate. Firms that invoice on submission need a
+  setting; none was built.
+- **[Likely] Deductions never reduce the taxable value;** retention and advance recovery are on the gross value of work.
+- **[Likely] Only priced contract BOQ items are billed** (provisional sums and items without a rate wait for
+  variations, Wave 4).
+- **[Likely] The next bill starts from the last certified quantities,** not from what was billed.
+- **[Certain] A company GSTIN, the project's client and the site's GST state are required** before a bill is made.
+- **[Guessing] Escalation as CPWD 10CC-style:** value × factor × share × (index − base) ÷ base per component, rounded
+  to the paisa per component. Check against a real contract.
+
+**API** (under `/api/tenant`):
+- `GET /projects/:id/client-bills` (with the terms); `POST /projects/:id/bill-terms`.
+- `POST /projects/:id/client-bills` (`{upto, siteId}`); `GET|POST /client-bills/:id` (quantities, indices,
+  deductions).
+- `POST /client-bills/:id/refresh|submit|certify|cancel`; `GET /client-bills/:id/xlsx`.
+
+Migration `0037_client_bills.sql`.
+
+**Tests:**
+- 2 API integration tests, every figure by hand:
+  - RA 1: ₹49,000 of work, escalation ₹2,707.25 (materials and labour by the formula), CGST and SGST ₹4,653.65 each,
+    retention ₹2,450, advance ₹4,900, a 1% cess ₹490: net ₹53,174.55. Certified with PCC at 4 cum not 5: net
+    ₹47,041.47, posted as a sales voucher of ₹54,041.47 a side. Refused: billing before the project has a client or
+    the company a GSTIN; a second bill while the first is open; cancelling a certified bill; reversing its voucher.
+  - RA 2 from RA 1's certified quantities: ₹1,99,600 with retention held to the ₹10,000 cap (₹7,830) and ₹19,960 of
+    advance: net ₹2,07,738. RA 3 at a site in Gujarat (IGST ₹28,530), brickwork billed below what was measured, no
+    retention left, waiting for approval above ₹1 lakh and approved by the admin. The project's trial balance:
+    contract revenue ₹2,45,397.85, the client ₹2,54,779.47, retention ₹10,000. The bill as Excel.
+- A browser test: the company's GSTIN, a client, a tender won and made a project, 50 cum measured; the terms; RA 1 at
+  ₹5,900 with GST and ₹5,650 net, submitted; certified for 40 cum (net ₹4,520, ₹1,130 less) and its voucher.
+
+**For the CA review:** the posting on certification, tax invoice timing, and the escalation formula.

@@ -59,6 +59,7 @@ import {
 } from './screens/ProcurementReports';
 import { ProjectDocumentsScreen } from './screens/ProjectDocuments';
 import { ChartScreen } from './screens/accounts/Chart';
+import { ClientBillScreen } from './screens/accounts/ClientBill';
 import { CompaniesScreen } from './screens/accounts/Companies';
 import { DayBookScreen, LedgerScreen, TrialBalanceScreen } from './screens/accounts/Reports';
 import { BooksSetupScreen } from './screens/accounts/Setup';
@@ -264,6 +265,14 @@ const projectProcurementRoute = createRoute({
     return <ProjectProcurementReportsScreen key={projectId} projectId={projectId} />;
   },
 });
+const clientBillRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/client-bills/$billId',
+  component: function ClientBillPage() {
+    const { billId } = clientBillRoute.useParams();
+    return <ClientBillScreen key={billId} billId={billId} />;
+  },
+});
 const voucherRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/accounts/vouchers/$voucherId',
@@ -455,6 +464,7 @@ const routeTree = rootRoute.addChildren([
     }),
     voucherRoute,
     ledgerRoute,
+    clientBillRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/accounts/trial-balance',
