@@ -63,6 +63,24 @@ Planning is split into 10 phases. Each phase is a document; a phase is "locked" 
 
 **All 10 planning phases are locked.**
 
+## Wave plans
+
+Every wave has a written plan here **before its first step is built**; each step is re-read with you before it
+starts, and what changed while building is recorded in the plan's "delivered" sections. Plans for later waves are
+the least certain and are revised as earlier waves reach pilots.
+
+| Wave | Plan | State |
+|------|------|-------|
+| 0 Platform | [01-mvp.md](01-mvp.md), [03-architecture.md](03-architecture.md) | Built |
+| 1 Estimation, Bid/Tender, Documents | [wave1-plan.md](wave1-plan.md) | Built; pilot not yet |
+| 2a Projects and scheduling | [wave2a-plan.md](wave2a-plan.md) | Built; pilot not yet |
+| 2b Procurement, inventory, site reports | [wave2b-plan.md](wave2b-plan.md) | Steps 1-5 built; 6-9 planned in detail |
+| 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Planned |
+| 4 Control | [wave4-plan.md](wave4-plan.md) | Planned |
+| 5 Document workflow | [wave5-plan.md](wave5-plan.md) | Planned |
+| 6 Growth (completes v1) | [wave6-plan.md](wave6-plan.md) | Planned |
+| 7 v2: AI, collaboration, productivity | [wave7-plan.md](wave7-plan.md) | Outline; rewritten at its start |
+
 ## Wave 0 build progress
 
 | Step | What | Status |

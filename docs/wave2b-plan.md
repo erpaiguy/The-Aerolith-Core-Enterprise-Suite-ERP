@@ -54,6 +54,108 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 
 Each step ships with API tests and a browser test of the main journey, as in Waves 1 and 2a.
 
+## Steps 6-9 in detail (planned before building)
+
+Written before step 6 starts, so each step is agreed before code. "Delivered" sections below replace these as steps
+ship; anything changed while building is recorded there.
+
+### Step 6: Inventory (R5)
+
+**Goal:** what is in each store, where it came from, where it went, and what it is worth.
+
+**Model:**
+- **Stores** belong to a project's site (`proc.store`: project, site, name, active). [Likely] One store per site is
+  the common case; a second (a cement godown, a steel yard) is allowed. **Bins** (`proc.store_bin`) are optional
+  locations inside a store, for those who track racks or yards; most sites will not.
+- **One stock ledger** (`proc.stock_move`): every movement is a row with store, bin, resource, quantity (+ in,
+  − out), unit cost, value, the document that caused it (receipt line, issue, transfer, return, adjustment) and date.
+  Balances are sums of the ledger; a materialised balance per store and resource (`proc.stock_balance`) is kept in the
+  same transaction for speed and checked against the ledger by a test.
+- **Only library resources are stocked.** A typed-in order line (no resource) is received but not stocked; the receipt
+  says so. [Likely] This pushes teams to pick materials from the library, which the budget (step 2) needs anyway.
+- **Valuation:** weighted average per store and resource by default; FIFO as a tenant setting chosen before the first
+  movement and fixed after (switching method mid-stream rewrites history). [Certain] Values come from the order rate
+  **before GST** (input credit is not cost for a registered contractor); an unregistered supplier's line is costed
+  with its GST, since nothing is claimed back.
+
+**Movements:**
+- **Receipts in:** every accepted receipt line (step 5) posts into the receipt's site store, at the order rate. Held
+  goods post when accepted. A cancelled receipt reverses its moves, refused if the stock has since been issued below
+  what it would take back (issue first, then cancel is not allowed to make stock negative).
+- **Issues** to work: to a **WBS element** (and optionally a BOQ line), with who took it and for what; issue slips
+  numbered ISS/2026-27/…. Issues cost at the store's current average (or FIFO layers).
+- **Returns from site** to the store (unused material back), against the issue.
+- **Transfers** between stores of the same project, or to another project's store (a transfer note, TRN/…; in
+  transit until received at the other end, so the stock is never in two places).
+- **Stock take:** a count sheet per store; differences post as adjustments with a reason, under the approval rules
+  (document type `stock_adjustment`) above an amount.
+- **Reorder levels** per store and resource: below it, the store shows it, and a requisition can be raised for the
+  shortfall.
+- **No negative stock**, ever: an issue beyond the balance is refused. [Likely] Sites will ask to "issue now, receive
+  the paperwork later"; the answer is to record the receipt first.
+
+**Screens:** Stores (per project, and in the menu, replacing "Stores — soon"); a store's stock (resource, quantity,
+value, average rate, below reorder); a resource's ledger in a store; issue, return, transfer and count forms; the
+receipt shows its stock moves.
+
+**Reports in this step:** stock by store and value; ledger for a period; issues by WBS element (consumption) against
+the material budget.
+
+**Permissions:** `stores.receive` (step 5) also covers issues and returns; transfers out and stock take adjustments
+need the new `stores.manage` (managers by default).
+
+**Tests:** hand-worked weighted average across three receipts and two issues; FIFO across the same; a transfer in
+transit; a stock take with a loss approved; negative stock refused; a receipt cancel refused after issue; ledger equals
+balance; a browser test receiving, issuing to a WBS element and seeing the balance and value.
+
+**Open questions for you before step 6:** (1) weighted average as the default; (2) whether issues need a BOQ line or a
+WBS element is enough; (3) whether a site engineer (worker) may issue, or only the storekeeper.
+
+### Step 7: Daily site reports (R6)
+
+**Goal:** what happened on site today, recorded on site from a phone.
+
+- One report per site per day (`proj.daily_report`): weather (morning/afternoon, rain hours), manpower by trade and
+  by labour contractor (headcount, own or contractor), equipment (owned/hired, hours worked, idle with reason),
+  materials received (pulled from the day's receipts) and consumed (pulled from the day's issues), work done (BOQ
+  line or activity with quantity, which **does not** replace the measurement book: it is the site's daily claim),
+  hindrances and delays (cause, hours, whose account: client, us, weather), safety remarks, visitors, photos.
+- Drafted through the day, **submitted** by the site in-charge, **acknowledged** by the project lead; a submitted
+  report is changed only by a correction with a reason.
+- **Phone first:** the screens work at 360 px wide, large touch targets, photo capture from the camera, and save as
+  you go so a dropped signal loses nothing typed. [Certain] Not offline: the app stays online-only until Wave 6's
+  mobile work (docs/01-mvp.md non-goals). Photos are compressed in the browser before upload.
+- Missing reports: a project's page shows days without a report; a reminder to the in-charge in the evening.
+- Reports: a day's report printable as PDF; manpower and equipment histograms by week; delays by cause.
+- **Permissions:** the team writes; `dsr.acknowledge` for leads.
+- **Tests:** a day built up over several saves, submitted, corrected; histograms worked by hand; a browser test at a
+  phone viewport.
+
+### Step 8: Project documents (R7)
+
+**Goal:** a project's documents and drawings, reusing Wave 1's document store.
+
+- A project gets its own folder tree in `doc` (as a tender has), created with the project; tender documents stay with
+  the tender and can be **linked** (not copied) into the project.
+- **Drawings register:** drawing number, title, discipline, revision, status (for information, for approval, for
+  construction, superseded), received from and on; uploading a new revision supersedes the old one, which stays
+  readable and marked. Transmittals and formal review cycles are Wave 5 (D1, D3); this step is the register.
+- Attachments from procurement land here: quote documents for a project's enquiries (closing the step 3 gap),
+  challan photos and test certificates on receipts (step 5).
+- **Tests:** register with three revisions; superseded marking; a receipt's challan photo; access kept to the team.
+
+### Step 9: Procurement reports
+
+- **Requisition to order to receipt:** per requisition line, what was ordered, received and is outstanding, with
+  ageing.
+- **Open orders:** what is owed, by supplier and by promised date (late deliveries highlighted).
+- **Material reconciliation:** budget (step 2) vs requisitioned vs ordered vs received vs issued vs in stock, by
+  resource, with the theoretical consumption from measured work (norms × measured quantities) against actual issues:
+  [Certain] the wastage figure every contractor asks for.
+- **Supplier performance:** on-time delivery, rejection rate, price against the enquiry's L1.
+- Each exportable to Excel and printable; added to the dashboards picker.
+- **Exit criterion for Wave 2b:** a pilot site runs a month of purchasing and stores on it.
+
 ## Step 1 delivered: approvals and purchase requisitions
 
 **Journey:**
