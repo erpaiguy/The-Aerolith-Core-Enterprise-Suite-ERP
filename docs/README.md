@@ -74,7 +74,7 @@ the least certain and are revised as earlier waves reach pilots.
 | 0 Platform | [01-mvp.md](01-mvp.md), [03-architecture.md](03-architecture.md) | Built |
 | 1 Estimation, Bid/Tender, Documents | [wave1-plan.md](wave1-plan.md) | Built; pilot not yet |
 | 2a Projects and scheduling | [wave2a-plan.md](wave2a-plan.md) | Built; pilot not yet |
-| 2b Procurement, inventory, site reports | [wave2b-plan.md](wave2b-plan.md) | Steps 1-7 built; 8-9 planned in detail |
+| 2b Procurement, inventory, site reports | [wave2b-plan.md](wave2b-plan.md) | Steps 1-9 built; the exit criterion waits on a pilot site |
 | 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Planned |
 | 4 Control | [wave4-plan.md](wave4-plan.md) | Planned |
 | 5 Document workflow | [wave5-plan.md](wave5-plan.md) | Planned |
@@ -141,5 +141,5 @@ nothing here has run on a real project yet.
 | 5 | Goods receipt: partial receipts, rejections at the gate, quality hold and inspection, returns to the supplier; the order closes when all has come | **Done** |
 | 6 | Inventory: stores, stock ledger (weighted average or FIFO), issues to WBS, returns, transfers, stock take under approval, reorder levels, consumption | **Done** |
 | 7 | Daily site reports: phone first, saved as you go through a dropped signal, photos, the day's receipts and issues, acknowledged by the lead, corrections with a reason, weekly figures | **Done** |
-| 8 | Project documents | Next |
-| 9 | Procurement reports | |
+| 8 | Project documents: the project's own vault kept to its team, the drawings register (each revision a version, the last superseded), receipt challans, quote documents on a project's enquiry | **Done** |
+| 9 | Procurement reports: requisition to order to receipt, open orders, material reconciliation with wastage against the norms, supplier performance; each as Excel | **Done** |

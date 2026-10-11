@@ -28,7 +28,7 @@ import {
   trashDays,
   type FolderTemplate,
 } from './document-settings.js';
-import { DocumentsService } from './documents.service.js';
+import { DocumentsService, type Vault } from './documents.service.js';
 import { DocumentText } from './text.service.js';
 
 const HOUR = 3600_000;
@@ -104,8 +104,11 @@ export class DocumentLifecycle implements OnModuleInit, OnModuleDestroy {
   async purge(claims: TenantClaims, documentId: string) {
     const db = await this.tenants.forTenant(claims.ten);
     await db.begin(async (tx) => {
-      const [d] = await tx<{ deleted: boolean; tender_id: string; name: string }[]>`
-        SELECT deleted_at IS NOT NULL AS deleted, tender_id, name FROM doc.document WHERE id = ${documentId}`;
+      const [d] = await tx<
+        { deleted: boolean; tender_id: string | null; project_id: string | null; name: string }[]
+      >`
+        SELECT deleted_at IS NOT NULL AS deleted, tender_id, project_id, name FROM doc.document
+        WHERE id = ${documentId}`;
       if (!d) throw new NotFoundException({ code: 'document_not_found' });
       if (!d.deleted)
         throw new ConflictException({
@@ -115,20 +118,23 @@ export class DocumentLifecycle implements OnModuleInit, OnModuleDestroy {
       await tx`SELECT doc.purge_document(${documentId}, ${claims.sub}, 'manual')`;
       await audit(tx, claims.sub, 'document.purge', 'document', documentId, {
         tenderId: d.tender_id,
+        projectId: d.project_id,
         name: d.name,
       });
     });
     return { purged: 1 };
   }
 
-  /** Deletes for good everything in a tender's trash. */
-  async emptyTrash(claims: TenantClaims, tenderId: string) {
+  /** Deletes for good everything in a tender's or a project's trash. */
+  async emptyTrash(claims: TenantClaims, v: Vault) {
     const db = await this.tenants.forTenant(claims.ten);
+    await this.docs.mustSee(db, claims, v, true);
     const purged = await db.begin(async (tx) => {
       const ids = await tx<{ id: string }[]>`
-        SELECT id FROM doc.document WHERE tender_id = ${tenderId} AND deleted_at IS NOT NULL`;
+        SELECT id FROM doc.document
+        WHERE ${tx(v.kind === 'tender' ? 'tender_id' : 'project_id')} = ${v.id} AND deleted_at IS NOT NULL`;
       for (const { id } of ids) await tx`SELECT doc.purge_document(${id}, ${claims.sub}, 'manual')`;
-      await audit(tx, claims.sub, 'document.empty_trash', 'tender', tenderId, {
+      await audit(tx, claims.sub, 'document.empty_trash', v.kind, v.id, {
         documents: ids.length,
       });
       return ids.length;

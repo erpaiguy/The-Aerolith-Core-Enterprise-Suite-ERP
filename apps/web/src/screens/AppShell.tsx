@@ -10,6 +10,7 @@ import {
   BriefcaseBusiness,
   Calculator,
   CheckCheck,
+  ClipboardList,
   ListChecks,
   PackageCheck,
   ShoppingCart,
@@ -209,6 +210,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/stores" icon={<Warehouse className="size-4" />}>
               Stores
+            </NavItem>
+            <NavItem to="/procurement-reports" icon={<ClipboardList className="size-4" />}>
+              Procurement reports
             </NavItem>
           </nav>
           <div className={`${menuOpen ? 'block' : 'hidden'} px-4 pb-4 md:block`}>

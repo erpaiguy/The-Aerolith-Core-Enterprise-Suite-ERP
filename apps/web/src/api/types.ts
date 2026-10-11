@@ -851,6 +851,8 @@ export interface DocItem {
 export interface DocVault {
   folders: DocFolder[];
   documents: DocItem[];
+  /** A project's vault: the won tender it was made from, whose documents stay there. */
+  fromTender?: { id: string; number: string; title: string } | null;
   trashCount: number;
   /** Days the trash keeps a document before it is deleted for good; null: for ever. */
   trashDays: number | null;
@@ -894,8 +896,11 @@ export interface DocUploadResult {
 }
 
 export interface DocSearchHit extends DocItem {
-  tenderId: string;
-  tender: { number: string; title: string };
+  /** One of the two: a tender's document or a project's. */
+  tenderId: string | null;
+  tender: { number: string; title: string } | null;
+  projectId: string | null;
+  project: { number: string; name: string } | null;
   folder: string | null;
   /** Found by words inside the PDF: the passage, the words between \u0002 and \u0003. */
   snippet: string | null;

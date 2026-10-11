@@ -21,7 +21,7 @@ import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
 import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { TRASH_DAYS } from './document-settings.js';
-import { DocumentsService } from './documents.service.js';
+import { DocumentsService, projectVault, tenderVault, type Vault } from './documents.service.js';
 import { DocumentLifecycle } from './lifecycle.service.js';
 
 const rowVersion = z.number().int().positive();
@@ -61,6 +61,7 @@ const searchQuery = z.object({
   q: z.string().trim().max(200).optional(),
   tag: z.string().trim().max(100).optional(),
   tenderId: z.uuid().optional(),
+  projectId: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
@@ -88,7 +89,7 @@ const trashBody = z.object({
 });
 
 const linkBody = z.object({
-  kind: z.enum(['rfq_vendor', 'checklist_item', 'addendum']),
+  kind: z.enum(['rfq_vendor', 'checklist_item', 'addendum', 'goods_receipt']),
   targetId: z.string().min(1).max(80),
 });
 
@@ -106,12 +107,82 @@ export class DocumentsController {
 
   @Get('tenders/:id/documents')
   vault(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
-    return this.docs.vault(c, id);
+    return this.docs.vault(c, tenderVault(id));
   }
 
   @Get('tenders/:id/documents/trash')
   trash(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
-    return this.docs.trash(c, id);
+    return this.docs.trash(c, tenderVault(id));
+  }
+
+  // A project's vault (docs/wave2b-plan.md step 8): the same as a tender's, kept to the project's team.
+
+  @Get('projects/:id/documents')
+  projectVault(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.docs.vault(c, projectVault(id));
+  }
+
+  @Get('projects/:id/documents/trash')
+  projectTrash(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.docs.trash(c, projectVault(id));
+  }
+
+  @Post('projects/:id/folders')
+  @HttpCode(200)
+  @RequiresPermission('documents.edit')
+  @RequiresFeatures()
+  createProjectFolder(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(folderCreate)) b: z.infer<typeof folderCreate>,
+  ) {
+    return this.docs.createFolder(c, projectVault(id), b);
+  }
+
+  @Post('projects/:id/folders/standard')
+  @HttpCode(200)
+  @RequiresPermission('documents.edit')
+  @RequiresFeatures()
+  projectStandardFolders(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.docs.standardFolders(c, projectVault(id));
+  }
+
+  /** multipart/form-data, field `file`, as for a tender. */
+  @Post('projects/:id/documents/upload')
+  @HttpCode(200)
+  @RequiresPermission('documents.edit')
+  @RequiresFeatures()
+  projectUpload(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(uploadQuery)) q: z.infer<typeof uploadQuery>,
+    @Req() req: FastifyRequest,
+  ) {
+    return this.receive(c, projectVault(id), q, req);
+  }
+
+  @Post('projects/:id/documents/zip')
+  @HttpCode(200)
+  async projectZip(
+    @Auth() c: Claims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(zipBody)) b: z.infer<typeof zipBody>,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const z = await this.docs.zip(c, projectVault(id), b);
+    fileHeaders(reply);
+    return new StreamableFile(z.stream, {
+      type: 'application/zip',
+      disposition: attachment(z.fileName),
+    });
+  }
+
+  @Post('projects/:id/documents/trash/empty')
+  @HttpCode(200)
+  @Roles('admin')
+  @RequiresFeatures()
+  emptyProjectTrash(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.lifecycle.emptyTrash(c, projectVault(id));
   }
 
   @Post('tenders/:id/folders')
@@ -123,7 +194,7 @@ export class DocumentsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(folderCreate)) b: z.infer<typeof folderCreate>,
   ) {
-    return this.docs.createFolder(c, id, b);
+    return this.docs.createFolder(c, tenderVault(id), b);
   }
 
   @Post('tenders/:id/folders/standard')
@@ -131,7 +202,7 @@ export class DocumentsController {
   @RequiresPermission('documents.edit')
   @RequiresFeatures()
   standardFolders(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
-    return this.docs.standardFolders(c, id);
+    return this.docs.standardFolders(c, tenderVault(id));
   }
 
   @Post('folders/:id')
@@ -159,11 +230,20 @@ export class DocumentsController {
   @HttpCode(200)
   @RequiresPermission('documents.edit')
   @RequiresFeatures()
-  async upload(
+  upload(
     @Auth() c: Claims,
     @Param('id', ParseUUIDPipe) id: string,
     @Query(new ZodPipe(uploadQuery)) q: z.infer<typeof uploadQuery>,
     @Req() req: FastifyRequest,
+  ) {
+    return this.receive(c, tenderVault(id), q, req);
+  }
+
+  private async receive(
+    c: Claims,
+    vault: Vault,
+    q: z.infer<typeof uploadQuery>,
+    req: FastifyRequest,
   ) {
     if (!req.isMultipart())
       throw new BadRequestException({
@@ -177,7 +257,7 @@ export class DocumentsController {
     if (!file) throw new BadRequestException({ code: 'no_file', message: 'No file was sent.' });
     return this.docs.upload(
       c,
-      id,
+      vault,
       {
         folderId: q.folderId ?? null,
         path: q.path ?? null,
@@ -194,6 +274,7 @@ export class DocumentsController {
       q: q.q || null,
       tag: q.tag || null,
       tenderId: q.tenderId ?? null,
+      projectId: q.projectId ?? null,
       limit: q.limit,
     });
   }
@@ -267,7 +348,7 @@ export class DocumentsController {
   @Roles('admin')
   @RequiresFeatures()
   emptyTrash(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
-    return this.lifecycle.emptyTrash(c, id);
+    return this.lifecycle.emptyTrash(c, tenderVault(id));
   }
 
   /** The company's standard folders and how long the trash keeps documents (docs/wave1-plan.md step 13). */
@@ -370,7 +451,7 @@ export class DocumentsController {
     @Body(new ZodPipe(zipBody)) b: z.infer<typeof zipBody>,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    const z = await this.docs.zip(c, id, b);
+    const z = await this.docs.zip(c, tenderVault(id), b);
     fileHeaders(reply);
     return new StreamableFile(z.stream, {
       type: 'application/zip',

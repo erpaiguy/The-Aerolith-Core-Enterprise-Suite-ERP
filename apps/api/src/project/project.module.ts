@@ -7,6 +7,8 @@ import { ProjectAccess } from './project-access.interceptor.js';
 import { CostCodeService } from './cost-code.service.js';
 import { DailyReportController } from './daily-report.controller.js';
 import { DailyReportService } from './daily-report.service.js';
+import { DrawingController } from './drawing.controller.js';
+import { DrawingService } from './drawing.service.js';
 import { ProjectBoqController } from './project-boq.controller.js';
 import { ProjectBoqService } from './project-boq.service.js';
 import { ProjectController } from './project.controller.js';
@@ -24,6 +26,7 @@ import { WbsService } from './wbs.service.js';
     WbsController,
     ProgressController,
     DailyReportController,
+    DrawingController,
   ],
   providers: [
     ProjectService,
@@ -32,6 +35,7 @@ import { WbsService } from './wbs.service.js';
     CostCodeService,
     ProgressService,
     DailyReportService,
+    DrawingService,
     // Every BOQ and plan route, whichever module serves it, checks a project's team first.
     { provide: APP_INTERCEPTOR, useClass: ProjectAccess },
   ],

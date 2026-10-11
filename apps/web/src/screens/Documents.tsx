@@ -1,5 +1,5 @@
-// Tender documents (docs/wave1-plan.md step 10): the Documents tab of a tender (folders, uploads with versions,
-// preview, tags, the trash, ZIP downloads) and the Documents page that searches every tender's documents.
+// Documents (docs/wave1-plan.md step 10): a tender's or a project's vault (folders, uploads with versions, preview,
+// tags, the trash, ZIP downloads; projects from docs/wave2b-plan.md step 8) and the Documents page that searches them.
 import {
   Alert,
   Badge,
@@ -95,7 +95,7 @@ interface QueuedFile {
 }
 
 /** Uploads files a few at a time and reports each one. */
-function useUploads(tenderId: string, onDone: () => void) {
+function useUploads(vault: VaultRef, onDone: () => void) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const running = useRef(false);
   const items = useRef<QueuedFile[]>([]);
@@ -122,7 +122,7 @@ function useUploads(tenderId: string, onDone: () => void) {
         if (next.path) params.set('path', next.path);
         try {
           const r = await api.upload<DocUploadResult>(
-            `/api/tenant/tenders/${tenderId}/documents/upload?${params}`,
+            `/api/tenant/${vault.kind}/${vault.id}/documents/upload?${params}`,
             next.file,
           );
           update(next.key, {
@@ -186,11 +186,28 @@ function withFolders(list: FileList): { file: File; path: string | null }[] {
   });
 }
 
-// --- the tender's vault ---
+// --- a tender's or a project's vault ---
+
+/** Whose documents: a tender's, or a project's (docs/wave2b-plan.md step 8). */
+export interface VaultRef {
+  kind: 'tenders' | 'projects';
+  id: string;
+}
 
 export function TenderDocuments({ tenderId }: { tenderId: string }) {
+  return <VaultDocuments vault={{ kind: 'tenders', id: tenderId }} />;
+}
+
+/** The vault's folders and documents; `mayWrite` false for a project's viewers. */
+export function VaultDocuments({
+  vault,
+  mayWrite = true,
+}: {
+  vault: VaultRef;
+  mayWrite?: boolean;
+}) {
   const qc = useQueryClient();
-  const canEdit = usePermission('documents.edit');
+  const canEdit = usePermission('documents.edit') && mayWrite;
   const [folderId, setFolderId] = useState<string | null>(null);
   const [openDoc, setOpenDoc] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
@@ -201,17 +218,17 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
-  const vault = useQuery({
-    queryKey: ['documents', tenderId],
-    queryFn: () => api.request<DocVault>(`/api/tenant/tenders/${tenderId}/documents`),
+  const listing = useQuery({
+    queryKey: ['documents', vault.id],
+    queryFn: () => api.request<DocVault>(`/api/tenant/${vault.kind}/${vault.id}/documents`),
   });
   const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['documents', tenderId] });
+    void qc.invalidateQueries({ queryKey: ['documents', vault.id] });
     void qc.invalidateQueries({ queryKey: ['document'] });
-    void qc.invalidateQueries({ queryKey: ['documents-trash', tenderId] });
+    void qc.invalidateQueries({ queryKey: ['documents-trash', vault.id] });
   };
-  const uploads = useUploads(tenderId, refresh);
-  const v = vault.data;
+  const uploads = useUploads(vault, refresh);
+  const v = listing.data;
   const folders = useMemo(() => v?.folders ?? [], [v]);
   const byId = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
   // A folder that was removed (or hidden) falls back to the top level.
@@ -224,7 +241,7 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
     try {
       const out = await fn();
       if (out && typeof out === 'object' && 'folders' in out)
-        qc.setQueryData(['documents', tenderId], out);
+        qc.setQueryData(['documents', vault.id], out);
       else refresh();
       return true;
     } catch (err) {
@@ -237,16 +254,16 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
   const zip = (body: { folderId?: string | null; documentIds?: string[] }) =>
     run('zip', async () => {
       const { blob, fileName } = await api.download(
-        `/api/tenant/tenders/${tenderId}/documents/zip`,
+        `/api/tenant/${vault.kind}/${vault.id}/documents/zip`,
         { method: 'POST', body },
       );
       saveFile(blob, fileName);
       return null;
     });
 
-  if (vault.isPending) return <Spinner />;
-  if (vault.isError) return <Alert tone="danger">{describeError(vault.error)}</Alert>;
-  const vd = vault.data;
+  if (listing.isPending) return <Spinner />;
+  if (listing.isError) return <Alert tone="danger">{describeError(listing.error)}</Alert>;
+  const vd = listing.data;
   const path: DocFolder[] = [];
   for (let id = current; id; id = byId.get(id)?.parentId ?? null) path.unshift(byId.get(id)!);
   const subfolders = folders.filter((f) => f.parentId === current);
@@ -283,14 +300,16 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
           }}
         />
         <div className="mt-3 space-y-2 border-t border-line pt-3">
-          {canEdit && <NewFolder tenderId={tenderId} parentId={current} run={run} busy={busy} />}
+          {canEdit && <NewFolder vault={vault} parentId={current} run={run} busy={busy} />}
           {canEdit && folders.length === 0 && (
             <Button
               variant="secondary"
               className="w-full"
               busy={busy === 'standard'}
               onClick={() =>
-                void run('standard', () => post<DocVault>(`tenders/${tenderId}/folders/standard`))
+                void run('standard', () =>
+                  post<DocVault>(`${vault.kind}/${vault.id}/folders/standard`),
+                )
               }
             >
               Add the standard folders
@@ -313,14 +332,21 @@ export function TenderDocuments({ tenderId }: { tenderId: string }) {
       </Card>
 
       <div className="min-w-0 space-y-5">
+        {vd.fromTender && (
+          <Alert>
+            The tender's documents stay with the tender:{' '}
+            <Link
+              to="/tenders/$tenderId"
+              params={{ tenderId: vd.fromTender.id }}
+              className="font-medium underline"
+            >
+              {vd.fromTender.number} · {vd.fromTender.title}
+            </Link>
+          </Alert>
+        )}
         {error && <Alert tone="danger">{error}</Alert>}
         {showTrash ? (
-          <TrashList
-            tenderId={tenderId}
-            canEdit={canEdit}
-            trashDays={vd.trashDays}
-            onChanged={refresh}
-          />
+          <TrashList vault={vault} canEdit={canEdit} trashDays={vd.trashDays} onChanged={refresh} />
         ) : (
           <Card
             title={
@@ -580,12 +606,12 @@ function FolderTree({
 }
 
 function NewFolder({
-  tenderId,
+  vault,
   parentId,
   run,
   busy,
 }: {
-  tenderId: string;
+  vault: VaultRef;
   parentId: string | null;
   run: Run;
   busy: string | null;
@@ -601,7 +627,7 @@ function NewFolder({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     void run('folder', () =>
-      post<DocVault>(`tenders/${tenderId}/folders`, { parentId, name }),
+      post<DocVault>(`${vault.kind}/${vault.id}/folders`, { parentId, name }),
     ).then((ok) => {
       if (ok) {
         setName('');
@@ -1321,12 +1347,12 @@ function EditDocument({
 }
 
 function TrashList({
-  tenderId,
+  vault,
   canEdit,
   trashDays,
   onChanged,
 }: {
-  tenderId: string;
+  vault: VaultRef;
   canEdit: boolean;
   trashDays: number | null;
   onChanged: () => void;
@@ -1353,8 +1379,8 @@ function TrashList({
       ? formatDate(new Date(new Date(deletedAt).getTime() + trashDays * 86_400_000).toISOString())
       : null;
   const trash = useQuery({
-    queryKey: ['documents-trash', tenderId],
-    queryFn: () => api.request<DocItem[]>(`/api/tenant/tenders/${tenderId}/documents/trash`),
+    queryKey: ['documents-trash', vault.id],
+    queryFn: () => api.request<DocItem[]>(`/api/tenant/${vault.kind}/${vault.id}/documents/trash`),
   });
   const restore = async (id: string) => {
     setBusy(id);
@@ -1380,7 +1406,7 @@ function TrashList({
             <Button
               variant="danger"
               busy={busy === 'all'}
-              onClick={() => void act('all', `tenders/${tenderId}/documents/trash/empty`)}
+              onClick={() => void act('all', `${vault.kind}/${vault.id}/documents/trash/empty`)}
             >
               Delete for good
             </Button>
@@ -1523,7 +1549,7 @@ export function DocumentsScreen() {
     <div className="space-y-5">
       <PageHeader
         title="Documents"
-        subtitle="Every tender's documents. Open a tender's Documents tab to upload and organise them."
+        subtitle="Every tender's documents, and those of the projects you are on. Open a tender's Documents tab or a project's Documents to upload and organise them."
       />
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-[16rem] flex-1">
@@ -1569,7 +1595,7 @@ export function DocumentsScreen() {
             <thead>
               <tr>
                 <th>Document</th>
-                <th>Tender</th>
+                <th>Tender or project</th>
                 <th className="text-right">Size</th>
                 <th>Uploaded</th>
                 <th />
@@ -1598,14 +1624,31 @@ export function DocumentsScreen() {
                     </div>
                   </td>
                   <td>
-                    <Link
-                      to="/tenders/$tenderId"
-                      params={{ tenderId: d.tenderId }}
-                      className="text-accent hover:underline"
-                    >
-                      {d.tender.title}
-                    </Link>
-                    <div className="font-mono text-xs text-fg-muted">{d.tender.number}</div>
+                    {d.tenderId && d.tender ? (
+                      <>
+                        <Link
+                          to="/tenders/$tenderId"
+                          params={{ tenderId: d.tenderId }}
+                          className="text-accent hover:underline"
+                        >
+                          {d.tender.title}
+                        </Link>
+                        <div className="font-mono text-xs text-fg-muted">{d.tender.number}</div>
+                      </>
+                    ) : d.projectId && d.project ? (
+                      <>
+                        <Link
+                          to="/projects/$projectId/documents"
+                          params={{ projectId: d.projectId }}
+                          className="text-accent hover:underline"
+                        >
+                          {d.project.name}
+                        </Link>
+                        <div className="font-mono text-xs text-fg-muted">
+                          Project {d.project.number}
+                        </div>
+                      </>
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap text-right tabular-nums">
                     {formatBytes(d.size)}

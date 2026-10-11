@@ -49,8 +49,8 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | **Done** (see below) |
 | 6 | **Inventory** (R5) | Stores, issues to WBS, transfers, returns, stock ledger, valuation, reorder levels, stock take | **Done** (see below) |
 | 7 | **Daily site reports** (R6) | Manpower, equipment, materials, weather, work done, delays, safety, photos; phone first | **Done** (see below) |
-| 8 | **Project documents** (R7) | The project's vault and drawings register with revisions (Wave 1's documents) | |
-| 9 | **Procurement reports** | Requisition to order to receipt, open orders, stock, consumption against budget | |
+| 8 | **Project documents** (R7) | The project's vault and drawings register with revisions (Wave 1's documents) | **Done** (see below) |
+| 9 | **Procurement reports** | Requisition to order to receipt, open orders, stock, consumption against budget | **Done** (see below) |
 
 Each step ships with API tests and a browser test of the main journey, as in Waves 1 and 2a.
 
@@ -330,8 +330,7 @@ right to edit projects).
   empty RFQ behind, which the first version of this step did).
 - **[Likely] Work enquiries for a project are typed lines**: a subcontract package from the contract BOQ waits until
   work orders (step 4) show what they need.
-- **[Likely] Quote documents are not attached on a project's enquiry yet**: Wave 1 files them in the tender's
-  documents, and project documents are step 8.
+- **[Certain] Quote documents on a project's enquiry** were missing here; step 8 files them in the project's documents.
 
 **API** (under `/api/tenant`): `GET|POST /projects/:id/rfqs` (`{title, kind, dueOn, terms, requisitionIds}`);
 `POST /rfqs/:id/lines` also takes `{requisitionIds}`; an RFQ carries `projectId` and `project`, its lines their
@@ -611,3 +610,120 @@ existing one answers `report_exists` with its id); `GET|POST /daily-reports/:id`
 - A browser test at a phone's size: the menu folded; today's report built section by section and saved; the signal cut
   while typing ("No signal") and restored ("Saved"), the notes still there after a reload; a photo; submitted,
   acknowledged, corrected with a reason and resubmitted; the reports and weekly figures.
+
+## Step 8 delivered: project documents
+
+**Journey:**
+- A project's page has **Documents and drawings**, kept to its team. Two tabs:
+  - **Drawings register:** add a drawing (number, title, discipline). Each revision is uploaded with its label ("P1",
+    "R0"), purpose (for information, for approval, good for construction), who it came from and when. The register
+    shows each drawing's current revision. A drawing's card lists every revision, newest first, the earlier ones marked
+    **Superseded** and each still downloadable.
+  - **All documents:** Wave 1's vault, for the project: folders, uploads with versions, preview, tags, trash, ZIP.
+    For a project made from a won tender, a note links to the tender's documents, which stay with the tender.
+- **Each drawing is one document** in the vault, under "Drawings/<Discipline>", named "<number> <title>". Each
+  revision is a new version of it, so the vault's own version history is the revision history.
+- **A goods receipt** has **Challan and certificates**: files attached there are kept under "Receipts/<GRN number>" and
+  linked to the receipt.
+- **A project's enquiry** now takes vendors' quote documents, as a tender's does. They are kept in the project's
+  documents, in the quotes folder when it has one. This closes the step 3 gap.
+- **Search** (the Documents page) finds project documents too, for the projects the user sees, and each result says
+  whether it belongs to a tender or a project.
+
+**Who does what:** the project's team reads its documents. Uploading, foldering and the drawings register need the
+team's lead or member place (or the right to edit projects) and `documents.edit`. Viewers read. Restricted folders work
+as in Wave 1.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] No folder tree is made with the project.** "Add the standard folders" on the vault does it, as for a
+  tender; the drawings and receipts folders are made when first needed.
+- **[Certain] Tender documents are linked, not copied:** the project's vault shows a link to the tender's documents.
+- **[Likely] A revision's status is its purpose plus superseded.** "Superseded" is not a purpose that can be chosen; it
+  is set when the next revision arrives. Transmittals and review cycles stay Wave 5.
+- **[Likely] A revision whose file is the same as the current one is refused** (`same_file`), as is a revision label
+  used before on the drawing (`revision_exists`) and a date in the future.
+
+**API** (under `/api/tenant`): the tender vault's routes for a project:
+- `GET /projects/:id/documents`, `GET /projects/:id/documents/trash`.
+- `POST /projects/:id/folders`, `POST /projects/:id/folders/standard`.
+- `POST /projects/:id/documents/upload` (multipart; `folderId`, `documentId`, `path`).
+- `POST /projects/:id/documents/zip`, `POST /projects/:id/documents/trash/empty`.
+- `GET /documents?projectId`.
+
+Drawings:
+- `GET|POST /projects/:id/drawings` (`{number, title, discipline}`), `GET /drawings/:id`.
+- `POST /drawings/:id/revisions?revision&purpose&receivedFrom&receivedOn&note` (multipart).
+
+Links take the kind `goods_receipt`. A receipt returns its `documents` and `mayAttach`. Migration
+`0035_project_documents.sql`: folders, documents, links and purged documents belong to a tender or a project (exactly
+one), plus `proj.drawing` and `proj.drawing_revision`.
+
+**Tests:**
+- 4 API integration tests:
+  - A project's vault kept to its team: folders, uploads, versions, search scoped to the projects the user sees.
+  - The drawings register. P1, then R0 good for construction: one document under "Drawings/Structural" with two
+    versions, P1 superseded and still readable. A repeated label, the same file and a future date are refused, and the
+    register is refused to someone off the team.
+  - A challan linked to a goods receipt and a quote to the project's enquiry; a link across owners is refused.
+  - A project document purged from the trash for good.
+- A browser test (with step 9): a challan attached to a receipt; drawing A-101 with R0 for approval, then R1 good for
+  construction (R0 superseded and downloadable); the vault holding the drawing and the challan in its folders.
+
+## Step 9 delivered: procurement reports
+
+**Journey:**
+- A project's page has **Procurement reports**, each on screen and as **Excel**:
+  - **Requisition to order to receipt:** each line of the approved requisitions shows what was asked of vendors, what
+    was ordered and received against it, and what is still to come. It also shows the stage (not asked, asked, partly
+    ordered, ordered, partly received, received), the enquiries and orders, the needed-by date with "Late" past it,
+    and the days open since approval. When one enquiry line asks for several requisitions' lines, what was ordered and
+    received against it is shared among them in requisition order.
+  - **Open orders:** what suppliers still owe on issued purchase orders, line by line, valued at the order rate before
+    GST, with the days late past the delivery date, and totals by supplier.
+  - **Material reconciliation:** material by material, from the approved material budget through requisitioned,
+    ordered, received, issued (less returns from site) to in stock. Against the issued quantity it sets what the
+    measured work should have taken: each BOQ item's measured quantity times the budget's norm per unit. Issued minus
+    that is the **wastage**, as a quantity and a percentage.
+  - **Supplier performance:** orders and their value with GST, receipt lines, **on time** (receipts on or before the
+    order's date), **rejected** (by value at the order rate) and **above the lowest quote** (what was paid against the
+    lowest rate quoted before GST on the same enquiry lines; a GST-included quote is divided out).
+- **Procurement reports** in the main menu: open orders and supplier performance across the projects the user sees
+  (every project for admins and those who see all projects).
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Not added to the dashboards picker.** The dashboards are built for tenders and estimates: financial year,
+  vertical and owner filters, with KPI tiles over tenders. A procurement dashboard needs its own filters (project,
+  supplier, period) and is better shaped by a month of pilot data. The reports are on screen and in Excel; the browser
+  prints them.
+- **[Certain] Rejection counts the gate and inspection**, by value, and goods held for inspection count as received
+  for what is owed (they are on site), not as accepted.
+- **[Likely] Wastage needs norms and measurement:** a material with no norm on a measured item shows no wastage rather
+  than 100%. Typed-in order lines (no library resource) are not in the reconciliation.
+- **[Likely] Lowest quote means every quote on the enquiry line,** including vendors not chosen, so the figure shows
+  what choosing another supplier cost.
+
+**API** (under `/api/tenant`), each with `?format=xlsx` for Excel:
+- `GET /projects/:id/reports/requisitions`
+- `GET /reports/open-orders?projectId`
+- `GET /projects/:id/reports/materials`
+- `GET /reports/suppliers?projectId`
+
+No migration.
+
+**Tests:**
+- 2 API integration tests, every figure worked by hand:
+  - Raft (200 bags needed by 1 October) and Columns (100 bags) share one enquiry line. 300 bags are ordered and 145
+    accepted, so Raft takes 200 ordered and all 145 received (partly received, late) and Columns takes 100 ordered
+    (ordered). The sand has all come.
+  - 155 bags still owed, ₹59,675.00, late since 3 October.
+  - Materials: 300 requisitioned and ordered, 145 received, 110 issued (120 less 10 back), 35 in stock. Measured: 50 at
+    1.8 and 20 at 0.5, so 100 bags should have gone and 10 were wasted (10.0%).
+  - Suppliers: Vidarbha ₹1,47,840.00, one of two receipts on time (50.0%), 5 of 150 bags rejected (3.3%), and 1.3%
+    above Akola's GST-included lowest quote (₹448.40 / 1.18 = ₹380). Surat: ₹17,850.00, all on time, at the lowest.
+  - The same as Excel, numbers as numbers.
+  - Access: a worker off the team gets no project reports and empty company-wide ones; on the team, they see them; the
+    admin sees every project's.
+- The browser test (with step 8): 40 bags still owed, ₹15,600.00; downloaded as Excel; company-wide from the menu.
+
+**Wave 2b exit criterion:** a pilot site runs a month of purchasing and stores on it. All nine steps are built; the
+pilot has not run yet, so the criterion is not met.

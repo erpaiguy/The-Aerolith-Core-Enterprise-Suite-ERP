@@ -998,24 +998,29 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
   const fileInput = useRef<HTMLInputElement>(null);
   const docFor = useRef<string | null>(null);
   const docInput = useRef<HTMLInputElement>(null);
-  // Quote documents are kept in the tender's documents; a project's RFQ waits for project documents (step 8).
-  const canAttach = usePermission('documents.edit') && canSend && rfq.tenderId !== null;
+  // Quote documents are kept in the tender's documents, or the project's (docs/wave2b-plan.md step 8).
+  const owner = rfq.tenderId
+    ? { path: `tenders/${rfq.tenderId}`, id: rfq.tenderId, name: 'the tender documents' }
+    : rfq.projectId
+      ? { path: `projects/${rfq.projectId}`, id: rfq.projectId, name: 'the project documents' }
+      : null;
+  const canAttach = usePermission('documents.edit') && canSend && owner !== null;
   const [attached, setAttached] = useState<string | null>(null);
   const who = rfq.kind === 'work' ? 'subcontractor' : 'supplier';
 
-  /** The vendor's file goes into the tender's documents (the quotes folder when it has one) and is linked here. */
+  /** The vendor's file goes into the vault (the quotes folder when it has one) and is linked here. */
   const attach = async (files: File[]) => {
     const partyId = docFor.current;
-    if (!partyId || files.length === 0) return;
+    if (!partyId || !owner || files.length === 0) return;
     setAttached(null);
-    let where = 'the tender documents';
+    let where = owner.name;
     const out = await action.run(`attach-${partyId}`, async () => {
-      const vault = await api.request<DocVault>(`/api/tenant/tenders/${rfq.tenderId}/documents`);
+      const vault = await api.request<DocVault>(`/api/tenant/${owner.path}/documents`);
       const folder = vault.folders.find((f) => f.name === QUOTES_FOLDER);
       if (folder) where = `“${QUOTES_FOLDER}”`;
       for (const file of files) {
         const { document } = await api.upload<{ document: { id: string } }>(
-          `/api/tenant/tenders/${rfq.tenderId}/documents/upload${folder ? `?folderId=${folder.id}` : ''}`,
+          `/api/tenant/${owner.path}/documents/upload${folder ? `?folderId=${folder.id}` : ''}`,
           file,
         );
         await post(`documents/${document.id}/links`, {
@@ -1029,7 +1034,7 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
       setAttached(
         `Attached ${files.length === 1 ? files[0]!.name : `${files.length} files`}, kept in ${where}.`,
       );
-      void qc.invalidateQueries({ queryKey: ['documents', rfq.tenderId] });
+      void qc.invalidateQueries({ queryKey: ['documents', owner.id] });
     }
   };
   const openDocument = (id: string) =>

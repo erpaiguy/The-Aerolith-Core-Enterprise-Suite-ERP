@@ -397,7 +397,7 @@ export function QueriesAndAddenda({
                 </div>
                 <p className="whitespace-pre-wrap">{x.summary}</p>
                 <LinkedDocuments
-                  tenderId={tender.id}
+                  vault={`tenders/${tender.id}`}
                   kind="addendum"
                   targetId={x.id}
                   label={x.ref}
@@ -791,7 +791,7 @@ export function Checklist({
                             .join(' · ')}
                         </span>
                         <LinkedDocuments
-                          tenderId={tender.id}
+                          vault={`tenders/${tender.id}`}
                           kind="checklist_item"
                           targetId={c.id}
                           label={c.title}

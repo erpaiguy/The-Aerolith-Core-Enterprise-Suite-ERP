@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { useRun } from '../approvals/model';
 import { formatQty } from '../boq/model';
+import { LinkedDocuments } from '../documents/LinkedDocuments';
 import { describeError } from '../lib/format';
 import type { Inspection, Receipt } from '../procurement/orders';
 import { shortDate } from '../schedule/model';
@@ -208,6 +209,31 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
           </tbody>
         </Table>
       </Card>
+      {(r.documents.length > 0 || r.mayAttach) && (
+        <Card title="Challan and certificates">
+          <LinkedDocuments
+            vault={`projects/${r.project.id}`}
+            kind="goods_receipt"
+            targetId={r.id}
+            label={`Goods receipt ${r.number}`}
+            documents={r.documents}
+            folder={null}
+            path={`Receipts/${r.number.replaceAll('/', '-')}`}
+            canAttach={r.mayAttach && r.status === 'posted'}
+            onChanged={() =>
+              void api
+                .request<Receipt>(`/api/tenant/receipts/${r.id}`)
+                .then(onChanged)
+                .catch(() => undefined)
+            }
+          />
+          {r.documents.length === 0 && (
+            <p className="mt-2 text-sm text-fg-muted">
+              Attach the delivery challan, the test certificates: kept in the project's documents.
+            </p>
+          )}
+        </Card>
+      )}
       {r.mayInspect && (
         <InspectForm
           lines={held}

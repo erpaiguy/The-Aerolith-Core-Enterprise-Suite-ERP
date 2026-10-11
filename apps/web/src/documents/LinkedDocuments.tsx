@@ -1,6 +1,7 @@
 // Documents linked to something on a tender (docs/wave1-plan.md step 13): an addendum's corrigendum, the certificate a
-// checklist item asks for. The file is kept in the tender's documents (in the standard folder for it when the tender
-// has one the user may see) and linked here; unlinking leaves it in the documents.
+// checklist item asks for; or on a project (docs/wave2b-plan.md step 8): a goods receipt's challan and test
+// certificates. The file is kept in the vault's documents (in the standard folder for it when the vault has one the
+// user may see, or in the folders `path` names) and linked here; unlinking leaves it in the documents.
 import { Button } from '@aerolith/ui';
 import { FileText, Paperclip, X } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -14,23 +15,27 @@ export interface LinkedDocument {
 }
 
 export function LinkedDocuments({
-  tenderId,
+  vault,
   kind,
   targetId,
   label,
   documents,
   folder,
+  path,
   canAttach,
   onChanged,
 }: {
-  tenderId: string;
-  kind: 'addendum' | 'checklist_item';
+  /** Whose vault, as the API names it: `tenders/<id>` or `projects/<id>`. */
+  vault: string;
+  kind: 'addendum' | 'checklist_item' | 'goods_receipt';
   targetId: string;
   /** What the documents belong to, for screen readers: "Corrigendum 1". */
   label: string;
   documents: LinkedDocument[];
   /** The standard folder to keep new files in, when the tender has it. */
   folder: string | null;
+  /** Or folders to keep them in, made when missing: "Receipts/GRN-0001". */
+  path?: string;
   canAttach: boolean;
   onChanged: () => void;
 }) {
@@ -56,11 +61,16 @@ export function LinkedDocuments({
     });
   const attach = (files: File[]) =>
     void run(async () => {
-      const vault = await api.request<DocVault>(`/api/tenant/tenders/${tenderId}/documents`);
-      const f = folder ? vault.folders.find((x) => x.name === folder) : undefined;
+      const params = new URLSearchParams();
+      if (folder) {
+        const v = await api.request<DocVault>(`/api/tenant/${vault}/documents`);
+        const f = v.folders.find((x) => x.name === folder);
+        if (f) params.set('folderId', f.id);
+      }
+      if (path) params.set('path', path);
       for (const file of files) {
         const { document } = await api.upload<{ document: { id: string } }>(
-          `/api/tenant/tenders/${tenderId}/documents/upload${f ? `?folderId=${f.id}` : ''}`,
+          `/api/tenant/${vault}/documents/upload?${params.toString()}`,
           file,
         );
         await link(document.id);

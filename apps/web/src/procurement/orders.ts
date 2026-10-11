@@ -208,6 +208,9 @@ export interface Receipt {
   mayInspect: boolean;
   mayReturn: boolean;
   mayCancel: boolean;
+  /** Linked from the project's documents: the challan, test certificates. */
+  documents: { id: string; name: string }[];
+  mayAttach: boolean;
 }
 
 export interface ReceiptRow {

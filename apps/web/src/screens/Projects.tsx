@@ -16,7 +16,16 @@ import {
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Gauge, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  ClipboardList,
+  FileStack,
+  Gauge,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
@@ -398,13 +407,27 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
           </span>
         }
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               to="/projects/$projectId/dashboard"
               params={{ projectId: p.id }}
               className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm font-medium hover:bg-surface-2"
             >
               <Gauge className="size-4" aria-hidden /> Dashboard
+            </Link>
+            <Link
+              to="/projects/$projectId/documents"
+              params={{ projectId: p.id }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm font-medium hover:bg-surface-2"
+            >
+              <FileStack className="size-4" aria-hidden /> Documents and drawings
+            </Link>
+            <Link
+              to="/projects/$projectId/procurement-reports"
+              params={{ projectId: p.id }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm font-medium hover:bg-surface-2"
+            >
+              <ClipboardList className="size-4" aria-hidden /> Procurement reports
             </Link>
             {p.canEdit && !editing && (
               <Button variant="secondary" onClick={() => setEditing(true)}>
@@ -479,12 +502,6 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <ProjectStores project={p} />
               <ProjectDailyReports project={p} />
               <Sites project={p} onDone={done} />
-              <Card title="Coming next">
-                <p className="text-sm text-fg-muted">
-                  Next in Wave 2b: purchase orders from the vendors chosen, goods receipt, stores,
-                  and daily site reports.
-                </p>
-              </Card>
             </div>
             <div className="space-y-5">
               <Team project={p} onDone={done} />

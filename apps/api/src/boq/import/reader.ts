@@ -81,6 +81,11 @@ export async function* readXlsx(path: string, onBytes?: OnBytes): AsyncGenerator
     worksheets: 'emit',
     entries: 'emit',
   });
+  // ExcelJS reads `model.sheets` (the names, from xl/workbook.xml) as each worksheet is parsed, and fails with "Cannot
+  // read properties of undefined (reading 'sheets')" when a worksheet comes first; seen once in the integration tests.
+  // An empty list until the workbook part is read: such a sheet is then named "Sheet N" below, never a failed import.
+  const r = reader as unknown as { model?: { sheets?: unknown[] } };
+  r.model ??= { sheets: [] };
   let sheet = 0;
   try {
     for await (const ws of reader) {

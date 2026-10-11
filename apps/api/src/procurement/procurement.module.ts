@@ -6,6 +6,8 @@ import { ProvisioningModule } from '../provisioning/provisioning.module.js';
 import { TenderModule } from '../tender/tender.module.js';
 import { InventoryController } from './inventory.controller.js';
 import { InventoryService } from './inventory.service.js';
+import { ProcurementReportController } from './procurement-report.controller.js';
+import { ProcurementReportService } from './procurement-report.service.js';
 import { MaterialBudgetController } from './material-budget.controller.js';
 import { MaterialBudgetService } from './material-budget.service.js';
 import { ProjectRfqController } from './project-rfq.controller.js';
@@ -25,6 +27,7 @@ import { RequisitionService } from './requisition.service.js';
     PurchaseOrderController,
     ReceiptController,
     InventoryController,
+    ProcurementReportController,
   ],
   providers: [
     RequisitionService,
@@ -32,6 +35,7 @@ import { RequisitionService } from './requisition.service.js';
     PurchaseOrderService,
     ReceiptService,
     InventoryService,
+    ProcurementReportService,
   ],
 })
 export class ProcurementModule {}

@@ -2,7 +2,7 @@
 // addendum. Read by the RFQ and tender pages; documents in restricted folders appear only to users who may see them.
 import type { Sql, TransactionSql } from 'postgres';
 
-export type LinkKind = 'rfq_vendor' | 'checklist_item' | 'addendum';
+export type LinkKind = 'rfq_vendor' | 'checklist_item' | 'addendum' | 'goods_receipt';
 export interface LinkedDocument {
   id: string;
   name: string;

@@ -53,6 +53,11 @@ import { OrdersScreen } from './screens/Orders';
 import { ReceiptsScreen } from './screens/Receipts';
 import { OrderOfRevisionScreen, PurchaseOrderScreen } from './screens/PurchaseOrder';
 import { RequisitionScreen } from './screens/Requisition';
+import {
+  ProcurementReportsScreen,
+  ProjectProcurementReportsScreen,
+} from './screens/ProcurementReports';
+import { ProjectDocumentsScreen } from './screens/ProjectDocuments';
 import { RequisitionsScreen } from './screens/Requisitions';
 import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
@@ -238,6 +243,22 @@ const dailyReportsRoute = createRoute({
     return <DailyReportsScreen key={projectId} projectId={projectId} siteId={site} />;
   },
 });
+const projectDocumentsRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/documents',
+  component: function ProjectDocumentsPage() {
+    const { projectId } = projectDocumentsRoute.useParams();
+    return <ProjectDocumentsScreen key={projectId} projectId={projectId} />;
+  },
+});
+const projectProcurementRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/procurement-reports',
+  component: function ProjectProcurementPage() {
+    const { projectId } = projectProcurementRoute.useParams();
+    return <ProjectProcurementReportsScreen key={projectId} projectId={projectId} />;
+  },
+});
 const macroRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/projects/$projectId/macro',
@@ -392,6 +413,8 @@ const routeTree = rootRoute.addChildren([
     receiptRoute,
     dailyReportRoute,
     dailyReportsRoute,
+    projectDocumentsRoute,
+    projectProcurementRoute,
     storeRoute,
     issueRoute,
     transferRoute,
@@ -406,6 +429,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/receipts',
       component: ReceiptsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/procurement-reports',
+      component: ProcurementReportsScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

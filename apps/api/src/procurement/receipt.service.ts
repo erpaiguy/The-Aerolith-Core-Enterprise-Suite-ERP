@@ -20,6 +20,7 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt } from '../rates/decimal.js';
 import { nextNumber } from '../tender/numbering.js';
 import { audit } from '../tender/tender-records.js';
+import { linkedDocuments } from '../documents/links.js';
 import { InventoryService } from './inventory.service.js';
 import { orderProgress } from './receipt-progress.js';
 import { reverseIn, stockIn, valuation, paise } from './stock-ledger.js';
@@ -478,7 +479,7 @@ export class ReceiptService {
   async get(claims: TenantClaims, receiptId: string) {
     const db = await this.tenants.forTenant(claims.ten);
     const r = await this.receipt(db, receiptId);
-    await this.projects.access(db, claims, r.project_id);
+    const access = await this.projects.access(db, claims, r.project_id);
     const may = await this.mayReceive(db, claims, r.project_id);
     const [h] = await db`
       SELECT g.id, g.number, g.status, g.status_reason AS "statusReason",
@@ -513,11 +514,25 @@ export class ReceiptService {
           FILTER (WHERE x.position IS NOT NULL), '[]') AS lines
       FROM proc.goods_return t LEFT JOIN proc.goods_return_line x ON x.return_id = t.id
       WHERE t.receipt_id = ${receiptId} GROUP BY t.id ORDER BY t.created_at`;
+    const documents =
+      (
+        await linkedDocuments(
+          db,
+          'goods_receipt',
+          [receiptId],
+          await this.permissions.can(claims, 'pricing.edit'),
+        )
+      ).get(receiptId) ?? [];
     const posted = r.status === 'posted';
     return {
       ...h!,
       lines,
       returns,
+      documents,
+      // The challan and test certificates go into the project's documents: its team, with documents.edit.
+      mayAttach:
+        (access.canEdit || access.role === 'lead' || access.role === 'member') &&
+        (await this.permissions.can(claims, 'documents.edit')),
       mayInspect: may && posted && lines.some((l) => l.inspection === 'hold'),
       mayReturn: may && posted && lines.some((l) => dec(l.rejected) > dec(l.returned)),
       mayCancel: may && posted && returns.length === 0,
