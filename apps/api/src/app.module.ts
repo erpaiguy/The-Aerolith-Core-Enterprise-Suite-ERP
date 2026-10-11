@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { AccountsModule } from './accounts/accounts.module.js';
 import { ApprovalModule } from './approvals/approval.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { RateLimitGuard } from './auth/rate-limit.js';
@@ -32,6 +33,7 @@ import { TenderModule } from './tender/tender.module.js';
     DashboardModule,
     ProjectModule,
     ApprovalModule,
+    AccountsModule,
     ProcurementModule,
   ],
   controllers: [HealthController],

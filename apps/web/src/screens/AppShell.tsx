@@ -9,7 +9,13 @@ import {
   Boxes,
   BriefcaseBusiness,
   Calculator,
+  BookOpen,
+  CalendarCheck,
   CheckCheck,
+  Landmark,
+  ListTree,
+  ReceiptText,
+  Scale,
   ClipboardList,
   ListChecks,
   PackageCheck,
@@ -27,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
+import { usePermission } from '../session/permissions';
 import type { Inbox } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
 import { useSession } from '../session/session';
@@ -91,6 +98,7 @@ function LicenceBanner() {
 export function AppShell() {
   const session = useSession();
   const isAdmin = session.user?.role === 'admin';
+  const mayBooks = usePermission('accounts.view');
   const inbox = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.request<Inbox>('/api/tenant/inbox'),
@@ -161,6 +169,9 @@ export function AppShell() {
                 <NavItem to="/settings/approvals" icon={<ListChecks className="size-4" />}>
                   Approval rules
                 </NavItem>
+                <NavItem to="/settings/companies" icon={<Landmark className="size-4" />}>
+                  Companies
+                </NavItem>
               </>
             )}
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
@@ -214,6 +225,28 @@ export function AppShell() {
             <NavItem to="/procurement-reports" icon={<ClipboardList className="size-4" />}>
               Procurement reports
             </NavItem>
+            {mayBooks && (
+              <>
+                <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+                  Accounts
+                </div>
+                <NavItem to="/accounts/vouchers" icon={<ReceiptText className="size-4" />}>
+                  Vouchers
+                </NavItem>
+                <NavItem to="/accounts/trial-balance" icon={<Scale className="size-4" />}>
+                  Trial balance
+                </NavItem>
+                <NavItem to="/accounts/day-book" icon={<BookOpen className="size-4" />}>
+                  Day book
+                </NavItem>
+                <NavItem to="/accounts/chart" icon={<ListTree className="size-4" />}>
+                  Chart of accounts
+                </NavItem>
+                <NavItem to="/accounts/setup" icon={<CalendarCheck className="size-4" />}>
+                  Books setup
+                </NavItem>
+              </>
+            )}
           </nav>
           <div className={`${menuOpen ? 'block' : 'hidden'} px-4 pb-4 md:block`}>
             <Link to="/licences" className="text-xs text-fg-subtle hover:underline">

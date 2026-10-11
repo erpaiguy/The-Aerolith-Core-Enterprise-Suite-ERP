@@ -58,6 +58,11 @@ import {
   ProjectProcurementReportsScreen,
 } from './screens/ProcurementReports';
 import { ProjectDocumentsScreen } from './screens/ProjectDocuments';
+import { ChartScreen } from './screens/accounts/Chart';
+import { CompaniesScreen } from './screens/accounts/Companies';
+import { DayBookScreen, LedgerScreen, TrialBalanceScreen } from './screens/accounts/Reports';
+import { BooksSetupScreen } from './screens/accounts/Setup';
+import { NewVoucherScreen, VoucherScreen, VouchersScreen } from './screens/accounts/Vouchers';
 import { RequisitionsScreen } from './screens/Requisitions';
 import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
@@ -259,6 +264,29 @@ const projectProcurementRoute = createRoute({
     return <ProjectProcurementReportsScreen key={projectId} projectId={projectId} />;
   },
 });
+const voucherRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/accounts/vouchers/$voucherId',
+  component: function VoucherPage() {
+    const { voucherId } = voucherRoute.useParams();
+    return <VoucherScreen key={voucherId} voucherId={voucherId} />;
+  },
+});
+const ledgerRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/accounts/ledgers/$accountId',
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): { entityId?: string | undefined; from?: string | undefined; to?: string | undefined } => ({
+    entityId: typeof s.entityId === 'string' ? s.entityId : undefined,
+    from: typeof s.from === 'string' ? s.from : undefined,
+    to: typeof s.to === 'string' ? s.to : undefined,
+  }),
+  component: function LedgerPage() {
+    const { accountId } = ledgerRoute.useParams();
+    return <LedgerScreen key={accountId} accountId={accountId} search={ledgerRoute.useSearch()} />;
+  },
+});
 const macroRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/projects/$projectId/macro',
@@ -415,6 +443,43 @@ const routeTree = rootRoute.addChildren([
     dailyReportsRoute,
     projectDocumentsRoute,
     projectProcurementRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/vouchers',
+      component: VouchersScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/vouchers/new',
+      component: NewVoucherScreen,
+    }),
+    voucherRoute,
+    ledgerRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/trial-balance',
+      component: TrialBalanceScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/day-book',
+      component: DayBookScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/chart',
+      component: ChartScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/setup',
+      component: BooksSetupScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/settings/companies',
+      component: CompaniesScreen,
+    }),
     storeRoute,
     issueRoute,
     transferRoute,

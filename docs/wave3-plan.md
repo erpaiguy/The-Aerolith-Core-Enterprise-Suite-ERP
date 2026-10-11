@@ -49,6 +49,48 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 - **[Certain] Money stays exact** (`numeric`, explicit rounding per docs/05-database.md §1); tax is rounded per
   line as an invoice shows it (Wave 2b step 4's rule), totals rounded to the rupee only where the law requires.
 
+## Step 1 in detail (planned before building)
+
+**Goal:** books for each company (legal entity): a chart of accounts, vouchers that always balance, locked months,
+opening balances, and the day book, ledger and trial balance. Every later money step posts here.
+
+- **Companies.** The tenant has one entity today ("Main entity", no GSTIN). Step 1 adds a Companies screen for the
+  admin: name, legal name, GSTIN, PAN, TAN, state, address, and the date its books start. Projects and tenders
+  already name their entity.
+- **One chart of accounts per tenant,** shared by its companies; balances are kept by company. [Likely] Firms with
+  several companies want the same chart; a ledger used by only one company is still allowed.
+  - A tree of groups and ledgers under five fixed roots: Equity, Liabilities, Assets, Income, Expenses. Each ledger:
+    code, name, group, kind (ordinary, bank, cash, party, tax), whether lines need a project (cost centre).
+  - Seeded with a construction contractor's chart in Schedule III order. The tenant adds, renames and moves
+    ledgers; a ledger with postings is never deleted, only closed.
+  - **Party ledgers:** each client, vendor or subcontractor gets one ledger when first posted to (under Sundry
+    debtors or Sundry creditors), so a party can be both.
+- **Account map:** the roles later steps post to (sales works contract, output and input CGST/SGST/IGST, TDS
+  receivable, TDS payable by section, retention receivable and payable, mobilisation advance received, advances to
+  suppliers, stock, GRN clearing, material consumption, subcontract cost, round off) mapped to ledgers per company,
+  seeded to the seeded chart and changed by the admin.
+- **Vouchers:** journal, payment, receipt, contra, sales, purchase, debit note, credit note and opening. Numbered per
+  type, company and financial year. Each line: ledger, debit or credit, and optionally project, site, cost code and a
+  line note.
+  - **The database refuses a voucher that does not balance** (checked at commit) and any edit or delete of a posted
+    voucher. A mistake is put right by **reversing** the voucher: a new voucher, dated when the reversal is made,
+    with every line the other way round.
+  - Bank and cash ledgers appear only in payment, receipt and contra vouchers' bank side, as Tally does. [Likely]
+- **Periods:** financial years April to March. The admin locks a month per company; a voucher dated in a locked month
+  is refused (by the database too). Reopening is the admin's, audited.
+- **Opening balances:** one opening voucher per company dated the day before its books start, typed in or imported
+  from Excel (ledger code or name, debit, credit), parties included. It must balance. [Likely] Bill-by-bill open
+  items for parties come with receivables and payables (steps 3 and 4).
+- **Reports:** day book (vouchers between two dates), ledger (opening, each line with its running balance, closing),
+  trial balance as at a date (group totals and ledgers, optionally for one project), each as Excel.
+- **Rights:** new `accounts.view` (read the books; managers by default) and `accounts.post` (vouchers; managers by
+  default). The chart, the account map, companies, locks and opening balances are the admin's.
+- **Tests:** an unbalanced voucher refused by the API and by the database; a posted voucher cannot be changed;
+  reversal; a locked month; numbering per type and year; opening balances imported; a trial balance of a worked set
+  of vouchers by hand, and for one project.
+- **Not in this step:** documents posting automatically (each money step adds its own posting), bill-wise party
+  balances, multi-currency vouchers, cost-centre allocation percentages.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -269,10 +311,90 @@ Each step ships with API integration tests (amounts worked by hand) and a browse
 4. [Guessing] Tenants on Tally may only want 3a's billing and payables (mode c), not the ledger; the pilot decides
    which is built first in depth.
 
-## Questions for you before Wave 3 starts
+## Questions for you before Wave 3 starts (answered: the recommended choices, taken when the build started)
+
+You asked for the build to go ahead on the recommended choices without waiting. Each one stays open to change:
+
+1. **Full double-entry ledger in the app,** with accounts mode (c) for firms that keep Tally (step 8).
+2. **A generic RA bill format** (abstract, measurement detail, deductions) until a real client bill is shared; the
+   first pilot's format becomes the first template.
+3. **Payroll in-house for site staff** (step 12) and labour contractors' wage compliance (step 13): both.
+4. **Joineries Production is its own wave after 3c.**
+5. **The CA and payroll practitioner reviews are open items.** Each money step records what needs their sign-off;
+   nothing in 3a is to be relied on for filing until that review is done.
+
+The original questions:
 
 1. Full double-entry ledger in the app (recommended) or accounts-lite with Tally holding the books?
 2. Which client RA bill formats must be supported first (please share one or two real bills)?
 3. Payroll in-house for site staff, or only labour contractors' wage compliance?
 4. Joineries Production module: its own wave after 3c (recommended), or sooner?
 5. Which CA or payroll practitioner reviews 3a and step 12?
+
+## Step 1 delivered: ledger core
+
+**Journey:**
+- **Companies** (admin settings): name, legal name, GSTIN (the state and PAN are taken from it, and refused when they
+  disagree), TAN, address, and the date the books start. The tenant's "Main entity" is the first company.
+- **Chart of accounts** (Accounts menu): the seeded construction chart under Equity, Liabilities, Assets, Income and
+  Expenses. The admin adds groups and ledgers (bank, cash, tax or ordinary; a ledger can require a project on every
+  line), renames, moves within the same top group, and closes ledgers. A party gets its ledger the first time it is
+  posted to, under Sundry debtors (clients) or Sundry creditors.
+- **Account map** (under the chart): every role later steps post to, per company, mapped to the seeded ledgers; the
+  admin points a role at another ledger.
+- **Vouchers:** journal, payment, receipt, contra, sales, purchase, debit note, credit note; lines by ledger or party,
+  with a project and a note; the totals and the difference shown as you type; numbered per type, company and year
+  ("RV/2026-27/0001"). **Reverse** posts a new voucher, dated when you choose, with every line the other way round.
+- **Trial balance** as at a date, for the company or one project (each ledger opens its ledger); **ledger** between two
+  dates with opening, running and closing balances; **day book**; each as Excel.
+- **Books setup:** months of a financial year, locked and reopened (with a reason) by the admin; **opening balances**
+  from an Excel sheet of Ledger, Debit and Credit (ledger by code or name, or a party by name), checked first and
+  posted only when every row is understood and the sides agree. Posting again replaces them (the old voucher
+  reversed).
+
+**Who does what:** new `accounts.view` and `accounts.post` rights (managers by default; workers neither). Companies,
+the chart, the account map, locks and opening balances are the admin's.
+
+**What the database enforces** (so no bug or script can break the books): a voucher balances, with two lines or more,
+at commit; vouchers and lines are never updated or deleted; no voucher is dated in a locked month; a line posts to an
+open ledger, not a group, with a project when the ledger needs one.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] One chart for all companies.** Balances, numbering, locks and the account map are per company.
+- **[Likely] Bank and cash go only in payments, receipts and contras,** as in Tally; journals refuse them.
+- **[Certain] A reversal is dated when it is made,** not on the original's date, so a locked month stays untouched.
+- **[Likely] Income and expense balances run on until year-end closing** (step 8): a trial balance late in a second
+  year still includes the first year's income and expenses.
+- **[Likely] Opening balances are by ledger;** bill-by-bill open items for parties come with receivables and payables.
+
+**API** (under `/api/tenant`):
+- `GET|POST /companies`, `POST /companies/:id`.
+- `GET|POST /accounts/chart`, `POST /accounts/chart/:id`; `GET|POST /accounts/map?entityId`.
+- `GET|POST /accounts/vouchers` (`{entityId, type, date, narration, reference, lines}`), `GET /accounts/vouchers/:id`,
+  `POST /accounts/vouchers/:id/reverse` (`{date, reason}`).
+- `GET /accounts/periods?entityId&fy`, `POST /accounts/periods/lock|reopen`.
+- `GET|POST /companies/:id/opening`, `POST /companies/:id/opening/import?post` (multipart).
+- `GET /accounts/day-book`, `/accounts/ledgers/:id`, `/accounts/trial-balance`, each with `?format=xlsx`.
+
+Migration `0036_ledger.sql`.
+
+**Tests:**
+- 5 API integration tests, every balance by hand:
+  - Companies (the state and PAN from the GSTIN, a mismatch refused, a second company); a bank ledger added; opening
+    balances of ₹10,50,000 a side imported (an unknown ledger reported by row; managers refused); the books' start
+    fixed once there are openings.
+  - A receipt, a payment and a journal numbered per type; a project required by the ledger; refused: unbalanced, bank
+    in a journal, a payment not out of bank or cash, a worker, before the books, a group. The database refusing an
+    unbalanced voucher at commit, and any update or delete. The payment reversed; reversing it again, or the reversal,
+    refused.
+  - October locked: refused by the API and by the database; reopened with a reason; the second company numbering its
+    own vouchers.
+  - Trial balance as at 31 October, ₹12,98,100.00 a side, with group totals; as at 30 September (the openings only);
+    for one project; the bank's ledger (6,00,000 → 8,36,000 → 7,86,000 → 8,36,000); the day book (₹3,48,000); as Excel.
+  - The account map seeded and changed; a mapped ledger cannot be closed; opening balances replaced.
+- A browser test: the company and its GSTIN; a bank ledger; opening balances from Excel; a receipt with the difference
+  shown until it balances; the receipt reversed; the trial balance and the bank's running balance; October locked and
+  a voucher in it refused.
+
+**For the CA review:** the seeded chart and its Schedule III grouping, the account map's roles, and whether journals
+should be allowed to touch bank and cash.
