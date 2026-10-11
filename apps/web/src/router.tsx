@@ -40,6 +40,7 @@ import { MacroScreen } from './screens/Macro';
 import { ApprovalDetailScreen } from './screens/ApprovalDetail';
 import { ApprovalRulesScreen } from './screens/ApprovalRules';
 import { ApprovalsScreen } from './screens/Approvals';
+import { MaterialBudgetScreen } from './screens/MaterialBudget';
 import { ProgressScreen } from './screens/Progress';
 import { RequisitionScreen } from './screens/Requisition';
 import { RequisitionsScreen } from './screens/Requisitions';
@@ -125,6 +126,14 @@ const approvalRoute = createRoute({
   component: function ApprovalPage() {
     const { approvalId } = approvalRoute.useParams();
     return <ApprovalDetailScreen key={approvalId} approvalId={approvalId} />;
+  },
+});
+const materialBudgetRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/material-budgets/$budgetId',
+  component: function MaterialBudgetPage() {
+    const { budgetId } = materialBudgetRoute.useParams();
+    return <MaterialBudgetScreen key={budgetId} budgetId={budgetId} />;
   },
 });
 const requisitionRoute = createRoute({
@@ -283,6 +292,7 @@ const routeTree = rootRoute.addChildren([
     projectDashboardRoute,
     approvalRoute,
     requisitionRoute,
+    materialBudgetRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/approvals',

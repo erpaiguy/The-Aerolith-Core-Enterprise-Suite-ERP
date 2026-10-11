@@ -18,11 +18,20 @@ import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Plus, Send, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { ProjectDetail, Resource } from '../api/types';
+import type { ProjectDetail } from '../api/types';
 import { ApprovalSteps } from '../approvals/ApprovalTrail';
 import { useRun } from '../approvals/model';
 import { describeError, formatInr } from '../lib/format';
-import { REQUISITION_STATUS, REQUISITION_TONE, type Requisition } from '../procurement/model';
+import {
+  REQUISITION_STATUS,
+  REQUISITION_TONE,
+  budgetLeft,
+  type DemandLine,
+  type Requisition,
+  type RequisitionLine,
+} from '../procurement/model';
+import { ResourcePicker } from '../procurement/ResourcePicker';
+import { formatQty } from '../boq/model';
 import { RequisitionLines } from '../procurement/RequisitionLines';
 import { shortDate } from '../schedule/model';
 
@@ -201,6 +210,7 @@ function RequisitionView({
       {r.mayEdit ? (
         <Editor
           projectId={r.project.id}
+          saved={r.lines}
           draft={draft}
           setDraft={setDraft}
           total={draftTotal}
@@ -273,6 +283,7 @@ type Draft = ReturnType<typeof toDraft>;
 
 function Editor({
   projectId,
+  saved,
   draft,
   setDraft,
   total,
@@ -281,6 +292,8 @@ function Editor({
   onSave,
 }: {
   projectId: string;
+  /** The lines as saved: they carry the budget for their resources. */
+  saved: RequisitionLine[];
   draft: Draft;
   setDraft: (d: Draft) => void;
   total: number;
@@ -441,6 +454,7 @@ function Editor({
               >
                 <Trash2 className="size-4" aria-hidden />
               </Button>
+              <BudgetHint line={l} saved={saved} />
             </div>
           ))}
           <div className="flex flex-wrap items-end gap-3">
@@ -470,6 +484,33 @@ function Editor({
               <Plus className="size-4" aria-hidden /> Line typed in
             </Button>
           </div>
+          <DemandAdder
+            projectId={projectId}
+            onAdd={(found) => {
+              const lines = [...draft.lines];
+              for (const d of found) {
+                const k = lines.findIndex((l) => l.resourceId === d.resourceId);
+                if (k >= 0)
+                  lines[k] = {
+                    ...lines[k]!,
+                    qty: String(
+                      Math.round((Number(lines[k]!.qty || 0) + Number(d.qty)) * 10_000) / 10_000,
+                    ),
+                  };
+                else
+                  lines.push({
+                    ...blank,
+                    resourceId: d.resourceId,
+                    resourceCode: d.code,
+                    description: d.name,
+                    unit: d.unit,
+                    qty: String(Number(d.qty)),
+                    rate: d.rate ? String(Number(d.rate)) : '',
+                  });
+              }
+              setDraft({ ...draft, lines });
+            }}
+          />
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <span className="text-sm" data-testid="draft-total">
               Estimated total <b className="tabular-nums">{formatInr(String(total))}</b>
@@ -484,59 +525,173 @@ function Editor({
   );
 }
 
-/** Finds a material (or any resource) in the rate library and adds it as a line, at its current rate. */
-function ResourcePicker({ onPick }: { onPick: (r: Resource) => void }) {
-  const [q, setQ] = useState('');
-  const [chosen, setChosen] = useState('');
-  const found = useQuery({
-    queryKey: ['resource-search', q],
-    queryFn: () =>
-      api.request<{ items: Resource[] }>(
-        `/api/tenant/resources?q=${encodeURIComponent(q)}&limit=20`,
-      ),
-    enabled: q.trim().length >= 2,
-  });
-  const items = found.data?.items ?? [];
+/** The material budget for a line's resource: what is left after the project's other requisitions. */
+function BudgetHint({ line, saved }: { line: LineDraft; saved: RequisitionLine[] }) {
+  if (!line.resourceId) return null;
+  const s = saved.find((x) => x.resourceId === line.resourceId);
+  if (!s) return null;
+  if (s.budgetQty === null)
+    return s.hasBudget ? (
+      <p className="w-full pl-8 text-xs text-warning" data-testid="budget-hint">
+        Not in the material budget.
+      </p>
+    ) : null;
+  const b = budgetLeft(s, line.qty || '0')!;
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <Field label="Find in the rate library">
-        <Input
-          value={q}
-          placeholder="Code or name"
-          className="w-48"
-          onChange={(e) => {
-            setQ(e.target.value);
-            setChosen('');
-          }}
-        />
-      </Field>
-      <div className="w-72">
-        <Field label="Resource">
-          <Select value={chosen} onChange={(e) => setChosen(e.target.value)}>
-            <option value="">
-              {q.trim().length < 2 ? 'Type to find…' : `${items.length} found`}
-            </option>
-            {items.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.code} · {r.name} ({r.unit}){r.rate ? ` ₹${Number(r.rate)}` : ''}
-              </option>
-            ))}
-          </Select>
+    <p
+      className={`w-full pl-8 text-xs ${b.over ? 'text-danger' : 'text-fg-muted'}`}
+      data-testid="budget-hint"
+    >
+      Budget {formatQty(String(b.budget))} {line.unit}
+      {b.elsewhere > 0 && `, ${formatQty(String(b.elsewhere))} in other requisitions`}:{' '}
+      {formatQty(String(b.left))} left
+      {b.over && ` — this goes ${formatQty(String(Number(line.qty) - b.left))} over`}.
+    </p>
+  );
+}
+
+/** Adds what a quantity of work on a BOQ item takes, or what the next weeks' work takes, by the budget's norms. */
+function DemandAdder({
+  projectId,
+  onAdd,
+}: {
+  projectId: string;
+  onAdd: (lines: DemandLine[]) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [qty, setQty] = useState('');
+  const [weeks, setWeeks] = useState('2');
+  const [look, setLook] = useState<{ items: number; lines: DemandLine[] } | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const { run, busy, error } = useRun(() => undefined);
+  return (
+    <div className="space-y-3 rounded-md border border-dashed border-line p-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="BOQ item">
+          <Input
+            value={code}
+            maxLength={40}
+            className="w-24"
+            onChange={(e) => setCode(e.target.value)}
+          />
         </Field>
+        <Field label="Work quantity">
+          <Input
+            inputMode="decimal"
+            value={qty}
+            className="w-28"
+            onChange={(e) => setQty(e.target.value)}
+          />
+        </Field>
+        <Button
+          type="button"
+          variant="secondary"
+          busy={busy === 'item'}
+          disabled={!code.trim() || !(Number(qty) > 0)}
+          onClick={() =>
+            void run('item', async () => {
+              const r = await api.request<{ lines: DemandLine[] }>(
+                `/api/tenant/projects/${projectId}/material-demand/item?code=${encodeURIComponent(code.trim())}&qty=${encodeURIComponent(qty.trim())}`,
+              );
+              onAdd(r.lines);
+              setCode('');
+              setQty('');
+            })
+          }
+        >
+          <Plus className="size-4" aria-hidden /> Materials for it
+        </Button>
+        <span className="px-2 pb-2 text-xs text-fg-muted">or</span>
+        <div className="w-36">
+          <Field label="The next">
+            <Select value={weeks} onChange={(e) => setWeeks(e.target.value)}>
+              {[1, 2, 3, 4, 6, 8].map((w) => (
+                <option key={w} value={w}>
+                  {w} week{w === 1 ? '' : 's'}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          busy={busy === 'look'}
+          onClick={() =>
+            void run('look', async () => {
+              const r = await api.request<{ items: number; lines: DemandLine[] }>(
+                `/api/tenant/projects/${projectId}/material-demand/lookahead?weeks=${weeks}`,
+              );
+              setLook(r);
+              setPicked(
+                new Set(r.lines.filter((l) => l.kind === 'material').map((l) => l.resourceId)),
+              );
+            })
+          }
+        >
+          From the look-ahead
+        </Button>
       </div>
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={!chosen}
-        onClick={() => {
-          const r = items.find((x) => x.id === chosen);
-          if (r) onPick(r);
-          setChosen('');
-          setQ('');
-        }}
-      >
-        <Plus className="size-4" aria-hidden /> Add
-      </Button>
+      {look && (
+        <div className="space-y-2" data-testid="lookahead-demand">
+          <p className="text-xs text-fg-muted">
+            The work not yet measured on {look.items} BOQ item{look.items === 1 ? '' : 's'} whose
+            activities are on or due in the next {weeks} week{weeks === '1' ? '' : 's'}, by the
+            budget&apos;s norms.
+          </p>
+          {look.lines.length === 0 ? (
+            <p className="text-sm text-fg-muted">
+              Nothing: link BOQ items to the schedule&apos;s activities, and make the material
+              budget from the tender.
+            </p>
+          ) : (
+            <ul className="space-y-1 text-sm" aria-label="Needed in the look-ahead">
+              {look.lines.map((l) => (
+                <li key={l.resourceId}>
+                  <label className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={picked.has(l.resourceId)}
+                      onChange={(e) => {
+                        const n = new Set(picked);
+                        if (e.target.checked) n.add(l.resourceId);
+                        else n.delete(l.resourceId);
+                        setPicked(n);
+                      }}
+                    />
+                    <span className="font-mono text-xs">{l.code}</span> {l.name}:{' '}
+                    <b className="tabular-nums">
+                      {formatQty(l.qty)} {l.unit}
+                    </b>
+                    {Number(l.requisitioned) > 0 && (
+                      <span className="text-xs text-fg-muted">
+                        ({formatQty(l.requisitioned)} already requisitioned)
+                      </span>
+                    )}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={picked.size === 0}
+              onClick={() => {
+                onAdd(look.lines.filter((l) => picked.has(l.resourceId)));
+                setLook(null);
+              }}
+            >
+              <Plus className="size-4" aria-hidden /> Add the ticked ones
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setLook(null)}>
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && <Alert tone="danger">{error}</Alert>}
     </div>
   );
 }

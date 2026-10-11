@@ -192,12 +192,26 @@ export class RevisionService {
     const db = await this.tenants.forTenant(claims.ten);
     await db.begin(async (tx) => {
       const [b] = await tx<
-        { name: string; status: string; archived: boolean; version_no: number; tender_id: string }[]
+        {
+          name: string;
+          status: string;
+          archived: boolean;
+          version_no: number;
+          tender_id: string;
+          closed_reason: string | null;
+          closed: boolean;
+        }[]
       >`
-        SELECT name, status, archived_at IS NOT NULL AS archived, version_no, tender_id FROM est.boq
-        WHERE id = ${boqId} FOR UPDATE`;
+        SELECT name, status, archived_at IS NOT NULL AS archived, version_no, tender_id, closed_reason,
+          closed_at IS NOT NULL AS closed
+        FROM est.boq WHERE id = ${boqId} FOR UPDATE`;
       if (!b) throw new NotFoundException({ code: 'boq_not_found' });
       refuseArchived(b);
+      if (b.closed)
+        throw new ConflictException({
+          code: 'boq_closed',
+          message: `This estimate is closed${b.closed_reason ? `: ${b.closed_reason}` : ''}. It is kept as it was.`,
+        });
       if (b.status === 'draft')
         throw new ConflictException({
           code: 'not_frozen',

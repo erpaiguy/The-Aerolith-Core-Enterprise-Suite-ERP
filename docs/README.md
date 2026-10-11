@@ -117,5 +117,6 @@ nothing here has run on a real project yet.
 | Step | What | Status |
 |------|------|--------|
 | 1 | Approvals (rules by amount, levels, stand-ins) and purchase requisitions | **Done** |
-| 2 | Material budget and demand from the BOQ and schedule | Next |
-| 3-9 | Vendor enquiries, purchase orders, goods receipt, inventory, daily site reports, project documents, reports | |
+| 2 | Material budget from the tender's rate analyses, revised under approval; requisitions against it, from BOQ items and the look-ahead | **Done** |
+| 3 | Vendor enquiries for a project | Next |
+| 4-9 | Purchase orders, goods receipt, inventory, daily site reports, project documents, reports | |

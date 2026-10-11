@@ -28,10 +28,9 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
   level at all.
 - **[Certain] Notifications are in-app only.** Staff accounts have a username and a password but no email address
   (docs/03-architecture.md §6), so the app cannot email them. "Waiting on me" is in the menu with a count.
-- **[Likely] Material demand will come from the tender's rate analyses** (step 2): the contract BOQ was copied as
-  values (2a step 2), but each line keeps the tender line's key, so its analysis (cement, steel, labour per unit) can
-  be followed back. Decide before step 2 whether that is how you budget materials, or whether you keep a separate
-  material budget.
+- **[Certain] The material budget is the project's own copy (your decision, 11 Oct 2026).** Made once from the won
+  tender's rate analyses when the project takes its budget; never linked back to estimation; the tender's estimate is
+  then closed; the project revises its copy as often as it needs, each revision kept.
 - **[Guessing] GST on purchase orders** (step 4) waits on the open question from 2a step 2: whether contract values
   are entered with or without GST. Purchase GST itself is clear (CGST + SGST within the state, IGST across states,
   from the site's state and the vendor's GSTIN).
@@ -41,7 +40,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | # | Step | Features | Notes |
 |---|------|----------|-------|
 | 1 | **Approvals + purchase requisitions** (P5, R1) | Approval rules by document type, levels by amount, approvers (project lead, managers, admins, a named person), delegation while away, comments, withdraw, "waiting on me"; requisitions for a project (materials from the rate library or typed in, quantities, needed-by dates, BOQ line and WBS element) as its first user | **Done** (see below) |
-| 2 | **Material budget and demand** (R1) | Resource quantities from the tender's rate analyses through line keys; requisitions from BOQ items and the look-ahead; requisitioned against budget | |
+| 2 | **Material budget and demand** (R1) | The project's material budget, copied from the tender's rate analyses and revised under approval; the estimate closed; requisitions against the budget, from BOQ items and from the look-ahead | **Done** (see below) |
 | 3 | **Vendor enquiries for a project** (R2) | Wave 1's RFQs and comparative statements for requisitioned materials | |
 | 4 | **Purchase and work orders** (R3) | Terms, GST, amendments, approvals, supplier acknowledgement | |
 | 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | |
@@ -117,3 +116,79 @@ Each step ships with API tests and a browser test of the main journey, as in Wav
   browser, raises a requisition from the library and a typed line and submits it; the lead finds it waiting (with the
   count), rejects it with a reason; the engineer changes it and submits again; the lead approves; the engineer sees
   it approved and is told.
+
+## Step 2 delivered: material budget and demand
+
+**Your decision:** the material budget comes from the tender's rate analyses, is the project's own (not linked to
+estimation), the estimate is closed when the project takes it, and the project revises its copy as often as needed.
+
+**Journey:**
+- A project from a won tender, once its contract BOQ is made (2a step 2), has **Make it from the tender** under
+  **Material budget**. Each contract BOQ item's rate analysis, as it was in the tender version the contract came from,
+  with its sub-analyses (mortar inside brickwork) and wastage worked in, gives what one unit of the item takes of each
+  resource: its **norms**. Times the budget's quantities, added up per resource, at the rates on the estimate's rate
+  date, they make **revision 0**: cement, steel, sand, labour, equipment, each with quantity, rate and amount.
+- The **tender's estimate is closed**: frozen as it is, and no new revision of it can be started ("closed: won, the
+  budget of project PRJ/…"). Estimation is never looked at again for this project.
+- Revision 0 is checked and changed like any revision, then **submitted**; once approved under the approval rules for
+  "Material budget revision" (or at once, with none), it is **in force**.
+- **Start a revision** (with a reason): a copy of the budget in force, where the lead changes quantities and rates,
+  adds resources from the rate library and removes others. It shows each resource against the revision before it and
+  what requisitions already take. Submitted, approved, it is in force and the one before is kept, replaced. A revision
+  can be discarded (kept as discarded if it was ever submitted).
+- **Requisitions** show, for each line from the library, the budget in force for it and what the project's other
+  live requisitions take: "34.68 of 34.68 left: 5.32 over", in red when a line goes past it. The approver sees the
+  same. Going over is allowed (the approval is where it is judged), and a resource not in the budget is marked so.
+- A requisition's lines can be **worked out**: a BOQ item and a quantity of work ("5 cum of C1": 17.34 bags of cement,
+  2.35 cum of sand, half a mason-day), or **the look-ahead**: the work not yet measured on the BOQ items whose activities
+  are on or due in the next 1 to 8 weeks, by the norms, with what is already requisitioned; ticked lines are added.
+
+**Who does what:** the project's lead (and those who edit projects) makes and revises the budget; the team reads it
+and raises requisitions against it; the approval rules decide who approves a revision.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] The analyses are taken as they are now, and flagged if changed after the bid.** A BOQ item points to
+  its rate analysis in the company's library; the tender's versions keep the pointer, not the analysis, so an analysis
+  edited after the tender was frozen gives today's figures, not the bid's. The budget says how many items this affects
+  ("1 of 2 BOQ items took their quantities from a rate analysis changed after the tender was frozen") and keeps the
+  flag on each item's norms. Freezing the analyses with each submitted tender version would remove the doubt for later
+  tenders; that is a change to Wave 1, not made here.
+- **[Likely] Quantities from the project's budget BOQ** (the cost copy from 2a step 2), the contract's if there is
+  none; **rates as on the estimate's rate date** (the first contract BOQ's, if there are several).
+- **[Likely] Lump sums and percentage additions are money, not resources**, so they are not in the material budget.
+  The budget BOQ keeps the cost of the work; the material budget keeps the resources. They can drift apart as each is
+  revised; that is the price of keeping them separate, as decided.
+- **[Likely] The norms are fixed when the budget is made**; revisions change the totals per resource, not the norms.
+  Items added to the contract later have no norms until revised by hand.
+- **[Likely] A revision is approved for what it adds** to the budget in force (revision 0 for its total), so a rule
+  "from ₹50,000" catches large increases; a rule from ₹0 approves every revision.
+- **[Likely] The estimate is closed when the material budget is made**, not when the contract BOQ is: that is when
+  the project takes the estimate as its budget. Its BOQ page does not say so yet; starting a revision of it is refused
+  with the reason.
+- **The look-ahead counts all the unmeasured work** on an item whose activity is in the window, not just the part
+  falling in it, and nets nothing off for stock or open orders yet (steps 4 to 6 bring those).
+
+**API** (under `/api/tenant`):
+- `GET /projects/:id/material-budget` (revisions, in force, open), `POST /projects/:id/material-budget/from-tender`,
+  `…/blank`, `…/revise` (`{reason}`).
+- `GET /material-budgets/:id`, `POST /material-budgets/:id` (`{rowVersion, reason, lines: [{resourceId, qty, rate,
+  note}]}`), `…/submit` (`{rowVersion}`), `…/discard`.
+- `GET /projects/:id/material-demand/item?code=&qty=`, `GET /projects/:id/material-demand/lookahead?weeks=`.
+- Requisition lines carry `budgetQty`, `budgetUsedElsewhere`, `hasBudget`. A closed estimate refuses
+  `POST /boqs/:id/revise` (`boq_closed`). Migration `0029_material_budget.sql`.
+
+**Tests:**
+- 3 API integration tests, every figure worked by hand:
+  - from the tender: brickwork per 10 cum with 2.5 cum of mortar + 4 % (itself 8 bags and 1.1 cum sand per cum), RCC
+    with wastage, an item with no analysis; RCC's steel raised after the bid: cement 267.2 bags, sand 23.3 cum, steel
+    1,785 kg, masons 60 days, ₹3,20,780; the norms per item and the changed flag; refused before the contract BOQ and
+    for a member; made once; the estimate closed; in force with no rule;
+  - requisitions against it (100 bags elsewhere); revision 1 (cement 330 at ₹420, wire added, masons dropped:
+    ₹3,00,300) approved by a manager for ₹0; revision 0 replaced; a revision discarded (gone) and one rejected then
+    discarded (kept);
+  - materials for 10 cum of a BOQ item; the look-ahead for an activity carrying out RCC with 5 of 20 cum measured
+    (122.4 bags, 1,338.75 kg, 6.75 cum); an empty budget for a project without a tender; the norms cannot be changed
+    in the database.
+- A browser test: a price book and a PCC analysis; a tender item priced from it, won, its project's BOQs; the material
+  budget from the tender (34.68 bags, ₹23,232) put in force; a requisition for 5 cum of the item, then 40 bags, shown
+  5.32 over the budget; the budget revised to 45 bags and in force, revision 0 replaced.

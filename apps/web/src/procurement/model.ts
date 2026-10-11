@@ -36,6 +36,38 @@ export interface RequisitionLine {
   boqDescription: string | null;
   wbsCode: string | null;
   wbsName: string | null;
+  /** The material budget in force for the resource, and what the project's other live requisitions take of it. */
+  budgetQty: string | null;
+  budgetUsedElsewhere: string | null;
+  hasBudget: boolean;
+}
+
+/** What is left of the budget for a line, and whether the line goes past it. */
+export function budgetLeft(
+  l: Pick<RequisitionLine, 'budgetQty' | 'budgetUsedElsewhere'>,
+  qty: string,
+) {
+  if (l.budgetQty === null) return null;
+  const left = Number(l.budgetQty) - Number(l.budgetUsedElsewhere ?? 0);
+  return {
+    budget: Number(l.budgetQty),
+    elsewhere: Number(l.budgetUsedElsewhere ?? 0),
+    left,
+    over: Number(qty) > left,
+  };
+}
+
+/** Resource quantities worked out from norms: for a BOQ item, or for the look-ahead. */
+export interface DemandLine {
+  resourceId: string;
+  code: string;
+  name: string;
+  kind: string;
+  unit: string;
+  qty: string;
+  rate: string | null;
+  budgetQty: string | null;
+  requisitioned: string;
 }
 
 export interface RequisitionHead {

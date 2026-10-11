@@ -1,7 +1,17 @@
 // One approval request (docs/wave2b-plan.md step 1): the document as the approver sees it (they may not be on its
 // project), its levels, what happened, and the decision: approve (with a note), reject (with a reason), or a comment;
 // its submitter withdraws it.
-import { Alert, Badge, Button, Card, Field, PageHeader, Spinner, Textarea } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  PageHeader,
+  Spinner,
+  Table,
+  Textarea,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
@@ -9,6 +19,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { ApprovalEvents, ApprovalSteps } from '../approvals/ApprovalTrail';
 import { APPROVAL_STATUS, APPROVAL_TONE, useRun, type Approval } from '../approvals/model';
+import { formatQty } from '../boq/model';
 import { describeError, formatDateTime, formatInr } from '../lib/format';
 import type { RequisitionHead, RequisitionLine } from '../procurement/model';
 import { RequisitionLines } from '../procurement/RequisitionLines';
@@ -66,7 +77,7 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
           <Card
             title={`${formatInr(d.amount)}, submitted by ${d.submittedBy}`}
             actions={
-              d.docType === 'purchase_requisition' && (
+              d.docType === 'purchase_requisition' ? (
                 <Link
                   to="/requisitions/$requisitionId"
                   params={{ requisitionId: d.docId }}
@@ -74,7 +85,15 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
                 >
                   Open the requisition
                 </Link>
-              )
+              ) : d.docType === 'material_budget' ? (
+                <Link
+                  to="/material-budgets/$budgetId"
+                  params={{ budgetId: d.docId }}
+                  className="text-sm text-accent hover:underline"
+                >
+                  Open the budget revision
+                </Link>
+              ) : null
             }
           >
             <p className="mb-3 text-xs text-fg-muted">{formatDateTime(d.submittedAt)}</p>
@@ -82,6 +101,8 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
               <RequisitionDocument
                 doc={d.document as RequisitionHead & { lines: RequisitionLine[] }}
               />
+            ) : d.docType === 'material_budget' ? (
+              <BudgetDocument doc={d.document as BudgetDoc} />
             ) : null}
           </Card>
           {(d.mayAct || d.mayWithdraw || d.status === 'pending') && (
@@ -192,6 +213,79 @@ function RequisitionDocument({ doc }: { doc: RequisitionHead & { lines: Requisit
         )}
       </dl>
       <RequisitionLines lines={doc.lines} total={doc.amount} />
+    </div>
+  );
+}
+
+interface BudgetDoc {
+  revision: number;
+  reason: string;
+  total: string;
+  basedOn: { revision: number } | null;
+  lines: {
+    resourceId: string;
+    code: string;
+    name: string;
+    unit: string;
+    qty: string;
+    rate: string | null;
+    amount: string | null;
+    prevQty: string | null;
+    prevAmount: string | null;
+  }[];
+}
+
+/** A budget revision as its approver sees it: each resource against the revision before. */
+function BudgetDocument({ doc }: { doc: BudgetDoc }) {
+  const changed = doc.lines.filter(
+    (l) => !doc.basedOn || l.qty !== (l.prevQty ?? '0') || l.amount !== l.prevAmount,
+  );
+  return (
+    <div className="space-y-3">
+      <p className="text-sm">
+        Revision {doc.revision}
+        {doc.basedOn && ` of revision ${doc.basedOn.revision}`}: {formatInr(doc.total)}.
+        {doc.reason && <span className="block text-fg-muted">Why: {doc.reason}</span>}
+      </p>
+      <Table minWidth="40rem">
+        <thead>
+          <tr>
+            <th>Resource</th>
+            <th className="text-right">Quantity</th>
+            {doc.basedOn && <th className="text-right">Was</th>}
+            <th className="text-right">Amount</th>
+            {doc.basedOn && <th className="text-right">Was</th>}
+          </tr>
+        </thead>
+        <tbody aria-label={doc.basedOn ? 'Changes' : 'Budget'}>
+          {changed.map((l) => (
+            <tr key={l.resourceId}>
+              <td>
+                <span className="mr-2 font-mono text-xs">{l.code}</span>
+                {l.name}
+              </td>
+              <td className="whitespace-nowrap text-right tabular-nums">
+                {formatQty(l.qty)} {l.unit}
+              </td>
+              {doc.basedOn && (
+                <td className="whitespace-nowrap text-right tabular-nums text-fg-muted">
+                  {l.prevQty === null ? 'new' : `${formatQty(l.prevQty)} ${l.unit}`}
+                </td>
+              )}
+              <td className="text-right tabular-nums">{formatInr(l.amount)}</td>
+              {doc.basedOn && (
+                <td className="text-right tabular-nums text-fg-muted">{formatInr(l.prevAmount)}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+      {doc.basedOn && changed.length < doc.lines.length && (
+        <p className="text-xs text-fg-muted">
+          {doc.lines.length - changed.length} resource
+          {doc.lines.length - changed.length === 1 ? '' : 's'} unchanged.
+        </p>
+      )}
     </div>
   );
 }

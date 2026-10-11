@@ -398,9 +398,21 @@ export class RequisitionService implements OnModuleInit {
       SELECT l.position, l.resource_id AS "resourceId", res.code AS "resourceCode", l.description, l.unit,
         l.qty::text AS qty, l.rate::text AS rate, l.amount::text AS amount, to_char(l.needed_by, 'YYYY-MM-DD')
           AS "neededBy", l.notes,
-        bi.code AS "boqCode", bi.description AS "boqDescription", w.code AS "wbsCode", w.name AS "wbsName"
+        bi.code AS "boqCode", bi.description AS "boqDescription", w.code AS "wbsCode", w.name AS "wbsName",
+        -- The material budget in force for the resource, and what the project's other live requisitions take of it.
+        mb.qty::text AS "budgetQty",
+        CASE WHEN mb.resource_id IS NULL THEN NULL ELSE coalesce((SELECT sum(ol.qty) FROM proc.requisition o
+          JOIN proc.requisition_line ol ON ol.requisition_id = o.id
+          WHERE o.project_id = r.project_id AND o.id <> r.id AND o.status IN ('submitted', 'approved')
+            AND ol.resource_id = l.resource_id), 0)::text END AS "budgetUsedElsewhere",
+        EXISTS (SELECT 1 FROM proj.material_budget x WHERE x.project_id = r.project_id AND x.status = 'approved')
+          AS "hasBudget"
       FROM proc.requisition_line l
       JOIN proc.requisition r ON r.id = l.requisition_id
+      LEFT JOIN LATERAL (
+        SELECT bl.resource_id, bl.qty FROM proj.material_budget b
+        JOIN proj.material_budget_line bl ON bl.budget_id = b.id AND bl.resource_id = l.resource_id
+        WHERE b.project_id = r.project_id AND b.status = 'approved') mb ON l.resource_id IS NOT NULL
       LEFT JOIN est.resource res ON res.id = l.resource_id
       LEFT JOIN proj.wbs w ON w.id = l.wbs_id
       LEFT JOIN LATERAL (
