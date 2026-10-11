@@ -43,6 +43,10 @@ import { ApprovalsScreen } from './screens/Approvals';
 import { MaterialBudgetScreen } from './screens/MaterialBudget';
 import { ProgressScreen } from './screens/Progress';
 import { GoodsReceiptScreen } from './screens/GoodsReceipt';
+import { ConsumptionScreen } from './project/ProjectStores';
+import { IssueScreen, StockCountScreen, TransferScreen } from './screens/StockDocs';
+import { StoreScreen } from './screens/Store';
+import { StoresScreen } from './screens/Stores';
 import { OrdersScreen } from './screens/Orders';
 import { ReceiptsScreen } from './screens/Receipts';
 import { OrderOfRevisionScreen, PurchaseOrderScreen } from './screens/PurchaseOrder';
@@ -170,6 +174,46 @@ const receiptRoute = createRoute({
   component: function ReceiptPage() {
     const { receiptId } = receiptRoute.useParams();
     return <GoodsReceiptScreen key={receiptId} receiptId={receiptId} />;
+  },
+});
+const storeRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/stores/$storeId',
+  component: function StorePage() {
+    const { storeId } = storeRoute.useParams();
+    return <StoreScreen key={storeId} storeId={storeId} />;
+  },
+});
+const issueRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/issues/$issueId',
+  component: function IssuePage() {
+    const { issueId } = issueRoute.useParams();
+    return <IssueScreen key={issueId} issueId={issueId} />;
+  },
+});
+const transferRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/transfers/$transferId',
+  component: function TransferPage() {
+    const { transferId } = transferRoute.useParams();
+    return <TransferScreen key={transferId} transferId={transferId} />;
+  },
+});
+const stockCountRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/stock-counts/$countId',
+  component: function StockCountPage() {
+    const { countId } = stockCountRoute.useParams();
+    return <StockCountScreen key={countId} countId={countId} />;
+  },
+});
+const consumptionRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/consumption',
+  component: function ConsumptionPage() {
+    const { projectId } = consumptionRoute.useParams();
+    return <ConsumptionScreen key={projectId} projectId={projectId} />;
   },
 });
 const macroRoute = createRoute({
@@ -324,6 +368,16 @@ const routeTree = rootRoute.addChildren([
     orderRoute,
     orderRevisionRoute,
     receiptRoute,
+    storeRoute,
+    issueRoute,
+    transferRoute,
+    stockCountRoute,
+    consumptionRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/stores',
+      component: StoresScreen,
+    }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/receipts',

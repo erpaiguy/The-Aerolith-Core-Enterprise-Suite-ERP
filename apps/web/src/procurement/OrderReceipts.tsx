@@ -10,6 +10,7 @@ import type { ProjectDetail } from '../api/types';
 import { useRun } from '../approvals/model';
 import { formatQty } from '../boq/model';
 import { shortDate } from '../schedule/model';
+import type { StoreRow } from './inventory';
 import type { Order, Receipt } from './orders';
 
 const today = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
@@ -129,10 +130,15 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
     queryKey: ['project', o.project.id],
     queryFn: () => api.request<ProjectDetail>(`/api/tenant/projects/${o.project.id}`),
   });
+  const stores = useQuery({
+    queryKey: ['stores', 'project', o.project.id],
+    queryFn: () => api.request<StoreRow[]>(`/api/tenant/stores?projectId=${o.project.id}`),
+  });
   const owed = o.progress.filter((l) => Number(l.outstanding) > 0);
   const [head, setHead] = useState({
     receivedOn: today(),
     siteId: o.inForce?.site?.id ?? '',
+    storeId: '',
     challanNo: '',
     challanDate: '',
     vehicleNo: '',
@@ -147,6 +153,7 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
     setLines({ ...lines, [k]: { ...lines[k]!, ...patch } });
   const { run, busy, error } = useRun(() => undefined);
   const chosen = owed.filter((l) => Number(lines[l.lineKey]?.qty) > 0);
+  const siteStores = (stores.data ?? []).filter((s) => s.active && s.site.id === head.siteId);
   return (
     <form
       className="mt-4 space-y-4 rounded-md border border-line p-3"
@@ -159,6 +166,7 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
             body: {
               receivedOn: head.receivedOn,
               siteId: head.siteId || null,
+              storeId: head.storeId || null,
               challanNo: head.challanNo.trim(),
               challanDate: head.challanDate || null,
               vehicleNo: head.vehicleNo,
@@ -194,7 +202,7 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
           <Field label="At site">
             <Select
               value={head.siteId}
-              onChange={(e) => setHead({ ...head, siteId: e.target.value })}
+              onChange={(e) => setHead({ ...head, siteId: e.target.value, storeId: '' })}
             >
               <option value="">Not said</option>
               {project.data?.sites
@@ -207,6 +215,23 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
             </Select>
           </Field>
         </div>
+        {siteStores.length > 1 && (
+          <div className="w-44">
+            <Field label="Into store">
+              <Select
+                value={head.storeId}
+                onChange={(e) => setHead({ ...head, storeId: e.target.value })}
+              >
+                <option value="">Choose</option>
+                {siteStores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        )}
         <Field label="Challan no.">
           <Input
             value={head.challanNo}

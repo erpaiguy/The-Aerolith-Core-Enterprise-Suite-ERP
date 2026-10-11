@@ -4,6 +4,8 @@ import { AuthModule } from '../auth/auth.module.js';
 import { ProjectModule } from '../project/project.module.js';
 import { ProvisioningModule } from '../provisioning/provisioning.module.js';
 import { TenderModule } from '../tender/tender.module.js';
+import { InventoryController } from './inventory.controller.js';
+import { InventoryService } from './inventory.service.js';
 import { MaterialBudgetController } from './material-budget.controller.js';
 import { MaterialBudgetService } from './material-budget.service.js';
 import { ProjectRfqController } from './project-rfq.controller.js';
@@ -22,7 +24,14 @@ import { RequisitionService } from './requisition.service.js';
     ProjectRfqController,
     PurchaseOrderController,
     ReceiptController,
+    InventoryController,
   ],
-  providers: [RequisitionService, MaterialBudgetService, PurchaseOrderService, ReceiptService],
+  providers: [
+    RequisitionService,
+    MaterialBudgetService,
+    PurchaseOrderService,
+    ReceiptService,
+    InventoryService,
+  ],
 })
 export class ProcurementModule {}

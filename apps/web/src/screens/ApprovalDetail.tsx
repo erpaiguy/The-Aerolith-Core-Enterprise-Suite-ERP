@@ -24,7 +24,9 @@ import { describeError, formatDateTime, formatInr } from '../lib/format';
 import type { RequisitionHead, RequisitionLine } from '../procurement/model';
 import { OrderLines, rupees } from '../procurement/OrderLines';
 import { ORDER_KIND, SUPPLY, type OrderApprovalDoc } from '../procurement/orders';
+import type { StockCount } from '../procurement/inventory';
 import { RequisitionLines } from '../procurement/RequisitionLines';
+import { CountDocument } from './StockDocs';
 import { shortDate } from '../schedule/model';
 
 type Detail = Approval & { document: unknown };
@@ -95,6 +97,16 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
                 >
                   Open the budget revision
                 </Link>
+              ) : d.docType === 'stock_adjustment' ? (
+                <Link
+                  to="/stock-counts/$countId"
+                  params={{ countId: d.docId }}
+                  className="text-sm text-accent hover:underline"
+                >
+                  Open the stock take
+                </Link>
+              ) : d.docType === 'stock_adjustment' ? (
+                <CountDocument doc={d.document as StockCount} />
               ) : d.docType === 'purchase_order' ? (
                 <Link
                   to="/orders/revision/$revisionId"

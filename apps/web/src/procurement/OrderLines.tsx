@@ -4,7 +4,12 @@ import { formatAmount, formatQty, formatRate } from '../boq/model';
 import type { OrderRevision } from './orders';
 
 /** ₹ to the paisa, as on the order. */
-export const rupees = (v: string | null) => (v === null ? '-' : `₹${formatAmount(v)}`);
+export const rupees = (v: string | null) =>
+  v === null
+    ? '-'
+    : v.trim().startsWith('-')
+      ? `-₹${formatAmount(v.trim().slice(1))}`
+      : `₹${formatAmount(v)}`;
 
 export function OrderLines({ r }: { r: OrderRevision }) {
   const intra = r.supply === 'intra';

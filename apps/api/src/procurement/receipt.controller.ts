@@ -31,6 +31,7 @@ const text = (max: number) =>
 const receive = z.object({
   receivedOn: date,
   siteId: z.uuid().nullable().default(null),
+  storeId: z.uuid().nullable().default(null),
   challanNo: z.string().trim().min(1).max(100),
   challanDate: date.nullable().default(null),
   invoiceNo: text(100),

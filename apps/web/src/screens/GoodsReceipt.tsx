@@ -116,6 +116,18 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
           <dd>
             {shortDate(r.receivedOn)}
             {r.site && ` at ${r.site.name}`}
+            {r.store && (
+              <>
+                {', into '}
+                <Link
+                  to="/stores/$storeId"
+                  params={{ storeId: r.store.id }}
+                  className="text-accent hover:underline"
+                >
+                  {r.store.name}
+                </Link>
+              </>
+            )}
             {r.receivedBy && `, by ${r.receivedBy}`}
           </dd>
           <dt className="text-fg-muted">Challan</dt>
@@ -158,7 +170,14 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
             {r.lines.map((l) => (
               <tr key={l.position}>
                 <td className="tabular-nums text-fg-muted">{l.position}</td>
-                <td>{l.description}</td>
+                <td>
+                  {l.description}
+                  {!l.stocked && (
+                    <span className="block text-xs text-fg-muted">
+                      Typed in, not from the library: not stocked
+                    </span>
+                  )}
+                </td>
                 <td className="whitespace-nowrap text-right tabular-nums">
                   {formatQty(l.qty)} {l.unit}
                 </td>

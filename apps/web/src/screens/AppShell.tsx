@@ -55,19 +55,6 @@ function NavItem({
   );
 }
 
-function Upcoming({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return (
-    <div
-      className="flex items-center gap-2.5 px-2.5 py-2 text-sm text-fg-subtle"
-      title="Arrives in Wave 1"
-    >
-      {icon}
-      <span className="flex-1">{children}</span>
-      <span className="text-[10px] uppercase tracking-wide">Soon</span>
-    </div>
-  );
-}
-
 /** Licence banner: trial countdown, grace period, read-only. */
 function LicenceBanner() {
   const { licence, entitlement } = useSession();
@@ -202,7 +189,9 @@ export function AppShell() {
             <NavItem to="/receipts" icon={<PackageCheck className="size-4" />}>
               Goods receipts
             </NavItem>
-            <Upcoming icon={<Warehouse className="size-4" />}>Stores</Upcoming>
+            <NavItem to="/stores" icon={<Warehouse className="size-4" />}>
+              Stores
+            </NavItem>
           </nav>
           <div className="px-4 pb-4">
             <Link to="/licences" className="text-xs text-fg-subtle hover:underline">

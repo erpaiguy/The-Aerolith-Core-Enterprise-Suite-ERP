@@ -177,12 +177,15 @@ export interface Receipt {
   project: { id: string; number: string; name: string };
   vendor: { id: string; name: string; gstin: string | null };
   site: { id: string; name: string } | null;
+  store: { id: string; name: string } | null;
   receivedBy: string | null;
   createdAt: string;
   rowVersion: number;
   lines: {
     position: number;
     lineKey: string;
+    /** A rate-library material, which goes into the store; typed-in lines do not. */
+    stocked: boolean;
     description: string;
     unit: string;
     qty: string;

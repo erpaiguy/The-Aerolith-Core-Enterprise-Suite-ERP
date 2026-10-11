@@ -47,7 +47,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 3 | **Vendor enquiries for a project** (R2) | Wave 1's RFQs and comparative statements for requisitioned materials | **Done** (see below) |
 | 4 | **Purchase and work orders** (R3) | Terms, GST, amendments, approvals, supplier acknowledgement | **Done** (see below) |
 | 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | **Done** (see below) |
-| 6 | **Inventory** (R5) | Stores, issues to WBS, transfers, returns, stock ledger, valuation, reorder levels, stock take | |
+| 6 | **Inventory** (R5) | Stores, issues to WBS, transfers, returns, stock ledger, valuation, reorder levels, stock take | **Done** (see below) |
 | 7 | **Daily site reports** (R6) | Manpower, equipment, materials, weather, work done, delays, safety, photos; phone first | |
 | 8 | **Project documents** (R7) | The project's vault and drawings register with revisions (Wave 1's documents) | |
 | 9 | **Procurement reports** | Requisition to order to receipt, open orders, stock, consumption against budget | |
@@ -60,6 +60,8 @@ Written before step 6 starts, so each step is agreed before code. "Delivered" se
 ship; anything changed while building is recorded there.
 
 ### Step 6: Inventory (R5)
+
+(Built: see "Step 6 delivered" at the end for what changed.)
 
 **Goal:** what is in each store, where it came from, where it went, and what it is worth.
 
@@ -469,3 +471,76 @@ lines carry `lineKey`. Migration `0032_goods_receipts.sql`.
 - A browser test: an order for 100 bags and 1.235 t; 60 bags (2 burst) and the steel held; inspected (1.2 t passes,
   0.035 t bent); both rejections returned (RTV); the order shows 42 bags and 0.035 t owed; the rest with "Everything
   still owed": the order closes itself; two receipts in the register.
+
+## Step 6 delivered: inventory
+
+**Journey:**
+- The first receipt at a site makes its store ("Risod sump store"); a project's page has **Stores** (value, materials,
+  how many below their reorder level), **New store** for a second one at a site (the receive form then asks which),
+  and **Consumption**. **Stores** in the menu lists them all; it also shows the valuation method, which the admin
+  chooses there until the first stock moves.
+- **Receipts in:** every accepted line of a library material goes into the receipt's store at the **order rate
+  before GST**; held goods go in when accepted on inspection. Typed-in lines are received but **not stocked**, and
+  the receipt says so.
+- The store page: each material's quantity, average rate, value and reorder level, its **ledger** (every movement
+  with the running balance and value, each linked to its document), recent movements, transfers in transit.
+- **Issue** (ISS/2026-27/…): to a WBS element (and a contract BOQ item if given), taken by whom and for what, valued
+  at the store's cost. An issue slip prints.
+- **Back from site:** unused material returns against its issue at what it went out at; never more than is out.
+- **Transfer** (TRN/…): out of one store at its cost, **in transit** (in neither store), then received at the other
+  end (same project or another) at the same value; cancelled while in transit, it goes back where it came from.
+- **Stock take** (STK/…): counts against the book, with why; submitted under the approval rules for
+  `stock_adjustment`, for the value of the differences; posted as adjustments once approved.
+- **Reorder levels** per store and material; "Requisition for what is short" makes a draft requisition at the store's
+  site for each material below its level, up to the level.
+- **Consumption** per project: per material the budget in force, received, issued (net of returns) and its value,
+  budget left, in its stores; and issued by WBS element.
+
+**Who does what:** the team reads; **`stores.receive`** (managers and workers) also issues and takes returns from site
+and receives transfers; the new **`stores.manage`** (managers) sets up stores and reorder levels, sends transfers and
+counts stock. Your three questions before step 6 were answered with the plan's defaults (weighted average by default;
+a WBS element required and a BOQ item optional; workers may issue). Say if any should change.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] The ledger is insert-only** for the app (no update or delete), with the balance kept beside it in the
+  same transaction; a test checks they agree.
+- **[Certain] FIFO** is a tenant-wide choice before the first movement, then fixed; FIFO keeps lots, the average does
+  not.
+- **[Likely] A cancelled receipt takes out what it brought in** (its own value under the average, its own untouched
+  lot under FIFO), so it leaves nothing behind in the store's value; refused if there is not that much left (or,
+  under FIFO, if its lot has been used).
+- **[Likely] A count's difference is against the book when each line was counted**, and posts as that difference
+  once approved, even if stock moved in between (those movements are real). Losses are valued as an issue would be,
+  gains at the cost when counted.
+- **[Likely] Values come out at posting time:** a back-dated issue is valued at the store's cost when it is entered,
+  and the ledger lists movements in the order entered.
+- **[Certain] Bins (locations inside a store) are not built.** The plan made them optional; they add a dimension to
+  every movement and most sites will not use them. Say if a pilot needs them.
+- **[Likely] No table lock when setting the valuation method:** the app's database role cannot lock the insert-only
+  ledger, and setting it is a one-time admin action before any stock exists.
+- **Not yet:** receipts, issues and counts post to the ledger of accounts in Wave 3 (GRN clearing and material
+  consumption); e-way bills for transfers are Wave 3 step 6.
+
+**API** (under `/api/tenant`): `GET|POST /stock/valuation`; `GET /stores?projectId`; `POST /projects/:id/stores`
+(`{siteId, name}`); `GET /projects/:id/consumption`; `GET /stores/:id`; `GET /stores/:id/ledger/:resourceId`;
+`POST /stores/:id/reorder` (`{resourceId, level}`), `/reorder-requisition`, `/issues` (`{issuedOn, wbsCode, issuedTo,
+purpose, lines: [{resourceId, qty, boqCode}]}`), `/transfers` (`{toStoreId, sentOn, note, lines}`), `/counts`
+(`{countedOn, notes, lines: [{resourceId, counted, reason}]}`); `GET /issues/:id`, `POST /issues/:id/returns`;
+`GET /transfers/:id`, `POST /transfers/:id/receive|cancel`; `GET|POST /stock-counts/:id`, `/submit`, `/discard`.
+A receipt takes `storeId` and carries `store` and each line's `stocked`. Approval document type `stock_adjustment`.
+Migration `0033_inventory.sql`.
+
+**Tests:**
+- 5 API integration tests, every value by hand. Weighted average: 100 bags at ₹390 and 50 at ₹402 (150, ₹59,100); 60
+  issued to SUB (₹23,640); 30 at ₹410.50; 45 to SUP (₹17,915.63, rounding 17,915.625 up); 5 back (₹1,990.63); an unknown
+  WBS element and 91 bags out of 90 refused; the valuation method refused once stock moved; the typed-in line not
+  stocked. The ₹410.50 receipt cancelled (50 bags, ₹19,535); a worker refused a store; a second store; 20 bags in
+  transit (₹7,814) then received, received twice refused; 10 sent and cancelled. A count of 28 against 30 (₹781.40),
+  approved under a ₹500 rule and posted; a second open count refused; reorder at 40 and a requisition for 12. The
+  consumption (received 150, issued 100 for ₹39,565, 48 in stock for ₹18,753.60: 59,100 = 39,565 + 781.40 +
+  18,753.60), by WBS; the ledger's eleven movements and running balance; ledger equals balance; off the team, nothing.
+  FIFO on a second tenant: 120 out of lots at ₹390 and ₹402 (₹47,040); the partly used lot's receipt not cancellable;
+  40 out of the ₹402 and ₹410.50 lots (₹16,165).
+- A browser test: cement from the library ordered and received into the site's store (₹39,000); 40 issued to the
+  substructure (₹15,600); 5 back (65, ₹25,350); reorder at 80 and a requisition for 15; a stock take of 63 posted
+  (−₹780); the ledger; the consumption (35 issued, ₹13,650).

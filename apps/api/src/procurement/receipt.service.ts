@@ -20,7 +20,9 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt } from '../rates/decimal.js';
 import { nextNumber } from '../tender/numbering.js';
 import { audit } from '../tender/tender-records.js';
+import { InventoryService } from './inventory.service.js';
 import { orderProgress } from './receipt-progress.js';
+import { reverseIn, stockIn, valuation, paise } from './stock-ledger.js';
 
 type Db = Sql | TransactionSql;
 
@@ -31,6 +33,8 @@ export interface ReceiptInput {
   challanDate: string | null;
   invoiceNo: string | null;
   vehicleNo: string | null;
+  /** The store it goes into; by default the site's only store (made if it has none). */
+  storeId: string | null;
   notes: string;
   lines: { lineKey: string; qty: string; rejected: string; reason: string | null; hold: boolean }[];
 }
@@ -67,7 +71,51 @@ export class ReceiptService {
     private readonly tenants: TenantConnections,
     private readonly projects: ProjectService,
     private readonly permissions: PermissionsService,
+    private readonly inventory: InventoryService,
   ) {}
+
+  /**
+   * Accepted lines of library materials go into the receipt's store at the order rate before GST (the input credit
+   * is not a cost); typed-in lines are received but not stocked.
+   */
+  private async stockAccepted(
+    tx: TransactionSql,
+    claims: TenantClaims,
+    r: { id: string; number: string; po_id: string; store_id: string | null },
+    lines: { line_key: string; resource_id: string | null; accepted: string }[],
+    on: string,
+  ) {
+    const stocked = lines.filter((l) => l.resource_id && dec(l.accepted) > 0n);
+    if (!stocked.length) return;
+    if (!r.store_id)
+      throw new BadRequestException({
+        code: 'choose_store',
+        message: 'The site has more than one store: say which one it goes into.',
+      });
+    const method = await valuation(tx);
+    for (const l of stocked) {
+      const [rate] = await tx<{ rate: string }[]>`
+        SELECT l.rate::text AS rate FROM proc.po_line l JOIN proc.po_revision v ON v.id = l.revision_id
+        WHERE v.po_id = ${r.po_id} AND v.status = 'approved' AND l.line_key = ${l.line_key}`;
+      const qty = dec(l.accepted);
+      await stockIn(
+        tx,
+        method,
+        {
+          storeId: r.store_id,
+          resourceId: l.resource_id!,
+          on,
+          kind: 'receipt',
+          docType: 'goods_receipt',
+          docId: r.id,
+          docNumber: r.number,
+          userId: claims.sub,
+        },
+        qty,
+        paise((qty * dec(rate?.rate ?? '0')) / 10n ** 12n),
+      );
+    }
+  }
 
   /** The project's team (lead or member, or those who edit projects) with `stores.receive`. */
   async mayReceive(db: Db, claims: TenantClaims, projectId: string) {
@@ -204,16 +252,30 @@ export class ReceiptService {
           SELECT site_id FROM proc.po_revision WHERE po_id = ${orderId} AND status = 'approved'`;
         siteId = f?.site_id ?? null;
       }
+      const storeId = lines.some((l) => l.resource_id)
+        ? await this.inventory.storeForReceipt(tx, claims, o.project_id, siteId, input.storeId)
+        : null;
       const [p] = await tx<{ entity_id: string }[]>`
         SELECT entity_id FROM proj.project WHERE id = ${o.project_id}`;
       const number = await nextNumber(tx, 'goods_receipt', p!.entity_id, 'GRN', new Date());
       const [r] = await tx<{ id: string }[]>`
-        INSERT INTO proc.goods_receipt (project_id, po_id, number, site_id, received_on, challan_no, challan_date,
-          invoice_no, vehicle_no, notes, created_by, updated_by)
-        VALUES (${o.project_id}, ${orderId}, ${number}, ${siteId}, ${input.receivedOn}, ${input.challanNo},
+        INSERT INTO proc.goods_receipt (project_id, po_id, number, site_id, store_id, received_on, challan_no,
+          challan_date, invoice_no, vehicle_no, notes, created_by, updated_by)
+        VALUES (${o.project_id}, ${orderId}, ${number}, ${siteId}, ${storeId}, ${input.receivedOn}, ${input.challanNo},
           ${input.challanDate}, ${input.invoiceNo}, ${input.vehicleNo}, ${input.notes}, ${claims.sub}, ${claims.sub})
         RETURNING id`;
       await tx`INSERT INTO proc.grn_line ${tx(lines.map((l) => ({ ...l, receipt_id: r!.id })))}`;
+      await this.stockAccepted(
+        tx,
+        claims,
+        { id: r!.id, number, po_id: orderId, store_id: storeId },
+        lines.map((l) => ({
+          line_key: l.line_key,
+          resource_id: l.resource_id,
+          accepted: l.accepted_qty,
+        })),
+        input.receivedOn,
+      );
       await tx`INSERT INTO proj.project_event (project_id, kind, data, actor_id)
         VALUES (${o.project_id}, 'goods_received', ${tx.json({ number, order: o.number })}, ${claims.sub})`;
       await audit(tx, claims.sub, 'receipt.create', 'goods_receipt', r!.id, {
@@ -242,9 +304,18 @@ export class ReceiptService {
       const r = await this.receipt(tx, receiptId, true);
       if (r.status !== 'posted')
         throw new ConflictException({ code: 'receipt_cancelled', message: 'It is cancelled.' });
+      const accepted: { line_key: string; resource_id: string | null; accepted: string }[] = [];
       for (const l of input.lines) {
-        const [g] = await tx<{ qty: string; inspection: string; description: string }[]>`
-          SELECT qty::text AS qty, inspection, description FROM proc.grn_line
+        const [g] = await tx<
+          {
+            qty: string;
+            inspection: string;
+            description: string;
+            line_key: string;
+            resource_id: string | null;
+          }[]
+        >`
+          SELECT qty::text AS qty, inspection, description, line_key, resource_id FROM proc.grn_line
           WHERE receipt_id = ${receiptId} AND position = ${l.position} FOR UPDATE`;
         if (!g) throw new BadRequestException({ code: 'line_not_found' });
         if (g.inspection !== 'hold')
@@ -267,7 +338,30 @@ export class ReceiptService {
             rejected_qty = ${q4(x)}, rejection_reason = ${x > 0n ? l.reason!.trim() : null},
             inspected_at = now(), inspected_by = ${claims.sub}
           WHERE receipt_id = ${receiptId} AND position = ${l.position}`;
+        accepted.push({ line_key: g.line_key, resource_id: g.resource_id, accepted: q4(a) });
       }
+      // A receipt from before stores existed finds its store now.
+      const [head] = await tx<{ store_id: string | null; site_id: string | null }[]>`
+        SELECT store_id, site_id FROM proc.goods_receipt WHERE id = ${receiptId}`;
+      let storeId = head!.store_id;
+      if (!storeId && accepted.some((l) => l.resource_id)) {
+        storeId = await this.inventory.storeForReceipt(
+          tx,
+          claims,
+          r.project_id,
+          head!.site_id,
+          null,
+        );
+        if (storeId)
+          await tx`UPDATE proc.goods_receipt SET store_id = ${storeId} WHERE id = ${receiptId}`;
+      }
+      await this.stockAccepted(
+        tx,
+        claims,
+        { id: r.id, number: r.number, po_id: r.po_id, store_id: storeId },
+        accepted,
+        indiaToday(),
+      );
       await tx`UPDATE proc.goods_receipt SET updated_at = now(), updated_by = ${claims.sub},
         row_version = row_version + 1 WHERE id = ${receiptId}`;
       await audit(tx, claims.sub, 'receipt.inspect', 'goods_receipt', receiptId, {
@@ -341,6 +435,30 @@ export class ReceiptService {
           code: 'has_returns',
           message: 'Goods from it went back to the supplier: it stays on the record.',
         });
+      // What it put into stock comes out again; refused if it has since been issued.
+      const moves = await tx<{ id: string; store_id: string; resource_id: string }[]>`
+        SELECT id::text AS id, store_id, resource_id FROM proc.stock_move
+        WHERE doc_type = 'goods_receipt' AND doc_id = ${receiptId} AND kind = 'receipt' ORDER BY id`;
+      const method = await valuation(tx);
+      for (const m of moves)
+        await reverseIn(tx, method, m.id, {
+          storeId: m.store_id,
+          resourceId: m.resource_id,
+          on: indiaToday(),
+          kind: 'receipt_cancelled',
+          docType: 'goods_receipt',
+          docId: receiptId,
+          docNumber: r.number,
+          userId: claims.sub,
+        }).catch((e: unknown) => {
+          if (e instanceof ConflictException)
+            throw new ConflictException({
+              code: 'stock_used',
+              message:
+                'Material from it has already been issued from the store: it stays on the record.',
+            });
+          throw e;
+        });
       await tx`UPDATE proc.goods_receipt SET status = 'cancelled', status_reason = ${reason}, updated_at = now(),
         updated_by = ${claims.sub}, row_version = row_version + 1 WHERE id = ${receiptId}`;
       if (o.status === 'closed' && o.closed_on_receipt)
@@ -371,16 +489,18 @@ export class ReceiptService {
         json_build_object('id', p.id, 'number', p.number, 'name', p.name) AS project,
         json_build_object('id', v.id, 'name', v.name, 'gstin', v.gstin) AS vendor,
         CASE WHEN s.id IS NULL THEN NULL ELSE json_build_object('id', s.id, 'name', s.name) END AS site,
+        CASE WHEN st.id IS NULL THEN NULL ELSE json_build_object('id', st.id, 'name', st.name) END AS store,
         u.display_name AS "receivedBy", g.created_at AS "createdAt", g.row_version AS "rowVersion"
       FROM proc.goods_receipt g
       JOIN proc.purchase_order o ON o.id = g.po_id
       JOIN proj.project p ON p.id = g.project_id
       JOIN platform.party v ON v.id = o.party_id
       LEFT JOIN proj.site s ON s.id = g.site_id
+      LEFT JOIN proc.store st ON st.id = g.store_id
       LEFT JOIN platform."user" u ON u.id = g.created_by
       WHERE g.id = ${receiptId}`;
     const lines = await db<{ inspection: string; rejected: string; returned: string }[]>`
-      SELECT g.position, g.line_key AS "lineKey", g.description, g.unit, g.qty::text AS qty, g.inspection,
+      SELECT g.position, g.line_key AS "lineKey", (g.resource_id IS NOT NULL) AS stocked, g.description, g.unit, g.qty::text AS qty, g.inspection,
         g.accepted_qty::text AS accepted, g.rejected_qty::text AS rejected, g.rejection_reason AS "rejectionReason",
         coalesce((SELECT sum(x.qty) FROM proc.goods_return_line x JOIN proc.goods_return t ON t.id = x.return_id
           WHERE t.receipt_id = g.receipt_id AND x.position = g.position), 0)::text AS returned,
