@@ -7,12 +7,19 @@ import { TenderModule } from '../tender/tender.module.js';
 import { MaterialBudgetController } from './material-budget.controller.js';
 import { MaterialBudgetService } from './material-budget.service.js';
 import { ProjectRfqController } from './project-rfq.controller.js';
+import { PurchaseOrderController } from './purchase-order.controller.js';
+import { PurchaseOrderService } from './purchase-order.service.js';
 import { RequisitionController } from './requisition.controller.js';
 import { RequisitionService } from './requisition.service.js';
 
 @Module({
   imports: [ProvisioningModule, AuthModule, ProjectModule, ApprovalModule, TenderModule],
-  controllers: [RequisitionController, MaterialBudgetController, ProjectRfqController],
-  providers: [RequisitionService, MaterialBudgetService],
+  controllers: [
+    RequisitionController,
+    MaterialBudgetController,
+    ProjectRfqController,
+    PurchaseOrderController,
+  ],
+  providers: [RequisitionService, MaterialBudgetService, PurchaseOrderService],
 })
 export class ProcurementModule {}

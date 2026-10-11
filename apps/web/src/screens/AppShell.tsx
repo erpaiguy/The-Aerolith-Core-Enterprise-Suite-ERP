@@ -20,6 +20,7 @@ import {
   ScrollText,
   Tags,
   Users,
+  Warehouse,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { api } from '../api/client';
@@ -194,7 +195,10 @@ export function AppShell() {
             <NavItem to="/requisitions" icon={<ShoppingCart className="size-4" />}>
               Requisitions
             </NavItem>
-            <Upcoming icon={<BriefcaseBusiness className="size-4" />}>Orders and stores</Upcoming>
+            <NavItem to="/orders" icon={<BriefcaseBusiness className="size-4" />}>
+              Orders
+            </NavItem>
+            <Upcoming icon={<Warehouse className="size-4" />}>Stores</Upcoming>
           </nav>
           <div className="px-4 pb-4">
             <Link to="/licences" className="text-xs text-fg-subtle hover:underline">

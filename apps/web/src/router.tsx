@@ -42,6 +42,8 @@ import { ApprovalRulesScreen } from './screens/ApprovalRules';
 import { ApprovalsScreen } from './screens/Approvals';
 import { MaterialBudgetScreen } from './screens/MaterialBudget';
 import { ProgressScreen } from './screens/Progress';
+import { OrdersScreen } from './screens/Orders';
+import { OrderOfRevisionScreen, PurchaseOrderScreen } from './screens/PurchaseOrder';
 import { RequisitionScreen } from './screens/Requisition';
 import { RequisitionsScreen } from './screens/Requisitions';
 import { ProjectDashboardScreen } from './screens/ProjectDashboard';
@@ -142,6 +144,22 @@ const requisitionRoute = createRoute({
   component: function RequisitionPage() {
     const { requisitionId } = requisitionRoute.useParams();
     return <RequisitionScreen key={requisitionId} requisitionId={requisitionId} />;
+  },
+});
+const orderRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/orders/$orderId',
+  component: function OrderPage() {
+    const { orderId } = orderRoute.useParams();
+    return <PurchaseOrderScreen key={orderId} orderId={orderId} />;
+  },
+});
+const orderRevisionRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/orders/revision/$revisionId',
+  component: function OrderRevisionPage() {
+    const { revisionId } = orderRevisionRoute.useParams();
+    return <OrderOfRevisionScreen key={revisionId} revisionId={revisionId} />;
   },
 });
 const macroRoute = createRoute({
@@ -293,6 +311,13 @@ const routeTree = rootRoute.addChildren([
     approvalRoute,
     requisitionRoute,
     materialBudgetRoute,
+    orderRoute,
+    orderRevisionRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/orders',
+      component: OrdersScreen,
+    }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/approvals',

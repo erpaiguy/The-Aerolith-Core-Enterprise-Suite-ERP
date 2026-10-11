@@ -99,7 +99,7 @@ test("a project's approved requisition goes to vendors and the lowest is chosen"
   await expect(page.getByText('Chosen (2 of 2 lines)')).toBeVisible();
   // 100 × 390 + 12 × 1,700 = ₹59,400 before GST; no estimate is changed.
   await expect(page.getByText('₹59,400').first()).toBeVisible();
-  await expect(page.getByTestId('rfq-next')).toContainText('purchase orders come next');
+  await expect(page.getByTestId('rfq-next')).toContainText('changes no estimate');
   await expect(
     page.getByRole('button', { name: 'Put the chosen rates into the estimate' }),
   ).toHaveCount(0);

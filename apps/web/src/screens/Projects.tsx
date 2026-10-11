@@ -22,6 +22,7 @@ import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
 import { ProjectEnquiries } from '../project/ProjectEnquiries';
 import { ProjectMaterialBudget } from '../project/ProjectMaterialBudget';
+import { ProjectOrders } from '../project/ProjectOrders';
 import { ProjectRequisitions } from '../project/ProjectRequisitions';
 import { ProjectSchedules } from '../project/ProjectSchedules';
 import type {
@@ -472,6 +473,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <ProjectMaterialBudget project={p} />
               <ProjectRequisitions project={p} />
               <ProjectEnquiries project={p} />
+              <ProjectOrders project={p} />
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">

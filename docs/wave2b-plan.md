@@ -31,9 +31,12 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 - **[Certain] The material budget is the project's own copy (your decision, 11 Oct 2026).** Made once from the won
   tender's rate analyses when the project takes its budget; never linked back to estimation; the tender's estimate is
   then closed; the project revises its copy as often as it needs, each revision kept.
-- **[Guessing] GST on purchase orders** (step 4) waits on the open question from 2a step 2: whether contract values
-  are entered with or without GST. Purchase GST itself is clear (CGST + SGST within the state, IGST across states,
-  from the site's state and the vendor's GSTIN).
+- **[Certain] GST is always added on top of the contract value (your decision, 11 Oct 2026).** Rates and contract
+  values are before GST; the tax is worked out and added. On purchase and work orders: CGST + SGST when the supplier's
+  state (the first two digits of its GSTIN) is the site's, IGST across states, none from a supplier without a GSTIN.
+  For contract values this confirms 2a step 2's rule (compared before GST). Still open there: a project made from a
+  won tender takes the submission's bid value, which the submission form suggests *with* GST; the contract BOQ page
+  then asks, but the value itself is not corrected for you.
 
 ## Steps
 
@@ -42,7 +45,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 1 | **Approvals + purchase requisitions** (P5, R1) | Approval rules by document type, levels by amount, approvers (project lead, managers, admins, a named person), delegation while away, comments, withdraw, "waiting on me"; requisitions for a project (materials from the rate library or typed in, quantities, needed-by dates, BOQ line and WBS element) as its first user | **Done** (see below) |
 | 2 | **Material budget and demand** (R1) | The project's material budget, copied from the tender's rate analyses and revised under approval; the estimate closed; requisitions against the budget, from BOQ items and from the look-ahead | **Done** (see below) |
 | 3 | **Vendor enquiries for a project** (R2) | Wave 1's RFQs and comparative statements for requisitioned materials | **Done** (see below) |
-| 4 | **Purchase and work orders** (R3) | Terms, GST, amendments, approvals, supplier acknowledgement | |
+| 4 | **Purchase and work orders** (R3) | Terms, GST, amendments, approvals, supplier acknowledgement | **Done** (see below) |
 | 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | |
 | 6 | **Inventory** (R5) | Stores, issues to WBS, transfers, returns, stock ledger, valuation, reorder levels, stock take | |
 | 7 | **Daily site reports** (R6) | Manpower, equipment, materials, weather, work done, delays, safety, photos; phone first | |
@@ -239,3 +242,70 @@ A BOQ's header carries `closedAt` and `closedReason`. Migration `0030_project_rf
 - A browser test: a requisition from the library and a typed line, approved, sent to vendors with **Ask vendors**;
   two suppliers quote, the lowest per line chosen (₹59,400); no "into the estimate"; the enquiry on the project's
   page and the requisition's.
+
+## Step 4 delivered: purchase and work orders
+
+**Journey:**
+- An enquiry's comparative statement (a project's) has **Make purchase orders** (or work orders): a **draft order for
+  each supplier chosen**, with the lines chosen for them at the rate **before GST** and the GST rate they quoted,
+  delivered to the requisitions' site. Lines already on a live order are left out, so pressing it twice orders
+  nothing twice; once an order is cancelled its lines can be ordered again.
+- A project's page has **Orders**: the list, and **New order** (purchase or work, to a vendor or subcontractor from
+  the party master) for one written directly.
+- On the order: the site it is delivered to (the **place of supply**), deliver-by date, payment, delivery and other
+  terms, and lines (from the rate library or typed in) with HSN/SAC, unit, quantity, rate before GST and GST %. The
+  page shows **before GST, CGST + SGST or IGST, and the total with GST** as you type, worked out the same way as the
+  server. Buyer and supplier with their GSTINs head the page; **Print** prints it.
+- **Submit for approval** sends it under the approval rules for **purchase_order** (Settings → Approval rules), for its
+  total with GST. With no rule for that amount it is in force at once; either way it is then **Issued** (PO/2026-27/…,
+  work orders WO/2026-27/…, per company and financial year).
+- **Acknowledged**: the supplier's acceptance (date, their reference) is recorded.
+- **Amend** (with a reason): a copy of the revision in force to change and submit; it is approved for **what it adds**
+  to the order in force (an amendment that takes away is approved for ₹0 where a rule applies from ₹0). Until then
+  the earlier revision stays in force; once in force, the earlier one is superseded and the supplier is to
+  acknowledge again. An amendment can be thrown away.
+- **Cancel** (with a reason, at any stage: a revision waiting for approval is withdrawn) or **Close** when done.
+- **Orders** in the menu: the register across the projects you are on, by status. "Stores" stays coming (steps 5-6).
+- The approver sees the order, the supplier and GSTIN, the place of supply and GST basis, the lines with tax, and for
+  an amendment the total in force against the new one.
+
+**Who does what:** the project's team reads its orders; others do not see them. Writing, amending, acknowledging,
+cancelling and closing need the new **`purchase.edit`** right (managers yes, workers no by default, as for `rfq.edit`)
+and a place on the team as lead or member (or the right to edit projects).
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] GST is added on top**, per line and rounded to the paisa as an invoice shows it; within a state the rate
+  is split in half for CGST and SGST, each half rounded (3 × ₹33.33 at 5% is ₹2.50 + ₹2.50).
+- **[Certain] No place of supply, no order**: an order cannot be submitted without a site, or with a site that has no
+  GST state code (set it on the project's page). A supplier without a GSTIN charges no GST, whatever rate was typed.
+- **[Likely] The buyer's GSTIN is the company entity's**: a contractor registered in more than one state (one GSTIN
+  per state) would order for a site in another state from that state's registration; per-state registrations wait
+  until someone needs them.
+- **[Likely] Revision 0 is never thrown away**: a draft order that is not wanted is cancelled, so its number stays on
+  the record with a reason (no gaps in the series).
+- **[Likely] Orders are not checked against the material budget** yet: the requisition is (step 2), and receipts
+  (step 5) and the procurement reports (step 9) compare ordered and received against it.
+- **[Guessing] Supplier acknowledgement is recorded, not collected**: the app does not email (docs/03-architecture.md
+  §6), so it is typed in from their letter or email.
+
+**API** (under `/api/tenant`): `GET /orders?projectId&status` (`open` = draft, issued, acknowledged);
+`POST /projects/:id/orders` (`{kind, partyId, siteId, deliverBy, paymentTerms, deliveryTerms, otherTerms, lines}`);
+`POST /rfqs/:id/orders` (from the vendors chosen); `GET /orders/:id`; `GET /order-revisions/:id` (the order of a
+revision, for an approval's link); `POST /order-revisions/:id` (change a draft or rejected revision, with
+`rowVersion`), `/submit`, `/discard`; `POST /orders/:id/amend` (`{reason}`), `/acknowledge` (`{on, reference}`),
+`/cancel`, `/close` (`{reason}`). Approval document type `purchase_order`. Migration `0031_purchase_orders.sql`.
+
+**Tests:**
+- 5 API integration tests, the GST worked by hand: a purchase order within Maharashtra (cement 100 × ₹390.50 and steel
+  1.235 t × ₹62,000 at 18%: ₹1,15,620.00 + CGST ₹10,405.80 + SGST ₹10,405.80 = ₹1,36,431.60), refused without a site
+  and with a site without a state code, a worker without `purchase.edit` refused, approved under a ₹1 lakh rule for
+  its total; acknowledged (not for a future date); amended to 120 bags (₹1,45,647.40, adding ₹9,215.80, in force at
+  once, to be acknowledged again), an amendment discarded, revision 0 not discardable, closed; a Gujarat
+  subcontractor's work order (WO series) with IGST ₹8,100 on ₹45,000, paisa rounding, an unregistered supplier with
+  no GST, a cancelled order, the open register; orders made from an enquiry (cement at 28% within the state, sand at
+  5% from Gujarat, both to the requisition's site), nothing ordered twice, re-ordered after a cancel; kept to the
+  team, the project's activity.
+- A browser test: a supplier with a Maharashtra GSTIN, a project with a site in state 27, a new order: 100 bags at
+  ₹390.50 shows ₹39,050.00 + CGST ₹3,514.50 + SGST ₹3,514.50 = ₹46,079.00 as typed; submitted and issued, the same
+  totals on the order; acknowledged; amended to 120 bags (₹55,294.80), in force, the acknowledgement cleared, the
+  earlier revision superseded; in the orders register.

@@ -119,5 +119,6 @@ nothing here has run on a real project yet.
 | 1 | Approvals (rules by amount, levels, stand-ins) and purchase requisitions | **Done** |
 | 2 | Material budget from the tender's rate analyses, revised under approval; requisitions against it, from BOQ items and the look-ahead | **Done** |
 | 3 | Vendor enquiries for a project, from approved requisitions | **Done** |
-| 4 | Purchase and work orders | Next |
-| 5-9 | Goods receipt, inventory, daily site reports, project documents, reports | |
+| 4 | Purchase and work orders: GST on top (CGST + SGST or IGST from the site and the supplier's GSTIN), approvals, amendments, acknowledgement; made from an enquiry's chosen vendors | **Done** |
+| 5 | Goods receipt and inspection | Next |
+| 6-9 | Inventory, daily site reports, project documents, reports | |

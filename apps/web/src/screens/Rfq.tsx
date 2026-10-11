@@ -1873,12 +1873,7 @@ function Comparative({
           />
         </tfoot>
       </Table>
-      {canEdit && rfq.projectId && (
-        <p className="mt-4 border-t border-line pt-4 text-xs text-fg-muted" data-testid="rfq-next">
-          The vendors chosen here are ordered from: purchase orders come next (Wave 2b step 4). A
-          project&apos;s enquiry changes no estimate.
-        </p>
-      )}
+      {rfq.projectId && <MakeOrders rfq={rfq} lines={t.linesSelected} />}
       {canEdit && rfq.tenderId && (
         <div className="mt-4 space-y-3 border-t border-line pt-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -1899,6 +1894,61 @@ function Comparative({
         </div>
       )}
     </Card>
+  );
+}
+
+/** A project's enquiry: draft orders for the vendors chosen, one each (docs/wave2b-plan.md step 4). */
+function MakeOrders({ rfq, lines }: { rfq: RfqDetail; lines: number }) {
+  const qc = useQueryClient();
+  const canOrder = usePermission('purchase.edit');
+  const [made, setMade] = useState<{ id: string; number: string; vendor: { name: string } }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!canOrder) return null;
+  const make = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.request<{
+        orders: { id: string; number: string; vendor: { name: string } }[];
+      }>(`/api/tenant/rfqs/${rfq.id}/orders`, { method: 'POST', body: {} });
+      setMade(r.orders);
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-4 space-y-3 border-t border-line pt-4" data-testid="rfq-next">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button busy={busy} disabled={lines === 0} onClick={() => void make()}>
+          Make {rfq.kind === 'work' ? 'work' : 'purchase'} orders
+        </Button>
+        <span className="text-xs text-fg-muted">
+          A draft order for each vendor chosen, at the rate before GST and the GST they quoted;
+          lines already on an order are left out. A project&apos;s enquiry changes no estimate.
+        </span>
+      </div>
+      {made.length > 0 && (
+        <ul className="space-y-1 text-sm" aria-label="Orders made">
+          {made.map((o) => (
+            <li key={o.id}>
+              <Link
+                to="/orders/$orderId"
+                params={{ orderId: o.id }}
+                className="font-mono text-accent hover:underline"
+              >
+                {o.number}
+              </Link>{' '}
+              {o.vendor.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <Alert tone="danger">{error}</Alert>}
+    </div>
   );
 }
 

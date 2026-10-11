@@ -22,6 +22,8 @@ import { APPROVAL_STATUS, APPROVAL_TONE, useRun, type Approval } from '../approv
 import { formatQty } from '../boq/model';
 import { describeError, formatDateTime, formatInr } from '../lib/format';
 import type { RequisitionHead, RequisitionLine } from '../procurement/model';
+import { OrderLines, rupees } from '../procurement/OrderLines';
+import { ORDER_KIND, SUPPLY, type OrderApprovalDoc } from '../procurement/orders';
 import { RequisitionLines } from '../procurement/RequisitionLines';
 import { shortDate } from '../schedule/model';
 
@@ -93,6 +95,14 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
                 >
                   Open the budget revision
                 </Link>
+              ) : d.docType === 'purchase_order' ? (
+                <Link
+                  to="/orders/revision/$revisionId"
+                  params={{ revisionId: d.docId }}
+                  className="text-sm text-accent hover:underline"
+                >
+                  Open the order
+                </Link>
               ) : null
             }
           >
@@ -103,6 +113,8 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
               />
             ) : d.docType === 'material_budget' ? (
               <BudgetDocument doc={d.document as BudgetDoc} />
+            ) : d.docType === 'purchase_order' ? (
+              <OrderDocument doc={d.document as OrderApprovalDoc} />
             ) : null}
           </Card>
           {(d.mayAct || d.mayWithdraw || d.status === 'pending') && (
@@ -286,6 +298,59 @@ function BudgetDocument({ doc }: { doc: BudgetDoc }) {
           {doc.lines.length - changed.length === 1 ? '' : 's'} unchanged.
         </p>
       )}
+    </div>
+  );
+}
+
+/** An order revision as its approver sees it: to whom, where, the lines with GST, and what it adds to the one in force. */
+function OrderDocument({ doc }: { doc: OrderApprovalDoc }) {
+  const { order: o, revision: r, inForce } = doc;
+  return (
+    <div className="space-y-3">
+      <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+        <dt className="text-fg-muted">{ORDER_KIND[o.kind]}</dt>
+        <dd>
+          <span className="font-mono">{o.number}</span>
+          {r.revision > 0 && ` amendment ${r.revision}`}
+          {o.rfq && <span className="text-fg-muted"> from {o.rfq.number}</span>}
+        </dd>
+        <dt className="text-fg-muted">To</dt>
+        <dd>
+          {o.vendor.name}
+          <span className="ml-2 font-mono text-xs">{o.vendor.gstin ?? 'no GSTIN'}</span>
+        </dd>
+        <dt className="text-fg-muted">Deliver to</dt>
+        <dd>
+          {r.site?.name ?? 'Not said'}
+          {r.deliverBy && `, by ${shortDate(r.deliverBy)}`}
+        </dd>
+        {r.supply && (
+          <>
+            <dt className="text-fg-muted">GST</dt>
+            <dd>{SUPPLY[r.supply]}</dd>
+          </>
+        )}
+        {r.paymentTerms && (
+          <>
+            <dt className="text-fg-muted">Payment</dt>
+            <dd className="whitespace-pre-wrap">{r.paymentTerms}</dd>
+          </>
+        )}
+        {r.reason && (
+          <>
+            <dt className="text-fg-muted">Why amended</dt>
+            <dd>{r.reason}</dd>
+          </>
+        )}
+      </dl>
+      {inForce && (
+        <p className="text-sm" data-testid="order-change">
+          In force now: revision {inForce.revision}, {rupees(inForce.total)}. This one:{' '}
+          {rupees(r.total)}, a change of{' '}
+          <b>{rupees((Number(r.total) - Number(inForce.total)).toFixed(2))}</b>.
+        </p>
+      )}
+      <OrderLines r={r} />
     </div>
   );
 }

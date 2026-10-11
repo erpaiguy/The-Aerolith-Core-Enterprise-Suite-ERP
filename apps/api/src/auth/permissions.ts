@@ -55,6 +55,11 @@ export const PERMISSIONS = {
     label: "Edit the company's cost codes",
     defaults: { manager: true, worker: false },
   },
+  'purchase.edit': {
+    label:
+      "Make, amend and cancel a project's purchase and work orders (they still go through the approval rules)",
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
