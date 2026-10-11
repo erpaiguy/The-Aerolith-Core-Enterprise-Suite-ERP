@@ -48,7 +48,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 4 | **Purchase and work orders** (R3) | Terms, GST, amendments, approvals, supplier acknowledgement | **Done** (see below) |
 | 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | **Done** (see below) |
 | 6 | **Inventory** (R5) | Stores, issues to WBS, transfers, returns, stock ledger, valuation, reorder levels, stock take | **Done** (see below) |
-| 7 | **Daily site reports** (R6) | Manpower, equipment, materials, weather, work done, delays, safety, photos; phone first | |
+| 7 | **Daily site reports** (R6) | Manpower, equipment, materials, weather, work done, delays, safety, photos; phone first | **Done** (see below) |
 | 8 | **Project documents** (R7) | The project's vault and drawings register with revisions (Wave 1's documents) | |
 | 9 | **Procurement reports** | Requisition to order to receipt, open orders, stock, consumption against budget | |
 
@@ -114,6 +114,8 @@ balance; a browser test receiving, issuing to a WBS element and seeing the balan
 WBS element is enough; (3) whether a site engineer (worker) may issue, or only the storekeeper.
 
 ### Step 7: Daily site reports (R6)
+
+(Built: see "Step 7 delivered" at the end for what changed.)
 
 **Goal:** what happened on site today, recorded on site from a phone.
 
@@ -544,3 +546,68 @@ Migration `0033_inventory.sql`.
 - A browser test: cement from the library ordered and received into the site's store (₹39,000); 40 issued to the
   substructure (₹15,600); 5 back (65, ₹25,350); reorder at 80 and a requisition for 15; a stock take of 63 posted
   (−₹780); the ledger; the consumption (35 issued, ₹13,650).
+
+## Step 7 delivered: daily site reports
+
+**Journey:**
+- A project's page has **Daily site reports**: "Today at <site>" for each active site (opens today's report, or starts
+  it), the days of the last two weeks with no submitted report (each a link to write it), the latest reports, and
+  "All reports and weekly figures".
+- **The report**, one per site per day (a past day too, never a future one), in one column for a phone:
+  weather morning and afternoon and hours of rain; **manpower** by trade, our own or a labour contractor's; **equipment**
+  own or hired, hours worked, hours idle and why; **work done** (description, BOQ item, quantity), the site's own
+  account (the measurement book stays what is billed); **hindrances** (cause, what happened, hours lost, on whose
+  account: the client's, ours, or neither); safety, visitors and notes; **photos**.
+- **Started from yesterday:** a new report carries over the site's last crew and plant (hours blank), to change rather
+  than type again.
+- **Received today** and **Issued to work today** come from the day's goods receipts at the site and issue slips from
+  its stores, linked, not typed again.
+- **Saved as you go:** each change is kept on the phone at once and saved a moment later; with no signal the page says
+  so and saves when the signal returns; changes kept on the phone survive closing the page, and are dropped (with a
+  notice) only if someone else saved the report since. A second phone with an old copy is told, never overwrites.
+- **Photos** from the camera, shrunk on the phone to at most 1600 px (JPEG) before upload; JPEG, PNG or WebP up to
+  8 MB; kept in the tenant's file store.
+- **Submit**, then the lead **acknowledges**; a submitted or acknowledged report is changed only by **Correct**, with a
+  reason, which puts it back to draft; the history shows each step. Prints as the day's report.
+- **Reminder:** submitting a report sets a reminder in the submitter's inbox for 7 pm (India) the next day for the
+  same site; submitting the next report before then replaces it.
+- **Weekly figures** (last eight weeks, submitted reports only): man-days by trade and equipment hours worked and idle
+  as charts, hindrance hours by cause and account as a table.
+- **On a phone the main menu folds** behind a "Menu" button (for every screen, not only reports).
+
+**Who does what:** the project's team (lead or member, or those who edit projects) writes, submits and corrects;
+acknowledging needs the new **`dsr.acknowledge`** right (managers by default) and the lead's place (or the right to edit
+projects). Viewers read.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] Online only**, as planned: kept on the phone and saved when the signal returns, but the page must have
+  been opened with a signal. Offline-first is Wave 6.
+- **[Likely] The day's materials are read live** from receipts and issues, not copied into the report: a receipt
+  cancelled later disappears from that day's report.
+- **[Likely] Work done names a BOQ item, not a schedule activity.** Activities live in a project's several
+  schedules; linking to them waits until a pilot shows how sites name their work.
+- **[Likely] Missing days count every calendar day** from the site's first day on the project (Sundays and holidays
+  too), for the last two weeks; site calendars can narrow this later.
+- **[Certain] Photos are hidden, not deleted,** when removed from a draft; the documents' clean-up now also keeps any
+  file a photo uses.
+- **[Guessing] The reminder is to the person who submitted the last report** for the site, as the nearest thing to a
+  site in-charge (the app has no such role yet).
+
+**API** (under `/api/tenant`): `GET /projects/:id/daily-reports?siteId` (reports, missing days, mayWrite);
+`GET /projects/:id/daily-reports/summary?from&to`; `POST /projects/:id/daily-reports` (`{siteId, reportDate}`; an
+existing one answers `report_exists` with its id); `GET|POST /daily-reports/:id` (the sections with `rowVersion`);
+`POST /daily-reports/:id/submit|acknowledge|correct`; `POST /daily-reports/:id/photos?caption` (multipart),
+`GET /daily-reports/:id/photos/:photoId`, `POST /daily-reports/:id/photos/:photoId/remove`. Migration
+`0034_daily_reports.sql`.
+
+**Tests:**
+- 5 API integration tests: a day's report built over saves (an old copy refused as stale), refused for a future day and
+  for a viewer, the same site and day answering with the existing one, the day's receipt (100 bags) and issue (10 to
+  SUB) on it; a photo stored and read back byte for byte, a text file refused; submitted, editing and photos refused,
+  acknowledging refused to a worker and done by the lead, corrected without a reason refused, then with one, changed
+  and resubmitted (four history entries); Tuesday carried forward from Monday; the missing days (today only, then
+  none); tomorrow's 7 pm reminder; weekly figures by hand (masons 4, then 6 + 8; helpers 10 + 10; the mixer 6 + 5 hours
+  worked, 2 idle; drawings 4 h on the client, rain 3 h, power 2 h); kept to the team.
+- A browser test at a phone's size: the menu folded; today's report built section by section and saved; the signal cut
+  while typing ("No signal") and restored ("Saved"), the notes still there after a reload; a photo; submitted,
+  acknowledged, corrected with a reason and resubmitted; the reports and weekly figures.

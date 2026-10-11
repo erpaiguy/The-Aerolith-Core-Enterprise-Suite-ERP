@@ -16,7 +16,8 @@ export type Permission =
   | 'costcodes.edit'
   | 'purchase.edit'
   | 'stores.receive'
-  | 'stores.manage';
+  | 'stores.manage'
+  | 'dsr.acknowledge';
 
 export function usePermission(p: Permission): boolean {
   const { user, licence } = useSession();

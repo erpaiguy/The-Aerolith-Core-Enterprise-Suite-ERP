@@ -20,6 +20,7 @@ import { ArrowLeft, Gauge, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
+import { ProjectDailyReports } from '../project/ProjectDailyReports';
 import { ProjectEnquiries } from '../project/ProjectEnquiries';
 import { ProjectMaterialBudget } from '../project/ProjectMaterialBudget';
 import { ProjectOrders } from '../project/ProjectOrders';
@@ -476,6 +477,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <ProjectEnquiries project={p} />
               <ProjectOrders project={p} />
               <ProjectStores project={p} />
+              <ProjectDailyReports project={p} />
               <Sites project={p} onDone={done} />
               <Card title="Coming next">
                 <p className="text-sm text-fg-muted">

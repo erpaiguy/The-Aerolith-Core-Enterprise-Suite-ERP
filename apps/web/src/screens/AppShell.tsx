@@ -1,4 +1,4 @@
-import { Link, Outlet } from '@tanstack/react-router';
+import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
@@ -17,13 +17,14 @@ import {
   Contact,
   FileStack,
   KeyRound,
+  Menu,
   LogOut,
   ScrollText,
   Tags,
   Users,
   Warehouse,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
 import type { Inbox } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
@@ -94,6 +95,10 @@ export function AppShell() {
     queryFn: () => api.request<Inbox>('/api/tenant/inbox'),
     refetchInterval: 60_000,
   });
+  // On a phone the menu is folded away behind a button, and folds again on every page change.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const path = useRouterState({ select: (r) => r.location.pathname });
+  useEffect(() => setMenuOpen(false), [path]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
@@ -106,14 +111,27 @@ export function AppShell() {
             <div className="flex size-8 items-center justify-center rounded-md bg-accent text-sm font-bold text-accent-fg">
               A
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">Aerolith Core</div>
               <div className="truncate text-xs text-fg-muted">
                 {session.entitlement?.tier === 'trial' ? 'Trial' : 'Licensed'}
               </div>
             </div>
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-md px-2.5 py-2 text-sm text-fg-muted hover:bg-surface-2 md:hidden"
+              aria-expanded={menuOpen}
+              aria-controls="main-menu"
+              onClick={() => setMenuOpen(!menuOpen)}
+            >
+              <Menu className="size-5" aria-hidden /> Menu
+            </button>
           </div>
-          <nav className="space-y-0.5 px-2 pb-3" aria-label="Main">
+          <nav
+            className={`${menuOpen ? 'block' : 'hidden'} space-y-0.5 px-2 pb-3 md:block`}
+            aria-label="Main"
+            id="main-menu"
+          >
             <NavItem to="/" icon={<Bell className="size-4" />} badge={inbox.data?.unread}>
               Home
             </NavItem>
@@ -193,7 +211,7 @@ export function AppShell() {
               Stores
             </NavItem>
           </nav>
-          <div className="px-4 pb-4">
+          <div className={`${menuOpen ? 'block' : 'hidden'} px-4 pb-4 md:block`}>
             <Link to="/licences" className="text-xs text-fg-subtle hover:underline">
               Third-party licences
             </Link>

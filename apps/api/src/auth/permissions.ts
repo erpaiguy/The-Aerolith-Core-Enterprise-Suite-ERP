@@ -70,6 +70,10 @@ export const PERMISSIONS = {
       "Set up a project's stores, transfer stock out of them and count it (stock adjustments go through the approval rules)",
     defaults: { manager: true, worker: false },
   },
+  'dsr.acknowledge': {
+    label: "Acknowledge a project's daily site reports (as its lead)",
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

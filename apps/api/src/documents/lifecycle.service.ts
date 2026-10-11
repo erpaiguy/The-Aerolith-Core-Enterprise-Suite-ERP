@@ -170,7 +170,8 @@ export class DocumentLifecycle implements OnModuleInit, OnModuleDestroy {
       const used = new Set(
         (
           await db<{ storage_key: string }[]>`
-            SELECT DISTINCT storage_key FROM doc.document_version WHERE storage_key = ANY(${keys})`
+            SELECT DISTINCT storage_key FROM doc.document_version WHERE storage_key = ANY(${keys})
+            UNION SELECT storage_key FROM proj.dr_photo WHERE storage_key = ANY(${keys})`
         ).map((r) => r.storage_key),
       );
       for (const k of keys.filter((k) => !used.has(k)))

@@ -361,6 +361,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'purchase.edit',
         'stores.receive',
         'stores.manage',
+        'dsr.acknowledge',
       ]);
       expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
         'tender.edit',
@@ -376,6 +377,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'purchase.edit',
         'stores.receive',
         'stores.manage',
+        'dsr.acknowledge',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
       const all = (await get('/tenant/permissions', t.admin)).json<{
@@ -396,6 +398,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'purchase.edit': true,
           'stores.receive': true,
           'stores.manage': true,
+          'dsr.acknowledge': true,
         },
         worker: {
           'tender.edit': false,
@@ -411,6 +414,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'purchase.edit': false,
           'stores.receive': true,
           'stores.manage': false,
+          'dsr.acknowledge': false,
         },
       });
     });

@@ -43,6 +43,8 @@ import { ApprovalsScreen } from './screens/Approvals';
 import { MaterialBudgetScreen } from './screens/MaterialBudget';
 import { ProgressScreen } from './screens/Progress';
 import { GoodsReceiptScreen } from './screens/GoodsReceipt';
+import { DailyReportScreen } from './screens/DailyReport';
+import { DailyReportsScreen } from './screens/DailyReports';
 import { ConsumptionScreen } from './project/ProjectStores';
 import { IssueScreen, StockCountScreen, TransferScreen } from './screens/StockDocs';
 import { StoreScreen } from './screens/Store';
@@ -216,6 +218,26 @@ const consumptionRoute = createRoute({
     return <ConsumptionScreen key={projectId} projectId={projectId} />;
   },
 });
+const dailyReportRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/daily-reports/$reportId',
+  component: function DailyReportPage() {
+    const { reportId } = dailyReportRoute.useParams();
+    return <DailyReportScreen key={reportId} reportId={reportId} />;
+  },
+});
+const dailyReportsRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/daily-reports',
+  validateSearch: (s: Record<string, unknown>): { site?: string | undefined } => ({
+    site: typeof s.site === 'string' ? s.site : undefined,
+  }),
+  component: function DailyReportsPage() {
+    const { projectId } = dailyReportsRoute.useParams();
+    const { site } = dailyReportsRoute.useSearch();
+    return <DailyReportsScreen key={projectId} projectId={projectId} siteId={site} />;
+  },
+});
 const macroRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/projects/$projectId/macro',
@@ -368,6 +390,8 @@ const routeTree = rootRoute.addChildren([
     orderRoute,
     orderRevisionRoute,
     receiptRoute,
+    dailyReportRoute,
+    dailyReportsRoute,
     storeRoute,
     issueRoute,
     transferRoute,
