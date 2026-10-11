@@ -52,6 +52,8 @@ export const SUPPLY: Record<Supply, string> = {
 
 export interface OrderLine {
   position: number;
+  /** The same line through the order's amendments. */
+  lineKey: string;
   resourceId: string | null;
   resourceCode: string | null;
   rfqLineId: string | null;
@@ -130,6 +132,93 @@ export interface Order extends OrderHead {
   mayAcknowledge: boolean;
   mayCancel: boolean;
   mayClose: boolean;
+  /** The order in force line by line against what came (purchase orders). */
+  progress: LineProgress[];
+  receipts: {
+    id: string;
+    number: string;
+    status: ReceiptStatus;
+    receivedOn: string;
+    challanNo: string;
+    held: number;
+  }[];
+  mayReceive: boolean;
+}
+
+export type ReceiptStatus = 'posted' | 'cancelled';
+export type Inspection = 'gate' | 'hold' | 'inspected';
+
+export interface LineProgress {
+  lineKey: string;
+  position: number;
+  resourceId: string | null;
+  description: string;
+  unit: string;
+  ordered: string;
+  accepted: string;
+  onHold: string;
+  rejected: string;
+  returned: string;
+  outstanding: string;
+}
+
+export interface Receipt {
+  id: string;
+  number: string;
+  status: ReceiptStatus;
+  statusReason: string | null;
+  receivedOn: string;
+  challanNo: string;
+  challanDate: string | null;
+  invoiceNo: string | null;
+  vehicleNo: string | null;
+  notes: string;
+  order: { id: string; number: string; status: OrderStatus };
+  project: { id: string; number: string; name: string };
+  vendor: { id: string; name: string; gstin: string | null };
+  site: { id: string; name: string } | null;
+  receivedBy: string | null;
+  createdAt: string;
+  rowVersion: number;
+  lines: {
+    position: number;
+    lineKey: string;
+    description: string;
+    unit: string;
+    qty: string;
+    inspection: Inspection;
+    accepted: string;
+    rejected: string;
+    rejectionReason: string | null;
+    returned: string;
+    inspectedBy: string | null;
+    inspectedAt: string | null;
+  }[];
+  returns: {
+    id: string;
+    number: string;
+    returnedOn: string;
+    reference: string | null;
+    reason: string;
+    lines: { position: number; qty: string }[];
+  }[];
+  mayInspect: boolean;
+  mayReturn: boolean;
+  mayCancel: boolean;
+}
+
+export interface ReceiptRow {
+  id: string;
+  number: string;
+  status: ReceiptStatus;
+  receivedOn: string;
+  challanNo: string;
+  orderNumber: string;
+  orderId: string;
+  vendor: string;
+  project: { id: string; number: string; name: string };
+  lines: number;
+  held: number;
 }
 
 export interface OrderRow {

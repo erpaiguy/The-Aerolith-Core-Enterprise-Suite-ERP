@@ -11,6 +11,7 @@ import {
   Calculator,
   CheckCheck,
   ListChecks,
+  PackageCheck,
   ShoppingCart,
   Building2,
   Contact,
@@ -197,6 +198,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/orders" icon={<BriefcaseBusiness className="size-4" />}>
               Orders
+            </NavItem>
+            <NavItem to="/receipts" icon={<PackageCheck className="size-4" />}>
+              Goods receipts
             </NavItem>
             <Upcoming icon={<Warehouse className="size-4" />}>Stores</Upcoming>
           </nav>

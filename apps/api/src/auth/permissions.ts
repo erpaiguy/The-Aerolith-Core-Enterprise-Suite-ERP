@@ -60,6 +60,11 @@ export const PERMISSIONS = {
       "Make, amend and cancel a project's purchase and work orders (they still go through the approval rules)",
     defaults: { manager: true, worker: false },
   },
+  'stores.receive': {
+    label:
+      "Receive goods against a project's purchase orders at its sites, inspect what is held and return rejections",
+    defaults: { manager: true, worker: true },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

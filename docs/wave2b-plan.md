@@ -46,7 +46,7 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 | 2 | **Material budget and demand** (R1) | The project's material budget, copied from the tender's rate analyses and revised under approval; the estimate closed; requisitions against the budget, from BOQ items and from the look-ahead | **Done** (see below) |
 | 3 | **Vendor enquiries for a project** (R2) | Wave 1's RFQs and comparative statements for requisitioned materials | **Done** (see below) |
 | 4 | **Purchase and work orders** (R3) | Terms, GST, amendments, approvals, supplier acknowledgement | **Done** (see below) |
-| 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | |
+| 5 | **Goods receipt and inspection** (R4) | Partial receipts, quality hold, returns | **Done** (see below) |
 | 6 | **Inventory** (R5) | Stores, issues to WBS, transfers, returns, stock ledger, valuation, reorder levels, stock take | |
 | 7 | **Daily site reports** (R6) | Manpower, equipment, materials, weather, work done, delays, safety, photos; phone first | |
 | 8 | **Project documents** (R7) | The project's vault and drawings register with revisions (Wave 1's documents) | |
@@ -283,8 +283,8 @@ and a place on the team as lead or member (or the right to edit projects).
   until someone needs them.
 - **[Likely] Revision 0 is never thrown away**: a draft order that is not wanted is cancelled, so its number stays on
   the record with a reason (no gaps in the series).
-- **[Likely] Orders are not checked against the material budget** yet: the requisition is (step 2), and receipts
-  (step 5) and the procurement reports (step 9) compare ordered and received against it.
+- **[Likely] Orders are not checked against the material budget** yet: the requisition is (step 2), and the
+  procurement reports (step 9) compare ordered and received against it.
 - **[Guessing] Supplier acknowledgement is recorded, not collected**: the app does not email (docs/03-architecture.md
   §6), so it is typed in from their letter or email.
 
@@ -309,3 +309,61 @@ revision, for an approval's link); `POST /order-revisions/:id` (change a draft o
   ₹390.50 shows ₹39,050.00 + CGST ₹3,514.50 + SGST ₹3,514.50 = ₹46,079.00 as typed; submitted and issued, the same
   totals on the order; acknowledged; amended to 120 bags (₹55,294.80), in force, the acknowledgement cleared, the
   earlier revision superseded; in the orders register.
+
+## Step 5 delivered: goods receipt and inspection
+
+**Journey:**
+- An issued purchase order has **Receipts**: each line ordered, accepted, on hold, rejected (and whether it went
+  back) and **still owed**; its receipts; and **Receive goods**.
+- A receipt (GRN/2026-27/…) records the date, the site (the order's by default), the supplier's **delivery challan**
+  (number and date), vehicle and invoice numbers, and for each line what came. A line is **accepted at the gate**
+  (less anything rejected there, with why: burst bags) or **held for inspection** (steel for a bend test, cubes for
+  concrete). **Everything still owed** fills in the rest of the order.
+- On the receipt, a held line is **inspected**: accepted and rejected (with why), which must add up to what came.
+- **Return rejected goods**: what goes back to the supplier (RTV/2026-27/…), with the gate pass or debit note and why;
+  no more than was rejected and not yet returned.
+- **Rejected goods are still owed**: they do not count against the order, so the supplier sends replacements.
+- When every line has come and been accepted (nothing on hold, no amendment being worked on) the order **closes
+  itself** ("Received in full"). A receipt made in error is **cancelled** with a reason (not once something from it
+  went back): what it recorded is owed again and an order it closed reopens.
+- **Goods receipts** in the menu: the register across the projects you are on, or those waiting for inspection.
+  Receipts print as the gate record.
+
+**Who does what:** the project's team reads its receipts. Receiving, inspecting, returning and cancelling need the new
+**`stores.receive`** right (**managers and workers** by default: the storekeeper on site is usually a worker) and a
+place on the team as lead or member.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] Nothing beyond what is still owed**: receiving more than the order (a lorry with 105 bags, steel over
+  by weight) is refused with "amend the order", so an excess is approved like any other change to the order. Say if
+  you want a tolerance (say 2% for steel by weight) instead.
+- **[Certain] An amendment cannot ask for less than came**, nor drop a line something came for; and an order with
+  receipts cannot be cancelled, only closed.
+- **[Certain] Order lines keep a key through amendments**, so a receipt stays on "the cement line" whatever the
+  amendments did to positions. Lines written in step 4 were given keys by position (migration 0032).
+- **[Likely] Work orders are not received**: work is measured and billed (Wave 3), so receiving is for purchase orders.
+- **[Likely] A receipt is recorded once, not drafted**: what came is a fact at the gate; a mistake is cancelled with a
+  reason and recorded again.
+- **[Certain] Accepted goods are not stock yet**: the stock ledger, issues to work and valuation are step 6, which
+  takes accepted receipts as its first entries. Challan photos and test certificates wait for project documents
+  (step 8).
+
+**API** (under `/api/tenant`): `POST /orders/:id/receipts` (`{receivedOn, siteId, challanNo, challanDate, invoiceNo,
+vehicleNo, notes, lines: [{lineKey, qty, rejected, reason, hold}]}`); `GET /receipts?projectId&held`;
+`GET /receipts/:id`; `POST /receipts/:id/inspect` (`{lines: [{position, accepted, rejected, reason}]}`),
+`/returns` (`{returnedOn, reference, reason, lines: [{position, qty}]}`), `/cancel` (`{reason}`). An order carries
+`progress` (by line: ordered, accepted, onHold, rejected, returned, outstanding), `receipts` and `mayReceive`; its
+lines carry `lineKey`. Migration `0032_goods_receipts.sql`.
+
+**Tests:**
+- 4 API integration tests, worked by hand: 60 bags with 2 burst at the gate and 0.5 t of steel held (cement 58
+  accepted, 42 still owed; steel 0.735 owed); refused: off the team, a work order, a rejection without a reason, a line
+  twice, more than ordered, a future date, 43 bags when 42 are owed; the steel inspected (0.49 not adding up to 0.5
+  refused, then 0.45 + 0.05), its line not held refused; returns (3 bags when 2 were rejected refused, then 2 bags and
+  0.05 t), a receipt with returns not cancellable; an amendment to 50 bags or without the steel refused, the order not
+  cancellable; the rest received to the store yard, the order closed and further receipts refused; the receipt
+  cancelled, 42 bags owed again and the order reopened; the project's activity; a viewer reads but cannot receive.
+- The permission lists include `stores.receive`.
+- A browser test: an order for 100 bags and 1.235 t; 60 bags (2 burst) and the steel held; inspected (1.2 t passes,
+  0.035 t bent); both rejections returned (RTV); the order shows 42 bags and 0.035 t owed; the rest with "Everything
+  still owed": the order closes itself; two receipts in the register.

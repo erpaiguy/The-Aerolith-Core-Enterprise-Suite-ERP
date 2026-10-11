@@ -42,7 +42,9 @@ import { ApprovalRulesScreen } from './screens/ApprovalRules';
 import { ApprovalsScreen } from './screens/Approvals';
 import { MaterialBudgetScreen } from './screens/MaterialBudget';
 import { ProgressScreen } from './screens/Progress';
+import { GoodsReceiptScreen } from './screens/GoodsReceipt';
 import { OrdersScreen } from './screens/Orders';
+import { ReceiptsScreen } from './screens/Receipts';
 import { OrderOfRevisionScreen, PurchaseOrderScreen } from './screens/PurchaseOrder';
 import { RequisitionScreen } from './screens/Requisition';
 import { RequisitionsScreen } from './screens/Requisitions';
@@ -160,6 +162,14 @@ const orderRevisionRoute = createRoute({
   component: function OrderRevisionPage() {
     const { revisionId } = orderRevisionRoute.useParams();
     return <OrderOfRevisionScreen key={revisionId} revisionId={revisionId} />;
+  },
+});
+const receiptRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/receipts/$receiptId',
+  component: function ReceiptPage() {
+    const { receiptId } = receiptRoute.useParams();
+    return <GoodsReceiptScreen key={receiptId} receiptId={receiptId} />;
   },
 });
 const macroRoute = createRoute({
@@ -313,6 +323,12 @@ const routeTree = rootRoute.addChildren([
     materialBudgetRoute,
     orderRoute,
     orderRevisionRoute,
+    receiptRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/receipts',
+      component: ReceiptsScreen,
+    }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/orders',

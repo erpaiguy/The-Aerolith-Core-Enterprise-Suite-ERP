@@ -16,6 +16,7 @@ import {
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { Sql, TransactionSql } from 'postgres';
 import { ApprovalService, indiaToday, type Outcome } from '../approvals/approval.service.js';
 import type { TenantClaims } from '../auth/auth.service.js';
@@ -26,6 +27,8 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt, mul } from '../rates/decimal.js';
 import { RfqService } from '../rfq/rfq.service.js';
 import { nextNumber } from '../tender/numbering.js';
+import { orderProgress, receivedByLine } from './receipt-progress.js';
+import { ReceiptService } from './receipt.service.js';
 import { audit } from '../tender/tender-records.js';
 
 type Db = Sql | TransactionSql;
@@ -37,6 +40,8 @@ export type RevisionStatus =
 export type Supply = 'intra' | 'inter' | 'unregistered';
 
 export interface OrderLineInput {
+  /** The order line this continues (kept through amendments); none for a new line. */
+  lineKey?: string | null;
   resourceId: string | null;
   rfqLineId?: string | null;
   description: string;
@@ -111,6 +116,7 @@ export class PurchaseOrderService implements OnModuleInit {
     private readonly permissions: PermissionsService,
     private readonly approvals: ApprovalService,
     private readonly rfqs: RfqService,
+    private readonly receipts: ReceiptService,
   ) {}
 
   onModuleInit() {
@@ -188,9 +194,24 @@ export class PurchaseOrderService implements OnModuleInit {
       if (found.length !== resIds.length)
         throw new BadRequestException({ code: 'resource_not_found' });
     }
+    // A line keeps its key only if it is one of this order's lines, once.
+    const known = new Set(
+      (
+        await tx<{ line_key: string }[]>`
+          SELECT DISTINCT l.line_key FROM proc.po_line l JOIN proc.po_revision v ON v.id = l.revision_id
+          WHERE v.po_id = ${o.id}`
+      ).map((x) => x.line_key),
+    );
+    const used = new Set<string>();
+    const keyOf = (k: string | null | undefined) => {
+      if (!k || !known.has(k) || used.has(k)) return randomUUID();
+      used.add(k);
+      return k;
+    };
     const lines = input.lines.map((l, i) => ({
       revision_id: revisionId,
       position: i + 1,
+      line_key: keyOf(l.lineKey),
       resource_id: l.resourceId,
       rfq_line_id: l.rfqLineId ?? null,
       description: l.description,
@@ -393,6 +414,25 @@ export class PurchaseOrderService implements OnModuleInit {
             ? "The site has no GST state code: set it on the project's page, so GST can be worked out."
             : 'Say which site it is delivered to: that decides the GST.',
         });
+      // Not below what has already come (accepted or on hold), nor without a line something came for.
+      const got = await receivedByLine(tx, o.id);
+      if (got.size) {
+        const now = new Map(
+          (
+            await tx<{ line_key: string; qty: string }[]>`
+              SELECT line_key, qty::text AS qty FROM proc.po_line WHERE revision_id = ${revisionId}`
+          ).map((l) => [l.line_key, dec(l.qty)]),
+        );
+        for (const [key, g] of got)
+          if (dec(g.counted) > 0n && (now.get(key) ?? 0n) < dec(g.counted)) {
+            const [d] = await tx<{ description: string }[]>`
+              SELECT description FROM proc.grn_line WHERE line_key = ${key} LIMIT 1`;
+            throw new ConflictException({
+              code: 'below_received',
+              message: `${d!.description}: ${Number(g.counted)} already came, so the order cannot ask for less.`,
+            });
+          }
+      }
       const [inForce] = await tx<{ total: string }[]>`
         SELECT total::text FROM proc.po_revision WHERE po_id = ${o.id} AND status = 'approved'`;
       const delta = inForce ? cents(r.total) - cents(inForce.total) : cents(r.total);
@@ -479,10 +519,10 @@ export class PurchaseOrderService implements OnModuleInit {
         FROM proc.po_revision WHERE id = ${f!.id}
         RETURNING id`;
       await tx`
-        INSERT INTO proc.po_line (revision_id, position, resource_id, rfq_line_id, description, hsn, unit, qty, rate,
-          gst_pct, amount, cgst, sgst, igst)
-        SELECT ${r!.id}, position, resource_id, rfq_line_id, description, hsn, unit, qty, rate, gst_pct, amount,
-          cgst, sgst, igst
+        INSERT INTO proc.po_line (revision_id, position, line_key, resource_id, rfq_line_id, description, hsn, unit,
+          qty, rate, gst_pct, amount, cgst, sgst, igst)
+        SELECT ${r!.id}, position, line_key, resource_id, rfq_line_id, description, hsn, unit, qty, rate, gst_pct,
+          amount, cgst, sgst, igst
         FROM proc.po_line WHERE revision_id = ${f!.id}`;
       await audit(tx, claims.sub, 'order.amend', 'purchase_order', orderId, {
         revision: n!.next,
@@ -551,6 +591,13 @@ export class PurchaseOrderService implements OnModuleInit {
         throw new ConflictException({
           code: `already_${cur.status}`,
           message: `It is already ${cur.status}.`,
+        });
+      const [received] = await tx`
+        SELECT 1 FROM proc.goods_receipt WHERE po_id = ${orderId} AND status = 'posted' LIMIT 1`;
+      if (received)
+        throw new ConflictException({
+          code: 'has_receipts',
+          message: 'Goods have come against it: close it instead (nothing more is expected).',
         });
       const open = await tx<{ id: string }[]>`
         SELECT id FROM proc.po_revision WHERE po_id = ${orderId} AND status IN ('draft', 'submitted', 'rejected')`;
@@ -627,7 +674,7 @@ export class PurchaseOrderService implements OnModuleInit {
         v.total::text AS total, v.approved_at AS "approvedAt", v.row_version AS "rowVersion"
       FROM proc.po_revision v LEFT JOIN proj.site s ON s.id = v.site_id WHERE v.id = ${revisionId}`;
     const lines = await db`
-      SELECT l.position, l.resource_id AS "resourceId", r.code AS "resourceCode", l.rfq_line_id AS "rfqLineId",
+      SELECT l.position, l.line_key AS "lineKey", l.resource_id AS "resourceId", r.code AS "resourceCode", l.rfq_line_id AS "rfqLineId",
         l.description, l.hsn, l.unit, l.qty::text AS qty, l.rate::text AS rate, l.gst_pct::text AS "gstPct",
         l.amount::text AS amount, l.cgst::text AS cgst, l.sgst::text AS sgst, l.igst::text AS igst
       FROM proc.po_line l LEFT JOIN est.resource r ON r.id = l.resource_id
@@ -713,6 +760,9 @@ export class PurchaseOrderService implements OnModuleInit {
     const inForce = revisions.find((r) => r.status === 'approved');
     const open = revisions.find((r) => OPEN.includes(r.status));
     const live = o.status !== 'cancelled' && o.status !== 'closed';
+    const issued = o.status === 'issued' || o.status === 'acknowledged';
+    const receipts = await this.receipts.forOrder(db, orderId);
+    const anyReceived = receipts.some((r) => r.status === 'posted');
     return {
       ...(await this.head(db, orderId)),
       inForce: inForce ? await this.revisionDetail(db, inForce.id) : null,
@@ -726,7 +776,13 @@ export class PurchaseOrderService implements OnModuleInit {
       mayEdit: mayOrder && live && !!open && EDITABLE.includes(open.status),
       mayAmend: mayOrder && (o.status === 'issued' || o.status === 'acknowledged') && !open,
       mayAcknowledge: mayOrder && o.status === 'issued',
-      mayCancel: mayOrder && live,
+      mayCancel: mayOrder && live && !anyReceived,
+      progress: o.kind === 'purchase' && inForce ? await orderProgress(db, orderId) : [],
+      receipts,
+      mayReceive:
+        o.kind === 'purchase' &&
+        issued &&
+        (await this.receipts.mayReceive(db, claims, o.project_id)),
       mayClose: mayOrder && (o.status === 'issued' || o.status === 'acknowledged') && !open,
     };
   }

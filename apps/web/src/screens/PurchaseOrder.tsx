@@ -36,6 +36,7 @@ import {
   type Order,
   type OrderRevision,
 } from '../procurement/orders';
+import { OrderReceipts } from '../procurement/OrderReceipts';
 import { ResourcePicker } from '../procurement/ResourcePicker';
 import { shortDate } from '../schedule/model';
 
@@ -44,6 +45,7 @@ const trimZeros = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v)
 interface LineDraft {
   resourceId: string | null;
   resourceCode: string | null;
+  lineKey: string | null;
   rfqLineId: string | null;
   description: string;
   hsn: string;
@@ -63,6 +65,7 @@ const toDraft = (r: OrderRevision) => ({
   lines: r.lines.map((l): LineDraft => ({
     resourceId: l.resourceId,
     resourceCode: l.resourceCode,
+    lineKey: l.lineKey,
     rfqLineId: l.rfqLineId,
     description: l.description,
     hsn: l.hsn ?? '',
@@ -268,6 +271,7 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
                     reason: draft.reason,
                     lines: draft.lines.map((l) => ({
                       resourceId: l.resourceId,
+                      lineKey: l.lineKey,
                       rfqLineId: l.rfqLineId,
                       description: l.description,
                       hsn: l.hsn,
@@ -326,6 +330,7 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
           )}
         </Card>
       )}
+      {o.kind === 'purchase' && o.inForce && <OrderReceipts o={o} />}
       {o.revisions.length > 1 && (
         <Card title="Revisions" className="print:hidden">
           <ul className="space-y-1 text-sm" aria-label="Order revisions">
@@ -510,6 +515,7 @@ function Editor({
   const blank: LineDraft = {
     resourceId: null,
     resourceCode: null,
+    lineKey: null,
     rfqLineId: null,
     description: '',
     hsn: '',

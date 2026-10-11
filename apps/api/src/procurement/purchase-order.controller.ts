@@ -33,6 +33,7 @@ const revision = z.object({
   lines: z
     .array(
       z.object({
+        lineKey: z.uuid().nullable().default(null),
         resourceId: z.uuid().nullable().default(null),
         rfqLineId: z.uuid().nullable().default(null),
         description: z.string().trim().min(1).max(1000),

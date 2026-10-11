@@ -9,6 +9,8 @@ import { MaterialBudgetService } from './material-budget.service.js';
 import { ProjectRfqController } from './project-rfq.controller.js';
 import { PurchaseOrderController } from './purchase-order.controller.js';
 import { PurchaseOrderService } from './purchase-order.service.js';
+import { ReceiptController } from './receipt.controller.js';
+import { ReceiptService } from './receipt.service.js';
 import { RequisitionController } from './requisition.controller.js';
 import { RequisitionService } from './requisition.service.js';
 
@@ -19,7 +21,8 @@ import { RequisitionService } from './requisition.service.js';
     MaterialBudgetController,
     ProjectRfqController,
     PurchaseOrderController,
+    ReceiptController,
   ],
-  providers: [RequisitionService, MaterialBudgetService, PurchaseOrderService],
+  providers: [RequisitionService, MaterialBudgetService, PurchaseOrderService, ReceiptService],
 })
 export class ProcurementModule {}
