@@ -99,7 +99,7 @@ test('a drawing reviewed, returned, revised and approved', async ({ page }) => {
     name: 'Comment 1',
   });
   await expect(c1).toContainText('page 1 · RV-001');
-  await c1.getByLabel('Reply').fill('F3 to be 2.4 m square');
+  await c1.getByRole('textbox', { name: 'Reply' }).fill('F3 to be 2.4 m square');
   await c1.getByRole('button', { name: 'Reply' }).click();
   await expect(c1).toContainText('F3 to be 2.4 m square');
   await c1.getByRole('button', { name: 'Resolve' }).click();

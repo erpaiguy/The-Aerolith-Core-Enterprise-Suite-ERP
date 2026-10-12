@@ -82,6 +82,8 @@ import { ContractsScreen } from './screens/control/Contracts';
 import { RisksScreen } from './screens/control/Risks';
 import { MepScreen } from './screens/control/Mep';
 import { ReviewsScreen } from './screens/dms/Reviews';
+import { ShareScreen } from './screens/dms/Share';
+import { TransmittalsScreen } from './screens/dms/Transmittals';
 import { MonthlyReviewScreen, PortfolioScreen } from './screens/control/Portfolio';
 import {
   ClientReceiptScreen,
@@ -124,7 +126,7 @@ function Root() {
   const session = useSession();
   const path = useRouterState({ select: (s) => s.location.pathname });
 
-  if (PUBLIC_PATHS.includes(path)) return <Outlet />;
+  if (PUBLIC_PATHS.includes(path) || path.startsWith('/share/')) return <Outlet />;
   if (session.status === 'loading') return <Spinner label="Starting" />;
   if (session.status === 'needs_activation') return <ActivateScreen />;
   if (session.status === 'signed_out') {
@@ -527,6 +529,16 @@ const analysisReportRoute = createRoute({
   },
 });
 
+// A transmittal's recipient: no account, only the expiring link (docs/wave5-plan.md step 3).
+const shareRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/share/$tenant/$token',
+  component: function SharePage() {
+    const { tenant, token } = shareRoute.useParams();
+    return <ShareScreen tenant={tenant} token={token} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -728,6 +740,11 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/transmittals',
+      component: TransmittalsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/accounts/trial-balance',
       component: TrialBalanceScreen,
     }),
@@ -875,6 +892,7 @@ const routeTree = rootRoute.addChildren([
     path: '/reports/pipeline',
     component: PipelineReport,
   }),
+  shareRoute,
   createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: '/licences', component: LicencesScreen }),
   createRoute({

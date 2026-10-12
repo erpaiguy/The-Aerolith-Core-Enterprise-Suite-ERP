@@ -32,6 +32,7 @@ import {
   TriangleAlert,
   Fan,
   FileCheck2,
+  Send,
   LayoutGrid,
   ClipboardList,
   ListChecks,
@@ -266,6 +267,9 @@ export function AppShell() {
               badge={inbox.data?.pending.reviews}
             >
               Reviews
+            </NavItem>
+            <NavItem to="/transmittals" icon={<Send className="size-4" />}>
+              Transmittals and RFIs
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

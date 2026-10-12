@@ -199,6 +199,6 @@ owner's call).
 |------|------|--------|
 | 1 | Review workflows: status codes A/B/C/D with fixed effects, company or project workflows of stages (everyone or the first answer, due days, named users, the lead, members or a designation), reviews of a document version, returned on C and resubmitted on a new version, reminders and "waiting on me" | **Done** |
 | 2 | Mark-up and comments: a PDF viewer in the browser, comments boxed on a page or general, replies, resolved and reopened, frozen when the review closes; the review's comment sheet in Excel | **Done** |
-| 3 | Transmittals, RFIs and submittals; outside parties acknowledge through an expiring link | Next |
-| 4 | Controlled revisions | Planned |
+| 3 | Transmittals, RFIs and submittals: issued transmittals answered by the recipient through an expiring link (no account; only the token's hash kept), RFIs answered and tied to a variation or revised drawing, submittals approved through reviews with the material approval following | **Done** |
+| 4 | Controlled revisions | Next |
 | 5 | Internal sign-off with a drawn signature, stamped on the PDF with an audit certificate | Planned |

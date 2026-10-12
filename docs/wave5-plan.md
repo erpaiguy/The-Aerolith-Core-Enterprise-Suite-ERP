@@ -283,6 +283,37 @@ The transmittal register is in Excel too.
 - A browser test: a transmittal issued and its link opened in a fresh browser context (signed out), acknowledged and
   answered; the register shows it responded.
 
+## Step 3 delivered
+
+[Certain] As planned (migration 0062):
+- **Transmittals** TR-001…: drafted from vault versions with copies and remarks, then issued. Once issued they cannot
+  be changed. Registered with overdue shown, and closed. Each item shows when a newer revision has superseded it.
+- **The link:**
+  - `POST transmittals/:id/link` returns the path once (`/share/<tenant>/<token>`, 14 days by default). Only the
+    token's SHA-256 is stored.
+  - A new link or closing the transmittal withdraws the old one. Unknown tokens get 404, and expired or withdrawn
+    ones 410. A lapsed licence is refused, and the routes are rate limited (60 a minute, 10 for writes).
+  - The signed-out page shows the documents and lets the recipient download them, acknowledge by name, and answer
+    once with a code, a response and one file. The file is kept in the vault under `Transmittals/TR-001 response`, in
+    the issuer's name with a note saying who sent it.
+  - Every open, download, acknowledgement and response is logged with its IP, and the issuer is notified.
+- **RFIs** RFI-001…: assigned to someone on the project, with a notice and reminders the day before and on the day.
+  The assignee or the lead answers, and the raiser is notified. The outcome is a variation of the project or a newer
+  version of a drawing, then the RFI is closed.
+- **Submittals** SUB-001…: each starts a review (step 1) and takes its status. A resubmission moves the submittal to
+  the new review. A material submittal's material approval (Wave 3) is approved or rejected when its review closes
+  that way.
+- **Screen:** "Transmittals and RFIs", with tabs for transmittals, RFIs and submittals. Also the public page
+  `/share/…`.
+- **Not built:** the transmittal register in Excel (the screen's table is the register for now). The "raise a
+  variation from this RFI" shortcut is also left; the outcome links an existing variation.
+- **Tests:**
+  - `transmittals.int.spec.ts`: the link end to end with no headers, only the hash stored, the refusals (withdrawn,
+    expired, closed, unknown, malformed), the event log, an RFI to a revised drawing, and a material submittal
+    carrying its approval.
+  - The browser test `transmittals.spec.ts`: the recipient in a fresh signed-out browser downloads, acknowledges and
+    answers B with a file; the register shows it; an RFI is answered and closed.
+
 ## Risks
 
 1. [Likely] DSC tokens from different vendors ship different drivers; support will hit token-specific problems.
