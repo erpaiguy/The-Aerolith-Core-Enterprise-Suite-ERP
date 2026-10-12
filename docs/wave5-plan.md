@@ -103,3 +103,12 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 1. Which status code set do your consultants use?
 2. Is DSC signing needed for your own documents, or only for statutory submissions?
 3. Expiring links for external reviewers: acceptable, or wait for the Wave 6 portals?
+
+## Answers taken (2026-10-12: "start wave 5 with your recommended defaults")
+
+1. **Status codes:** A approved, B approved with comments, C revise and resubmit, D rejected. Each company can rename
+   them or add its own.
+2. **DSC signing** is for statutory submissions only (it needs the desktop app and the signer's USB token). Everything
+   else uses internal sign-off with a typed or drawn signature.
+3. **External reviewers** get an expiring, signed link (no account) to view what was sent and upload their response,
+   recorded against the transmittal. The Wave 6 portals replace it later.
