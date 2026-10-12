@@ -112,3 +112,20 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
    else uses internal sign-off with a typed or drawn signature.
 3. **External reviewers** get an expiring, signed link (no account) to view what was sent and upload their response,
    recorded against the transmittal. The Wave 6 portals replace it later.
+
+## Changed by the owner (2026-10-12)
+
+- **Reviews run on their own review engine** (schema `dms`), not as stage rules added to the approval engine.
+  - Reviews run in stages, in order or in parallel, and each reviewer returns a status code. The approval engine
+    runs by amount levels, and nine document types already depend on it.
+  - Reviews still show in "waiting on me".
+- **Signing is a drawn signature on a canvas, only.** Aadhaar eSign, DSC tokens and any certifying agency are out of
+  scope, so **step 6 is dropped**.
+  - Internal sign-off (step 5) is the signature: drawn, placed on the PDF, with an audit certificate page.
+  - The audit page records who signed, when, from which session, and the document's hash.
+  - The Wave 5 exit check becomes:
+    1. A drawing reviewed in three stages.
+    2. Revised.
+    3. Signed with drawn signatures.
+    4. Issued on a transmittal.
+    5. Acknowledged by the recipient through the expiring link.
