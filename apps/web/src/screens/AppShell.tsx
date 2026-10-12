@@ -14,6 +14,7 @@ import {
   Settings2,
   ShieldCheck,
   Gauge,
+  ArrowLeftRight,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -228,6 +229,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/cost-control" icon={<Gauge className="size-4" />}>
               Cost control
+            </NavItem>
+            <NavItem to="/cash-flow" icon={<ArrowLeftRight className="size-4" />}>
+              Cash flow
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

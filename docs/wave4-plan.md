@@ -180,6 +180,87 @@ each with its document.
   - The total agreeing with the project P&L.
 - A browser test: CTC entered, a line allocated, the month closed.
 
+## Step 2 in detail (planned before building)
+
+**What was found first.** [Certain] Nothing records when money is expected:
+- No payment days or credit period, for clients or suppliers.
+- Order payment terms are free text.
+- No billing plan.
+
+So step 2 adds **cash terms per project**, with defaults, and builds every expected date from them:
+- Client certifies a bill 30 days after it is raised, and pays 30 days after certifying.
+- Client deducts TDS at 2%.
+- Suppliers are paid 30 days after delivery.
+- Cost not yet ordered is paid 30 days after the work.
+
+**Inflow, per project:**
+- **Certified bills not fully received:** what is still owed, due at the invoice date plus the payment days. Anything
+  already overdue counts as due now.
+- **A submitted bill:** certified after the certification days, then paid after the payment days.
+- **Work done but not billed** (earned at contract rates less what bills have claimed): billed at the end of this
+  month, then certified and paid after the same delays.
+- **Work still to do**, by month:
+  - From the schedule's forecast dates (the S-curve of Wave 2a step 7) where activities are linked to the contract
+    BOQ.
+  - Otherwise, the remaining contract value spread evenly to the planned finish.
+  - Each month's work is billed at the month end.
+- **What a bill brings in:** value plus GST, less retention, advance recovery and the client's TDS, at the
+  project's bill terms.
+
+**Outflow, per project:**
+- **Posted supplier bills not fully paid:** due on their due date. Anything already overdue counts as due now.
+- **Open order balances** (step 1's committed) plus their GST: paid at delivery (the order's deliver-by date, or now
+  if passed) plus the supplier days.
+- **Cost not yet ordered:** step 1's cost to complete less the commitment, spread like the remaining work and paid
+  after the cost days.
+
+**Actual cash, per project:**
+- **In:** client receipts, the cash share of each project's allocations.
+- **Out:**
+  - Payment runs paid.
+  - Payroll paid, by each person's project days.
+  - Labour wage sheets paid.
+  - Manual payments with a project.
+
+**Company view:**
+- **Opening position:** the bank and cash balance as at the date.
+- **Actual:** the bank and cash ledgers' movement, contras left out.
+- **Forecast:**
+  - Every project's flows.
+  - Company overheads per month (a company setting, nothing by default).
+  - **GST to the government:** output tax on expected bills less input tax on expected payments, paid on the 20th
+    of the next month, with a credit carried forward.
+
+**Periods:**
+- By month: six months back, twelve ahead.
+- By week: eight weeks back, thirteen ahead.
+- An **as-of date** (today unless given), so a forecast can be read as it stood.
+
+**Rights:**
+- A project's cash flow: its team.
+- The company's cash flow: `accounts.view`.
+- Cash terms and the overheads: `cost.forecast`.
+
+**Tests:**
+- Unit tests:
+  - Periods.
+  - Dates moved by the terms.
+  - Overdue becoming due now.
+  - GST netted with a credit carried.
+- An integration test: a project's cash flow worked by hand for six months, in and out. It covers:
+  - A certified bill.
+  - Unbilled work.
+  - Remaining work spread to the finish.
+  - A supplier bill.
+  - An open order.
+  - Uncommitted cost.
+  - Actual receipts and payments.
+  - The company view with the bank balance and GST.
+- A browser test: cash terms changed and the forecast moving.
+
+**[Guessing]** Retention release at the end of the defects liability period, and escalation, are left out of the
+forecast for now. A finance person should say whether the defaults match the company's experience.
+
 ## Risks
 
 1. [Likely] Cost to complete entered per element is work site teams avoid; if it is not kept, forecasts collapse to

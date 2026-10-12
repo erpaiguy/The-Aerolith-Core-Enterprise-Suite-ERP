@@ -87,6 +87,8 @@ interface OrderLine {
   resourceId: string | null;
   resourceKind: string | null;
   amount: string;
+  gstPct: string;
+  deliverBy: string | null;
   billed: string;
   reqWbs: string | null;
   reqCost: string | null;
@@ -150,7 +152,8 @@ export class CostControlService {
   private async orderLines(db: Db, projectId: string) {
     return db<OrderLine[]>`
       SELECT o.id AS "poId", o.number, o.kind, o.status, p.name AS party, l.line_key AS "lineKey", l.description,
-        l.resource_id AS "resourceId", r.kind AS "resourceKind", l.amount::text,
+        l.resource_id AS "resourceId", r.kind AS "resourceKind", l.amount::text, l.gst_pct::text AS "gstPct",
+        to_char(v.deliver_by, 'YYYY-MM-DD') AS "deliverBy",
         coalesce((SELECT sum(bl.amount) FROM acc.vendor_bill b JOIN acc.vendor_bill_line bl ON bl.bill_id = b.id
           WHERE b.order_id = o.id AND b.status = 'posted' AND bl.line_key = l.line_key), 0)::text AS billed,
         q.wbs_id AS "reqWbs", q.cost_code_id AS "reqCost", a.wbs_id AS "allocWbs", a.cost_code_id AS "allocCost"
@@ -230,8 +233,8 @@ export class CostControlService {
     return { wbsId, costCodeId, how, source };
   }
 
-  /** Every figure, worked now. */
-  private async work(db: Db, projectId: string) {
+  /** Every figure, worked now (also read by cash flow, step 2). */
+  async work(db: Db, projectId: string) {
     const defaults = await this.defaults(db);
     const orders = await this.orderLines(db, projectId);
     const byOrderLine = new Map(orders.map((o) => [`${o.poId}|${o.lineKey}`, o]));
