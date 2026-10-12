@@ -16,7 +16,7 @@ test('a tender goes from lead through a scored bid decision to a recorded loss',
 }) => {
   const admin = `estimates-${Date.now()}@kulkarni-infra.in`;
   const nav = (name: string) =>
-    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name }).click();
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }).click();
   await signInNewAdmin(page, admin, 'Shuttering-Plate-88', 'Kulkarni Infra');
 
   // 1. Empty register, then a new tender with an inline new client.

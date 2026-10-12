@@ -77,8 +77,8 @@ the least certain and are revised as earlier waves reach pilots.
 | 2b Procurement, inventory, site reports | [wave2b-plan.md](wave2b-plan.md) | Steps 1-9 built; the exit criterion waits on a pilot site |
 | 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Built (steps 1-15); professional reviews open |
 | 4 Control | [wave4-plan.md](wave4-plan.md) | Built (steps 1-7, exit check in); pilot not yet |
-| 5 Document workflow | [wave5-plan.md](wave5-plan.md) | Planned |
-| 6 Growth (completes v1) | [wave6-plan.md](wave6-plan.md) | Planned |
+| 5 Document workflow | [wave5-plan.md](wave5-plan.md) | Built (steps 1-5, exit check in); pilot not yet |
+| 6 Growth (completes v1) | [wave6-plan.md](wave6-plan.md) | Built (steps 1-6, exit check in); pilot not yet; e-invoice GSP adapter waits on a sandbox |
 | 7 v2: AI, collaboration, productivity | [wave7-plan.md](wave7-plan.md) | Outline; rewritten at its start |
 
 ## Wave 0 build progress

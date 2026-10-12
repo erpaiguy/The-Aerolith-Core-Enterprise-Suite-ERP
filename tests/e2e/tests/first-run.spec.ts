@@ -62,7 +62,7 @@ test('admin activates, secures the account, adds a worker; the worker sets a pas
   await page.screenshot(shot('04-admin-home'));
 
   // 4. The admin adds a worker and sees the one-time password once.
-  await page.getByRole('link', { name: 'Users' }).click();
+  await page.getByRole('link', { name: 'Users', exact: true }).click();
   await expect(page.getByText('1 of 3 seats in use')).toBeVisible();
   await page.getByLabel('Username').fill('suresh');
   await page.getByLabel('Full name').fill('Suresh Patil');
@@ -84,7 +84,7 @@ test('admin activates, secures the account, adds a worker; the worker sets a pas
   await page.getByLabel('Repeat new password').fill('Tower-Crane-Lift-31');
   await page.getByRole('button', { name: 'Save password' }).click();
   await expect(page.getByRole('heading', { name: /Good (morning|day), Suresh/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Users' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Users', exact: true })).toHaveCount(0);
 
   // 6. The session survives a reload (refresh token in the HttpOnly cookie, never readable by the page).
   expect(await page.evaluate(() => document.cookie)).not.toContain('aerolith_rt');
