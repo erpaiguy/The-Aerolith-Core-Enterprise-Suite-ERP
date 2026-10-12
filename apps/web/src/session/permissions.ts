@@ -29,7 +29,8 @@ export type Permission =
   | 'safety.manage'
   | 'attendance.mark'
   | 'cost.forecast'
-  | 'crm.edit';
+  | 'crm.edit'
+  | 'sales.edit';
 
 export function usePermission(p: Permission): boolean {
   const { user, licence } = useSession();

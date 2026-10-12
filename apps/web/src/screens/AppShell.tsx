@@ -35,6 +35,7 @@ import {
   Send,
   Signature,
   Handshake,
+  Home,
   MailCheck,
   LayoutGrid,
   ClipboardList,
@@ -237,6 +238,9 @@ export function AppShell() {
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               Construction
             </div>
+            <NavItem to="/sales" icon={<Home className="size-4" />}>
+              Sales and RERA
+            </NavItem>
             <NavItem to="/projects" icon={<Building2 className="size-4" />}>
               Projects
             </NavItem>

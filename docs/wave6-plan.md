@@ -185,6 +185,91 @@ with filters; a lead's page with its interactions, follow-ups and conversion), a
   - The tender test's permission lists updated for `crm.edit`.
   - The browser test `crm.spec.ts`.
 
+## Step 2 in detail (planned before building)
+
+**What is there.** [Certain] Projects with schedules and measured progress (Wave 2a), the ledger with party ledgers,
+roles and GST output accounts, bank and cash ledgers (Wave 3a). Nothing for selling units.
+
+**[Certain] The rules this step relies on, Maharashtra first:**
+- RERA §13: no more than **10% of the cost** is taken before a registered agreement for sale.
+- RERA §4(2)(l)(D): **70% of amounts realised** from allottees go into a separate **designated account**. Withdrawals
+  are allowed in proportion to completion, as certified by the engineer, the architect and a chartered accountant
+  (MahaRERA Forms 1, 2 and 3).
+- MahaRERA rules: interest on delayed payment at **SBI's highest MCLR + 2%**, kept as a rate per project.
+- [Likely] GST on under-construction units:
+  - 5% for residential, 1% for affordable, 12% for commercial.
+  - These are effective rates, with the one-third land deduction already counted.
+  - Charged on each demand, intra-state (CGST and SGST halves).
+
+**[Guessing] Taken as defaults, each a project setting:**
+- 70% share.
+- 15 days to pay a demand.
+- Interest at 10.75% a year (MCLR 8.75% + 2), simple, by day.
+- GST is excluded from the 70% (it is the government's money, not the allottee's price).
+
+**Schema `re`:**
+- **Sales setup per project:** the RERA registration number and date, the declared completion date, the designated
+  bank ledger and the collection bank ledger, the share, interest rate and days to pay.
+- **Towers and units:**
+  - A unit has a tower, a floor, a number, a kind (flat, shop or office) and a carpet area in m².
+  - Its price: a rate per m² of carpet area, parking, other charges, and a GST rate.
+  - Its status: available, held, booked, agreement, cancelled.
+  - A unit's price is its own; a price list is a bulk update.
+- **Buyers:** name, co-applicant, phone, email, PAN and address.
+  - Each booking opens a party (flagged **buyer**, not client, so buyers stay out of client lists).
+  - The party's ledger sits under debtors, named "<unit> <buyer> (<booking>)", so two buyers with one name never
+    clash.
+- **Bookings** (BK-001…): the unit, the buyer, the agreement value (carpet area × rate + parking + charges), the
+  booked-on date, and the agreement date and registration number once registered. Cancelling frees the unit; the
+  refund is outside this step.
+- **Payment plans:**
+  - A project's stages, each a percentage of the agreement value. The stages total 100%.
+  - Each stage is due on booking, on agreement, or on a **construction milestone** (for example "plinth", "slab 3",
+    "possession").
+  - Site marks a milestone **reached on a date** (optionally with the schedule activity that shows it).
+- **Demands** (DM-001…):
+  - When a milestone is reached, a demand is raised for every live booking whose plan has that stage. The amount is
+    that percentage of the value, plus GST, due in the project's days.
+  - Before the agreement is registered, a demand that would take collections past 10% is held back until the
+    agreement is registered.
+  - Each demand **posts**: buyer Dr; advances from flat buyers Cr (a new ledger and role); output CGST and SGST Cr.
+- **Receipts:**
+  - Posted Dr the collection bank, Cr the buyer, then allocated to that buyer's demands oldest first.
+  - Each receipt's **RERA share** (70% of the part that is not GST) is added to what must be deposited.
+- **Delay interest:** worked out by day on each overdue demand until paid. "Raise interest" posts it as a demand of
+  its own (buyer Dr, interest income Cr).
+- **The designated account:**
+  - Deposits are contra entries from the collection bank to the designated bank. The screen shows what is required
+    against what has been deposited.
+  - Withdrawals are contra entries from the designated bank to another bank, each with the three certificates'
+    references and the completion % they certify.
+  - **Refused:** withdrawing past (deposited × certified completion %) less what has already been withdrawn.
+
+**Reports:**
+- Inventory by tower and status.
+- Sales (booked, agreement value, demanded, collected, outstanding, overdue).
+- A buyer's statement.
+- The **MahaRERA quarterly update** in Excel: units booked in the quarter and to date, amounts collected, the
+  designated account's deposits and withdrawals, and each tower's construction progress (from the milestones
+  reached).
+
+**Screen:** "Sales", with tabs for Inventory (a grid of units by floor, coloured by status), Bookings, Demands and
+receipts, and RERA.
+
+**Rights:** a new `sales.edit` (managers). Postings also need `accounts.post`, as other money steps do.
+
+**Tests:**
+- Unit: the agreement value, demand amounts with GST, the 10% rule, interest by day, the RERA share and the
+  withdrawal limit.
+- An integration test:
+  - A tower of units and a plan (10% on booking, 20% on agreement, 30% plinth, 40% possession).
+  - A booking, with the agreement's demand held until registration.
+  - Milestones reached and demands posted; a receipt allocated, with the 70% due.
+  - A deposit, a withdrawal refused past the limit and allowed within it.
+  - Interest on a late demand.
+  - The vouchers checked in the trial balance, and the quarterly workbook read back.
+- A browser test: units, a booking, a milestone, a demand and a receipt, and the RERA tab's numbers.
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own

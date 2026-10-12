@@ -412,8 +412,8 @@ export class LedgerService {
       { id: string }[]
     >`SELECT id FROM acc.account WHERE party_id = ${partyId}`;
     if (had) return had.id;
-    const [p] = await tx<{ name: string; is_client: boolean }[]>`
-      SELECT name, is_client FROM platform.party WHERE id = ${partyId} AND deleted_at IS NULL`;
+    const [p] = await tx<{ name: string; is_client: boolean; is_buyer: boolean }[]>`
+      SELECT name, is_client, is_buyer FROM platform.party WHERE id = ${partyId} AND deleted_at IS NULL`;
     if (!p) throw new NotFoundException({ code: 'party_not_found' });
     const [seq] = await tx<{ n: string }[]>`SELECT nextval('acc.party_code')::text AS n`;
     const code = `P${seq!.n.padStart(5, '0')}`;
@@ -421,7 +421,7 @@ export class LedgerService {
     const [a] = await tx<{ id: string }[]>`
       INSERT INTO acc.account (parent_id, is_group, nature, code, name, kind, party_id)
       SELECT g.id, false, g.nature, ${code}, ${clash ? `${p.name} (${code})` : p.name}, 'party', ${partyId}
-      FROM acc.account g WHERE g.system_key = ${partyGroupKey(p.is_client)}
+      FROM acc.account g WHERE g.system_key = ${partyGroupKey(p.is_client || p.is_buyer)}
       ON CONFLICT (party_id) DO NOTHING
       RETURNING id`;
     if (a) return a.id;

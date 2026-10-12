@@ -129,6 +129,10 @@ export const PERMISSIONS = {
     label: 'Keep leads, contacts and interactions; convert leads to tenders',
     defaults: { manager: true, worker: false },
   },
+  'sales.edit': {
+    label: 'Sell units: inventory, bookings, payment plans, demands, receipts and the RERA account',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

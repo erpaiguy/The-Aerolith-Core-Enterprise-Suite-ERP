@@ -373,6 +373,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'attendance.mark',
         'cost.forecast',
         'crm.edit',
+        'sales.edit',
       ]);
       expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
         'tender.edit',
@@ -401,6 +402,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'attendance.mark',
         'cost.forecast',
         'crm.edit',
+        'sales.edit',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
       const all = (await get('/tenant/permissions', t.admin)).json<{
@@ -434,6 +436,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'attendance.mark': true,
           'cost.forecast': true,
           'crm.edit': true,
+          'sales.edit': true,
         },
         worker: {
           'tender.edit': false,
@@ -462,6 +465,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'attendance.mark': true,
           'cost.forecast': false,
           'crm.edit': false,
+          'sales.edit': false,
         },
       });
     });

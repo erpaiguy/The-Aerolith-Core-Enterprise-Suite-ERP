@@ -70,6 +70,8 @@ export const ROLES = {
   lwf_payable: { label: 'Labour welfare fund payable', key: 'lwf_payable' },
   tds_payable_salary: { label: 'TDS payable, salaries', key: 'tds_payable_salary' },
   staff_advances: { label: 'Staff advances', key: 'staff_advances' },
+  buyer_advances: { label: 'Advances from flat buyers', key: 'advances_from_buyers' },
+  interest_income: { label: 'Interest income', key: 'interest_income' },
   round_off: { label: 'Round off', key: 'round_off' },
   profit_and_loss: { label: 'Profit and loss account', key: 'profit_and_loss' },
 } as const;
