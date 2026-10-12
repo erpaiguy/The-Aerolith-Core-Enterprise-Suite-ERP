@@ -159,7 +159,7 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 5 | Subcontract bills: a work order's measurement book (entries reversed, never changed); RA bills with retention to a cap, advance recovery, back-charges, labour cess and TDS; certified under approval into payables; retention released | **Done** |
 | 6a | GST: credit notes to clients; outward and inward registers; GSTR-1 for the offline tool and GSTR-3B; e-invoice JSON and IRNs; input tax blocked by ledger; GSTR-2B matched against the purchase book | **Done** |
 | 6b | TDS: challans depositing each deduction once, 26Q data for the return utility, clients' TDS matched against 26AS | **Done** |
-| 7 | Bank and reconciliation | Next |
-| 8 | Tally export and statements | |
+| 7 | Bank: statements imported (mapped CSV or Excel, OFX, MT940) once; lines matched to vouchers (suggested, picked, or posted in one click); the reconciliation as at a date | **Done** |
+| 8 | Tally export, financial statements, project P&L, year end | Next |
 | 9-13 | Fixed assets, equipment, HR, payroll, labour contractors | |
 | 14-15 | Quality, safety | |

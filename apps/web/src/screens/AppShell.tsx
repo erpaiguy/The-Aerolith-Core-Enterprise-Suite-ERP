@@ -248,6 +248,9 @@ export function AppShell() {
                 <NavItem to="/accounts/tds" icon={<Percent className="size-4" />}>
                   TDS
                 </NavItem>
+                <NavItem to="/accounts/bank" icon={<Building2 className="size-4" />}>
+                  Bank
+                </NavItem>
                 <NavItem to="/accounts/trial-balance" icon={<Scale className="size-4" />}>
                   Trial balance
                 </NavItem>

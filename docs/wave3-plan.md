@@ -283,6 +283,34 @@ above the limit, and the bulk JSON layout should be taken from a pilot's real fi
 - **Tests:** two months of 194C and 194I deductions deposited in two challans; the quarter's 26Q rows; a receivable
   matched, one short and one missing.
 
+## Step 7 in detail (planned before building)
+
+**Goal:** the bank ledger agrees with the bank's statement, and the difference is explained line by line.
+
+- **Statement import** for a bank ledger: **CSV or Excel** with a column mapping saved per bank ledger (date, narration,
+  reference, withdrawal, deposit, or one signed amount; balance; the date format); **OFX** (`STMTTRN`: date, amount,
+  FITID, cheque number, name and memo); **MT940** (`:61:` value date, credit or debit, amount, reference; `:86:`
+  narration). Each line is kept with a fingerprint (date, amount, reference, narration, balance); a line seen before
+  is skipped, and a file whose every line was imported before is refused.
+- **Matching:** each statement line against the bank ledger's voucher lines not yet reconciled, the same way round
+  (a deposit against a debit to the bank, a withdrawal against a credit). **Suggested:** the same amount within 7 days
+  of the voucher date, best first when the cheque or UTR number in the statement appears in the voucher's reference
+  or narration; confirmed by hand, one statement line against one or more voucher lines that add up to it. A match
+  is undone with a reason (both sides open again).
+- **One click for what only the bank knows:** an unmatched statement line becomes a voucher (bank charges, interest,
+  any ledger chosen): withdrawal: the ledger Dr, the bank Cr; deposit: the bank Dr, the ledger Cr; dated as on the
+  statement and matched at once.
+- **Bank reconciliation statement** as at a date: balance per the books; add cheques issued and not yet presented;
+  less deposits not yet credited; less charges and add credits on the statement not yet in the books; the balance as
+  per the bank, set against the statement's own closing balance on that date where the file carries balances.
+- **`BankAdapter`** (docs/03-architecture.md §14): the interface for a live statement feed, with only a mock adapter
+  (a bank's API needs a commercial agreement; none is bundled).
+- **Rights:** `accounts.view` sees statements, matches and the reconciliation; `accounts.post` imports, matches and
+  makes vouchers.
+- **Tests:** a month's statement (CSV) for a bank ledger with receipts, payments, a cheque not yet presented, a deposit
+  in transit and bank charges: suggestions, matches (one to two vouchers), charges posted in one click, the
+  reconciliation statement agreeing with the statement's balance; the same file again refused; OFX and MT940 parsed.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -949,3 +977,49 @@ Migration `0042_tds.sql`.
   workbook downloaded.
 
 **For the CA review:** the 26Q columns, interest and fees posted to one ledger, matching clients' TDS by quarter.
+
+## Step 7 delivered: bank and reconciliation
+
+**Journey:**
+- **Bank** (Accounts menu), for a company and a bank ledger, between two dates:
+  - **Statements:** the bank's **column mapping** saved per bank ledger (date, narration, reference, withdrawal and
+    deposit or one signed amount, balance, date format); **import** a CSV or Excel statement by it, or an OFX or MT940
+    file as it comes; Indian figures (`1,00,000.00`), "Dr"/"Cr" and brackets read; the bank's own header and footer
+    rows skipped. Lines seen before are skipped (each counted); a file whose every line was seen is refused.
+  - **Statement lines** with what each is matched to; for an open line, up to three **suggested** vouchers (the same
+    amount, the same way, within 7 days; those whose reference or number the statement mentions first), **pick
+    vouchers** (one or more adding up to the line), or **make a voucher** (a ledger and a narration: posted on the
+    statement's date and matched); a match **undone** with a reason.
+  - **Reconciliation** as at the "to" date: the books' balance; cheques issued and not presented; deposits not yet
+    credited; lines on the statement not in the books; the balance as per the bank, set against the statement's own
+    balance, and whether they agree.
+- **`BankAdapter`** with only `MockBankAdapter` (no bank's API is bundled: each needs a commercial agreement).
+
+**What it posts:** only the one-click vouchers: a withdrawal, the chosen ledger Dr and the bank Cr (a payment); a
+deposit, the bank Dr and the ledger Cr (a receipt).
+
+**Who does what:** `accounts.view` sees it; `accounts.post` sets the mapping, imports, matches, undoes and posts.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] A voucher and its reversal are left out of matching:** together they never touched the bank.
+- **[Likely] A line's fingerprint** is its date, amount, reference, narration and balance, with repeats in one file
+  counted, so two identical ₹59 charges on a day are two lines but the same file twice is one.
+- **[Likely] Matching is per company:** the vouchers offered are the chosen company's on that ledger.
+
+**API** (under `/api/tenant`): `GET|PUT /accounts/bank/:accountId/mapping`; `POST /accounts/bank/:accountId/statements`
+(multipart, field `file`); `GET /accounts/bank/:accountId/statement?entityId&from&to`;
+`GET /accounts/bank/:accountId/reconciliation?entityId&asOf`; `POST /accounts/bank-lines/:id/match|post`;
+`POST /accounts/bank-matches/:id/undo`.
+
+Migration `0043_bank.sql`.
+
+**Tests:**
+- 4 unit tests: amounts and dates as banks write them; a mapped CSV with a bank header and footer; OFX and MT940
+  (narration over two lines, the closing balance); fingerprints for repeats and the mock adapter.
+- 2 API integration tests, every figure by hand: six September vouchers and a five-line SBI statement; refused
+  without a mapping and for a worker; imported; refused the second time; suggestions by reference; one line matched
+  to two NEFT payments (one alone refused as not adding up, a second match refused); charges and interest posted in
+  one click (PV 5, RV 3); a match undone and made again; the reconciliation (books ₹70,353 + ₹12,000 not presented −
+  ₹20,000 not credited = ₹62,353, the statement's balance); a longer file taking only its one new line.
+- A browser test: the mapping saved, a statement imported and refused again, two lines made vouchers, the books and
+  the statement agreeing at ₹353.

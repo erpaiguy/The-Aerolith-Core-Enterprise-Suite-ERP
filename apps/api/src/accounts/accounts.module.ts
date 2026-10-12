@@ -3,6 +3,8 @@ import { ApprovalModule } from '../approvals/approval.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { ProjectModule } from '../project/project.module.js';
 import { ProvisioningModule } from '../provisioning/provisioning.module.js';
+import { BankController } from './bank.controller.js';
+import { BankService } from './bank.service.js';
 import { ClientBillController } from './client-bill.controller.js';
 import { ClientBillService } from './client-bill.service.js';
 import { GstController } from './gst.controller.js';
@@ -29,6 +31,7 @@ import { SubcontractService } from './subcontract.service.js';
     SubcontractController,
     GstController,
     TdsReturnController,
+    BankController,
   ],
   providers: [
     LedgerService,
@@ -38,6 +41,7 @@ import { SubcontractService } from './subcontract.service.js';
     SubcontractService,
     GstService,
     TdsReturnService,
+    BankService,
   ],
   exports: [LedgerService],
 })
