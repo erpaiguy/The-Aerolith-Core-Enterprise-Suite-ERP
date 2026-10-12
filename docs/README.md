@@ -206,3 +206,17 @@ owner's call).
 **Wave 5 is complete** (exit check `exit-5.int.spec.ts`). Drawn signatures are an internal sign-off with an audit
 trail, not a DSC or Aadhaar eSign; anything filed with a government portal that demands a DSC still needs one outside
 the app.
+
+## Wave 6 build progress ([plan](wave6-plan.md))
+
+The owner's answers: real estate sales and RERA in scope (Maharashtra first); only app users are paid seats, and
+portal users are free within a fair-use cap.
+
+| Step | What | Status |
+|------|------|--------|
+| 1 | CRM: contacts, leads with stage, value, probability and expected month, interactions with follow-ups, conversion to a tender whose outcome the lead follows, the pipeline | **Done** |
+| 2 | Real estate sales and RERA (Maharashtra first) | Next |
+| 3 | Report builder and BI | Planned |
+| 4 | Mobile app with offline site forms | Planned |
+| 5 | Portals (vendor, subcontractor, client) | Planned |
+| 6 | Integrations: public API, webhooks, Tally link, e-invoice adapters | Planned |

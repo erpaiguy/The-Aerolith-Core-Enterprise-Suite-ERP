@@ -81,6 +81,7 @@ import { VariationsScreen } from './screens/control/Variations';
 import { ContractsScreen } from './screens/control/Contracts';
 import { RisksScreen } from './screens/control/Risks';
 import { MepScreen } from './screens/control/Mep';
+import { CrmScreen } from './screens/crm/Crm';
 import { ReviewsScreen } from './screens/dms/Reviews';
 import { CheckScreen, DrawingReceiptsScreen } from './screens/dms/Receipts';
 import { ShareScreen } from './screens/dms/Share';
@@ -760,6 +761,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/sign-offs',
       component: SignOffsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/crm',
+      component: CrmScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

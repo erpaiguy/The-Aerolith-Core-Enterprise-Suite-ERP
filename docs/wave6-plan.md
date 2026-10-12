@@ -93,6 +93,98 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 - **Exit check for Wave 6 (and v1):** a manager builds a report they need without help; a vendor quotes and invoices
   through the portal; a site submits daily reports from the phone in a poor-signal area.
 
+## Answers taken (2026-10-12: "wave 6 proceed. keep real estate sales and RERA in scope, only the app users are counted as paid seats")
+
+1. **Developers are a target segment.** Real estate sales and RERA (step 2) are built. [Likely] RERA rules differ by
+   state; **Maharashtra (MahaRERA) first**, since the projects so far are there. Other states are added as data
+   (account share, report forms) when a tenant needs them.
+2. **Only app users (staff) are paid seats.** Portal users (vendors, subcontractors, clients, buyers) are free.
+   - [Likely] Free with no limit invites abuse and support cost, so each tenant has a **fair-use cap**: 50 external
+     users per kind by default, raised from the owner console.
+   - The cap is not a price.
+3. **Offline forms** (not answered, so the plan's list is taken): daily site report, attendance and muster, goods
+   receipt, issue slips, quality checklists.
+
+## Step 1 in detail (planned before building)
+
+**What is there.** [Certain] Parties (`platform.party`, with client, vendor and subcontractor flags and contact
+fields) and tenders. A tender's own status starts at "lead", and win/loss analysis exists (Wave 1 step 8). Nothing
+records the work before a tender: who we met, what they might build, and when.
+
+**Schema `crm`:**
+- **Contacts:** people at a party (name, role, phone, email), several per party. The party's single contact stays as
+  it is.
+- **Leads** (LD-001…):
+  - The details: a title, a party (or a new organisation's name, made into a party on conversion), a contact, a
+    source (referral, repeat client, website, cold call, event, portal, other), a segment (the tender verticals,
+    plus real estate) and a location.
+  - The money: an estimated value, an expected award month and a **probability**, set by stage and overridable.
+  - The workflow: an owner and a **stage**: new, qualified, proposal (or tender expected), negotiation, won, lost or
+    dropped. A lost or dropped lead has a reason.
+- **Interactions:** a call, meeting, site visit, email or note on a lead, with when and who. Each may set a
+  **follow-up** (a date and what to do). The owner gets a notice and a reminder at 09:00 that day, until it is done.
+- **Conversion to a tender:**
+  - A qualified lead becomes a tender (Wave 1) with its client (the party, created if new), title, value, location,
+    vertical and owner.
+  - The lead stays linked. Its stage follows the tender's outcome: won when the tender is won, lost (with the
+    reason) when lost or no-bid.
+  - A lead may also be marked **won directly**, for work awarded without a tender (repeat clients, negotiated work).
+
+**Pipeline:**
+- By stage: count, value and **weighted value** (value × probability).
+- By expected month for the next 12 months.
+- Leads with no interaction for 30 days ("going cold"), and overdue follow-ups.
+- Conversion rate by source.
+
+**Screens:** "CRM", with three tabs: the pipeline (a board by stage, with value and weighted totals), leads (a list
+with filters; a lead's page with its interactions, follow-ups and conversion), and contacts.
+
+**Rights:** a new permission, `crm.edit` (managers by default). Everyone reads; owners edit their own leads.
+
+**Tests:**
+- Unit: weighted value, default probabilities and the stage rules.
+- An integration test:
+  - A lead from a referral with a contact, two interactions and a follow-up (with its notice and reminder).
+  - Qualified, then converted to a tender with a new party created.
+  - The tender won, so the lead is won.
+  - A second lead lost with a reason.
+  - The pipeline numbers checked by hand; a lead going cold; rights.
+- A browser test: a lead created, an interaction logged, converted, and the pipeline showing it.
+
+## Step 1 delivered
+
+[Certain] As planned (migration 0065, schema `crm`, permission `crm.edit`):
+- **Contacts** per party. **Leads** LD-001… with source, segment, value, probability, expected month, owner and stage.
+- **The stage in effect:** a converted lead follows its tender. It is computed when read, from the tender's status
+  (won, then won; lost, no-bid, withdrawn or cancelled, then lost), not copied. Every way a tender's status changes is
+  covered without hooks.
+- **Probability:**
+  - A lead's own, else its stage's default (new 10, qualified 25, proposal 40, negotiation 60, tender 30). Won is
+    always 100 and lost 0.
+  - Weighted value is kept in paise.
+- **Moves by hand:** any way between new, qualified, proposal and negotiation, plus won, lost or dropped (lost and
+  dropped need a reason). A dropped lead can be revived. Nothing moves in or out of "tender" by hand.
+- **Interactions:**
+  - Recorded only when they have happened, not in the future.
+  - A follow-up gives the owner a notice and a reminder at 09:00 on the day. "Done" removes both.
+- **Conversion:**
+  - Allowed from qualified, proposal or negotiation, and needs `tender.edit` too.
+  - A new organisation becomes a client party, or an existing party of that name is reused and marked a client.
+  - The tender takes the title, value, location, vertical (real estate maps to buildings) and owner, with "From lead
+    LD-…" in its description.
+- **Pipeline:**
+  - Open count, value and weighted value, by stage.
+  - Weighted value by expected month, for 12 months.
+  - Win rate of closed leads by source.
+  - Leads untouched for 30 days, and follow-ups due within a week.
+- **Screen:** CRM, with Pipeline, Leads (each lead's card with its moves, conversion and interactions) and Contacts
+  tabs.
+- **Tests:**
+  - `crm-rules.spec.ts`.
+  - `crm.int.spec.ts`: referral to won tender, a follow-up's notices, a lost lead, and the pipeline checked by hand.
+  - The tender test's permission lists updated for `crm.edit`.
+  - The browser test `crm.spec.ts`.
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own

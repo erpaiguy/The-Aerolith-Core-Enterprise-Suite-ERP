@@ -125,6 +125,10 @@ export const PERMISSIONS = {
       'Enter cost to complete, place costs on WBS elements and cost codes, set the defaults, close cost months',
     defaults: { manager: true, worker: false },
   },
+  'crm.edit': {
+    label: 'Keep leads, contacts and interactions; convert leads to tenders',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

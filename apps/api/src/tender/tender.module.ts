@@ -42,6 +42,6 @@ import { TenderService } from './tender.service.js';
     TemplateService,
     TenderSettingsService,
   ],
-  exports: [RevisionService, RfqService, BoqService],
+  exports: [RevisionService, RfqService, BoqService, TenderService],
 })
 export class TenderModule {}

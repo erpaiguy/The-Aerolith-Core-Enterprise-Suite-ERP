@@ -34,6 +34,7 @@ import {
   FileCheck2,
   Send,
   Signature,
+  Handshake,
   MailCheck,
   LayoutGrid,
   ClipboardList,
@@ -208,6 +209,9 @@ export function AppShell() {
             </div>
             <NavItem to="/dashboards/tender" icon={<LayoutDashboard className="size-4" />}>
               Dashboards
+            </NavItem>
+            <NavItem to="/crm" icon={<Handshake className="size-4" />}>
+              CRM
             </NavItem>
             <NavItem to="/tenders" icon={<ScrollText className="size-4" />}>
               Tenders
