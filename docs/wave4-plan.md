@@ -132,3 +132,13 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 1. Is cost to complete entered by the site team, the planning team, or computed only?
 2. Which EAC method does your management use today?
 3. Do variations need the client's approval before billing in all your contracts, or are some billed pending?
+
+## Answers taken (2026-10-12: "start wave 4 with your recommended defaults")
+
+1. **Cost to complete** is entered by the planning team (permission `cost.forecast`) per WBS element and cost code.
+   Where nothing is entered, it is computed: remaining budget, floored at zero. A computed figure is marked as such
+   on every screen, so nobody mistakes it for a judgement.
+2. **EAC:** the forecast defaults to the CPI method (AC + (BAC − EV) ÷ CPI). The other methods are shown beside it,
+   and a project can choose a different one as its forecast.
+3. **Variations** are billed only once the client has approved them. A contract setting allows billing while
+   approval is pending, for the contracts that permit it; such lines are marked pending on the bill.
