@@ -13,6 +13,7 @@ import {
   LayoutTemplate,
   Settings2,
   ShieldCheck,
+  Gauge,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -224,6 +225,9 @@ export function AppShell() {
             </div>
             <NavItem to="/projects" icon={<Building2 className="size-4" />}>
               Projects
+            </NavItem>
+            <NavItem to="/cost-control" icon={<Gauge className="size-4" />}>
+              Cost control
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

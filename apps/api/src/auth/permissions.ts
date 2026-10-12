@@ -120,6 +120,11 @@ export const PERMISSIONS = {
     label: "Mark a site's attendance register (as the project's lead or member)",
     defaults: { manager: true, worker: true },
   },
+  'cost.forecast': {
+    label:
+      'Enter cost to complete, place costs on WBS elements and cost codes, set the defaults, close cost months',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

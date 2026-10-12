@@ -27,7 +27,8 @@ export type Permission =
   | 'labour.manage'
   | 'quality.manage'
   | 'safety.manage'
-  | 'attendance.mark';
+  | 'attendance.mark'
+  | 'cost.forecast';
 
 export function usePermission(p: Permission): boolean {
   const { user, licence } = useSession();

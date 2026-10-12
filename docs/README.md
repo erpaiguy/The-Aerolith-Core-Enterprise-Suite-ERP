@@ -75,8 +75,8 @@ the least certain and are revised as earlier waves reach pilots.
 | 1 Estimation, Bid/Tender, Documents | [wave1-plan.md](wave1-plan.md) | Built; pilot not yet |
 | 2a Projects and scheduling | [wave2a-plan.md](wave2a-plan.md) | Built; pilot not yet |
 | 2b Procurement, inventory, site reports | [wave2b-plan.md](wave2b-plan.md) | Steps 1-9 built; the exit criterion waits on a pilot site |
-| 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Building: steps 1-4 done |
-| 4 Control | [wave4-plan.md](wave4-plan.md) | Planned |
+| 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Built (steps 1-15); professional reviews open |
+| 4 Control | [wave4-plan.md](wave4-plan.md) | Building: step 1 done |
 | 5 Document workflow | [wave5-plan.md](wave5-plan.md) | Planned |
 | 6 Growth (completes v1) | [wave6-plan.md](wave6-plan.md) | Planned |
 | 7 v2: AI, collaboration, productivity | [wave7-plan.md](wave7-plan.md) | Outline; rewritten at its start |
@@ -171,3 +171,13 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 15 | Safety: incidents investigated to closure, permits to work issued only with their precautions and never to oneself, toolbox talks, safety inspections, man-hours from attendance and musters, frequency and severity rates; the 3c exit check | **Done** |
 
 **Wave 3 is complete.** Professional reviews still open: a chartered accountant (3a), a payroll practitioner (statutory figures), a quality engineer (acceptance criteria) and a safety officer (IS 3786 rates, permit precautions).
+
+## Wave 4 build progress ([plan](wave4-plan.md))
+
+Built on the recommended answers: cost to complete entered by planning (computed when blank), the forecast by the CPI
+method, variations billed once the client approves.
+
+| Step | What | Status |
+|------|------|--------|
+| 1 | Cost control: budget (original, changes, current), committed on orders, actual from the ledger, cost to complete, forecast and variance by cost code and WBS element; costs placed by rules (allocation, the voucher's cost code, the requisition behind an order, company defaults) with the rest shown as not placed; month closes compared; alerts; Excel | **Done** |
+| 2 | Cash flow | Next |
