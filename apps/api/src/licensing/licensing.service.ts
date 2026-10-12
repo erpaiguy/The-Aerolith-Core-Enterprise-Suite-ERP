@@ -42,6 +42,7 @@ interface LicenceRow {
   status: LicenceStatus;
   key_last4: string;
   seat_cap: number;
+  portal_cap: number;
   max_devices: number;
   starts_at: Date;
   ends_at: Date;
@@ -69,6 +70,8 @@ export interface TenantLicence {
   tierId: string;
   seatCap: number;
   roleCaps: Partial<Record<Role, number>> | null;
+  /** Portal users per kind (fair use; they are never seats). */
+  portalCap: number;
   state: LicenceState;
 }
 
@@ -252,6 +255,7 @@ export class LicensingService {
       tierId: row.tier_id,
       seatCap: row.seat_cap,
       roleCaps: row.role_caps,
+      portalCap: row.portal_cap,
       state: licenceState(
         { status: row.status, endsAt: row.ends_at, graceDays: row.grace_days },
         now,
@@ -320,6 +324,26 @@ export class LicensingService {
     });
   }
 
+  /** Raises or lowers a tenant's fair-use cap on portal users per kind (docs/wave6-plan.md step 5). */
+  async changePortalCap(licenceId: string, cap: number, reason: string, actor: string) {
+    return this.sql.begin(async (tx) => {
+      const licence = await this.lockLicence(tx, licenceId);
+      const from = licence.portal_cap;
+      if (from === cap) return { licenceId, portalCap: cap };
+      await tx`UPDATE core.licence SET portal_cap = ${cap}, row_version = row_version + 1 WHERE id = ${licenceId}`;
+      await tx`INSERT INTO core.licence_event (licence_id, kind, actor, data)
+        VALUES (${licenceId}, 'portal_cap_changed', ${actor}, ${tx.json({ from: from, to: cap, reason })})`;
+      await this.audit(
+        tx,
+        'licence.portal_cap_changed',
+        `licence:${licenceId}`,
+        { tenantId: licence.tenant_id, from: from, to: cap, reason },
+        actor,
+      );
+      return { licenceId, portalCap: cap };
+    });
+  }
+
   async revokeLicence(licenceId: string, reason: string, actor: string) {
     return this.sql.begin(async (tx) => {
       const licence = await this.lockLicence(tx, licenceId);
@@ -355,7 +379,7 @@ export class LicensingService {
 
   async getLicence(licenceId: string, now = new Date()) {
     const [licence] = await this.sql<LicenceRow[]>`
-      SELECT id, tenant_id, tier_id, kind, status, key_last4, seat_cap, max_devices, starts_at, ends_at, grace_days
+      SELECT id, tenant_id, tier_id, kind, status, key_last4, seat_cap, portal_cap, max_devices, starts_at, ends_at, grace_days
       FROM core.licence WHERE id = ${licenceId}`;
     if (!licence) throw new NotFoundException({ code: 'licence_not_found' });
     const devices = await this.sql`

@@ -502,6 +502,99 @@ deployment, against "no paid tools" for anyone without one. The inbox keeps noti
     its cache, still signed in, the outbox listing it), signal back, sent once, the outbox empty, one GRN on the
     order.
 
+## Step 5 in detail (planned before building)
+
+**What is there.** [Certain]
+- Staff accounts (`platform."user"`, seats) sign in with a device licence.
+- A transmittal can be shared by an unguessable link (`/share/:tenant/:token`, Wave 5).
+- These already exist and portals hang off them:
+  - Vendors are invited to RFQs (`tender.rfq_vendor`) and staff type their quotes.
+  - Orders and work orders carry a `party_id` and an acknowledgement.
+  - Work-order measurements are append-only.
+  - Vendor bills have an outstanding figure derived from paid runs.
+  - Client RA bills reach the client through `proj.project.client_id`.
+- Outbound email exists only on the control plane (owner accounts). The tenant side sends none.
+
+**Identity, kept apart from staff by construction:**
+- `portal.user` in the tenant database:
+  - A party, a kind (vendor, subcontractor or client), an email (unique), a name, and an argon2 password hash.
+  - Status: invited, active or deactivated. Failed-login lockout after 5 tries for 15 minutes, as for staff.
+- `portal.session`: refresh sessions, as for staff.
+- The access token is a new kind, **`portal`** (`{ten, sub, party, pk, sid}`, 15 minutes).
+  - [Certain] **The existing staff guard refuses every token that is not `tenant`, so a portal user can reach no staff
+    route.**
+  - A new `PortalGuard` admits only `portal` tokens to `/api/portal/*`, and every portal query filters by the token's
+    party.
+- The refresh cookie is `aerolith_prt` on `/api/portal/auth`.
+- Sign-in is at `/portal/<tenant>` with email and password. No device licence is needed. The tenant's licence must not
+  be revoked or suspended, and when it is read-only the portal is read-only too.
+
+**Invitations and the fair-use cap:**
+- Staff with the new permission **`portal.manage`** (admins and managers by default) invite an email for a party and
+  a kind. The party must carry that role, for example a vendor for the vendor portal.
+- The invite link is shown once (`/portal/<tenant>/accept#<token>`, valid 7 days, its hash kept). Staff send it the
+  way they send share links. Accepting sets a password, and possession of the link is the proof.
+  - [Likely] Sending it by email from the tenant needs a tenant mail setup, which does not exist. That is a later
+    addition.
+- **Cap:**
+  - `core.licence.portal_cap` (control-plane migration 0005): default 50 **per kind**, counting invited and active
+    users.
+  - Inviting past it is refused with `portal_cap_reached`.
+  - The owner console changes it on the licence page (`POST owner/licences/:id/portal-cap`, with a reason), recorded
+    as a `portal_cap_changed` licence event.
+  - Portal users never count as seats.
+- Staff can resend (a new link), deactivate (sessions revoked) and see the last sign-in.
+
+**Submissions are checked by staff before they count** (`portal.submission`):
+- Kinds:
+  - A **quote** against an RFQ the vendor was sent.
+  - A **measurement** against a work order.
+  - An **invoice** (a PDF or image, with number, date and amount) against an order.
+- The flow:
+  - Staff on that project are notified in the inbox.
+  - On "Submissions from portals", staff **accept** or **reject** with a reason. Accepting a quote saves it through
+    the RFQ's own quote entry (a new round). Accepting a measurement records the work-order measurements.
+  - Accepting an invoice marks it received for the accounts team, who post the vendor bill as today with the file
+    attached. [Likely] Posting bills straight from a vendor's figures is the wrong control.
+  - The submitter sees the status and any reason.
+- **Order acknowledgement** is the vendor's own act and counts directly (recorded as "Portal: name"), as it would on
+  paper.
+
+**What each portal shows** (read-only unless stated):
+- **Vendor:**
+  - Enquiries sent to them, open until due: lines and quantities, and their quote (submit).
+  - Their orders: lines, and acknowledge.
+  - Their invoices with status (submit).
+  - Their bills: amount, TDS, paid and outstanding.
+- **Subcontractor:**
+  - Their work orders: lines, measured to date, and submit a measurement.
+  - Their RA bills: status and certified amount.
+  - Bills and payments, as for a vendor.
+- **Client:**
+  - Their projects: contract value, billed, certified and received, and the latest site photos from daily reports
+    (30 days).
+  - Their RA bills with status and received.
+  - Transmittals addressed to their party: acknowledge and respond, through the same service as the share link.
+
+**Screens:**
+- Staff: "Portal users" (invite, resend, deactivate, cap used of 50) and "Submissions from portals".
+- Outside users: `/portal/<tenant>`, a small separate shell in the same web bundle with its own session. Sign in,
+  then tabs for what their kind sees.
+
+**Tests:**
+- Unit: invite and cap rules.
+- Integration:
+  - The cap at 50 per kind, raised by the operator.
+  - Invite, accept and sign in. Lockout after 5 failures.
+  - A portal token refused on a staff route, and a staff token on a portal route.
+  - Vendor A cannot see vendor B's enquiry or order (404).
+  - A quote submitted, accepted and visible in the RFQ comparison.
+  - A measurement submitted and accepted into the work order.
+  - A client sees only their own project's bills.
+  - A deactivated user's session refused.
+- Browser: a vendor invited, accepting, quoting and uploading an invoice. Staff accept the quote and see it in the
+  comparative statement.
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own

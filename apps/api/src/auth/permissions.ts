@@ -133,6 +133,11 @@ export const PERMISSIONS = {
     label: 'Sell units: inventory, bookings, payment plans, demands, receipts and the RERA account',
     defaults: { manager: true, worker: false },
   },
+  'portal.manage': {
+    label:
+      'Invite vendors, subcontractors and clients to the portals; accept or reject what they send',
+    defaults: { manager: true, worker: false },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

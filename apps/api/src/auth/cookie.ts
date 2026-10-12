@@ -28,6 +28,13 @@ export const refreshCookie = (token: string, secure: boolean): string =>
 export const clearedRefreshCookie = (secure: boolean): string =>
   cookie(REFRESH_COOKIE, '/api/auth', '', 0, secure);
 
+// Portal users (vendors, subcontractors, clients) keep their own cookie, scoped to the portal's auth routes.
+export const PORTAL_REFRESH_COOKIE = 'aerolith_prt';
+export const portalRefreshCookie = (token: string, secure: boolean): string =>
+  cookie(PORTAL_REFRESH_COOKIE, '/api/portal/auth', token, MAX_AGE_SECONDS, secure);
+export const clearedPortalRefreshCookie = (secure: boolean): string =>
+  cookie(PORTAL_REFRESH_COOKIE, '/api/portal/auth', '', 0, secure);
+
 export const operatorRefreshCookie = (token: string): string =>
   cookie(OPERATOR_REFRESH_COOKIE, '/api/owner/auth', token, OPERATOR_MAX_AGE_SECONDS, false);
 

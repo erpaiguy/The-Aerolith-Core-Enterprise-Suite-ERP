@@ -28,6 +28,10 @@ const trialChangeSchema = z.object({
   newEndsAt: z.coerce.date(),
   reason: z.string().trim().max(500).default(''),
 });
+const portalCapSchema = z.object({
+  portalCap: z.number().int().min(0).max(100000),
+  reason: z.string().trim().min(3).max(500),
+});
 const reasonSchema = z.object({ reason: z.string().trim().min(3).max(500) });
 const provisionSchema = z.object({ provider: z.enum(['local_postgres']) });
 const rolloutSchema = z.object({
@@ -91,6 +95,16 @@ export class OwnerController {
     @Body(new ZodPipe(trialChangeSchema)) body: z.infer<typeof trialChangeSchema>,
   ) {
     return this.licensing.changeTrialEnd(id, body.newEndsAt, body.reason, actor(op));
+  }
+
+  @Post('licences/:id/portal-cap')
+  @HttpCode(200)
+  changePortalCap(
+    @Auth() op: OperatorClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(portalCapSchema)) body: z.infer<typeof portalCapSchema>,
+  ) {
+    return this.licensing.changePortalCap(id, body.portalCap, body.reason, actor(op));
   }
 
   @Post('licences/:id/revoke')

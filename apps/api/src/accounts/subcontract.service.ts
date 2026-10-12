@@ -251,6 +251,25 @@ export class SubcontractService implements OnModuleInit {
     return this.workOrder(claims, orderId);
   }
 
+  /** Several lines measured together, all or none (a subcontractor's submission accepted from the portal). */
+  async measureMany(
+    claims: TenantClaims,
+    orderId: string,
+    measuredOn: string,
+    lines: { lineKey: string; qty: string; description: string }[],
+  ) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await db
+      .begin(async (tx) => {
+        const o = await this.order(tx, orderId);
+        await this.mustBill(tx, claims, o.project_id);
+        this.inForce(o);
+        for (const l of lines) await this.book(tx, claims, o, { ...l, measuredOn, reverses: null });
+      })
+      .catch(fromDb);
+    return this.workOrder(claims, orderId);
+  }
+
   /** A book entry is never changed: a mistake is taken out by an entry the other way. */
   async reverseMeasurement(
     claims: TenantClaims,

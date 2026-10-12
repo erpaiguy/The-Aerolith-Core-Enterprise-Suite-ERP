@@ -455,6 +455,11 @@ export class TransmittalService {
   async publicView(tenantId: string, token: string, ip: string | null) {
     const { db, link, t } = await this.open(tenantId, token);
     await this.event(db, link.id, 'open', ip);
+    return this.outward(db, t, link.expires_at);
+  }
+
+  /** What someone outside sees: through a share link, or on the client portal (docs/wave6-plan.md step 5). */
+  private async outward(db: Db, t: Row, expiresAt: Date | null) {
     const d = await this.detail(db, t.id);
     const [p] = await db<{ project: string }[]>`
       SELECT number || ' ' || name AS project FROM proj.project WHERE id = ${t.project_id}`;
@@ -478,7 +483,7 @@ export class TransmittalService {
       respondedBy: d.respondedBy,
       response: d.response,
       responseCode: d.responseCode,
-      expiresAt: link.expires_at,
+      expiresAt,
       items: d.items.map(({ id, name, versionNo, copies, remark }) => ({
         id,
         name,
@@ -560,5 +565,74 @@ export class TransmittalService {
       );
     });
     return this.publicView(tenantId, token, ip);
+  }
+
+  // --- the client portal (docs/wave6-plan.md step 5): transmittals addressed to the portal user's party ---
+
+  private async viaParty(tenantId: string, partyId: string, id: string) {
+    const db = await this.tenants.forTenant(tenantId);
+    const [t] = await db<Row[]>`
+      SELECT * FROM dms.transmittal WHERE id = ${id} AND party_id = ${partyId} AND status <> 'draft'`;
+    if (!t) throw new NotFoundException({ code: 'not_found', message: 'No such transmittal.' });
+    const lic = await this.licensing.tenantLicence(tenantId);
+    return { db, t, lic: lic.state };
+  }
+
+  async forParty(tenantId: string, partyId: string) {
+    const db = await this.tenants.forTenant(tenantId);
+    return db`
+      SELECT t.id, t.number, t.subject, t.purpose, t.status, p.name AS project,
+        to_char(t.due_on, 'YYYY-MM-DD') AS "dueOn", to_char(t.issued_on, 'YYYY-MM-DD') AS "issuedOn"
+      FROM dms.transmittal t JOIN proj.project p ON p.id = t.project_id
+      WHERE t.party_id = ${partyId} AND t.status <> 'draft'
+      ORDER BY t.issued_on DESC NULLS LAST, t.number DESC LIMIT 200`;
+  }
+
+  async partyView(tenantId: string, partyId: string, id: string) {
+    const { db, t } = await this.viaParty(tenantId, partyId, id);
+    return this.outward(db, t, null);
+  }
+
+  async partyFile(tenantId: string, partyId: string, id: string, itemId: string) {
+    const { db, t, lic } = await this.viaParty(tenantId, partyId, id);
+    const [it] = await db<{ document_id: string; version_no: number }[]>`
+      SELECT document_id, version_no FROM dms.transmittal_item WHERE id = ${itemId} AND transmittal_id = ${t.id}`;
+    if (!it) throw new NotFoundException({ code: 'not_found', message: 'No such item.' });
+    return this.documents.file(
+      await this.issuer(db, tenantId, t, lic),
+      it.document_id,
+      it.version_no,
+    );
+  }
+
+  async partyAcknowledge(tenantId: string, partyId: string, id: string, name: string) {
+    const { db, t } = await this.viaParty(tenantId, partyId, id);
+    await db.begin((tx) => this.acknowledgeTx(tx, t, name));
+    return this.partyView(tenantId, partyId, id);
+  }
+
+  async partyRespond(
+    tenantId: string,
+    partyId: string,
+    id: string,
+    input: { name: string; response: string; code: string | null },
+  ) {
+    const { db, t } = await this.viaParty(tenantId, partyId, id);
+    if (t.purpose !== 'review' && input.code)
+      throw new BadRequestException({ code: 'no_code', message: 'Only a review takes a code.' });
+    if (t.status === 'responded' || t.status === 'closed')
+      throw new ConflictException({
+        code: 'responded',
+        message: 'A response is already recorded.',
+      });
+    await db.begin(async (tx) => {
+      await this.respondTx(tx, await this.row(tx, t.id), {
+        by: input.name,
+        response: input.response,
+        code: input.code,
+        documentId: null,
+      });
+    });
+    return this.partyView(tenantId, partyId, id);
   }
 }

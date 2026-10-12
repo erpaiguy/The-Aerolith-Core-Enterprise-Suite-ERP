@@ -31,6 +31,19 @@ export type AccessClaims =
     }
   | {
       v: 1;
+      /** A vendor, subcontractor or client on a portal (docs/wave6-plan.md step 5); never a staff route. */
+      kind: 'portal';
+      ten: string;
+      sub: string;
+      party: string;
+      pk: 'vendor' | 'subcontractor' | 'client';
+      sid: string;
+      lic: LicenceState;
+      iat: number;
+      exp: number;
+    }
+  | {
+      v: 1;
       kind: 'enroll';
       who: 'admin' | 'operator';
       sub: string;

@@ -36,6 +36,6 @@ import { ReviewService } from './review.service.js';
     RevisionService,
     SignoffService,
   ],
-  exports: [ReviewService],
+  exports: [ReviewService, TransmittalService],
 })
 export class DmsModule {}
