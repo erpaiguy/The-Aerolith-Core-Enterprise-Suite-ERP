@@ -65,6 +65,13 @@ import {
   NewClientReceiptScreen,
   ReceivablesScreen,
 } from './screens/accounts/Receivables';
+import {
+  NewPaymentRunScreen,
+  NewVendorBillScreen,
+  PayablesScreen,
+  PaymentRunScreen,
+  VendorBillScreen,
+} from './screens/accounts/Payables';
 import { CompaniesScreen } from './screens/accounts/Companies';
 import { DayBookScreen, LedgerScreen, TrialBalanceScreen } from './screens/accounts/Reports';
 import { BooksSetupScreen } from './screens/accounts/Setup';
@@ -286,6 +293,22 @@ const clientReceiptRoute = createRoute({
     return <ClientReceiptScreen key={receiptId} receiptId={receiptId} />;
   },
 });
+const vendorBillRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/accounts/vendor-bills/$billId',
+  component: function VendorBillPage() {
+    const { billId } = vendorBillRoute.useParams();
+    return <VendorBillScreen key={billId} billId={billId} />;
+  },
+});
+const paymentRunRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/accounts/payment-runs/$runId',
+  component: function PaymentRunPage() {
+    const { runId } = paymentRunRoute.useParams();
+    return <PaymentRunScreen key={runId} runId={runId} />;
+  },
+});
 const voucherRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/accounts/vouchers/$voucherId',
@@ -489,6 +512,23 @@ const routeTree = rootRoute.addChildren([
       component: NewClientReceiptScreen,
     }),
     clientReceiptRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/payables',
+      component: PayablesScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/vendor-bills/new',
+      component: NewVendorBillScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/payment-runs/new',
+      component: NewPaymentRunScreen,
+    }),
+    vendorBillRoute,
+    paymentRunRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/accounts/trial-balance',

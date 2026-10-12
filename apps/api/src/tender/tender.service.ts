@@ -41,6 +41,10 @@ export interface PartyInput {
   phone: string | null;
   address: string | null;
   notes: string;
+  tdsSection?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNo?: string | null;
+  bankIfsc?: string | null;
 }
 
 export interface TenderInput {
@@ -66,7 +70,8 @@ export interface TenderInput {
 
 const PARTY_COLUMNS = `id, name, is_client AS "isClient", is_vendor AS "isVendor",
   is_subcontractor AS "isSubcontractor", is_competitor AS "isCompetitor", gstin, pan, contact_name AS "contactName", email, phone, address, notes,
-  row_version AS "rowVersion"`;
+  tds_section AS "tdsSection", bank_account_name AS "bankAccountName", bank_account_no AS "bankAccountNo",
+  bank_ifsc AS "bankIfsc", row_version AS "rowVersion"`;
 
 const TENDER_COLUMN: Record<keyof TenderInput, string> = {
   title: 'title',
@@ -102,6 +107,10 @@ const PARTY_COLUMN: Record<keyof PartyInput, string> = {
   phone: 'phone',
   address: 'address',
   notes: 'notes',
+  tdsSection: 'tds_section',
+  bankAccountName: 'bank_account_name',
+  bankAccountNo: 'bank_account_no',
+  bankIfsc: 'bank_ifsc',
 };
 
 const TENDER_SUMMARY = `t.id, t.number, t.title, t.status, t.client_ref AS "clientRef", t.vertical, t.location,

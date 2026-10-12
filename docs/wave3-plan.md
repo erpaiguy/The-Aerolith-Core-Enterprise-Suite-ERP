@@ -152,6 +152,47 @@ mobilisation advances; with what the client deducted; and what is still owed, ag
 - **Tests:** a receipt across two bills with TDS and a part payment; outstanding and ageing by hand; retention released;
   an advance received; an over-allocation refused; a cancellation reversing the voucher.
 
+## Step 4 in detail (planned before building)
+
+**Goal:** what the company owes its suppliers: their bills matched to the orders and receipts, TDS deducted by rule,
+input GST taken, debit notes; then paid in approved runs with a file for the bank.
+
+- **A vendor bill** (the supplier's tax invoice): the supplier, their bill number and date, the due date, and lines.
+  - **Against an order** (Wave 2b step 4): each line is an order line with the quantity billed and the rate; GST from
+    the order. **Three-way match:** the quantity billed may not exceed what was accepted on receipt (Wave 2b step 5)
+    less what earlier bills billed; the rate may not exceed the order's rate by more than the tenant's tolerance (0% by
+    default). A bill that does not match is **held** with the reasons; someone with the right to post **passes** it
+    with a reason, or cancels it. Work orders bill by quantity done without a receipt.
+  - **Without an order** (rent, services, site expenses): lines to an expense ledger, with a project when the ledger
+    needs one, and GST.
+  - CGST and SGST when the supplier's GSTIN state is the place of supply's (the site's for an order, the company's
+    otherwise), else IGST; a supplier without a GSTIN charges none.
+- **TDS** by section, kept as data with effective dates ([Guessing] each rate and threshold to be checked by the CA):
+  194C contractors (1% individuals and HUFs, 2% others; on a bill over ₹30,000 or once the year's bills pass
+  ₹1,00,000), 194J professional or technical fees (10%; over ₹30,000 in the year), 194I rent of land or building (10%;
+  over ₹2,40,000 in the year), 194Q purchase of goods (0.1% over ₹50 lakh in the year); 20% without a PAN (5% for
+  194Q). The supplier's default section is on the party. When the year's total first crosses the threshold, TDS is
+  deducted on the year's bills not taxed so far (catch-up). TDS is on the value before GST.
+- **Posted** as a purchase voucher: material consumption Dr (purchase-order lines), subcontract cost Dr (work-order
+  lines), or the expense ledger Dr (lines without an order), each with the project; input CGST/SGST/IGST Dr; the
+  supplier Cr the payable; TDS payable Cr the TDS. [Likely] Materials are a project's cost when billed (the purchase
+  method): stock in the books, goods-received-not-invoiced clearing and closing stock wait until receipts and issues
+  post to the books (step 8).
+- **Debit notes** against a bill (goods returned, rate differences): a taxable amount and its GST reversed; posted as a
+  debit note voucher (supplier Dr; the bill's ledger and input tax Cr).
+- **Payment runs:** a company, the bank, the payment date, and the bills due chosen (each up to what is outstanding),
+  or advances to a supplier for a project; submitted under the approval rules (`payment_run`); once approved, the
+  **bank file** (CSV: beneficiary, account number, IFSC, amount, reference) and **mark paid**, which posts one payment
+  voucher per supplier (supplier Dr or advances to suppliers Dr; bank Cr) and a **payment advice** for each, printable.
+  Suppliers' bank details are kept on the party.
+- **Advances** paid in a run are later **applied** to a bill of the same supplier (a journal: supplier Dr, advances to
+  suppliers Cr).
+- **Payables:** each supplier's outstanding aged from the due date as at a date, and advances not applied; as Excel.
+- **Rights:** `accounts.post` enters, passes and cancels bills and runs; payment runs go through the approval rules.
+- **Tests:** a bill matched to an order and receipt; one held for quantity and one for rate beyond tolerance, passed;
+  194C crossing the year's threshold with catch-up; a bill without an order; a debit note; a run approved, its bank
+  file, marked paid; an advance applied; payables aged by hand.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -565,4 +606,76 @@ advance received Cr the advance (with the project).
 
 **Also:** buttons in the forms added since Wave 2b that are not the form's own submit (add a line, remove, cancel,
 oldest first) no longer submit the form.
+
+## Step 4 delivered: vendor bills and payables
+
+**Journey:**
+- **Payables** (Accounts menu), for a company as at a date: what each supplier is owed, not due and 1-30, 31-60, 61-90
+  and over 90 days overdue, with advances not yet applied; the suppliers' bills (all, held, posted, cancelled); the
+  payment runs; as Excel.
+- **Enter a bill:** the supplier, their bill number (refused if entered before), dates (due 30 days later by
+  default), the TDS section (the supplier's by default).
+  - **Against an order:** its lines with what was accepted on receipt; quantities and rates billed. The bill is
+    matched: a quantity beyond what was accepted (for a work order, ordered) and not billed before, or a rate above the
+    order's beyond the tenant's tolerance (0% by default), **holds** the bill with the reasons. Someone with the right
+    to post **passes** it with a reason, or cancels it.
+  - **Without an order:** each line to an expense ledger, with a project, at its GST rate.
+  - GST from the order (CGST and SGST or IGST as on the order), or from the supplier's GSTIN state against the
+    company's; none for an unregistered supplier.
+- **TDS** worked by the section's data: a bill above the single-bill limit is taxed on itself; once the year's bills
+  pass the annual limit, on everything not taxed so far; individuals and HUFs (the PAN's 4th letter) at the lower
+  rate; without a PAN at the higher; to the rupee.
+- **A bill's page:** lines, GST, TDS, payable and outstanding; why it is held; pass; cancel (a posted bill only while
+  nothing is paid, applied or noted against it, by reversing its voucher); **debit note** (value and GST reversed);
+  **apply an advance**.
+- **Payment runs:** the bank, the date, the bills to pay (each up to what is outstanding and not already in a run;
+  "All" fills it) and advances (supplier, project, amount). Submitted under the approval rules for payment runs;
+  once approved, the **bank file** (CSV, refused until every supplier has an account number and IFSC) and **mark
+  paid**, which posts one payment voucher per supplier. Printable as payment advices.
+- **Clients and suppliers** now keep a supplier's TDS section and bank account.
+
+**What it posts:** a bill: each line's ledger Dr (material consumption for purchase orders, subcontract cost for work
+orders, the chosen ledger otherwise, each with the project), input tax Dr, the supplier Cr the payable, TDS payable Cr
+the TDS (194C, 194J, 194I and 194Q each to its ledger). A debit note: the supplier Dr; the bill's first ledger and input
+tax Cr. A payment: the supplier (or advances to suppliers) Dr; the bank Cr. An advance applied: the supplier Dr,
+advances to suppliers Cr.
+
+**Who does what:** `accounts.post` enters, passes and cancels bills, raises debit notes, applies advances and makes and
+pays runs; payment runs above a rule's amount wait for approval. The admin sets the rate tolerance.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Materials are costed when billed,** not when received or issued (see the plan above).
+- **[Likely] A held bill does not post** until passed; its quantities still count against what can be billed.
+- **[Guessing] The TDS sections, rates and limits** (194C 1%/2% over ₹30,000 a bill or ₹1 lakh a year; 194J 10% over
+  ₹30,000; 194I 10% over ₹2,40,000; 194Q 0.1% over ₹50 lakh; 20% without a PAN) are data with dates, for the CA to
+  confirm. Lower-deduction certificates are not handled yet.
+- **[Likely] The bank file is a plain CSV** (beneficiary, account, IFSC, amount, date, reference); each bank's own layout
+  is a later mapping.
+
+**API** (under `/api/tenant`):
+- `GET /accounts/tds-sections`; `POST /accounts/payables-settings` (`{rateTolerancePct}`, admin).
+- `GET|POST /accounts/vendor-bills`, `GET /accounts/vendor-bills/:id`, `POST /accounts/vendor-bills/:id/pass|cancel|debit-notes|apply-advance`.
+- `GET|POST /accounts/payment-runs`, `GET /accounts/payment-runs/:id`, `POST /accounts/payment-runs/:id/submit|cancel|paid`,
+  `GET /accounts/payment-runs/:id/bank-file`.
+- `GET /accounts/payables?entityId&asOf` (`format=xlsx`). Parties take `tdsSection`, `bankAccountName`,
+  `bankAccountNo`, `bankIfsc`.
+
+Migration `0039_payables.sql`.
+
+**Tests:**
+- 4 API integration tests, every figure by hand:
+  - 60 bags accepted of 100 ordered: V/101 for the 60 at ₹390 matched and posted (₹29,952; its voucher's lines); a
+    repeated bill number and a worker refused; V/102 for 30 more at ₹395 held for both reasons, then passed (₹15,168).
+  - A contractor (an individual, no GST) under 194C: ₹24,000 (no TDS), ₹36,000 (₹360 on itself), ₹48,000 (the year
+    at ₹1,08,000: ₹720 on ₹72,000); a fourth bill beyond the work order held and cancelled. Rent of ₹2,50,000 + 18%
+    under 194I without an order: ₹25,000 TDS, ₹2,70,000 payable.
+  - A debit note of ₹2,496; a ₹73,096 run waiting for approval, approved by the admin; the bank file refused until
+    both suppliers have accounts, then exact; paid in two vouchers; the advance applied to the contractor's bill and no
+    more; a paid bill not cancelled.
+  - Payables as at 30 September: ₹3,46,448 across three suppliers by age; the supplier's ledger and TDS payable 194C
+    (₹1,080) agree.
+- A browser test: the company's GSTIN, a bank ledger, a landlord with a bank account; a ₹59,000 rent bill entered and
+  posted; a run paying it, approved, its bank file, paid; nothing owed.
+
+**For the CA review:** the TDS data and catch-up rule, costing materials when billed, and the debit note's posting.
 

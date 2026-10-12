@@ -40,6 +40,8 @@ export const ROLES = {
   tds_receivable: { label: 'TDS deducted by clients', key: 'tds_receivable' },
   tds_payable_194c: { label: 'TDS payable, contractors (194C)', key: 'tds_payable_194c' },
   tds_payable_194j: { label: 'TDS payable, professionals (194J)', key: 'tds_payable_194j' },
+  tds_payable_194i: { label: 'TDS payable, rent (194I)', key: 'tds_payable_194i' },
+  tds_payable_194q: { label: 'TDS payable, purchase of goods (194Q)', key: 'tds_payable_194q' },
   retention_receivable: { label: 'Retention held by clients', key: 'retention_receivable' },
   retention_payable: { label: 'Retention held from subcontractors', key: 'retention_payable' },
   mobilisation_advance_received: {

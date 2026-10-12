@@ -30,6 +30,7 @@ import {
   ScrollText,
   Tags,
   Users,
+  Wallet,
   Warehouse,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -236,6 +237,9 @@ export function AppShell() {
                 </NavItem>
                 <NavItem to="/accounts/receivables" icon={<HandCoins className="size-4" />}>
                   Receivables
+                </NavItem>
+                <NavItem to="/accounts/payables" icon={<Wallet className="size-4" />}>
+                  Payables
                 </NavItem>
                 <NavItem to="/accounts/trial-balance" icon={<Scale className="size-4" />}>
                   Trial balance

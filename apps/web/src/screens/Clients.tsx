@@ -7,6 +7,7 @@ import {
   Field,
   Input,
   PageHeader,
+  Select,
   Spinner,
   Table,
   Textarea,
@@ -48,6 +49,10 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
           email: party.email ?? '',
           phone: party.phone ?? '',
           address: party.address ?? '',
+          tdsSection: party.tdsSection ?? '',
+          bankAccountName: party.bankAccountName ?? '',
+          bankAccountNo: party.bankAccountNo ?? '',
+          bankIfsc: party.bankIfsc ?? '',
         }
       : blank,
   );
@@ -125,6 +130,42 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
             <Input name="address" value={v.address ?? ''} onChange={set('address')} />
           </Field>
         </div>
+        {(v.isVendor || v.isSubcontractor) && (
+          <div className="grid gap-4 md:grid-cols-4">
+            <Field label="TDS section" hint="Deducted from their bills">
+              <Select value={v.tdsSection ?? ''} onChange={set('tdsSection')}>
+                <option value="">None</option>
+                <option value="194C">194C contractors</option>
+                <option value="194J">194J professional fees</option>
+                <option value="194I">194I rent</option>
+                <option value="194Q">194Q purchase of goods</option>
+              </Select>
+            </Field>
+            <Field label="Bank account name">
+              <Input
+                value={v.bankAccountName ?? ''}
+                onChange={set('bankAccountName')}
+                maxLength={200}
+              />
+            </Field>
+            <Field label="Account number">
+              <Input
+                value={v.bankAccountNo ?? ''}
+                onChange={set('bankAccountNo')}
+                maxLength={20}
+                inputMode="numeric"
+              />
+            </Field>
+            <Field label="IFSC">
+              <Input
+                value={v.bankIfsc ?? ''}
+                onChange={set('bankIfsc')}
+                maxLength={11}
+                className="uppercase"
+              />
+            </Field>
+          </div>
+        )}
         <Field label="Notes">
           <Textarea name="notes" rows={2} value={v.notes} onChange={set('notes')} />
         </Field>

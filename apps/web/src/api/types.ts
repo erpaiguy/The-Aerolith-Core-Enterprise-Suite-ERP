@@ -116,6 +116,11 @@ export interface Party {
   phone: string | null;
   address: string | null;
   notes: string;
+  /** A supplier's default TDS section and bank account (docs/wave3-plan.md step 4). */
+  tdsSection?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNo?: string | null;
+  bankIfsc?: string | null;
   rowVersion: number;
 }
 

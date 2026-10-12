@@ -71,6 +71,25 @@ const partyFields = {
   phone: text(40),
   address: text(1000),
   notes: z.string().trim().max(4000),
+  // A supplier's default TDS section and bank account (docs/wave3-plan.md step 4).
+  tdsSection: z
+    .enum(['194C', '194J', '194I', '194Q'])
+    .nullable()
+    .or(z.literal('').transform(() => null)),
+  bankAccountName: text(200),
+  bankAccountNo: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{6,20}$/, 'An account number: 6 to 20 digits')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
+  bankIfsc: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'An IFSC looks like HDFC0001234')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
 };
 const partyCreate = z.object({
   ...partyFields,
@@ -85,6 +104,10 @@ const partyCreate = z.object({
   phone: partyFields.phone.default(null),
   address: partyFields.address.default(null),
   notes: partyFields.notes.default(''),
+  tdsSection: partyFields.tdsSection.default(null),
+  bankAccountName: partyFields.bankAccountName.default(null),
+  bankAccountNo: partyFields.bankAccountNo.default(null),
+  bankIfsc: partyFields.bankIfsc.default(null),
 });
 const partyUpdate = z
   .object(partyFields)
