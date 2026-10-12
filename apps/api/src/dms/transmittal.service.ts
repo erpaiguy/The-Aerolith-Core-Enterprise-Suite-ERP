@@ -23,8 +23,6 @@ import { audit } from '../tender/tender-records.js';
 type Db = Sql | TransactionSql;
 type Purpose = 'information' | 'review' | 'construction' | 'record';
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-const addDays = (d: string, n: number) =>
-  new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const sha256 = (s: string) => createHash('sha256').update(s).digest();
 
 interface Row {
