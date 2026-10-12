@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Gauge,
   ArrowLeftRight,
+  TrendingUp,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -232,6 +233,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/cash-flow" icon={<ArrowLeftRight className="size-4" />}>
               Cash flow
+            </NavItem>
+            <NavItem to="/earned-value" icon={<TrendingUp className="size-4" />}>
+              Earned value
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

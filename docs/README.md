@@ -76,7 +76,7 @@ the least certain and are revised as earlier waves reach pilots.
 | 2a Projects and scheduling | [wave2a-plan.md](wave2a-plan.md) | Built; pilot not yet |
 | 2b Procurement, inventory, site reports | [wave2b-plan.md](wave2b-plan.md) | Steps 1-9 built; the exit criterion waits on a pilot site |
 | 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Built (steps 1-15); professional reviews open |
-| 4 Control | [wave4-plan.md](wave4-plan.md) | Building: step 1 done |
+| 4 Control | [wave4-plan.md](wave4-plan.md) | Building: steps 1-3 done |
 | 5 Document workflow | [wave5-plan.md](wave5-plan.md) | Planned |
 | 6 Growth (completes v1) | [wave6-plan.md](wave6-plan.md) | Planned |
 | 7 v2: AI, collaboration, productivity | [wave7-plan.md](wave7-plan.md) | Outline; rewritten at its start |
@@ -180,4 +180,6 @@ method, variations billed once the client approves.
 | Step | What | Status |
 |------|------|--------|
 | 1 | Cost control: budget (original, changes, current), committed on orders, actual from the ledger, cost to complete, forecast and variance by cost code and WBS element; costs placed by rules (allocation, the voucher's cost code, the requisition behind an order, company defaults) with the rest shown as not placed; month closes compared; alerts; Excel | **Done** |
-| 2 | Cash flow | Next |
+| 2 | Cash flow: per project and for the company, by month or week, actual back (receipts, payments, payroll, wages; the bank) and forecast ahead from cash terms (certification and payment delays, client TDS, supplier and cost days): bills owed, work done and to come, supplier bills, open orders, cost not yet ordered, overheads, GST to the government | **Done** |
+| 3 | Earned value: PV from the baseline at budget value, EV from the measurement book at budget rates, AC from the ledger; SV, CV, SPI, CPI; four estimates at completion side by side and the one the project uses; by WBS element; S-curves | **Done** |
+| 4 | Variations and change orders | Next |

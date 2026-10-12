@@ -261,6 +261,55 @@ So step 2 adds **cash terms per project**, with defaults, and builds every expec
 **[Guessing]** Retention release at the end of the defects liability period, and escalation, are left out of the
 forecast for now. A finance person should say whether the defaults match the company's experience.
 
+## Step 3 in detail (planned before building)
+
+**Goal:** a project's schedule and cost performance from what is recorded, by month and WBS element, with forecasts
+by the usual methods side by side.
+
+**The three curves, cumulative, at budget value:**
+- **EV (earned value):** the measurement book's quantities × each item's **budget rate**, the rate its budget line
+  shares the contract line's key with, as the progress report's budget value (Wave 2a step 6) already works it.
+  - [Likely] An item with no budget line falls back to its contract rate × the project's budget ÷ contract ratio.
+- **PV (planned value):** the same budget value of each linked contract item, spread evenly over the **baseline**
+  dates of the activities that carry it (Wave 2a steps 4 and 7), shared equally when several do.
+  - Re-baselining moves PV, never EV or AC.
+  - No baseline: PV is not shown and the indices are blank.
+- **AC (actual cost):** step 1's actual, from the ledger, by date. By WBS element through step 1's charges; what is
+  not on a WBS element stays at project level.
+
+**At a date** (today unless given):
+- BAC (the current budget).
+- PV, EV and AC.
+- Schedule and cost variance (SV = EV − PV, CV = EV − AC).
+- SPI = EV ÷ PV and CPI = EV ÷ AC.
+- Percent planned, done and spent.
+
+The same figures are given by WBS element.
+
+**EAC, side by side:**
+- The CPI method (BAC ÷ CPI): the default chosen at the start of Wave 4.
+- Remaining at budget (AC + BAC − EV).
+- CPI × SPI (AC + (BAC − EV) ÷ (CPI × SPI)).
+- Step 1's bottom-up forecast (actual + cost to complete).
+
+The project chooses one (`cost.forecast`). ETC = EAC − AC; VAC = BAC − EAC.
+
+**S-curves:** PV, EV and AC by month from the first date to the baseline finish, drawn with ECharts as the project
+dashboard does.
+
+**Rights:** the project's team sees it; `cost.forecast` chooses the method.
+
+**Tests:**
+- Unit tests:
+  - Indices and the four EACs on a worked example (SPI 0.8, CPI 0.9).
+  - Division by nothing blank.
+- An integration test:
+  - A budget, a schedule with a baseline and two activities linked to the contract BOQ, measurements and costs.
+  - PV, EV and AC worked by hand at a date.
+  - The project re-baselined and PV moving.
+  - The chosen method.
+- A browser test: the curves drawn and the method changed.
+
 ## Risks
 
 1. [Likely] Cost to complete entered per element is work site teams avoid; if it is not kept, forecasts collapse to
@@ -358,4 +407,123 @@ baseline and month snapshots. New permission: `cost.forecast`, on for managers.
   - **Excel** export.
 - A browser test: a labour bill placed on civil labour, cost to complete entered (forecast ₹55,000), the month closed
   and compared.
+
+## Step 2 delivered: cash flow
+
+**Journey:**
+- **Cash flow** (Projects menu), for the company or a project, by month or week, as of a date:
+  - Rows for each kind of money in and out, totals in and out, net, and the **position**: the bank and cash balance
+    for the company, net cash so far for a project.
+  - **Actual** periods shaded: six months or eight weeks back, and the current one to date.
+  - **Forecast** periods ahead: twelve months or thirteen weeks, then "later".
+  - Anything already overdue counts as due now.
+- **A project:**
+  - Its **cash terms**, defaults until saved (`cost.forecast`): days to certify, days to pay after certifying, the
+    client's TDS, supplier days, cost days.
+  - Notes say how the work still to do was forecast.
+  - "What the forecast is made of" lists every expected receipt and payment with its date.
+- **The company:**
+  - Bank and cash before the date.
+  - Every project's forecast, and the forecast by project.
+  - **Company overheads** per month (`cost.forecast`).
+  - **GST to the government** on the 20th of the next month, with a credit carried.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Work is billed at each month's end.** A month's work brings in value plus GST, less retention, advance
+  recovery (while an advance is set) and the client's TDS.
+- **[Likely] Work still to do** is spread by the schedule's forecast dates (calendar days) where activities are
+  linked to the contract BOQ. Otherwise it is spread evenly to the planned finish. With neither, it is not forecast,
+  and a note says so.
+- **[Likely] Cost not yet ordered** (step 1's cost to complete less the commitment) is spread like the work.
+- **[Likely] Open orders** are paid with their GST, the supplier days after delivery (the order's deliver-by date, or
+  the as-of date if that has passed).
+- **[Likely] A supplier bill's lines say which projects it is for.** Each project takes its lines' share of what is
+  owed and of what was paid on it.
+- **[Likely] A client receipt counts the cash only:** each project's allocation less its share of TDS and
+  deductions.
+- **[Likely] Payroll paid** is split over projects by each person's days, at the payment voucher's date.
+- **[Guessing] The company's GST** is output tax on expected bills (in the month certified) less input tax on
+  expected supplier payments (in the month delivered or billed). Retention release, escalation and TDS deducted from
+  suppliers are not forecast yet.
+- **[Certain] The company's actual is its bank and cash ledgers,** contras left out. A project's actual is built
+  from documents, since bank lines carry no project.
+
+**API** (under `/api/tenant`):
+- `GET projects/:id/cash-flow?by=month|week&asOf=`
+- `POST projects/:id/cash-terms`
+- `GET accounts/cash-flow?entityId=&by=&asOf=`
+- `POST accounts/cash-flow/:entityId/overheads`
+
+Migration `0054_cash_flow.sql` adds `ctl.cash_terms` and `ctl.cash_settings`.
+
+**Tests:**
+- 3 unit tests:
+  - Periods back and ahead (months and weeks, split at the date).
+  - Dates moved by terms, and overdue becoming due now.
+  - A bill's cash.
+  - Spreads.
+  - GST netted with a credit carried.
+- An integration test, worked by hand, as of 1 October 2026 with 10-day terms:
+  - **In:**
+    - A certified bill's 1,39,000 still owed, due now.
+    - 2,00,000 measured and not billed, bringing in 2,22,000 in November.
+    - 6,00,000 of work spread to March at 1,11,000 a month.
+  - **Out:**
+    - A 50,000 supplier bill.
+    - An order's 2,04,800.
+    - 6,00,000 of cost not yet ordered.
+  - **Actual:** 1,94,000 received, 30,000 paid in a run, 5,000 paid by voucher.
+  - **Position:** month by month.
+  - **Weekly view:** the order in the week of 19 October.
+  - **Company view:**
+    - The bank's 1,59,000.
+    - Overheads.
+    - GST: 9,200 for November after October's 44,800 credit, then 18,000 a month.
+- A browser test:
+  - A project's cost not yet ordered moved by its cost days.
+  - A supplier bill due.
+  - The company's overheads.
+
+## Step 3 delivered: earned value
+
+**Journey:**
+- **Earned value** (Projects menu), for a project as of a date:
+  - Budget at completion.
+  - Planned value, earned value and actual cost, each with its percentage.
+  - SV, CV, SPI and CPI, coloured.
+  - The estimate at completion, to complete, and the variance at completion.
+- **Estimate at completion:** four methods side by side, with the one the project uses marked. That choice is set
+  with `cost.forecast`, and the CPI method is the default.
+- **S-curves:** PV, EV and AC by month, with the figures beneath.
+- **By WBS element:** the same figures for each element, and for what is on none.
+- Without a baseline, a warning says so, and PV, SV and SPI are blank.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Budget value** is each contract item's quantity at the rate of the budget line sharing its key. An item
+  with none takes its contract rate scaled by the project's budget ÷ contract.
+- **[Likely] PV** spreads each linked item's budget value evenly over the **calendar** days of its activities'
+  baseline spans, shared equally between activities. The project dashboard's S-curve uses working days. The two
+  differ only in shape within a span.
+- **[Likely] Only the plan's current baseline counts.** A new baseline is used once it is made the current one.
+- **[Certain] AC is step 1's actual (the ledger) to the date.** By WBS element, only what is placed on one.
+- **[Likely] The bottom-up estimate is step 1's forecast as it stands now,** not as at the date.
+
+**API** (under `/api/tenant`):
+- `GET projects/:id/earned-value?asOf=`
+- `POST projects/:id/earned-value/method`
+
+Migration `0055_earned_value.sql` adds `ctl.ev_settings`.
+
+**Tests:**
+- 2 unit tests:
+  - SPI 0.8 and CPI 0.9 with all four estimates worked by hand.
+  - Anything that divides by nothing left blank.
+- An integration test:
+  - A contract of two items with budget lines sharing their keys, and two linked activities baselined.
+  - At 16 September: PV 1,31,250, EV 95,000, AC 1,05,000, SPI 0.7238, CPI 0.9048, and the four estimates.
+  - The foundations WBS element apart.
+  - The S-curve.
+  - Re-baselined with the columns activity shortened: PV 1,62,500 and SPI 0.5846.
+  - The method chosen by the manager and refused to the worker.
+- A browser test: no baseline warned of, and the forecast method changed.
 
