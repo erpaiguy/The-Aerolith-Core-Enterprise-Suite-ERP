@@ -29,6 +29,9 @@ import {
   ListTree,
   ReceiptText,
   Scale,
+  TriangleAlert,
+  Fan,
+  LayoutGrid,
   ClipboardList,
   ListChecks,
   PackageCheck,
@@ -229,6 +232,12 @@ export function AppShell() {
             <NavItem to="/projects" icon={<Building2 className="size-4" />}>
               Projects
             </NavItem>
+            <NavItem to="/portfolio" icon={<LayoutGrid className="size-4" />}>
+              Portfolio
+            </NavItem>
+            <NavItem to="/monthly-review" icon={<CalendarCheck className="size-4" />}>
+              Monthly review
+            </NavItem>
             <NavItem to="/cost-control" icon={<Gauge className="size-4" />}>
               Cost control
             </NavItem>
@@ -240,6 +249,15 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/variations" icon={<FilePlus2 className="size-4" />}>
               Variations
+            </NavItem>
+            <NavItem to="/contracts" icon={<Scale className="size-4" />}>
+              Contracts and claims
+            </NavItem>
+            <NavItem to="/risks" icon={<TriangleAlert className="size-4" />}>
+              Risk register
+            </NavItem>
+            <NavItem to="/mep" icon={<Fan className="size-4" />}>
+              MEP
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

@@ -78,6 +78,10 @@ import { CashFlowScreen } from './screens/control/CashFlow';
 import { CostControlScreen } from './screens/control/CostControl';
 import { EarnedValueScreen } from './screens/control/EarnedValue';
 import { VariationsScreen } from './screens/control/Variations';
+import { ContractsScreen } from './screens/control/Contracts';
+import { RisksScreen } from './screens/control/Risks';
+import { MepScreen } from './screens/control/Mep';
+import { MonthlyReviewScreen, PortfolioScreen } from './screens/control/Portfolio';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -690,6 +694,31 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/variations',
       component: VariationsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/contracts',
+      component: ContractsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/risks',
+      component: RisksScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/portfolio',
+      component: PortfolioScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/monthly-review',
+      component: MonthlyReviewScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/mep',
+      component: MepScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

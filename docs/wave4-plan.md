@@ -376,6 +376,163 @@ has approved.
 - A third rejected, with billing while pending on, and its lines reverted.
 - A browser test: a variation raised, priced, submitted and approved.
 
+## Step 5 in detail (planned before building)
+
+**Goal:** every contract a project runs on is on record, with its dated duties and securities reminded before they
+fall due; notices tracked to their reply; extensions of time built from the hindrances site teams already record;
+and cost claims followed to settlement.
+
+**Contracts** (per project):
+- The client contract, and subcontracts tied to a work order (Wave 2b).
+- Each has a reference, the party, value, signing date, start and completion dates, the defects liability period
+  (months), liquidated damages (% of the value per week, capped at a %), payment terms, and notes.
+
+**Securities** on a contract:
+- Kinds: performance guarantee, advance guarantee, retention bond, insurance policy, other.
+- Each records the issuer, number, amount, valid-until date, claim period, and a status: held, extended, returned,
+  invoked.
+- **Reminders** to the project's leads, 30 days and 7 days before expiry, while held. They are rescheduled when the
+  date moves, and dropped when the security is returned. These are the same notifications Wave 1's tender
+  securities use.
+
+**Obligations calendar:**
+- Dated duties from clauses: what, the clause, due date, done date.
+- Reminded 7 days and 1 day before.
+- The calendar also shows each security's expiry, each notice's reply date, completion, and the end of the defects
+  liability period. Overdue items are flagged.
+
+**Notices:**
+- Sent or received, with the subject, clause, date and reference.
+- A reply-by date (reminded 3 days before), and the date replied.
+
+**Extension of time** (EOT-01…):
+- Built from the daily reports' hindrances on the client's or a neutral account over a period, by cause.
+- [Likely] A day counts once, however many hindrances fall on it, if they add up to 4 hours or more. The days are
+  reported by cause.
+- The days claimed (the count, or typed), then granted or rejected with the client's reference.
+- A granted extension moves the contract's completion date by the days granted.
+
+**Claims** (CL-01…):
+- For idle resources, prolongation, escalation beyond the clause, or other.
+- The amount claimed, the evidence (text, and the EOT it rests on, if any), and the status: draft, submitted, under
+  negotiation, settled, rejected.
+- Settled for an amount, often less.
+
+**Rights:**
+- The project's team reads.
+- `billing.edit` (commercial) keeps contracts, securities, notices, extensions and claims.
+- The project's team keeps obligations.
+
+**Tests:**
+- A guarantee's two expiry reminders, moved when it is extended and dropped when it is returned.
+- An obligation and a notice on the calendar, with one overdue.
+- An EOT from three hindrances: two on one day count once, a short one does not count. Granted in part, moving
+  completion.
+- A claim settled for less.
+- A browser test: a contract, a guarantee and the calendar.
+
+## Step 6 in detail (planned before building)
+
+**Goal:** each project's (and the company's) risks are on record with how likely and how bad they are, who owns
+them and what is being done. The contingency held in the budget is drawn down against risks that occur, so what is
+left is always known.
+
+**Scales** (the company's, editable):
+- Probability 1–5, each with a label and a percentage. Defaults: rare 5%, unlikely 20%, possible 50%, likely 75%,
+  almost certain 95%.
+- Impact 1–5, each with a label.
+- Score = probability × impact (1–25). Bands: low up to 4, medium up to 9, high up to 16, extreme above.
+
+**A risk** (R-001… per project, or company-wide):
+- Cause, event and effect.
+- Category: commercial, design, site, safety, regulatory, schedule, other.
+- Probability and impact levels, a **cost impact** (₹) and a **time impact** (days).
+- Owner (a user).
+- Optional links to a WBS element, a cost code and a schedule activity.
+- Status: open, closed, or **occurred**.
+- **Mitigation actions:** what, due date, done date. Overdue actions are flagged.
+- **Expected value** = probability % × cost impact.
+
+**Contingency** (per project):
+- The amount held, set with `cost.forecast`.
+- **Drawdowns** against risks that occur: amount, date, note.
+- Remaining = held − drawn.
+- [Likely] A drawdown above what remains is refused.
+
+**Views:**
+- The register, sorted by score.
+- A 5 × 5 **heat map** of open risks.
+- The **top risks** by score, then by expected value.
+- Totals: expected value of open risks against contingency remaining.
+
+**Rights:**
+- The project's team raises and keeps risks.
+- `cost.forecast` sets the scales and the contingency and draws it down.
+- Company risks need `cost.forecast`.
+
+**Tests:**
+- Unit tests:
+  - Score bands.
+  - Expected value.
+  - The heat map.
+- An integration test:
+  - Three risks with mitigations, one overdue.
+  - The heat map and top risks.
+  - Contingency of ₹5,00,000 drawn down ₹1,20,000 on a risk that occurred.
+  - A drawdown beyond what remains refused.
+  - The scales changed and the expected value following.
+- A browser test: a risk raised with a mitigation, and the heat map.
+
+## Step 7 in detail (planned before building)
+
+**Portfolio dashboard** (the projects a person sees, one tile each, with totals):
+- **Contract:** the contract BOQs now, approved variations included.
+- **Margin:**
+  - Forecast margin: contract less step 1's forecast cost.
+  - Against the tender margin: the contract less approved variations, against the original budget.
+- **SPI and CPI** today (step 3).
+- **Cash so far:** the project's actual in less out (step 2), and certified bills overdue.
+- **Open variations:** count and value, with the value executed but not approved.
+- **Open claims:** the amount claimed.
+- **Risks:** the worst open score, the expected value of open risks, and contingency remaining.
+- Each tile links to the project's screens.
+
+**MEP pack** (loaded once by `boq.edit`; it skips anything already there):
+- **System-wise BOQ templates** (vertical "MEP") for HVAC, electrical, plumbing, fire fighting and ELV: sections and
+  items with units, no quantities or rates.
+- **Testing and commissioning checklists** for each system: Wave 3's quality checklist templates, work type
+  "MEP testing".
+- **Equipment schedule** per project:
+  - Tag, system, description, capacity, location and make.
+  - Status: planned, ordered, delivered, installed, tested, commissioned.
+  - [Likely] "Commissioned" needs a passed testing and commissioning checklist recorded against it.
+- **Coordination and clash log** per project (CI-001…):
+  - The systems involved, location, drawing reference and description.
+  - Open or resolved, with how and when.
+
+**Monthly review** (a project and a month): one page from what the app already holds:
+- Cost control totals and the worst-variance rows (step 1).
+- Earned value at the month's end (step 2's AC agrees with step 1's actual to that date).
+- Cash: the month's actual and the next three months' forecast (step 2).
+- Variations: totals and at risk (step 4).
+- Contracts: the next 30 days of the calendar (step 5).
+- Risks: top risks, open expected value and contingency (step 6).
+
+**Exit check for Wave 4:** a pilot project's monthly review in one integration test. Planned against actual against
+forecast, cash flow, variations and the risk register, cross-checked:
+- Cost control's actual equals earned value's AC.
+- The variation's budget change shows in cost control.
+- Contingency remaining equals held less drawn.
+
+**Tests:**
+- An integration test:
+  - Two projects on the dashboard.
+  - The MEP pack loaded twice, the second time loading nothing.
+  - An equipment item refused "commissioned" until its checklist passes.
+  - A clash raised and resolved.
+- The exit check.
+- A browser test: the dashboard and the monthly review.
+
 ## Risks
 
 1. [Likely] Cost to complete entered per element is work site teams avoid; if it is not kept, forecasts collapse to
@@ -660,4 +817,167 @@ Approval document type `variation`. Migration `0056_variations.sql` adds `ctl.va
   - **VO-003:** billed while pending, then rejected and taken out of both BOQs.
   - Rights checked.
 - A browser test: a variation raised, submitted, and approved by the client at a lower rate.
+
+## Step 5 delivered: contracts and claims
+
+**Journey:**
+- **Contracts and claims** (Projects menu), for a project:
+  - **The calendar:** security expiries, obligations, notice replies, completion and the end of the defects liability
+    period, by date, with overdue items marked.
+  - **Contracts:** the client's (its party taken from the project) and subcontracts (from a work order or a
+    subcontractor). Each has a reference, value, dates, defects liability period, liquidated damages and payment
+    terms.
+  - **Securities** (performance guarantee, advance guarantee, retention bond, insurance, other):
+    - Reminded to the project's leads 30 and 7 days before expiry.
+    - Rescheduled when extended, and dropped when returned or invoked.
+  - **Obligations** (reminded 7 days and 1 day before) and **notices** sent or received (reply reminded 3 days before).
+  - **Extensions of time:**
+    - The days lost over a period counted from the daily reports' hindrances, by cause.
+    - Claimed, submitted, then granted (in part) or rejected.
+    - Days granted move the contract's completion date.
+  - **Claims** for idle resources, prolongation, escalation or other, resting on an extension where there is one.
+    They go submitted, under negotiation, settled (never for more than claimed) or rejected.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] A day lost** is a date whose client and neutral hindrances add up to 4 hours or more. It counts once, to
+  the cause with the most hours that day. The contractor's own hindrances never count.
+- **[Likely] Reminders go to the project's leads,** else to whoever entered the contract. They use the same
+  notifications as Wave 1's tender securities.
+- **[Likely] Contracts, securities, notices, extensions and claims are commercial** (`billing.edit`). Obligations are
+  the project team's.
+
+**API** (under `/api/tenant`):
+- Contracts: `GET|POST projects/:id/contracts`, `POST contracts/:id`.
+- Securities: `POST contracts/:id/securities`, `POST contract-securities/:id`.
+- Obligations: `POST contracts/:id/obligations`, `POST obligations/:id/done`.
+- Notices: `POST contracts/:id/notices`, `POST notices/:id/replied`.
+- Extensions of time: `GET contracts/:id/eot-basis`, `POST contracts/:id/eots`, `POST eots/:id`.
+- Claims: `POST contracts/:id/claims`, `POST claims/:id/status`.
+
+Migration `0057_contracts.sql`.
+
+**Tests:**
+- Unit tests:
+  - Days lost: two hindrances on one day counted once, a short day not counted, the contractor's own not counted.
+  - Reminder dates.
+- An integration test:
+  - A guarantee's two reminders, moved by an extension and dropped on return.
+  - An overdue obligation and a notice on the calendar.
+  - An EOT of 2 days from four days of hindrances, more than claimed refused, 1 day granted moving completion to
+    1 April.
+  - A claim of ₹2,00,000 settled for ₹1,20,000, a settlement above the claim refused.
+- A browser test: a contract, a guarantee and an obligation on the calendar, the guarantee returned.
+
+## Step 6 delivered: risk register
+
+**Journey:**
+- **Risk register** (Projects menu), for a project or the company:
+  - **The heat map** of open risks (impact down, probability across).
+  - **Top risks.**
+  - **The open expected value**, and the project's **contingency** held, drawn and remaining.
+  - **Risks:**
+    - Sorted by score, with band, cost and time impact, and expected value.
+    - Status (open, occurred, closed).
+    - **Draw** contingency against an occurred risk.
+    - **Mitigation actions**, overdue ones marked.
+  - **Raise a risk** on the company's scales.
+
+**Decisions made while building (change any you disagree with):**
+- **[Guessing] The default scales:**
+  - Probability 5%, 20%, 50%, 75%, 95%.
+  - Bands: low up to 4, medium up to 9, high up to 16, extreme above.
+  - The company changes them with `cost.forecast`.
+- **[Likely] Expected value** is the probability % × the cost impact. Only open risks count in the heat map, the top
+  risks and the open expected value.
+- **[Likely] Contingency is drawn only against an occurred risk,** never beyond what remains. It cannot be set below
+  what is already drawn.
+- **[Likely] Company risks** are numbered on their own, and kept with `cost.forecast`.
+
+**API** (under `/api/tenant`):
+- `GET|POST projects/:id/risks`
+- `GET|POST risks`
+- `POST risks/:id`
+- `POST risks/:id/actions`
+- `POST risk-actions/:id/done`
+- `POST risk-scales`
+- `POST projects/:id/contingency`
+- `POST risks/:id/draws`
+
+Migration `0058_risks.sql`.
+
+**Tests:**
+- Unit tests: bands, expected value (half up) and the heat map.
+- An integration test:
+  - Three risks sorted 16, 15, 2 with expected values 1,50,000, 1,50,000 and 2,000.
+  - An overdue action.
+  - The heat map.
+  - Contingency of 5,00,000 drawn 1,20,000, with the draw refused before the risk occurred, beyond what remains, and
+    the held amount refused below what is drawn.
+  - "Possible" set to 40% moving an expected value to 1,20,000.
+  - A company risk numbered R-001.
+- A browser test: a risk raised (16, high, ₹1,50,000 expected) with a mitigation, occurred, and ₹1,20,000 drawn.
+
+## Step 7 delivered: portfolio, monthly review and the MEP pack
+
+**Journey:**
+- **Portfolio** (Projects menu), every project the person sees:
+  - Contract and forecast margin (and the tender margin).
+  - SPI and CPI.
+  - Cash so far, and overdue receivables.
+  - Open variations, and the value at risk.
+  - Open claims.
+  - The worst risk, and contingency left.
+  - Totals across projects.
+- **Monthly review:** a project and a month, printable:
+  - Cost totals and the worst variances.
+  - Earned value.
+  - The month's cash and the next three months.
+  - Variations.
+  - The contracts calendar for the next 30 days.
+  - Risks and contingency.
+- **MEP:**
+  - **Load the MEP pack:** five system-wise BOQ templates (HVAC, electrical, plumbing, fire fighting, ELV) and five
+    testing and commissioning checklists. Loading again adds nothing.
+  - Per project, the **equipment schedule**: tag, system, capacity, location and status. It is commissioned only
+    against a passed T&C checklist of that project.
+  - The **coordination and clash log** (CI-001…), raised and resolved.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] The portfolio and the review compose the step services.** They repeat no arithmetic, so their figures
+  always agree with each screen.
+- **[Likely] The review is as of the month's end,** or today for the current month.
+- **[Likely] The tender margin** is the contract less approved variations, against the original budget.
+- **[Guessing] The MEP pack's items and checklist limits are a starting list.** An MEP engineer should go through them
+  (supply air 12–16 °C, earth resistance at most 2 Ω, test pressures of 10 and 14 kg/cm²).
+
+**API** (under `/api/tenant`):
+- Portfolio and review: `GET portfolio`, `GET projects/:id/review?month=`.
+- MEP pack: `POST mep-pack`, `GET projects/:id/mep`.
+- Equipment schedule: `POST projects/:id/mep/equipment`, `POST mep-equipment/:id/status`.
+- Clash log: `POST projects/:id/mep/issues`, `POST coordination-issues/:id/resolve`.
+
+Migration `0059_mep.sql`.
+
+**Exit check for Wave 4 (passed):** one integration test runs a pilot project's September review. It holds:
+- A budget of 8,00,000 with an approved variation's 40,000 of changes.
+- 2,60,000 spent and 50 cum measured.
+- Earned value's AC and BAC equal to cost control's actual and budget, with EV 2,40,000 and CPI 0.9231.
+- No cash moved by a journal.
+- The approved variation of 50,000.
+- Contingency 1,00,000, of which 30,000 is drawn, leaving 70,000.
+- 40,000 of open risk value.
+- The obligation due in October on the calendar.
+- A tender margin of 20%.
+
+The same test also covers:
+- **The portfolio:** both projects with their contract totals.
+- **The MEP pack:** loaded once.
+- **An AHU:** refused commissioning on a failed checklist (supply air 19 °C), then commissioned on a passed one.
+- **A clash:** raised and resolved.
+
+**Tests:** the exit check above. A browser test covers:
+- The MEP pack loaded twice.
+- An AHU refused commissioning without a checklist.
+- A clash.
+- The portfolio and the monthly review.
 
