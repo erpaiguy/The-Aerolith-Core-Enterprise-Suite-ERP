@@ -595,6 +595,68 @@ deployment, against "no paid tools" for anyone without one. The inbox keeps noti
 - Browser: a vendor invited, accepting, quoting and uploading an invoice. Staff accept the quote and see it in the
   comparative statement.
 
+## Step 5 delivered
+
+- **Identity apart from staff:**
+  - `portal.user` and `portal.session` (migration `0070_portal.sql`).
+  - A `portal` token kind. The staff guard already refuses it, and `PortalGuard` admits nothing else to `/api/portal/*`.
+  - The guard checks on every request that the session is live and the user active, so deactivating someone ends
+    their access at once, not when their 15-minute token expires.
+  - Their own refresh cookie (`aerolith_prt`, `/api/portal/auth`, HttpOnly, SameSite=Strict, plus the client header).
+  - Lockout after 5 failures for 15 minutes.
+- **Invitations and the cap:**
+  - Staff with `portal.manage` invite an email for a party of the right kind.
+  - The link (`/portal/<tenant>/accept#token`, 7 days) is shown once, and "New link" replaces it.
+  - The fair-use cap is `core.licence.portal_cap` (control-plane migration 0005, default 50 per kind). It is changed
+    on the owner console's licence page with a reason and recorded as a `portal_cap_changed` event.
+  - [Certain] Portal users are never seats; the test proves the seat count is unchanged.
+- **Vendor and subcontractor portal:**
+  - Enquiries sent to them, open until due, and a quote online.
+  - Their orders (supply orders for vendors, work orders for subcontractors), and acknowledge, recorded as
+    "Portal: name".
+  - Measurements (subcontractors).
+  - Invoices: a PDF or photo, recognised by content, at most 10 MB.
+  - Bills with TDS, outstanding and last paid. RA bills for subcontractors.
+- **Client portal:**
+  - Their projects: contract value, billed, certified and paid.
+  - RA bills with status.
+  - Site photos from daily reports, last 30 days.
+  - Transmittals addressed to their party: download, acknowledge, respond. These use the same transmittal service
+    as the share link; the view was factored out (`outward`).
+- **Checked before it counts** (`portal.submission`, numbered PS-000001):
+  - Staff on "Portal submissions" accept or reject with a reason. Project leads, or the order's author, are notified
+    in the inbox.
+  - A submission is claimed first, so two people cannot both accept it, and released if the module refuses it.
+  - Accepting a quote saves it through `RfqService.saveQuote` as a new round, which needs `rfq.edit`.
+  - Accepting a measurement books all its lines in one transaction (`SubcontractService.measureMany`), with the
+    book's own checks.
+  - Accepting an invoice marks it received. The accounts team posts the bill as today, with the file.
+  - Invoice files are protected from the document purge (`lifecycle.service.ts`).
+- **Screens:**
+  - Staff: "Portal users" and "Portal submissions" (shown with `portal.manage`).
+  - Outside users: `/portal/<tenant>`, its own sign-in, session and tabs for their kind.
+  - The owner console's licence card: "Portal users per kind".
+- **Tests:**
+  - Unit: the cap and party rules.
+  - Integration (`portal.int.spec.ts`, 7 tests):
+    - The cap at 1 refused, then raised by the operator with its event.
+    - Accept, sign in, lockout.
+    - Tokens kept apart, both ways.
+    - Vendor B gets 404 on vendor A's enquiry.
+    - A quote accepted into the RFQ with its reference; accepting twice refused.
+    - A work order acknowledged; a measurement accepted into the book.
+    - A non-invoice file refused; a PDF fetched back byte for byte, then rejected with a reason.
+    - A client seeing only their own project and transmittal, and acknowledging it.
+    - A deactivated user's session refused at once; a worker cannot invite.
+  - Browser (`portal.spec.ts`): an RFQ subcontractor invited, the link opened in a separate browser, a password set,
+    a quote sent; the estimator accepts it and it appears in the RFQ's comparative statement.
+- **Departures from the plan:**
+  - The browser test does not upload an invoice, because an issued order through the screens doubles its length. The
+    integration test covers the upload, the type check and fetching the file back.
+  - Invitations are not emailed. The tenant side has no mail setup, so staff send the link.
+  - [Likely] Portal users have no second factor in this step. Lockout and short sessions (2 hours idle) stand in for
+    it until the security review (Risk 1).
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own

@@ -127,6 +127,62 @@ function TrialEnd({ licence }: { licence: LicenceDetail }) {
   );
 }
 
+/** The fair-use cap on free portal users (vendors, subcontractors, clients) per kind (docs/wave6-plan.md step 5). */
+function PortalCap({ licence }: { licence: LicenceDetail }) {
+  const [cap, setCap] = useState(String(licence.portal_cap));
+  const [reason, setReason] = useState('');
+  const change = useAction(
+    () =>
+      api.post<{ portalCap: number }>(`/api/owner/licences/${licence.id}/portal-cap`, {
+        portalCap: Number(cap),
+        reason: reason.trim(),
+      }),
+    {
+      invalidate: [['licence', licence.id]],
+      success: (r) => `Portal users per kind: ${r.portalCap}.`,
+    },
+  );
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void change.run();
+      }}
+      className="space-y-3 border-t border-line pt-4"
+    >
+      <h3 className="text-sm font-semibold">Portal users per kind</h3>
+      <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
+        <Field label="Limit">
+          <Input
+            name="portalCap"
+            type="number"
+            min={0}
+            max={100000}
+            value={cap}
+            onChange={(e) => setCap(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Reason">
+          <Input
+            name="portalCapReason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            minLength={3}
+            maxLength={500}
+            required
+          />
+        </Field>
+      </div>
+      {change.error && <Alert tone="danger">{change.error}</Alert>}
+      {change.done && <Alert tone="success">{change.done}</Alert>}
+      <Button type="submit" variant="secondary" busy={change.busy}>
+        Save limit
+      </Button>
+    </form>
+  );
+}
+
 function LicenceCard({ licenceId, ownerEmail }: { licenceId: string; ownerEmail: string }) {
   const { canWrite } = useSession();
   const [revealed, setRevealed] = useState<string | null>(null);
@@ -192,6 +248,7 @@ function LicenceCard({ licenceId, ownerEmail }: { licenceId: string; ownerEmail:
             </span>
           </Row>
           <Row label="Seats">{l.seat_cap}</Row>
+          <Row label="Portal users">{l.portal_cap} per kind (free; fair use)</Row>
           <Row label="Devices">
             {activeDevices.length} of {l.max_devices}
           </Row>
@@ -226,6 +283,7 @@ function LicenceCard({ licenceId, ownerEmail }: { licenceId: string; ownerEmail:
               <Alert tone="danger">{resend.error ?? reveal.error}</Alert>
             )}
             {l.kind === 'trial' && <TrialEnd licence={l} />}
+            <PortalCap licence={l} />
             <div className="space-y-3 border-t border-line pt-4">
               <h3 className="text-sm font-semibold text-danger">Revoke licence</h3>
               <p className="text-xs text-fg-muted">

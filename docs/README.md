@@ -218,5 +218,5 @@ portal users are free within a fair-use cap.
 | 2 | Real estate sales and RERA (Maharashtra): towers and units, bookings with buyer ledgers, payment plans by milestone, demands with GST (held by §13 before the agreement), receipts, delay interest, the designated account's 70% with certified withdrawals, the quarterly update | **Done** |
 | 3 | Report builder and BI: nine views with access as on the screens, saved and shared reports, charts, Excel, scheduled exports to the inbox | **Done** |
 | 4 | Mobile: installable app with an offline cache, an outbox for the site forms, idempotent writes on the server, a Capacitor shell for the stores | **Done** |
-| 5 | Portals (vendor, subcontractor, client) | Next |
-| 6 | Integrations: public API, webhooks, Tally link, e-invoice adapters | Planned |
+| 5 | Portals: vendors quote, acknowledge and invoice; subcontractors measure; clients see bills, photos and transmittals; staff accept before anything counts; free users within a fair-use cap per kind | **Done** |
+| 6 | Integrations: public API, webhooks, Tally link, e-invoice adapters | Next |

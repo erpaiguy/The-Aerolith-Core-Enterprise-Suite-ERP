@@ -164,6 +164,7 @@ export interface LicenceDetail {
   kind: string;
   state: LicenceState;
   seat_cap: number;
+  portal_cap: number;
   max_devices: number;
   starts_at: string;
   ends_at: string;

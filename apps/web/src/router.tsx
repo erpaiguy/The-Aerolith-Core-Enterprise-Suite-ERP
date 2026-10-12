@@ -82,6 +82,8 @@ import { ContractsScreen } from './screens/control/Contracts';
 import { RisksScreen } from './screens/control/Risks';
 import { MepScreen } from './screens/control/Mep';
 import { ReportBuilderScreen } from './screens/bi/ReportBuilder';
+import { PortalAcceptScreen, PortalScreen } from './screens/portal/Portal';
+import { PortalSubmissionsScreen, PortalUsersScreen } from './screens/portal/PortalStaff';
 import { OutboxScreen } from './screens/Outbox';
 import { CrmScreen } from './screens/crm/Crm';
 import { SalesScreen } from './screens/realestate/Sales';
@@ -132,7 +134,12 @@ function Root() {
   const session = useSession();
   const path = useRouterState({ select: (s) => s.location.pathname });
 
-  if (PUBLIC_PATHS.includes(path) || path.startsWith('/share/') || path.startsWith('/check/'))
+  if (
+    PUBLIC_PATHS.includes(path) ||
+    path.startsWith('/share/') ||
+    path.startsWith('/check/') ||
+    path.startsWith('/portal/')
+  )
     return <Outlet />;
   if (session.status === 'loading') return <Spinner label="Starting" />;
   if (session.status === 'needs_activation') return <ActivateScreen />;
@@ -556,6 +563,24 @@ const checkRoute = createRoute({
   },
 });
 
+// Vendors, subcontractors and clients: their own sign-in and session, not staff (docs/wave6-plan.md step 5).
+const portalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/portal/$tenant',
+  component: function PortalPage() {
+    const { tenant } = portalRoute.useParams();
+    return <PortalScreen tenant={tenant} />;
+  },
+});
+const portalAcceptRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/portal/$tenant/accept',
+  component: function PortalAcceptPage() {
+    const { tenant } = portalAcceptRoute.useParams();
+    return <PortalAcceptScreen tenant={tenant} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -787,6 +812,16 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/portal-users',
+      component: PortalUsersScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/portal-submissions',
+      component: PortalSubmissionsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/drawing-receipts',
       component: DrawingReceiptsScreen,
     }),
@@ -940,6 +975,8 @@ const routeTree = rootRoute.addChildren([
     component: PipelineReport,
   }),
   shareRoute,
+  portalRoute,
+  portalAcceptRoute,
   checkRoute,
   createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: '/licences', component: LicencesScreen }),

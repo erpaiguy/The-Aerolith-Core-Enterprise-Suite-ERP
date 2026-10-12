@@ -35,6 +35,7 @@ import {
   Send,
   Signature,
   Handshake,
+  Inbox as InboxIcon,
   Home,
   ChartPie,
   MailCheck,
@@ -128,6 +129,7 @@ export function AppShell() {
   const session = useSession();
   const isAdmin = session.user?.role === 'admin';
   const mayBooks = usePermission('accounts.view');
+  const mayPortals = usePermission('portal.manage');
   const mayPeople = usePermission('hr.view');
   const mayMark = usePermission('attendance.mark');
   const mayPayroll = usePermission('payroll.run');
@@ -216,6 +218,16 @@ export function AppShell() {
             <NavItem to="/crm" icon={<Handshake className="size-4" />}>
               CRM
             </NavItem>
+            {mayPortals && (
+              <>
+                <NavItem to="/portal-users" icon={<UsersRound className="size-4" />}>
+                  Portal users
+                </NavItem>
+                <NavItem to="/portal-submissions" icon={<InboxIcon className="size-4" />}>
+                  Portal submissions
+                </NavItem>
+              </>
+            )}
             <NavItem to="/tenders" icon={<ScrollText className="size-4" />}>
               Tenders
             </NavItem>
