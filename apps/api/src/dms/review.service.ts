@@ -185,7 +185,7 @@ export class ReviewService {
           : r.kind === 'designation'
             ? await tx<{ id: string }[]>`
                 SELECT e.user_id AS id FROM hr.employee e WHERE e.designation_id = ${r.id!} AND e.user_id IS NOT NULL
-                  AND (e.left_on IS NULL OR e.left_on >= current_date)`
+                  AND (e.left_on IS NULL OR e.left_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date)`
             : await tx<{ id: string }[]>`
                 SELECT m.user_id AS id FROM proj.member m JOIN platform."user" u ON u.id = m.user_id
                 WHERE m.project_id = ${projectId} AND m.role = ${r.kind} AND u.status = 'active'`;

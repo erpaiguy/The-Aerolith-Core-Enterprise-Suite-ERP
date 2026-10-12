@@ -311,7 +311,9 @@ export class SubcontractService implements OnModuleInit {
     },
   ) {
     await tx`SELECT pg_advisory_xact_lock(hashtext(${'wo-book ' + o.id}))`;
-    const [today] = await tx<{ d: string }[]>`SELECT to_char(current_date, 'YYYY-MM-DD') AS d`;
+    const [today] = await tx<
+      { d: string }[]
+    >`SELECT to_char((now() AT TIME ZONE 'Asia/Kolkata')::date, 'YYYY-MM-DD') AS d`;
     if (e.measuredOn > today!.d)
       throw new BadRequestException({
         code: 'measured_in_future',

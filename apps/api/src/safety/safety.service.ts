@@ -216,7 +216,7 @@ export class SafetyService {
     if (open)
       throw new ConflictException({ code: 'actions_open', message: 'An action is still open.' });
     await db.begin(async (tx) => {
-      await tx`UPDATE hse.incident SET status = 'closed', closed_by = ${claims.sub}, closed_on = current_date,
+      await tx`UPDATE hse.incident SET status = 'closed', closed_by = ${claims.sub}, closed_on = (now() AT TIME ZONE 'Asia/Kolkata')::date,
         row_version = row_version + 1 WHERE id = ${id}`;
       await audit(tx, claims.sub, 'safety.close', 'incident', id, {});
     });

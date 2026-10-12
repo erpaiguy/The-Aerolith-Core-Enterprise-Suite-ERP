@@ -19,9 +19,9 @@ import { LicensingService } from '../licensing/licensing.service.js';
 import { ProjectService } from '../project/project.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit } from '../tender/tender-records.js';
+import { newTransmittal, type Purpose } from './transmittal-records.js';
 
 type Db = Sql | TransactionSql;
-type Purpose = 'information' | 'review' | 'construction' | 'record';
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 const sha256 = (s: string) => createHash('sha256').update(s).digest();
 
@@ -210,17 +210,7 @@ export class TransmittalService {
         await tx`DELETE FROM dms.transmittal_item WHERE transmittal_id = ${id}`;
         tid = id;
       } else {
-        await tx`SELECT pg_advisory_xact_lock(hashtext(${`transmittal:${projectId}`}))`;
-        const [n] = await tx<{ n: number }[]>`
-          SELECT count(*)::int + 1 AS n FROM dms.transmittal WHERE project_id = ${projectId}`;
-        const [t] = await tx<{ id: string }[]>`
-          INSERT INTO dms.transmittal ${tx({
-            ...header,
-            project_id: projectId,
-            number: `TR-${String(n!.n).padStart(3, '0')}`,
-            created_by: claims.sub,
-          })} RETURNING id`;
-        tid = t!.id;
+        tid = await newTransmittal(tx, projectId, claims.sub, header);
       }
       for (const [i, it] of items.entries())
         await tx`
@@ -254,6 +244,16 @@ export class TransmittalService {
       throw new BadRequestException({
         code: 'no_items',
         message: 'Nothing to issue: add a document.',
+      });
+    const [open] = await db<{ number: string; name: string }[]>`
+      SELECT s.number, d.name FROM dms.transmittal_item i
+      JOIN dms.signoff s ON s.document_id = i.document_id AND s.version_no = i.version_no AND s.status = 'open'
+      JOIN doc.document d ON d.id = i.document_id
+      WHERE i.transmittal_id = ${id} LIMIT 1`;
+    if (open)
+      throw new ConflictException({
+        code: 'awaiting_signatures',
+        message: `${open.name} is still being signed (${open.number}); issue it once signed.`,
       });
     await db.begin(async (tx) => {
       const on = today();

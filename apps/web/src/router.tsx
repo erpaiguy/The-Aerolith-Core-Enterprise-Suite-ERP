@@ -82,7 +82,9 @@ import { ContractsScreen } from './screens/control/Contracts';
 import { RisksScreen } from './screens/control/Risks';
 import { MepScreen } from './screens/control/Mep';
 import { ReviewsScreen } from './screens/dms/Reviews';
+import { CheckScreen, DrawingReceiptsScreen } from './screens/dms/Receipts';
 import { ShareScreen } from './screens/dms/Share';
+import { SignOffsScreen } from './screens/dms/SignOffs';
 import { TransmittalsScreen } from './screens/dms/Transmittals';
 import { MonthlyReviewScreen, PortfolioScreen } from './screens/control/Portfolio';
 import {
@@ -126,7 +128,8 @@ function Root() {
   const session = useSession();
   const path = useRouterState({ select: (s) => s.location.pathname });
 
-  if (PUBLIC_PATHS.includes(path) || path.startsWith('/share/')) return <Outlet />;
+  if (PUBLIC_PATHS.includes(path) || path.startsWith('/share/') || path.startsWith('/check/'))
+    return <Outlet />;
   if (session.status === 'loading') return <Spinner label="Starting" />;
   if (session.status === 'needs_activation') return <ActivateScreen />;
   if (session.status === 'signed_out') {
@@ -539,6 +542,16 @@ const shareRoute = createRoute({
   },
 });
 
+// The QR on a controlled copy: current or superseded, to anyone holding the print (docs/wave5-plan.md step 4).
+const checkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/check/$tenant/$code',
+  component: function CheckPage() {
+    const { tenant, code } = checkRoute.useParams();
+    return <CheckScreen tenant={tenant} code={code} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   appLayout.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/', component: HomeScreen }),
@@ -745,6 +758,16 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/sign-offs',
+      component: SignOffsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/drawing-receipts',
+      component: DrawingReceiptsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/accounts/trial-balance',
       component: TrialBalanceScreen,
     }),
@@ -893,6 +916,7 @@ const routeTree = rootRoute.addChildren([
     component: PipelineReport,
   }),
   shareRoute,
+  checkRoute,
   createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: '/licences', component: LicencesScreen }),
   createRoute({

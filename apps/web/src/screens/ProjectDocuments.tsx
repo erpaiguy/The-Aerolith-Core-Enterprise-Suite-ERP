@@ -3,13 +3,14 @@
 import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table, cx } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Download, Plus, Upload } from 'lucide-react';
+import { ArrowLeft, Download, Plus, Printer, Upload } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { api, saveFile } from '../api/client';
 import type { ProjectDetail } from '../api/types';
 import { describeError, formatDate } from '../lib/format';
 import { indiaToday } from '../project/daily';
 import { VaultDocuments } from './Documents';
+import { RevisionControl } from './dms/RevisionControl';
 
 export const DISCIPLINE = {
   architectural: 'Architectural',
@@ -66,7 +67,13 @@ interface DrawingDetail {
     versionNo: number | null;
     supersededAt: string | null;
     addedBy: string | null;
+    receipts: number;
+    acknowledged: number;
+    /** The page behind the QR on its controlled copy. */
+    checkPath: string;
   }[];
+  /** The labels the project's revision series allows next; null when the series is off. */
+  next: { preliminary: string | null; construction: string | null } | null;
   mayEdit: boolean;
 }
 
@@ -78,7 +85,7 @@ const download = async (documentId: string, versionNo: number | null) => {
 };
 
 export function ProjectDocumentsScreen({ projectId }: { projectId: string }) {
-  const [tab, setTab] = useState<'drawings' | 'files'>('drawings');
+  const [tab, setTab] = useState<'drawings' | 'files' | 'control'>('drawings');
   const project = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.request<ProjectDetail>(`/api/tenant/projects/${projectId}`),
@@ -102,6 +109,7 @@ export function ProjectDocumentsScreen({ projectId }: { projectId: string }) {
           [
             ['drawings', 'Drawings register'],
             ['files', 'All documents'],
+            ['control', 'Revision control'],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -121,6 +129,8 @@ export function ProjectDocumentsScreen({ projectId }: { projectId: string }) {
       </div>
       {tab === 'drawings' ? (
         <Drawings projectId={projectId} />
+      ) : tab === 'control' ? (
+        <RevisionControl projectId={projectId} />
       ) : (
         <VaultDocuments vault={{ kind: 'projects', id: projectId }} mayWrite={mayWrite} />
       )}
@@ -323,7 +333,12 @@ function DrawingCard({ drawingId, onChanged }: { drawingId: string; onChanged: (
       <div className="space-y-4">
         {error && <Alert tone="danger">{error}</Alert>}
         {x.mayEdit && (
-          <NewRevision drawingId={drawingId} first={!x.revisions.length} onDone={onChanged} />
+          <NewRevision
+            drawingId={drawingId}
+            first={!x.revisions.length}
+            next={x.next}
+            onDone={onChanged}
+          />
         )}
         {x.revisions.length === 0 ? (
           <p className="text-sm text-fg-muted">No revision received yet.</p>
@@ -336,6 +351,7 @@ function DrawingCard({ drawingId, onChanged }: { drawingId: string; onChanged: (
                 <th>Received</th>
                 <th>From</th>
                 <th>Note</th>
+                <th>Receipts</th>
                 <th />
               </tr>
             </thead>
@@ -358,7 +374,10 @@ function DrawingCard({ drawingId, onChanged }: { drawingId: string; onChanged: (
                   <td className="whitespace-nowrap text-sm">{formatDate(r.receivedOn)}</td>
                   <td className="text-sm">{r.receivedFrom || '-'}</td>
                   <td className="text-sm">{r.note}</td>
-                  <td>
+                  <td className="text-sm">
+                    {r.receipts ? `${r.acknowledged} of ${r.receipts}` : '-'}
+                  </td>
+                  <td className="whitespace-nowrap">
                     {r.versionNo && (
                       <Button
                         type="button"
@@ -369,6 +388,30 @@ function DrawingCard({ drawingId, onChanged }: { drawingId: string; onChanged: (
                         <Download className="size-4" aria-hidden />
                       </Button>
                     )}
+                    {r.versionNo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-label={`Controlled copy of revision ${r.revision}`}
+                        title="The PDF stamped with this revision and a QR to check it is current"
+                        onClick={() =>
+                          void api
+                            .download(`/api/tenant/drawing-revisions/${r.id}/print`)
+                            .then((f) => saveFile(f.blob, f.fileName))
+                            .catch((err: unknown) => setError(describeError(err)))
+                        }
+                      >
+                        <Printer className="size-4" aria-hidden />
+                      </Button>
+                    )}
+                    <a
+                      className="ml-1 text-xs underline"
+                      href={r.checkPath}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Check page
+                    </a>
                   </td>
                 </tr>
               ))}
@@ -383,10 +426,12 @@ function DrawingCard({ drawingId, onChanged }: { drawingId: string; onChanged: (
 function NewRevision({
   drawingId,
   first,
+  next,
   onDone,
 }: {
   drawingId: string;
   first: boolean;
+  next: DrawingDetail['next'];
   onDone: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -424,6 +469,12 @@ function NewRevision({
       <div className="text-sm font-medium">
         {first ? 'The first revision' : 'A new revision (the current one is superseded)'}
       </div>
+      {next && (
+        <p className="text-xs text-fg-muted" data-testid="next-revision">
+          The project's series allows next:{' '}
+          {[next.preliminary, next.construction].filter(Boolean).join(' or ') || 'nothing'}.
+        </p>
+      )}
       {error && <Alert tone="danger">{error}</Alert>}
       <div className="grid gap-3 sm:grid-cols-[7rem_12rem_1fr_10rem]">
         <Field label="Revision">
@@ -432,7 +483,7 @@ function NewRevision({
             onChange={(e) => setRevision(e.target.value)}
             required
             maxLength={20}
-            placeholder="R0"
+            placeholder={next?.construction ?? next?.preliminary ?? 'R0'}
           />
         </Field>
         <Field label="Purpose">

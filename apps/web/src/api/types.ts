@@ -56,7 +56,13 @@ export interface Inbox {
   items: InboxItem[];
   upcoming: InboxItem[];
   unread: number;
-  pending: { passwordResets: number; approvals: number; reviews: number };
+  pending: {
+    passwordResets: number;
+    approvals: number;
+    reviews: number;
+    signoffs: number;
+    receipts: number;
+  };
 }
 
 export interface OwnerNotice {

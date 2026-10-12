@@ -33,6 +33,8 @@ import {
   Fan,
   FileCheck2,
   Send,
+  Signature,
+  MailCheck,
   LayoutGrid,
   ClipboardList,
   ListChecks,
@@ -270,6 +272,20 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/transmittals" icon={<Send className="size-4" />}>
               Transmittals and RFIs
+            </NavItem>
+            <NavItem
+              to="/sign-offs"
+              icon={<Signature className="size-4" />}
+              badge={inbox.data?.pending.signoffs}
+            >
+              Sign-offs
+            </NavItem>
+            <NavItem
+              to="/drawing-receipts"
+              icon={<MailCheck className="size-4" />}
+              badge={inbox.data?.pending.receipts}
+            >
+              Drawing receipts
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

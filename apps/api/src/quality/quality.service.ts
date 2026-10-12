@@ -646,8 +646,8 @@ export class QualityService {
         message: 'A snag is fixed before it is closed.',
       });
     await db`UPDATE qa.snag SET status = ${input.status},
-      fixed_on = CASE WHEN ${input.status} = 'fixed' THEN current_date ELSE fixed_on END,
-      closed_on = CASE WHEN ${input.status} = 'closed' THEN current_date ELSE NULL END,
+      fixed_on = CASE WHEN ${input.status} = 'fixed' THEN (now() AT TIME ZONE 'Asia/Kolkata')::date ELSE fixed_on END,
+      closed_on = CASE WHEN ${input.status} = 'closed' THEN (now() AT TIME ZONE 'Asia/Kolkata')::date ELSE NULL END,
       row_version = row_version + 1 WHERE id = ${id}`;
     return this.register(claims, s.project_id);
   }
@@ -699,7 +699,7 @@ export class QualityService {
       throw new ConflictException({ code: 'decided', message: 'Already decided.' });
     await db.begin(async (tx) => {
       await tx`UPDATE qa.material_approval SET status = ${input.status}, comments = ${input.comments},
-        decided_on = current_date, decided_by = ${claims.sub} WHERE id = ${id}`;
+        decided_on = (now() AT TIME ZONE 'Asia/Kolkata')::date, decided_by = ${claims.sub} WHERE id = ${id}`;
       await audit(tx, claims.sub, 'quality.make', 'material_approval', id, {
         status: input.status,
       });

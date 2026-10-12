@@ -179,7 +179,7 @@ export class PermissionsService {
     const rows = await db<{ user_id: string; permission: string }[]>`
       SELECT e.user_id, dp.permission FROM hr.employee e
       JOIN hr.designation_permission dp ON dp.designation_id = e.designation_id
-      WHERE e.user_id IS NOT NULL AND (e.left_on IS NULL OR e.left_on >= current_date)`;
+      WHERE e.user_id IS NOT NULL AND (e.left_on IS NULL OR e.left_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date)`;
     const byUser = new Map<string, Permission[]>();
     for (const r of rows)
       if (isPermission(r.permission))

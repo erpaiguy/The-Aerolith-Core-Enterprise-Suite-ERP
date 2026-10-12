@@ -105,7 +105,7 @@ function matching(
       WHEN 'manager' THEN u.role IN ('manager', 'admin')
       WHEN 'admin' THEN u.role = 'admin'
       WHEN 'designation' THEN EXISTS (SELECT 1 FROM hr.employee e WHERE e.user_id = u.id
-        AND e.designation_id = ${step.designation_id} AND (e.left_on IS NULL OR e.left_on >= current_date))
+        AND e.designation_id = ${step.designation_id} AND (e.left_on IS NULL OR e.left_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date))
       ELSE EXISTS (SELECT 1 FROM proj.member m WHERE m.project_id = ${projectId} AND m.user_id = u.id
         AND m.role = 'lead') END`;
 }
@@ -139,7 +139,7 @@ export function waitingOn(db: Db, claims: TenantClaims, today = indiaToday()) {
         OR (s.approver = 'manager' AND a.role IN ('manager', 'admin'))
         OR (s.approver = 'admin' AND a.role = 'admin')
         OR (s.approver = 'designation' AND EXISTS (SELECT 1 FROM hr.employee e WHERE e.user_id = a.id
-          AND e.designation_id = s.designation_id AND (e.left_on IS NULL OR e.left_on >= current_date)))
+          AND e.designation_id = s.designation_id AND (e.left_on IS NULL OR e.left_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date)))
         OR (s.approver = 'project_lead' AND EXISTS (SELECT 1 FROM proj.member m
           WHERE m.project_id = r.project_id AND m.user_id = a.id AND m.role = 'lead'))))))`;
 }

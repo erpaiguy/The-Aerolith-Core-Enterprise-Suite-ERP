@@ -116,7 +116,7 @@ export class RfqService {
             WHEN l.line_key IS NOT NULL THEN (SELECT n.rate::text FROM est.boq_node n
               WHERE n.boq_id = l.boq_id AND n.line_key = l.line_key)
             WHEN l.resource_id IS NOT NULL THEN (SELECT rr.rate::text FROM est.resource_rate rr
-              WHERE rr.resource_id = l.resource_id AND rr.effective_from <= current_date
+              WHERE rr.resource_id = l.resource_id AND rr.effective_from <= (now() AT TIME ZONE 'Asia/Kolkata')::date
               ORDER BY rr.effective_from DESC LIMIT 1)
           END AS "ourRate",
           (l.line_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM est.boq_node n

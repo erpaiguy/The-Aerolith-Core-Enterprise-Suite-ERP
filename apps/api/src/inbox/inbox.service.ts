@@ -20,7 +20,7 @@ export class InboxService {
   async inbox(claims: TenantClaims, now = new Date()) {
     const db = await this.tenants.forTenant(claims.ten);
     const mine = db`(user_id = ${claims.sub} OR user_id IS NULL)`;
-    const [items, upcoming, [unread], pending, approvals, reviews] = await Promise.all([
+    const [items, upcoming, [unread], pending, approvals, reviews, [dms]] = await Promise.all([
       db.unsafe(
         `SELECT ${ITEM_COLUMNS} FROM platform.notification WHERE (user_id = $1 OR user_id IS NULL)
         AND (due_at IS NULL OR due_at <= $2) ORDER BY coalesce(due_at, created_at) DESC LIMIT 100`,
@@ -40,12 +40,27 @@ export class InboxService {
         : Promise.resolve([{ n: 0 }]),
       waitingCount(db, claims),
       waitingReviews(db, claims),
+      // Sign-offs on my turn, and drawing revisions sent to me not yet acknowledged (docs/wave5-plan.md steps 4-5).
+      db<{ signoffs: number; receipts: number }[]>`
+        SELECT
+          (SELECT count(*)::int FROM dms.signoff_signer g JOIN dms.signoff s ON s.id = g.signoff_id
+            WHERE g.user_id = ${claims.sub} AND g.status = 'waiting' AND s.status = 'open'
+              AND g.position = (SELECT min(position) FROM dms.signoff_signer x
+                WHERE x.signoff_id = s.id AND x.status = 'waiting')) AS signoffs,
+          (SELECT count(*)::int FROM dms.distribution_receipt
+            WHERE user_id = ${claims.sub} AND acknowledged_at IS NULL) AS receipts`,
     ]);
     return {
       items,
       upcoming,
       unread: unread?.n ?? 0,
-      pending: { passwordResets: pending[0]?.n ?? 0, approvals, reviews },
+      pending: {
+        passwordResets: pending[0]?.n ?? 0,
+        approvals,
+        reviews,
+        signoffs: dms?.signoffs ?? 0,
+        receipts: dms?.receipts ?? 0,
+      },
     };
   }
 

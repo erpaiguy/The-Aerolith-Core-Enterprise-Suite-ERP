@@ -381,14 +381,14 @@ export class ProjectService {
         throw new BadRequestException({ code: 'reason_required', message: 'Say why.' });
       const [late] = await tx<{ start_on: string }[]>`
         SELECT to_char(start_on, 'YYYY-MM-DD') AS start_on FROM proj.project
-        WHERE id = ${id} AND ${to} = 'completed' AND actual_finish_on IS NULL AND start_on > current_date`;
+        WHERE id = ${id} AND ${to} = 'completed' AND actual_finish_on IS NULL AND start_on > (now() AT TIME ZONE 'Asia/Kolkata')::date`;
       if (late)
         throw new BadRequestException({
           code: 'bad_dates',
           message: `The project starts on ${late.start_on}; set the real start date before completing it.`,
         });
       await tx`UPDATE proj.project SET status = ${to}, status_reason = ${reason?.trim() || null},
-          actual_finish_on = CASE WHEN ${to} = 'completed' THEN coalesce(actual_finish_on, current_date)
+          actual_finish_on = CASE WHEN ${to} = 'completed' THEN coalesce(actual_finish_on, (now() AT TIME ZONE 'Asia/Kolkata')::date)
             WHEN ${to} = 'active' THEN NULL ELSE actual_finish_on END,
           updated_at = now(), updated_by = ${claims.sub}, row_version = row_version + 1
         WHERE id = ${id}`;

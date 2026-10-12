@@ -301,12 +301,12 @@ export class HrService {
         (SELECT json_build_object('from', to_char(x.from_date, 'YYYY-MM-DD'), 'project', p.number,
           'projectName', p.name, 'site', s.name)
           FROM hr.deployment x LEFT JOIN proj.project p ON p.id = x.project_id LEFT JOIN proj.site s ON s.id = x.site_id
-          WHERE x.employee_id = e.id AND x.from_date <= current_date ORDER BY x.from_date DESC LIMIT 1) AS place
+          WHERE x.employee_id = e.id AND x.from_date <= (now() AT TIME ZONE 'Asia/Kolkata')::date ORDER BY x.from_date DESC LIMIT 1) AS place
       FROM hr.employee e
       LEFT JOIN hr.designation d ON d.id = e.designation_id
       LEFT JOIN hr.employee m ON m.id = e.manager_id
       LEFT JOIN platform."user" u ON u.id = e.user_id
-      WHERE e.entity_id = ${entityId} AND (${all} OR e.left_on IS NULL OR e.left_on >= current_date)
+      WHERE e.entity_id = ${entityId} AND (${all} OR e.left_on IS NULL OR e.left_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date)
       ORDER BY lower(e.code)`;
   }
 

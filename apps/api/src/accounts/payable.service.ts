@@ -149,7 +149,7 @@ export class PayableService implements OnModuleInit {
         rate_individual::text AS "rateIndividual", rate_no_pan::text AS "rateNoPan",
         single_threshold::text AS "singleThreshold", year_threshold::text AS "yearThreshold",
         to_char(effective_from, 'YYYY-MM-DD') AS "effectiveFrom"
-      FROM acc.tds_section WHERE effective_from <= current_date ORDER BY section, effective_from DESC`;
+      FROM acc.tds_section WHERE effective_from <= (now() AT TIME ZONE 'Asia/Kolkata')::date ORDER BY section, effective_from DESC`;
   }
 
   private async section(db: Db, section: string, on: string): Promise<TdsSection> {

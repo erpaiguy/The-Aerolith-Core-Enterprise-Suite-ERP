@@ -200,5 +200,9 @@ owner's call).
 | 1 | Review workflows: status codes A/B/C/D with fixed effects, company or project workflows of stages (everyone or the first answer, due days, named users, the lead, members or a designation), reviews of a document version, returned on C and resubmitted on a new version, reminders and "waiting on me" | **Done** |
 | 2 | Mark-up and comments: a PDF viewer in the browser, comments boxed on a page or general, replies, resolved and reopened, frozen when the review closes; the review's comment sheet in Excel | **Done** |
 | 3 | Transmittals, RFIs and submittals: issued transmittals answered by the recipient through an expiring link (no account; only the token's hash kept), RFIs answered and tied to a variation or revised drawing, submittals approved through reviews with the material approval following | **Done** |
-| 4 | Controlled revisions | Next |
-| 5 | Internal sign-off with a drawn signature, stamped on the PDF with an audit certificate | Planned |
+| 4 | Controlled revisions: the project's series (P1, P2… then 0/1, A/B or R0/R1) enforced on the drawings register, the distribution matrix (receipts inside, draft transmittals outside), controlled copies stamped with a QR, and a signed-out check page saying current or superseded | **Done** |
+| 5 | Internal sign-off with drawn signatures: saved or drawn on a canvas, signers in order in fields placed on the PDF, the signed version with an audit certificate page as the document's next version, verified by hash; transmittals held until signed | **Done** |
+
+**Wave 5 is complete** (exit check `exit-5.int.spec.ts`). Drawn signatures are an internal sign-off with an audit
+trail, not a DSC or Aadhaar eSign; anything filed with a government portal that demands a DSC still needs one outside
+the app.

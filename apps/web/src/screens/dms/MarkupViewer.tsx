@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { api } from '../../api/client';
 import { describeError } from '../../lib/format';
 
-interface Box {
+export interface Box {
   x: number;
   y: number;
   w: number;
@@ -53,27 +53,7 @@ export function MarkupViewer({
     queryFn: () =>
       api.request<Markup[]>(`/api/tenant/documents/${documentId}/versions/${versionNo}/markups`),
   });
-  const pdf = useQuery({
-    queryKey: ['markup-pdf', documentId, versionNo],
-    staleTime: Infinity,
-    gcTime: 0,
-    queryFn: async () => {
-      const { blob } = await api.download(
-        `/api/tenant/documents/${documentId}/file?version=${versionNo}`,
-      );
-      const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
-      if (String.fromCharCode(...head) !== '%PDF-') return null;
-      const [pdfjs, worker] = await Promise.all([
-        import('pdfjs-dist'),
-        import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
-      ]);
-      pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-      return pdfjs.getDocument({
-        data: new Uint8Array(await blob.arrayBuffer()),
-        isEvalSupported: false,
-      }).promise;
-    },
-  });
+  const pdf = usePdf(documentId, versionNo);
   const [draft, setDraft] = useState<{ page: number; box: Box | null } | null>(null);
   const [text, setText] = useState('');
   const [active, setActive] = useState<string | null>(null);
@@ -109,11 +89,19 @@ export function MarkupViewer({
               <p className="text-xs text-fg-muted">The first {MAX_PAGES} pages are shown.</p>
             )}
             {Array.from({ length: pages }, (_, i) => (
-              <Page
+              <PdfPage
                 key={i + 1}
                 doc={pdf.data!}
                 n={i + 1}
-                marks={list.filter((m) => m.page === i + 1 && m.box)}
+                marks={list
+                  .filter((m) => m.page === i + 1 && m.box)
+                  .map((m) => ({
+                    id: m.id,
+                    label: String(m.number),
+                    name: `Comment ${m.number}`,
+                    box: m.box!,
+                    done: m.status === 'resolved',
+                  }))}
                 draft={draft?.page === i + 1 ? draft.box : null}
                 active={active}
                 onPick={setActive}
@@ -204,9 +192,44 @@ export function MarkupViewer({
   );
 }
 
+/** A PDF version opened with pdf.js in this browser; null when the file is not a PDF. */
+export function usePdf(documentId: string, versionNo: number) {
+  return useQuery({
+    queryKey: ['markup-pdf', documentId, versionNo],
+    staleTime: Infinity,
+    gcTime: 0,
+    queryFn: async () => {
+      const { blob } = await api.download(
+        `/api/tenant/documents/${documentId}/file?version=${versionNo}`,
+      );
+      const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer());
+      if (String.fromCharCode(...head) !== '%PDF-') return null;
+      const [pdfjs, worker] = await Promise.all([
+        import('pdfjs-dist'),
+        import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+      ]);
+      pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+      return pdfjs.getDocument({
+        data: new Uint8Array(await blob.arrayBuffer()),
+        isEvalSupported: false,
+      }).promise;
+    },
+  });
+}
+
+/** A box drawn on a page: a comment's or a signature field's. */
+export interface Pin {
+  id: string;
+  label: string;
+  /** The accessible name of its button. */
+  name: string;
+  box: Box;
+  done: boolean;
+}
+
 type PdfDoc = PDFDocumentProxy;
 
-function Page({
+export function PdfPage({
   doc,
   n,
   marks,
@@ -217,7 +240,7 @@ function Page({
 }: {
   doc: PdfDoc;
   n: number;
-  marks: Markup[];
+  marks: Pin[];
   draft: Box | null;
   active: string | null;
   onPick: (id: string) => void;
@@ -300,15 +323,15 @@ function Page({
             <button
               key={m.id}
               type="button"
-              aria-label={`Comment ${m.number}`}
+              aria-label={m.name}
               onClick={() => onPick(m.id)}
-              className={`absolute border-2 ${
-                m.status === 'resolved' ? 'border-success/60' : 'border-danger'
-              } ${active === m.id ? 'bg-warning/25' : 'bg-warning/10'}`}
-              style={pct(m.box!)}
+              className={`absolute border-2 ${m.done ? 'border-success/60' : 'border-danger'} ${
+                active === m.id ? 'bg-warning/25' : 'bg-warning/10'
+              }`}
+              style={pct(m.box)}
             >
               <span className="absolute -left-2 -top-3 rounded-full bg-danger px-1.5 text-xs text-white">
-                {m.number}
+                {m.label}
               </span>
             </button>
           ))}

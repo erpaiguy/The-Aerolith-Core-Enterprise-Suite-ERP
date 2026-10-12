@@ -314,6 +314,185 @@ The transmittal register is in Excel too.
   - The browser test `transmittals.spec.ts`: the recipient in a fresh signed-out browser downloads, acknowledges and
     answers B with a file; the register shows it; an RFI is answered and closed.
 
+## Step 4 in detail (planned before building)
+
+**What is there.** [Certain] Wave 2b step 8's drawings register (`proj.drawing`, `proj.drawing_revision`). Each
+revision is free text ("P1", "0", "R2") with a purpose (information, approval or construction), received from someone
+on a day, its file a vault version, and the earlier one marked superseded. Nothing checks the labels, says who must
+get the new revision, or tells site that a print is out of date.
+
+**Revision rules** (per project, `dms.revision_rule`; one row, or defaults):
+- A **preliminary series**, `P1, P2…`, for information and approval.
+- A **construction series**: `0, 1, 2…` (numbers), `A, B, C…` (letters) or `R0, R1…`.
+- On a new revision, the label must be the **next** in its series: P(n+1) after Pn, P1 first, and the construction
+  series starting at its first label. Once a construction revision exists there is no going back to P. A drawing for
+  construction must carry a construction label.
+- A pure rules module (`revision-rules.ts`) gives the next labels and checks a candidate, unit-tested. The register's
+  form offers the next labels. "Off" turns the rules off for a project, and the labels stay free as now.
+
+**Distribution matrix** (`dms.distribution`):
+- Per project, by discipline (or every discipline): **people inside** (users), and **outside parties** (a name and
+  email, optionally a party).
+- When a revision is added for construction (or any purpose if the row says so), every person inside on the matrix
+  gets a notice, "A-101 rev 1 for construction: rev 0 is superseded; withdraw old prints", and a **receipt** to
+  acknowledge (`dms.distribution_receipt`).
+- Outside parties get a **draft transmittal** for the revision, one per party, ready to issue (step 3).
+- The register shows, per revision, how many receipts are acknowledged against expected.
+
+**Controlled copies and the site check:**
+- A revision's print is the PDF with a **stamp** on every page: drawing number, revision, purpose, "controlled copy",
+  the date printed, and a **QR code**. The stamp is drawn server-side with pdf-lib (MIT), and the QR made with
+  `qrcode` (MIT) as squares, with no image.
+- The QR opens `/check/<tenant>/<code>`. Each revision has a random 16-byte code, unguessable so drawings cannot be
+  listed by walking codes.
+- That page, without signing in, says **"Current"** or **"Superseded by rev X on <date>"**, and shows the drawing's
+  number and title only (the person holds the paper already). It is rate limited.
+- [Likely] Only PDFs are stamped; other files print without a stamp, and the screen says so.
+
+**Rights:** rules and the matrix need `projects.edit` or the project's lead; prints and receipts are for the team; the
+check needs nothing.
+
+**Tests:**
+- Unit: the series rules (next labels, P to construction, no going back, letters past Z refused, off).
+- An integration test:
+  - Rules enforced on a drawing's revisions: P1, then P3 refused, then P2, then 0 for construction, then P3 refused,
+    then 1.
+  - The matrix notifies two people, makes a draft transmittal to the consultant, and receipts are acknowledged.
+  - A stamped print is read back with pdf-lib: page count kept, the stamp text present.
+  - The check route says current, then superseded after the next revision; an unknown code gives 404.
+- A browser test: rules set, a revision refused and the next one accepted, the matrix, a print downloaded, and the
+  check page opened signed out.
+
+## Step 5 in detail (planned before building)
+
+**The owner's rule.** [Certain] A signature is drawn on a canvas, nothing more: no Aadhaar eSign, no DSC, no
+certifying agency. [Likely] That makes it an **internal** sign-off. Its strength is the audit trail: who was signed in,
+when, from which session and address, and the hash of what they signed. It is not a qualified electronic signature
+under the IT Act's Second Schedule. The screen and the certificate say so plainly, so nobody mistakes it for one.
+
+**Saved signatures** (`dms.saved_signature`): each person may draw their signature once and reuse it, or draw afresh at
+each signing. It is a PNG of at most 200 KB, checked by its bytes.
+
+**A sign-off** (SO-001… per project, `dms.signoff`):
+- A PDF version from the project's vault, a title, optionally the review it follows (which must be approved), and
+  **signers in order**.
+- Each signer has a **signature field**: a box dragged on a page in the viewer, kept as fractions of the page, like
+  mark-up boxes.
+- Only the signer whose turn it is can sign. They sign with their saved signature or a new drawing, or decline with a
+  reason, which ends the sign-off.
+- The next signer is notified. Each signature records the time, the session id, the IP and the browser.
+- When the last signer signs, the server makes the **signed version**:
+  - The original PDF, each signature placed in its field with "Signed by <name>, <date time> IST" under it.
+  - An **audit certificate** page appended: the document, its version and the SHA-256 of the unsigned file; every
+    signer with name, username, time, IP, session and browser; and the plain statement of what kind of signature
+    this is.
+  - It is uploaded as the **next version of the same document** with the note "Signed: SO-001". The unsigned version
+    stays, since versions are never changed. The signed file's SHA-256 is kept.
+- **Verify:** the stored signed version is hashed again and compared with the kept hash: intact or altered.
+- **Issue gate:** a transmittal cannot be issued while one of its items has a sign-off still open. Signing comes before
+  issue.
+
+**Rights:** starting a sign-off is for the project's team; signing is for the named signer only; reading is for the
+project.
+
+**Tests:**
+- An integration test:
+  - Two signers in order. The second cannot sign first. The first signs with a saved signature, the second with a new
+    drawing.
+  - The signed version is the document's next version. Read back with pdf-lib, it has one page more (the
+    certificate), and its hash matches; verify says intact.
+  - Altering the stored file makes verify say altered.
+  - A decline ends the sign-off. A non-PNG and an oversized PNG are refused.
+  - A transmittal cannot be issued while its item's sign-off is open, and can once it is signed.
+- A browser test: a signature drawn with the mouse and saved, fields placed, both signers sign (the second in its own
+  session), and the signed version is downloaded.
+- **The Wave 5 exit check** (`exit-5.int.spec.ts`):
+  1. A drawing reviewed in three stages.
+  2. Revised.
+  3. Signed with drawn signatures.
+  4. Issued on a transmittal.
+  5. Acknowledged through the link.
+
+## Step 4 delivered
+
+[Certain] As planned (migration 0063), with these specifics:
+- **Series:**
+  - Off until the project sets it (Documents and drawings, Revision control), so existing registers are unchanged.
+  - Enforced before the file is stored, so a refused label leaves nothing behind.
+  - The register's form shows the labels allowed next.
+- **Matrix:**
+  - Rows are inside (a person on the project) or outside (a name and email).
+  - Each row covers one discipline or all, and construction revisions only or every one.
+  - People inside get a notice and a receipt, counted on the revision ("1 of 1"), and acknowledge under Drawing
+    receipts.
+  - Each party outside gets a draft TR of that revision ("Supersedes rev P2").
+- **Controlled copy:**
+  - Every page is stamped top right: the number, revision and purpose, "CONTROLLED COPY · printed …", and a QR.
+  - A superseded revision prints with a red "do not use for construction".
+  - The QR is drawn as squares; pdf-lib and qrcode (both MIT, dependencies MIT/Zlib/0BSD) were added to the API.
+  - The QR's address is the public site from `PUBLIC_API_URL`, never taken from the request.
+- **Check page** `/check/<tenant>/<code>`: the code is a random UUID per revision, the page needs no sign-in and is
+  rate limited. It says "Current" or "Superseded on …, the current revision is …". The register links to it.
+- **Tests:**
+  - `revision-rules.spec.ts`.
+  - The first case of `signoff.int.spec.ts`: the series, the matrix with receipts and the draft transmittal, the stamp
+    read back from the PDF, and the check before and after the next revision.
+  - The browser test `signoff.spec.ts`: P2 refused, P1 and 0 accepted, the copy downloaded, the check page opened
+    signed out, and the receipt acknowledged.
+
+## Step 5 delivered
+
+[Certain] As planned (migration 0064), drawn signatures only:
+- **Signature pad:** a canvas for mouse, finger or pen. The signature is saved once (My signature) or drawn at the
+  moment of signing. The server keeps PNGs only, checked by their bytes, at most 200 KB.
+- **Sign-offs** SO-001…:
+  - Signers in order, each with a field dragged on the PDF (the mark-up viewer's page, made reusable).
+  - Refused: a page the PDF lacks, a signer off the project, a review not approved.
+  - Only the signer whose turn it is can sign or decline; the session, IP and browser are kept with each signature.
+- **The signed version:**
+  - Made by the server when the last signer signs, from the exact file the signers saw (its SHA-256 is checked
+    first).
+  - Each signature is placed in its field with "Signed by …, … IST", and the certificate page is appended (the
+    document, the unsigned file's SHA-256, every signer's name, username, time, IP, session and browser, and the
+    plain statement that this is not a DSC, eSign or qualified signature).
+  - Kept as the document's next version, in the name of whoever started the sign-off, so a signer without upload
+    rights still completes it. Version 1 stays as it was.
+- **Verify** re-hashes the stored signed version: intact or altered.
+- **Issue gate:** a transmittal whose item has a sign-off still open is refused (`awaiting_signatures`).
+- **Inbox:** sign-offs on my turn and unacknowledged drawing receipts are counted on their menu items.
+- **Tests:**
+  - The second case of `signoff.int.spec.ts`: the order, a saved and a fresh signature, the refusals, the signed
+    version (3 pages from 2, the certificate in it, version 1 unchanged by hash), verify intact then altered, the
+    issue gate, and a decline.
+  - The browser test: a signature drawn with the mouse and saved, a field dragged, signed, verified and downloaded.
+
+## Fixed on the way: dates after midnight in India
+
+[Certain] Wave 4's subcontract browser test failed at 00:22 IST. The browser's date (13 October) was refused as "in
+the future" because the database compared it with `current_date` in UTC (still the 12th). Seventeen queries use
+`current_date` (measurement, equipment, leavers, TDS sections, rates, and others), so every one lagged by a day from
+midnight to 05:30 IST.
+
+Those queries now use `(now() AT TIME ZONE 'Asia/Kolkata')::date`.
+
+[Certain] Setting the session time zone to India was tried first and broke five suites. postgres.js returns `date`
+columns as JavaScript dates at UTC midnight and sends them back as timestamps, which only match a date in a UTC
+session. The sessions stay UTC.
+
+One committed default still lags: `est.boq.rate_date DEFAULT current_date` (migration 0008). Committed migrations are
+never edited, and the app sends the rate date explicitly, so it is noted, not changed.
+
+## Wave 5 exit check
+
+[Certain] `exit-5.int.spec.ts`, passing:
+1. A drawing under the project's series reviewed in three stages (design, the project's lead, the client by either of
+   two), with a mark-up, and returned with C.
+2. Revised P2, resubmitted, and approved with comments.
+3. Signed with two drawn signatures in order, verified intact.
+4. The signed version issued on a transmittal for construction.
+5. Acknowledged through the expiring link with no account. The file the recipient downloads carries the
+   certificate.
+
 ## Risks
 
 1. [Likely] DSC tokens from different vendors ship different drivers; support will hit token-specific problems.

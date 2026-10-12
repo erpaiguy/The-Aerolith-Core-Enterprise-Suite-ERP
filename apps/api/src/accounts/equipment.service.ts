@@ -179,7 +179,7 @@ export class EquipmentService {
         (SELECT json_build_object('from', to_char(a.from_date, 'YYYY-MM-DD'), 'project', pr.number,
           'projectName', pr.name, 'site', s.name)
           FROM eqp.allocation a LEFT JOIN proj.project pr ON pr.id = a.project_id LEFT JOIN proj.site s ON s.id = a.site_id
-          WHERE a.equipment_id = e.id AND a.from_date <= current_date ORDER BY a.from_date DESC LIMIT 1) AS place
+          WHERE a.equipment_id = e.id AND a.from_date <= (now() AT TIME ZONE 'Asia/Kolkata')::date ORDER BY a.from_date DESC LIMIT 1) AS place
       FROM eqp.equipment e LEFT JOIN platform.party p ON p.id = e.party_id
       WHERE e.entity_id = ${entityId} ORDER BY e.code`;
   }
@@ -280,7 +280,9 @@ export class EquipmentService {
           code: 'forbidden',
           message: "Log sheets are kept by the project's team.",
         });
-      const [today] = await tx<{ d: string }[]>`SELECT to_char(current_date, 'YYYY-MM-DD') AS d`;
+      const [today] = await tx<
+        { d: string }[]
+      >`SELECT to_char((now() AT TIME ZONE 'Asia/Kolkata')::date, 'YYYY-MM-DD') AS d`;
       if (input.date > today!.d)
         throw new BadRequestException({ code: 'future', message: 'Log a day that has happened.' });
       let worked = input.worked;
