@@ -193,6 +193,33 @@ input GST taken, debit notes; then paid in approved runs with a file for the ban
   194C crossing the year's threshold with catch-up; a bill without an order; a debit note; a run approved, its bank
   file, marked paid; an advance applied; payables aged by hand.
 
+## Step 5 in detail (planned before building)
+
+**Goal:** subcontractors paid by measurement, like the client pays the company: a measurement book per work order, RA
+bills with retention, advance recovery, back-charges, labour cess and TDS; retention released at the end.
+
+- **Terms per work order:** retention % (with an optional cap), advance recovery % per bill, labour cess % (1% by
+  default, [Guessing] BOCW cess deducted from the subcontractor where the contract says so), TDS section (194C).
+- **The work order's measurement book:** entries by line (date, quantity, what), never changed; a mistake is reversed
+  by an entry the other way.
+- **A subcontract RA bill** up to a date: each work order line measured to then, less what the previous certified bill
+  certified, at the order's rate; quantities can be lowered. **Back-charges** typed on the bill, each to a ledger
+  (materials issued from stores at the agreed rate, debris clearance, damages): they recover cost.
+- **The figures:** gross value; GST as on the order; deductions: retention (to the cap), advance recovery (up to the
+  advances paid to the subcontractor and not yet recovered), back-charges, labour cess on the gross, TDS by the
+  supplier rules (step 4's catch-up included); net payable.
+- **Certified under the approval rules** (`subcontract_bill`): once approved it posts and becomes a **supplier's bill**
+  in payables (so payment runs, ageing and TDS work as in step 4), its advance recovery recorded as an advance applied.
+  Posted: subcontract cost Dr the gross (with the project), input tax Dr; the subcontractor Cr, retention payable Cr,
+  each back-charge's ledger Cr, labour cess payable Cr, TDS payable Cr; and the advance recovered (subcontractor Dr,
+  advances to suppliers Cr).
+- **Retention release** for a work order, up to what is held: retention payable Dr, the subcontractor Cr, as a
+  supplier's bill to pay in a run.
+- **Rights:** `billing.edit` on the project's team makes and submits subcontract bills and measures; `accounts.post`
+  releases retention.
+- **Tests:** a subcontractor billed three times with a reversal in the book, back-charges and an advance recovered;
+  retention to its cap and released; TDS crossing the year's limit; paid in a run.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -679,3 +706,73 @@ Migration `0039_payables.sql`.
 
 **For the CA review:** the TDS data and catch-up rule, costing materials when billed, and the debit note's posting.
 
+
+## Step 5 delivered: subcontract bills
+
+**Journey:**
+- **On a work order's page** (once issued), three new cards:
+  - **Subcontract terms:** retention % with an optional cap, advance recovery % per bill, labour cess % (1% by
+    default), TDS section (194C by default, 194J or none).
+  - **Measurement book:** each line ordered, measured and certified so far; record an entry (item, date, quantity,
+    where); an entry is never changed, only **reversed** by an entry the other way (with a reason). The book refuses a
+    date in the future, a total beyond the order (revise the order first) or below nothing.
+  - **Subcontract bills:** RA bills to date with their status, gross and amount to pay; **New RA bill** up to a date
+    (one in the making at a time, not before the last certified bill's date); retention held, released and left;
+    **Release retention** (a date and an amount, up to what is held).
+- **A subcontract RA bill:** each line's previous (the last certified bill's), to date (from the book, can be lowered,
+  not raised beyond what is measured) and this bill's quantity at the order's rate; **back-charges** typed on the
+  bill, each to a cost ledger it recovers; the abstract worked out on saving: gross, GST, bill total, less TDS,
+  retention, back-charges, labour cess and the advance recovered; net to pay. **Take the book again** re-reads the
+  book and the terms. **Submit for certification** under the approval rules for subcontract bills: with none (or once
+  approved) it is certified and becomes a supplier's bill in payables (`WO/…/RA-n`), paid in payment runs like any
+  other.
+- **A quantity below what was certified** before is refused: the earlier bill is corrected with a debit note in
+  payables. A certified bill is not cancelled; its supplier's bill is not cancelled in payables either.
+
+**The figures:** gross = Σ (to date − previous) × rate, each line to the paisa; GST as on the order (CGST and SGST, or
+IGST, none if unregistered); retention = gross × % up to the cap less what earlier bills retained; advance recovered =
+gross × % up to the advances paid to the subcontractor and not yet applied (and the bill's payable); labour cess =
+gross × %; TDS by the supplier rules of step 4 on the gross, the year's catch-up included.
+
+**What it posts** (one purchase voucher, dated the bill's "up to" date): subcontract cost Dr each line's amount with
+the project, input tax Dr; the subcontractor Cr the bill less TDS, retention, back-charges and cess; retention payable
+Cr; each back-charge's ledger Cr; labour cess payable Cr; TDS payable Cr; and the advance recovered, the subcontractor
+Dr and advances to suppliers Cr (recorded as an advance applied to the bill). A retention release: retention payable Dr,
+the subcontractor Cr, as a supplier's bill (`WO/…/RR-n`).
+
+**Who does what:** the project's team (leads and members, or those who edit projects) with `billing.edit` set terms,
+measure, and make and submit bills; approvers under the rules for `subcontract_bill`; `accounts.post` releases
+retention.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] The bill is dated its "up to" date** in the books and for TDS's year, not the day it is approved.
+- **[Likely] The book cannot pass the ordered quantity:** extra work is a revision of the order, approved like any.
+- **[Guessing] Labour cess is deducted from the subcontractor** on the gross where the terms say so (1% by default),
+  credited to labour cess payable; whether the company or the subcontractor bears it is the contract's call.
+- **[Likely] A correction to a certified bill is a debit note,** not a negative next bill.
+- **[Likely] Retention released carries no TDS or GST:** both were dealt with on the bills it was held from.
+
+**API** (under `/api/tenant`):
+- `GET /work-orders/:id/subcontract`; `PUT /work-orders/:id/subcontract-terms`; `POST /work-orders/:id/measurements`;
+  `POST /wo-measurements/:id/reverse`; `POST /work-orders/:id/subcontract-bills`; `POST /work-orders/:id/retention-release`.
+- `GET|PUT /subcontract-bills/:id`; `POST /subcontract-bills/:id/refresh|submit|cancel`;
+  `GET /projects/:id/subcontract-bills`.
+
+Migration `0040_subcontract_bills.sql`.
+
+**Tests:**
+- 3 API integration tests, every figure by hand, on a work order of brickwork (100 cum at ₹4,500) and plaster (1,000
+  sqm at ₹250) to an individual registered in the state; retention 5% to ₹22,000, advance recovery 10%, cess 1%, 194C;
+  a ₹50,000 advance paid in a run:
+  - The book with a mistake reversed (and not twice); RA 1 with a ₹2,000 cement back-charge: ₹33,040 billed, no TDS,
+    ₹26,560 to pay; over a ₹30,000 rule, approved by the admin; its voucher's ten lines; not cancelled in payables.
+  - RA 2 with brickwork lowered to 35 of the 40 measured (41 refused): TDS catches up on the year's ₹4,07,500
+    (₹4,075); ₹3,83,015 to pay, certified at once under a ₹5 lakh rule. The book refuses passing the order. RA 3:
+    retention only the ₹1,625 left under the cap; ₹46,075 to pay.
+  - Retention released (a worker refused, a paisa more refused); RA 1 and the release paid in a ₹48,560 run; the
+    trial balance: retention payable nil, ₹4,750 of the advance left, TDS 194C and labour cess ₹4,525 each.
+- A browser test: a subcontractor, a work order, 5% retention; the book with a mistake reversed; RA 1 with a
+  back-charge (₹31,860 billed, ₹29,740 to pay), certified straight into payables.
+
+**For the CA review:** labour cess deducted from the subcontractor, the bill dated its measurement date, and retention
+released without TDS.

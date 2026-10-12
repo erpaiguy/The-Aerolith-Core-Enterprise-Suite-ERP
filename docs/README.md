@@ -156,7 +156,8 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 2 | Client RA bills: contract terms (GST, retention to a cap, the mobilisation advance and its recovery, CPWD-style escalation); bills from the measurement book less the last certified bill; submitted under the approval rules; certified for less; a tax invoice posted on certification | **Done** |
 | 3 | Receivables: client receipts with TDS and deductions, allocated to certified bills, retention released and advances; cancelled by reversal; ageing as at a date | **Done** |
 | 4 | Payables: suppliers' bills matched to orders and receipts (held, passed), TDS by section with catch-up, debit notes; payment runs under approval with a bank file; advances | **Done** |
-| 5 | Subcontract bills | Next |
-| 6-8 | GST and TDS, bank, Tally and statements | |
+| 5 | Subcontract bills: a work order's measurement book (entries reversed, never changed); RA bills with retention to a cap, advance recovery, back-charges, labour cess and TDS; certified under approval into payables; retention released | **Done** |
+| 6 | GST and TDS registers and returns | Next |
+| 7-8 | Bank, Tally and statements | |
 | 9-13 | Fixed assets, equipment, HR, payroll, labour contractors | |
 | 14-15 | Quality, safety | |

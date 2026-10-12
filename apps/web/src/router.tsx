@@ -60,6 +60,7 @@ import {
 import { ProjectDocumentsScreen } from './screens/ProjectDocuments';
 import { ChartScreen } from './screens/accounts/Chart';
 import { ClientBillScreen } from './screens/accounts/ClientBill';
+import { SubcontractBillScreen } from './screens/accounts/Subcontract';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -285,6 +286,14 @@ const clientBillRoute = createRoute({
     return <ClientBillScreen key={billId} billId={billId} />;
   },
 });
+const subcontractBillRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/subcontract-bills/$billId',
+  component: function SubcontractBillPage() {
+    const { billId } = subcontractBillRoute.useParams();
+    return <SubcontractBillScreen key={billId} billId={billId} />;
+  },
+});
 const clientReceiptRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/accounts/client-receipts/$receiptId',
@@ -501,6 +510,7 @@ const routeTree = rootRoute.addChildren([
     voucherRoute,
     ledgerRoute,
     clientBillRoute,
+    subcontractBillRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/accounts/receivables',

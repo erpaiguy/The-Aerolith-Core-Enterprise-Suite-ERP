@@ -500,9 +500,10 @@ export class PayableService implements OnModuleInit {
             voucher_id: string | null;
             touched: boolean;
             bill_date: string;
+            source: string | null;
           }[]
         >`
-          SELECT b.status, b.entity_id, b.voucher_id, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date,
+          SELECT b.status, b.entity_id, b.voucher_id, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date, b.source,
             EXISTS (SELECT 1 FROM acc.payment_run_line l JOIN acc.payment_run r ON r.id = l.run_id
                     WHERE l.bill_id = b.id AND r.status <> 'cancelled')
               OR EXISTS (SELECT 1 FROM acc.advance_application a WHERE a.bill_id = b.id)
@@ -511,6 +512,12 @@ export class PayableService implements OnModuleInit {
         if (!row) throw new NotFoundException({ code: 'bill_not_found' });
         if (row.status === 'cancelled')
           throw new ConflictException({ code: 'cancelled', message: 'Already cancelled.' });
+        if (row.source)
+          throw new ConflictException({
+            code: 'from_subcontract',
+            message:
+              'This bill comes from a subcontract certificate: correct it with a debit note.',
+          });
         if (row.touched)
           throw new ConflictException({
             code: 'bill_in_use',
@@ -563,7 +570,7 @@ export class PayableService implements OnModuleInit {
         b.supply, b.status, b.held_reasons AS "heldReasons", b.pass_reason AS "passReason", b.status_reason AS "statusReason",
         b.tds_section AS "tdsSection", b.tds_rate::text AS "tdsRate", b.tds_base::text AS "tdsBase", b.taxable::text AS taxable,
         b.cgst::text AS cgst, b.sgst::text AS sgst, b.igst::text AS igst, b.total::text AS total, b.tds::text AS tds,
-        b.payable::text AS payable, ${this.outstandingSql(db)}::text AS outstanding, b.narration,
+        b.payable::text AS payable, ${this.outstandingSql(db)}::text AS outstanding, b.narration, b.source,
         (SELECT json_build_object('id', v.id, 'number', v.number) FROM acc.voucher v WHERE v.id = b.voucher_id) AS voucher,
         coalesce((SELECT json_agg(json_build_object('position', l.position, 'lineKey', l.line_key, 'description', l.description,
           'unit', l.unit, 'qty', l.qty::text, 'rate', l.rate::text, 'gstPct', l.gst_pct::text, 'amount', l.amount::text,
@@ -584,7 +591,7 @@ export class PayableService implements OnModuleInit {
     return {
       ...b,
       mayPass: mayPost && b.status === 'held',
-      mayCancel: mayPost && b.status !== 'cancelled',
+      mayCancel: mayPost && b.status !== 'cancelled' && !b.source,
     };
   }
 
@@ -698,7 +705,7 @@ export class PayableService implements OnModuleInit {
   }
 
   /** What a supplier has been paid in advance and not yet applied. */
-  private async advanceLeft(db: Db, entityId: string, partyId: string) {
+  async advanceLeft(db: Db, entityId: string, partyId: string) {
     const [a] = await db<{ left: string }[]>`
       SELECT (coalesce((SELECT sum(l.amount) FROM acc.payment_run_line l JOIN acc.payment_run r ON r.id = l.run_id
           WHERE r.entity_id = ${entityId} AND r.status = 'paid' AND l.party_id = ${partyId} AND l.kind = 'advance'), 0)

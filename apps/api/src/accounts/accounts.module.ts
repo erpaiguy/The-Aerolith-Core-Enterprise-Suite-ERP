@@ -11,12 +11,26 @@ import { PayableController } from './payable.controller.js';
 import { PayableService } from './payable.service.js';
 import { ReceivableController } from './receivable.controller.js';
 import { ReceivableService } from './receivable.service.js';
+import { SubcontractController } from './subcontract.controller.js';
+import { SubcontractService } from './subcontract.service.js';
 
 /** Wave 3's money (docs/wave3-plan.md): the books first; billing, payables and the rest post into them. */
 @Module({
   imports: [ProvisioningModule, AuthModule, ProjectModule, ApprovalModule],
-  controllers: [LedgerController, ClientBillController, ReceivableController, PayableController],
-  providers: [LedgerService, ClientBillService, ReceivableService, PayableService],
+  controllers: [
+    LedgerController,
+    ClientBillController,
+    ReceivableController,
+    PayableController,
+    SubcontractController,
+  ],
+  providers: [
+    LedgerService,
+    ClientBillService,
+    ReceivableService,
+    PayableService,
+    SubcontractService,
+  ],
   exports: [LedgerService],
 })
 export class AccountsModule {}
