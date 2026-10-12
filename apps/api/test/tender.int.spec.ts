@@ -389,6 +389,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'dsr.acknowledge',
         'hr.view',
         'hr.edit',
+        'payroll.run',
         'attendance.mark',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
@@ -416,6 +417,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'dsr.acknowledge': true,
           'hr.view': true,
           'hr.edit': false,
+          'payroll.run': false,
           'attendance.mark': true,
         },
         worker: {
@@ -438,6 +440,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'dsr.acknowledge': false,
           'hr.view': false,
           'hr.edit': false,
+          'payroll.run': false,
           'attendance.mark': true,
         },
       });

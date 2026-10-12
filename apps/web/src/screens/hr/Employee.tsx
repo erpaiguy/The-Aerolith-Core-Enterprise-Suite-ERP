@@ -20,6 +20,7 @@ import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
+import { SalaryCard, SettlementCard } from '../payroll/Payroll';
 import { LeavePanel } from './MyAttendance';
 import {
   FLAG_LABEL,
@@ -215,6 +216,8 @@ export function EmployeeScreen({ employeeId }: { employeeId: string }) {
         )}
       </Card>
       <Deployments employee={d} mayEdit={mayEdit} />
+      <SalaryCard employeeId={d.id} />
+      <SettlementCard employeeId={d.id} leftOn={d.leftOn} />
       <LeavePanel employeeId={d.id} />
     </div>
   );

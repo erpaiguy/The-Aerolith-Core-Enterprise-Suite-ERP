@@ -399,7 +399,11 @@ export class AttendanceService {
    */
   async month(claims: TenantClaims, entityId: string, month: string) {
     await this.hr.must(claims, 'hr.view');
-    const db = await this.tenants.forTenant(claims.ten);
+    return this.monthDays(await this.tenants.forTenant(claims.ten), entityId, month);
+  }
+
+  /** The month's days without a permission check (payroll reads them). */
+  async monthDays(db: Db, entityId: string, month: string) {
     const from = `${month}-01`;
     const to = lastDay(month);
     const today = indiaDay();

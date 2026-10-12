@@ -97,6 +97,10 @@ export const PERMISSIONS = {
       'Keep the employee records (with PAN and bank in full), designations, holiday calendars, deployments and leave types',
     defaults: { manager: false, worker: false },
   },
+  'payroll.run': {
+    label: 'Run payroll: rules, pay components, salaries, the monthly run, posting and paying it',
+    defaults: { manager: false, worker: false },
+  },
   'attendance.mark': {
     label: "Mark a site's attendance register (as the project's lead or member)",
     defaults: { manager: true, worker: true },

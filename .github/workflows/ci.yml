@@ -164,8 +164,10 @@ jobs:
         run: echo '{"apiBaseUrl":"${{ vars.DESKTOP_API_BASE_URL || 'https://api.example.invalid' }}"}' > apps/desktop/resources/app-config.json
       - name: Build Windows installer
         run: pnpm --filter @aerolith/desktop dist:win
+      # The installer is ~100 MB: kept from main only, briefly, so branch pushes do not fill the artifact quota.
       - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
         with:
           name: windows-installer-unsigned
           path: apps/desktop/release/*.exe
-          retention-days: 7
+          retention-days: 3

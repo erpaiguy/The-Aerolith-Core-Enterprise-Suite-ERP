@@ -164,6 +164,7 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 9 | Fixed assets: register from bills or opening balances, transfers, depreciation runs (Companies Act, by project), Income Tax blocks, disposals with gain or loss | **Done** |
 | 10 | Equipment: register (own or hired), allocation, log sheets (in the daily report), fuel against the norm, maintenance, the month costed (own charged to projects, hire bills from the logs) | **Done** |
 | 11 | HR: employees (DPDP Aadhaar rule, masked PAN and bank), designations that add permissions and approve, calendars, deployment, attendance (register, biometric file, phone with location), leave (types, balances, applications through approvals, carry forward), the month's payable days | **Done** |
-| 12 | Payroll | Next |
-| 13 | Labour contractors | |
+| 12a | Payroll: compliance rules with effective dates, pay components, salaries, the monthly run (PF, ESI, PT, LWF, TDS), approval, posting by project, the bank file, payslips | **Done** |
+| 12b | Payroll: PF ECR, ESI data, Form 16 (Form 130) data, full and final (gratuity, encashment, notice), the 3b exit check | **Done** (practitioner review open) |
+| 13 | Labour contractors | Next |
 | 14-15 | Quality, safety | |

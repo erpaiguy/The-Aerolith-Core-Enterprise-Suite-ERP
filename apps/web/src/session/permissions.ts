@@ -23,6 +23,7 @@ export type Permission =
   | 'dsr.acknowledge'
   | 'hr.view'
   | 'hr.edit'
+  | 'payroll.run'
   | 'attendance.mark';
 
 export function usePermission(p: Permission): boolean {

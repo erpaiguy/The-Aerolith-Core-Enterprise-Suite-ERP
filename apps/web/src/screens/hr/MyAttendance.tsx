@@ -21,6 +21,7 @@ import { ApprovalSteps } from '../../approvals/ApprovalTrail';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
 import { shortDate } from '../../schedule/model';
+import { MyPayslips } from '../payroll/Payroll';
 import {
   FLAG_LABEL,
   STATUS_LABEL,
@@ -52,6 +53,7 @@ export function MyAttendanceScreen() {
         <>
           <Today me={me.data} />
           <LeavePanel employeeId={me.data.employee.id} self />
+          <MyPayslips />
         </>
       )}
     </div>

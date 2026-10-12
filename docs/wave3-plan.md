@@ -520,6 +520,74 @@ sources, each [Guessing] until a payroll practitioner confirms:
   regimes by hand; a run with unpaid days, arrears, an ESI-covered worker, a PT February; the voucher by project;
   the ECR line format; a gratuity and encashment by hand.
 
+## Step 13 in detail (planned before building)
+
+**Goal:** the contract labour on a site is known by name each day; what the contractor owes them is worked out and
+checked against the minimum wage before their bill is passed; the registers an inspector asks for print from the
+same data; BOCW cess is tracked to payment.
+
+- **Labour contractors:** a supplier (step 4's party) with its CLRA licence (number, the worker count it allows,
+  valid to), and its BOCW registration; a licence lapsing within 30 days, or exceeded, is flagged.
+- **Workers:** each contractor's people: name, father's or husband's name, sex, date of birth, trade, skill
+  (unskilled, semi-skilled, skilled, highly skilled), daily wage, the last four digits of Aadhaar with consent (the
+  DPDP rule of step 11), UAN and ESI number if any, joined and left.
+- **Minimum wages** as data with effective dates: a state, a skill and a daily rate (with the zone or class the
+  notification uses as text). None is seeded: the tenant enters its state's notification. [Certain] Rates are
+  revised twice a year (variable dearness allowance); a rate I typed from memory would be wrong.
+- **Daily muster** by site: each worker present, half day or absent, with overtime hours; one muster a day per site
+  and contractor. The **daily site report** shows the day's muster counts by contractor and trade beside its typed
+  manpower rows.
+- **Wage sheet** for a contractor, site and month: each worker's days, wages at their rate, overtime at twice the
+  ordinary hourly rate (the day's wage ÷ 8), gross; the minimum wage for their skill in the state on the month's last
+  day and the shortfall when their rate is below it (flagged, the sheet not passed); deductions as the contractor
+  reports them (PF, ESI, advances); net. **Verified:** the contractor's proof of payment (date, reference, mode) is
+  recorded against the sheet; a subcontract bill (step 5) of that contractor shows whether its months' sheets are
+  verified, and certification warns when one is not.
+- **Registers** (Excel), for a contractor and site: the register of workmen employed by the contractor, the muster
+  roll, and the register of wages (CLRA Forms XIII, XVI and XVII in the central rules; [Guessing] states use their
+  own numbering and columns).
+- **BOCW cess:** for a project, the cost of construction booked to date (its expenses in the ledger) at 1%, the cess
+  deducted from subcontract bills (step 5), the cess paid (challans recorded with a voucher: labour cess payable Dr,
+  bank Cr), and the balance.
+- **Rights:** `labour.manage` (new: contractors, workers, minimum wages, wage sheets, cess payments; managers on by
+  default); the project's team with `attendance.mark` keeps its sites' musters.
+- **Tests:** a contractor with a licence near expiry; workers; a month's musters with overtime; the wage sheet worked
+  by hand with a worker below the minimum wage flagged; verification; the registers' rows; the daily report's
+  counts; the cess register and a challan posted.
+
+## Step 14 in detail (planned before building)
+
+**Goal:** what was built was checked and passed before it was billed; tests are recorded against their acceptance
+criteria and a failure is followed to closure; materials and makes are approved before they are bought.
+
+- **Inspection requests** (RFI) for a project: the site asks the client's engineer to inspect a BOQ line's work (its
+  location, the activity), at a date; the request takes the measurement-book entries of that line not covered by an
+  earlier request; the inspector's decision is recorded: approved, approved with comments, or rejected (with the
+  comments). **Hold from billing** (a project setting): when on, a client bill (step 2) counts only measurements
+  covered by an approved inspection.
+- **Checklists:** company templates by work type (items answered yes/no, a number within limits, or a note; some
+  required); a filled checklist for a project and site (optionally for an inspection), answered on the phone with
+  photos; a "no" or an out-of-limit number on a required item fails it.
+- **Test records** for a project: concrete cubes (the grade, cast date, three specimens at 7 and 28 days), slump,
+  reinforcement steel (yield, tensile strength, elongation), soil compaction, bricks (compressive strength); each
+  judged against its criteria; a failure raises an NCR. [Guessing] The criteria are IS 456 (concrete: a 28-day sample,
+  the mean of its three cubes, at least fck − 3 N/mm² for M20 and above, no cube more than 15% from the mean; 7 days
+  indicative only, about 65% of fck), IS 1786 (Fe 500: yield ≥ 500, tensile ≥ 1.08 × yield and ≥ 545, elongation ≥
+  12%), the specified compaction (95% by default) and slump range, and IS 1077 (the brick's class): held as data a
+  quality engineer can change.
+- **NCRs:** numbered per project; from a test, an inspection or raised by hand; the non-conformance, root cause,
+  corrective action, who acts and by when; action taken, then **closed** by someone other than whoever took the
+  action (verification).
+- **Snag lists** by area or room, with photos; open, fixed, closed.
+- **Material approvals:** a sample or make submitted for a project's item (the resource), approved or rejected; an
+  item can be marked as needing an approved make, and a purchase order (Wave 2b) for it is then refused submission
+  without one.
+- **Rights:** `quality.manage` (new; templates, test criteria, decisions, NCR closure, material approvals; managers on
+  by default); the project's team raises inspections, fills checklists, records tests and snags.
+- **Tests:** an inspection covering two MB entries, rejected, then a second approved; a client bill with the hold on
+  and off; a checklist failed and passed; cubes passing and failing (an NCR raised and closed by another person);
+  steel and slump; a snag; a make required and a PO refused, then approved.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -1447,3 +1515,105 @@ designation approver).
   worked out day by day; the year carried forward (15, 12.5 and 15 days of earned leave).
 - A browser test: a calendar and a leave type set up, an employee deployed, a day on the site's register, a day's
   leave, and September's six payable days.
+
+## Step 12a delivered: payroll rules, salaries and the monthly run
+
+**Journey:**
+- **Payroll** (People menu, `payroll.run`), for a company:
+  - **Runs:** work a month; the list with each run's state (draft, waiting, approved, posted, paid), staff, gross
+    and net.
+  - **A run:** the totals (gross, net, PF both shares, ESI, professional tax, TDS, other deductions), anyone without
+    a salary named; each employee's days paid, gross, deductions and net, with their **payslip**; **arrears and
+    deductions** typed in while a draft (worked again at once); **submit** (approval rules, document type "Payroll
+    run"), **post**, the **bank file** (CSV), **pay** from a bank ledger.
+  - **Rules:** every version of every rule with its date; a new version added as figures (checked by kind), refused
+    once a month from that date is approved.
+  - **Components:** earnings and deductions (wages under the Code on Wages, taxable, cut for unpaid days).
+- **An employee's page** (`payroll.run`): the **salary** history and a new salary from a date (each component's
+  monthly amount; PF on the ceiling, actual wages or not at all; ESI; tax regime and, for the old, the year's
+  declared deductions).
+- **My attendance:** the employee's own payslips once the run is approved.
+
+**What it posts:** at the month's last day, one journal: salaries and wages Dr and the employer's PF, EDLI, admin
+charges, ESI and LWF Dr, **by project** in proportion to each employee's days at each deployment; salaries payable
+(net), staff advances (deductions recovered), PF, ESI, professional tax, LWF and TDS payable Cr (six seeded ledgers,
+L4006 and L5009–L5013). Paid: bank Cr, salaries payable Dr.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] The rules in force on the month's last day govern the whole month** (September 2026 is worked on the
+  ₹25,000 ceiling from 17 September). Payroll practice differs; a practitioner should confirm.
+- **[Guessing] The seeded figures** (checked in October 2026 from secondary sources): the Code on Wages' 50% rule
+  from 21 November 2025; EPF ceiling ₹15,000, ₹25,000 from 17 September 2026; ESI ₹21,000, 0.75% and 3.25%;
+  Maharashtra PT (women nil up to ₹25,000) and LWF ₹25/₹75 in June and December; income tax for 2025-26 onwards
+  (new regime default, rebate to ₹12 lakh with marginal relief; old regime rebate to ₹5 lakh). Every one is the
+  practitioner's to confirm before a tenant relies on it; correcting one is a new version.
+- **[Likely] Pay is by calendar days:** each component cut by payable days over the month's days, to the rupee.
+- **[Likely] PF and ESI to the rupee as the authorities do:** PF rounded, ESI rounded up; the employer's EPF share is
+  12% less the pension share. PF wages are worked on the month's regular pay; arrears are not added to PF wages.
+- **[Likely] ESI cover is judged on the full month's salary at the start of the contribution period** (April or
+  October) and holds to its end.
+- **[Likely] Professional tax and LWF follow the state of the site the employee is at on the month's last day**, else
+  the company's state; an employee with no sex recorded is charged the men's slabs.
+- **[Likely] TDS projects the year from this month's regular pay** (earlier approved months, this month, and the
+  same for the months left), taxes one-off pay (arrears) in full in its month, and spreads the rest evenly. The old
+  regime takes the declared deductions as one figure; PT and the employee's PF are not deducted automatically.
+- **[Likely] The cost split is by deployed days** in the month (calendar days in service at each project).
+- **[Likely] Payslips are a printable page** (the browser's print to PDF), so no PDF service is needed.
+
+**API** (under `/api/tenant/payroll`): `GET|POST rules`; `GET|POST components`; `GET|POST employees/:id/salary`;
+`GET|POST runs`, `GET runs/:id`, `POST runs/:id/work|submit|post|pay`, `POST runs/:id/adjustments`,
+`DELETE runs/:id/adjustments/:adjustmentId`, `GET runs/:id/bank-file`, `GET runs/:id/payslips/:employeeId`,
+`GET payslips/mine`. HR's `GET attendance/month` is unchanged; payroll reads the same days.
+
+Migration `0048_payroll.sql` (schema `pay`).
+
+**Tests:**
+- 6 unit tests: wages under the 50% rule; PF on the ₹15,000 and ₹25,000 ceilings and on actual wages; ESI rounded
+  up and its periods; Maharashtra PT by slab, sex and February; income tax under both regimes (₹12.1 lakh: ₹10,400
+  with marginal relief); a month's TDS (₹12,567, and ₹22,967 with ₹50,000 arrears).
+- 3 API integration tests, every figure by hand: three staff for September 2026 from a device's file: Suresh (₹2
+  lakh, ₹50,000 arrears, an advance of ₹5,000, split between two projects; TDS ₹19,500; net ₹2,22,300), Raju (27
+  of 30 days, ESI ₹122 and ₹527; net ₹14,258), Meena (the 50% rule: wages ₹40,000; PF on actual wages; the old
+  regime; net ₹75,000); totals; a rule refused for an approved month; the voucher (₹3,56,858, salaries ₹2,21,200 and
+  ₹1,25,000 by project); the bank file; paid from the bank; Raju's own payslip and not Suresh's.
+- A browser test: a salary set, September imported, the run worked (₹17,250 net), approved, posted, the payslip.
+
+## Step 12b delivered: returns, full and final, and the 3b exit check
+
+**Journey:**
+- **A run** (approved or later): **PF ECR** (the EPFO's #~# text file; members without a UAN named), **ESI file**
+  (the ESIC's monthly contribution sheet: IP number, name, days paid, wages, reason code).
+- **Payroll › Year:** each employee's financial year for **Form 16 (Form 130)**: salary, the standard deduction,
+  declared deductions (old regime), taxable income, TDS by quarter (the figures for the quarterly salary TDS
+  return).
+- **An employee who has left** (their record's leaving date): **full and final**: gratuity, earned leave encashed,
+  notice paid or recovered; worked again freely while a draft; **posted** on the last day (salaries and wages Dr on the
+  project they last worked on, salaries payable Cr), then paid like any payment.
+
+**Decisions made while building (change any you disagree with):**
+- **[Guessing] Gratuity under the Code on Social Security:** 15 days' wages (wages ÷ 26) for each year counted (a part
+  year over six months counts), from five completed years, or one for **fixed-term** staff (a new flag on the
+  employee), capped at ₹20 lakh; a rule with an effective date like the others.
+- **[Guessing] Leave encashment** at wages ÷ 26 a day on the chosen leave type's balance at the last day; **notice** at
+  the month's gross ÷ 30 a day. Neither is taxed by the settlement (exemptions differ by case); the practitioner
+  decides.
+- **[Likely] A settlement that nets to nothing or less is not posted:** the notice recovery then belongs in the last
+  month's run as a deduction.
+- **[Guessing] The ECR and ESI layouts** follow the portals' published templates as last known; the portals change
+  them, so check on the first real upload.
+
+**API** (under `/api/tenant/payroll`): `GET runs/:id/ecr?format=json|txt`, `GET runs/:id/esi?format=json|xlsx`,
+`GET year-form?entityId&year`, `GET|POST employees/:id/settlement`, `POST employees/:id/settlement/post`.
+
+Migration `0049_payroll_settlement.sql` (the gratuity rule, `hr.employee.fixed_term`, `pay.settlement`).
+
+**Tests:**
+- 3 unit tests: an ECR line; years of service (six months and a day counts, six does not); gratuity (₹1,03,846 for six
+  years at ₹30,000; a fixed-term year; the cap), encashment and notice.
+- **The 3b exit check** (2 more API integration tests on the same September): the ECR line for Suresh and the two
+  without a UAN; Raju's ESI row; the year's Form 16 data (₹2.5 lakh, ₹1.75 lakh taxable, ₹19,500 in Q2); Suresh
+  leaving after six years: gratuity ₹3,46,154, 16 days encashed ₹61,538, 15 days' notice short −₹1,00,000, total
+  ₹3,07,692 posted. **Open:** a payroll practitioner's review of every rule and figure above.
+
+**CI:** the Windows installer (~100 MB) is now kept as an artifact from `main` only, for three days, so branch pushes
+no longer fill the account's artifact storage (runs 89–90 failed only on that upload).

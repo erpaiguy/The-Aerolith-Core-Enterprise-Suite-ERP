@@ -1,6 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
+  Banknote,
   Bell,
   ClipboardCheck,
   Fingerprint,
@@ -110,6 +111,7 @@ export function AppShell() {
   const mayBooks = usePermission('accounts.view');
   const mayPeople = usePermission('hr.view');
   const mayMark = usePermission('attendance.mark');
+  const mayPayroll = usePermission('payroll.run');
   const inbox = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.request<Inbox>('/api/tenant/inbox'),
@@ -250,6 +252,11 @@ export function AppShell() {
             {mayPeople && (
               <NavItem to="/hr" icon={<IdCard className="size-4" />}>
                 Employees
+              </NavItem>
+            )}
+            {mayPayroll && (
+              <NavItem to="/payroll" icon={<Banknote className="size-4" />}>
+                Payroll
               </NavItem>
             )}
             {mayBooks && (
