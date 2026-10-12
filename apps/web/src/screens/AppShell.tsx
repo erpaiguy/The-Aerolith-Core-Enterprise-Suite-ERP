@@ -16,6 +16,7 @@ import {
   Gauge,
   ArrowLeftRight,
   TrendingUp,
+  FilePlus2,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -236,6 +237,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/earned-value" icon={<TrendingUp className="size-4" />}>
               Earned value
+            </NavItem>
+            <NavItem to="/variations" icon={<FilePlus2 className="size-4" />}>
+              Variations
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

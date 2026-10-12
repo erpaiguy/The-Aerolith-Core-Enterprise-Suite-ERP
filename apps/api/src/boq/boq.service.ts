@@ -456,66 +456,69 @@ export class BoqService {
         code: 'boq_importing',
         message: 'A file is being imported into this BOQ. Try again when it has finished.',
       });
-    return db.begin(async (tx) => {
-      const [boq] = await tx<
-        { status: string; archived: boolean; rate_date: string; version_no: number }[]
-      >`
+    return db.begin((tx) => this.applyInTx(tx, claims, boqId, ops));
+  }
+
+  /** `apply` inside the caller's transaction (variations edit a contract BOQ and its budget together). */
+  async applyInTx(tx: TransactionSql, claims: TenantClaims, boqId: string, ops: Op[]) {
+    const [boq] = await tx<
+      { status: string; archived: boolean; rate_date: string; version_no: number }[]
+    >`
         SELECT status, archived_at IS NOT NULL AS archived, rate_date::text, version_no FROM est.boq
         WHERE id = ${boqId} FOR UPDATE`;
-      if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
-      refuseArchived(boq);
-      if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
+    if (!boq) throw new NotFoundException({ code: 'boq_not_found' });
+    refuseArchived(boq);
+    if (boq.status !== 'draft') throw new ConflictException({ code: 'boq_locked' });
 
-      const ctx: BatchContext = {
-        tx,
-        boqId,
-        rateDate: boq.rate_date,
-        version: boq.version_no,
-        units: null,
-        idMap: new Map(),
-        touched: new Set(),
-        deleted: new Set(),
-        reload: false,
-      };
-      for (const [index, op] of ops.entries()) {
-        try {
-          if (op.op === 'insert') await this.insert(ctx, op);
-          else if (op.op === 'update') await this.update(ctx, op);
-          else if (op.op === 'delete') await this.remove(ctx, op);
-          else if (op.op === 'move') await this.move(ctx, op);
-          else await this.shift(ctx, op);
-        } catch (err) {
-          // Tell the client which op failed; the whole batch rolls back.
-          const r = (err as { response?: Record<string, unknown> }).response;
-          if (r && typeof r === 'object') Object.assign(r, { opIndex: index });
-          throw err;
-        }
+    const ctx: BatchContext = {
+      tx,
+      boqId,
+      rateDate: boq.rate_date,
+      version: boq.version_no,
+      units: null,
+      idMap: new Map(),
+      touched: new Set(),
+      deleted: new Set(),
+      reload: false,
+    };
+    for (const [index, op] of ops.entries()) {
+      try {
+        if (op.op === 'insert') await this.insert(ctx, op);
+        else if (op.op === 'update') await this.update(ctx, op);
+        else if (op.op === 'delete') await this.remove(ctx, op);
+        else if (op.op === 'move') await this.move(ctx, op);
+        else await this.shift(ctx, op);
+      } catch (err) {
+        // Tell the client which op failed; the whole batch rolls back.
+        const r = (err as { response?: Record<string, unknown> }).response;
+        if (r && typeof r === 'object') Object.assign(r, { opIndex: index });
+        throw err;
       }
-      await tx`UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${boqId}`;
-      const counts = ops.reduce<Record<string, number>>(
-        (a, o) => ({ ...a, [o.op]: (a[o.op] ?? 0) + 1 }),
-        {},
-      );
-      await audit(tx, claims.sub, 'boq.changes', boqId, counts);
+    }
+    await tx`UPDATE est.boq SET updated_at = now(), updated_by = ${claims.sub} WHERE id = ${boqId}`;
+    const counts = ops.reduce<Record<string, number>>(
+      (a, o) => ({ ...a, [o.op]: (a[o.op] ?? 0) + 1 }),
+      {},
+    );
+    await audit(tx, claims.sub, 'boq.changes', boqId, counts);
 
-      const live = [...ctx.touched].filter((id) => !ctx.deleted.has(id));
-      if (live.length > MAX_TOUCHED_ROWS) ctx.reload = true;
-      const rows =
-        ctx.reload && live.length > MAX_TOUCHED_ROWS
-          ? []
-          : await tx<BoqRow[]>`
+    const live = [...ctx.touched].filter((id) => !ctx.deleted.has(id));
+    if (live.length > MAX_TOUCHED_ROWS) ctx.reload = true;
+    const rows =
+      ctx.reload && live.length > MAX_TOUCHED_ROWS
+        ? []
+        : await tx<BoqRow[]>`
             SELECT ${tx.unsafe(ROW)}
             FROM est.boq_node n JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
             WHERE n.boq_id = ${boqId} AND n.id = ANY(${live}::bigint[]) ORDER BY n.sort_key`;
-      const [header] = await tx`SELECT ${tx.unsafe(HEADER)} FROM est.boq b WHERE b.id = ${boqId}`;
-      return {
-        header,
-        rows,
-        deletedIds: [...ctx.deleted],
-        idMap: Object.fromEntries(ctx.idMap),
-        reload: ctx.reload,
-      };
-    });
+    const [header] = await tx`SELECT ${tx.unsafe(HEADER)} FROM est.boq b WHERE b.id = ${boqId}`;
+    return {
+      header,
+      rows,
+      deletedIds: [...ctx.deleted],
+      idMap: Object.fromEntries(ctx.idMap),
+      reload: ctx.reload,
+    };
   }
 
   /**

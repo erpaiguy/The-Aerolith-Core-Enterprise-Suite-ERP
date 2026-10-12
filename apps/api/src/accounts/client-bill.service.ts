@@ -376,12 +376,16 @@ export class ClientBillService implements OnModuleInit {
         measuredQty: string;
         cumQty: string;
         certQty: string | null;
+        /** A variation's line billed while the client's approval is pending (the contract allows it). */
+        pendingVariation: string | null;
       }[]
     >`
       SELECT line_key AS "lineKey", position, code, description, unit, rate::text AS rate,
         contract_qty::text AS "contractQty", prev_qty::text AS "prevQty", measured_qty::text AS "measuredQty",
-        cum_qty::text AS "cumQty", cert_qty::text AS "certQty"
-      FROM acc.client_bill_line WHERE bill_id = ${id} ORDER BY position`;
+        cum_qty::text AS "cumQty", cert_qty::text AS "certQty",
+        (SELECT v.number FROM ctl.variation_line vl JOIN ctl.variation v ON v.id = vl.variation_id
+          WHERE vl.line_key = l.line_key AND v.status = 'submitted' AND v.applied LIMIT 1) AS "pendingVariation"
+      FROM acc.client_bill_line l WHERE bill_id = ${id} ORDER BY position`;
   }
   private deductions(db: Db, id: string) {
     return db<

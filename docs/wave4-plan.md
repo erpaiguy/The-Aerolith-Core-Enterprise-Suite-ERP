@@ -310,6 +310,72 @@ dashboard does.
   - The chosen method.
 - A browser test: the curves drawn and the method changed.
 
+## Step 4 in detail (planned before building)
+
+**What was found first.** [Certain] Contract BOQs are never locked once billed, nothing caps billing at the contract
+quantity, and a new BOQ line cannot be given the key its budget line shares. So a variation changes the contract
+BOQ and its budget in one transaction, keyed together, and the register shows work executed beyond what the client
+has approved.
+
+**A variation** (VO-001… per project):
+- The title, the source (client instruction, site condition, design change, other), the client's instruction
+  reference and the reason.
+- The time it needs, in days, and the activities it extends.
+- **Lines:**
+  - **New items:** code, description, unit, quantity. Priced by a rate analysis (its cost rate on the date), or a
+    typed cost rate. The contract rate defaults to the cost rate × the project's contract ÷ budget ratio (its
+    markup), and can be typed.
+  - **Changed quantities:** a contract BOQ line, plus or minus a quantity, at its contract rate and its budget rate.
+  - Each line carries a **value** (contract) and a **cost** (budget) impact.
+- **Statuses:**
+  - Draft.
+  - Pending (internal approval through the approval engine, as `variation`).
+  - Submitted to the client.
+  - Approved by the client, recorded with the reference, date and value. The client can approve lines at lower
+    quantities or rates, so for less.
+  - Rejected by the client.
+  - Withdrawn.
+
+**When the client approves:**
+- **The contract BOQ:** new items are added under a "Variations" section, and changed quantities move. If the contract
+  BOQ is frozen, this is a new revision: revised, changed, and frozen as an internal version labelled VO-001.
+- **The budget BOQ:** the same lines at cost, sharing their keys, so cost control (step 1) shows the budget as
+  approved changes.
+- **The schedule:** the named activities are extended by the variation's days.
+- The next **RA bill** then bills measured quantities of the new items and the moved quantities with no special
+  case.
+
+**Billing before approval:**
+- A project setting allows billing variations while the client's approval is pending (some contracts permit it).
+- With it on, lines go into the BOQs when the variation is submitted to the client. The client bill marks those lines
+  as pending.
+- If the client then rejects the variation:
+  - Changed quantities go back.
+  - New items with nothing measured are removed.
+  - New items that were measured stay, flagged for a credit note.
+
+**The register:**
+- Every variation with its value, cost and approved value.
+- Totals by status.
+- **"Executed, not approved":** variations not yet approved by the client whose work has started. Work has started
+  when it is marked started on site, or when measurements on a changed line exceed its contract quantity. Each is
+  shown with the value at risk.
+
+**Rights:**
+- The project's team raises, prices and submits variations.
+- `billing.edit` records the client's decision and the billing setting.
+
+**Tests:**
+- A variation with a new item priced from a rate analysis and a changed quantity:
+  - Approved internally (no rules) and submitted.
+  - Approved by the client for less.
+  - The contract BOQ revised and frozen as VO-001.
+  - The budget moved, and cost control's changes showing it.
+  - The next RA bill billing the new item and the moved quantity.
+- A second variation executed and not approved.
+- A third rejected, with billing while pending on, and its lines reverted.
+- A browser test: a variation raised, priced, submitted and approved.
+
 ## Risks
 
 1. [Likely] Cost to complete entered per element is work site teams avoid; if it is not kept, forecasts collapse to
@@ -526,4 +592,72 @@ Migration `0055_earned_value.sql` adds `ctl.ev_settings`.
   - Re-baselined with the columns activity shortened: PV 1,62,500 and SPI 0.5846.
   - The method chosen by the manager and refused to the worker.
 - A browser test: no baseline warned of, and the forecast method changed.
+
+## Step 4 delivered: variations
+
+**Journey:**
+- **Variations** (Projects menu), for a project:
+  - **The register:** each variation with its status, value, cost and approved value. Totals by status, and
+    **executed, not approved** with the value at risk.
+  - **The billing setting:** whether this contract lets variations be billed while the client's approval is pending
+    (`billing.edit`).
+  - **Raise a variation:** the title, source, the client's instruction reference and the reason, then lines.
+    - **New items:** code, description, unit, quantity; a rate analysis or a typed cost rate; and a contract rate,
+      typed or at the markup.
+    - **Changed contract items:** a quantity, plus or minus.
+  - **A variation:**
+    - Its lines with value and cost.
+    - **Submit** for approval inside the company. With no rules it goes straight to the client.
+    - The date work started on site.
+    - **Withdraw.**
+    - With `billing.edit`, the **client's decision**: the reference and date, each line's allowed quantity and rate,
+      approved or rejected.
+- On approval:
+  - **The contract BOQ:** new items under a "VO Variations" section, and changed quantities moved. A frozen contract
+    BOQ is revised, changed and frozen again as an internal version named after the variation.
+  - **The budget BOQ:** the same lines at cost, sharing their keys.
+  - **The schedule:** the activities named are extended by the variation's days.
+- A **client bill** marks lines billed from a variation still pending.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] A new item's contract rate** is its cost rate × the project's contract ÷ budget totals, unless typed. A
+  changed item keeps its contract rate. Its budget rate comes from the budget line sharing its key, else the contract
+  rate scaled.
+- **[Likely] The budget BOQ paired with a contract BOQ** is the one copied from the same tender BOQ, else the
+  project's only budget. With neither, only the contract moves.
+- **[Likely] The client approves line by line:** quantities and rates. The approved value is their sum.
+- **[Likely] Work has started** when it is marked started on site, or when a changed line is measured beyond its
+  contract quantity before the client approves.
+- **[Likely] Taking back a rejected variation:**
+  - Changed quantities return.
+  - A new item with nothing measured is removed.
+  - A measured one stays, for a credit note.
+- **[Guessing] Schedule extension happens after the approval is saved.** If the plan changed meanwhile, it is left
+  for the planner rather than failing the approval.
+
+**API** (under `/api/tenant`):
+- `GET|POST projects/:id/variations`
+- `POST projects/:id/variations/settings`
+- `GET|POST variations/:id`
+- `POST variations/:id/submit`
+- `POST variations/:id/client`
+- `POST variations/:id/started`
+- `POST variations/:id/withdraw`
+
+Approval document type `variation`. Migration `0056_variations.sql` adds `ctl.variation`, `ctl.variation_line` and
+`ctl.variation_settings`. `BoqService.applyInTx` runs BOQ edits in the caller's transaction.
+
+**Tests:**
+- An integration test, worked by hand:
+  - **VO-001:** waterproofing from an analysis (₹300 cost, ₹375 at the 1.25 markup) and 100 sqm more plaster, value
+    1,05,000 and cost 84,000.
+    - Straight to the client, who approves ₹350 and 80 sqm: 94,000.
+    - The frozen contract BOQ revised as VO-001.
+    - The budget moved and keyed together.
+    - Cost control's changes at 79,200.
+    - The next RA bill at the new rate and quantity.
+  - **VO-002:** executed and not approved, with 50,000 at risk.
+  - **VO-003:** billed while pending, then rejected and taken out of both BOQs.
+  - Rights checked.
+- A browser test: a variation raised, submitted, and approved by the client at a lower rate.
 

@@ -11,5 +11,6 @@ import { ProgrammeService } from './programme.service.js';
   imports: [ProvisioningModule, AuthModule, ProjectModule],
   controllers: [ProgrammeController],
   providers: [ProgrammeService, MacroService, DashboardService],
+  exports: [ProgrammeService],
 })
 export class ScheduleModule {}

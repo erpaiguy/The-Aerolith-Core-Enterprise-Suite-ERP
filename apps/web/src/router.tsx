@@ -77,6 +77,7 @@ import { SafetyScreen } from './screens/safety/Safety';
 import { CashFlowScreen } from './screens/control/CashFlow';
 import { CostControlScreen } from './screens/control/CostControl';
 import { EarnedValueScreen } from './screens/control/EarnedValue';
+import { VariationsScreen } from './screens/control/Variations';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -684,6 +685,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/earned-value',
       component: EarnedValueScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/variations',
+      component: VariationsScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,
