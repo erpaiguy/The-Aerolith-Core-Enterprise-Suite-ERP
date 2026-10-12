@@ -241,6 +241,9 @@ export function AppShell() {
                 <NavItem to="/accounts/payables" icon={<Wallet className="size-4" />}>
                   Payables
                 </NavItem>
+                <NavItem to="/accounts/gst" icon={<Landmark className="size-4" />}>
+                  GST
+                </NavItem>
                 <NavItem to="/accounts/trial-balance" icon={<Scale className="size-4" />}>
                   Trial balance
                 </NavItem>

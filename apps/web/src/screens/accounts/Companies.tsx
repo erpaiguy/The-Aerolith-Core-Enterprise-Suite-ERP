@@ -105,8 +105,11 @@ function CompanyForm({ company, onClose }: { company?: Company; onClose: () => v
     pan: company?.pan ?? '',
     tan: company?.tan ?? '',
     address: company?.address ?? '',
+    city: company?.city ?? '',
+    pincode: company?.pincode ?? '',
     booksFrom: company?.booksFrom ?? '',
   });
+  const [eInvoicing, setEInvoicing] = useState(company?.eInvoicing ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = (k: keyof typeof f) => ({
@@ -123,6 +126,8 @@ function CompanyForm({ company, onClose }: { company?: Company; onClose: () => v
         gstin: f.gstin || null,
         pan: f.pan || null,
         tan: f.tan || null,
+        pincode: f.pincode || null,
+        eInvoicing,
         booksFrom: f.booksFrom || null,
         ...(company ? { rowVersion: company.rowVersion } : {}),
       };
@@ -172,6 +177,22 @@ function CompanyForm({ company, onClose }: { company?: Company; onClose: () => v
         <Field label="Address">
           <Textarea {...field('address')} rows={2} maxLength={1000} />
         </Field>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="City">
+            <Input {...field('city')} maxLength={100} />
+          </Field>
+          <Field label="PIN code">
+            <Input {...field('pincode')} maxLength={6} inputMode="numeric" />
+          </Field>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <input
+              type="checkbox"
+              checked={eInvoicing}
+              onChange={(e) => setEInvoicing(e.target.checked)}
+            />
+            Issues e-invoices
+          </label>
+        </div>
         <div className="flex gap-2">
           <Button type="submit" busy={busy}>
             {company ? 'Save' : 'Add company'}

@@ -220,6 +220,69 @@ bills with retention, advance recovery, back-charges, labour cess and TDS; reten
 - **Tests:** a subcontractor billed three times with a reversal in the book, back-charges and an advance recovered;
   retention to its cap and released; TDS crossing the year's limit; paid in a run.
 
+## Step 6 in detail (planned before building)
+
+**Goal:** what the CA files each month and quarter comes out of the books without retyping: GST registers and return
+data, the e-invoice JSON, the supplier-filed 2B matched to the purchase book, and TDS deposited and returned. Built in
+two parts: **6a GST**, then **6b TDS**.
+
+**The uncomfortable part first:** [Certain] the government portals change their file layouts without notice, and a
+file the portal rejects is worse than no file. So each export is built to a published layout only where one exists and
+is stable (the e-invoice JSON, schema 1.1; the GSTR-2B download), and is otherwise **Excel in the layout the free
+government offline tools import** (the GST offline tool for GSTR-1, the NSDL Return Preparation Utility for 26Q), which
+then make the portal's file. [Likely] e-way bills are left out of this step: goods move between our own sites rarely
+above the limit, and the bulk JSON layout should be taken from a pilot's real file; recorded as an open item.
+
+### 6a GST
+
+- **Company and party details the returns need:** the company's PIN code and the client's state, PIN and legal name
+  (for the e-invoice); a **SAC/HSN** on the client bill terms (9954, construction services, by default).
+- **Credit notes to clients** (the client bill page said "correct it with a credit note"; this builds it): against a
+  certified bill's tax invoice, a value and the bill's GST rate; numbered `CN/…` per company and year; posts contract
+  revenue and output tax Dr, the client Cr; reduces what the client owes on that bill (receivables honour it).
+- **Blocked input tax:** a ledger can be marked "input tax blocked" (section 17(5): motor cars, food and beverages,
+  personal use, and so on — [Guessing] the list is the CA's call); a supplier's bill line to such a ledger posts its GST
+  into the expense, not input tax.
+- **Registers**, for a company and a month (or a range), as screens and Excel:
+  - **Outward:** each tax invoice and credit note: number, date, client and GSTIN, place of supply, taxable value,
+    CGST, SGST, IGST, total; B2B (client with a GSTIN) or B2C.
+  - **Inward:** each posted supplier's bill and debit note: supplier and GSTIN, their bill number and date, taxable,
+    taxes, input tax taken or blocked; unregistered suppliers listed apart.
+- **GSTR-1 data** (Excel, the offline tool's sheets): `b2b` (by invoice, rate-wise), `b2cl`, `b2cs` (by place of
+  supply and rate), `cdnr`, `hsn` (summary by SAC/HSN and rate), `docs` (invoice number ranges). [Guessing] the column
+  headings follow the offline tool's template; checked against the tool's own sample before release.
+- **GSTR-3B summary** (screen and Excel): 3.1(a) outward taxable supplies and tax; 4(A)(5) input tax from all other
+  supplies; 4(B)(1) reversed (debit notes) and blocked shown apart; the net. **The JSON** for 3B is not built (the
+  portal's offline route for 3B is manual entry).
+- **e-invoice:** for a certified bill (and a credit note), the **IRP JSON, schema 1.1** (`Version`, `TranDtls`,
+  `DocDtls`, `SellerDtls`, `BuyerDtls`, `ItemList` one line per bill, `ValDtls`), downloaded, uploaded by the tenant to
+  the IRP; the returned **IRN, acknowledgement number and date and the signed QR** typed or pasted back on the bill and
+  printed on it, the QR drawn by a free (MIT) library. Refused, with what is missing, when a GSTIN, PIN or state is not
+  there. [Guessing] whether a tenant must e-invoice (turnover over ₹5 crore) is the tenant's setting, not worked out.
+- **2B reconciliation:** the GSTR-2B JSON downloaded from the portal is uploaded for a month; its B2B invoices
+  (supplier GSTIN, invoice number, date, taxable, taxes) are matched against posted supplier's bills by GSTIN and a
+  normalised bill number: **matched**, **differs** (amounts off by more than ₹1), **in 2B only** (not in the books),
+  **in the books only** (the supplier has not filed: credit at risk). Kept per month; re-uploading replaces it. As
+  Excel.
+- **Rights:** `accounts.view` sees registers and returns; `accounts.post` raises credit notes, records IRNs, uploads 2B.
+- **Tests:** a month with two B2B invoices (one inter-state), a B2C invoice, a credit note, purchases with a blocked
+  line and a debit note: the registers, GSTR-1 sheets, 3B figures against hand-worked sums; the e-invoice JSON's every
+  field for one bill; a 2B file with a match, a difference, one only in 2B and one only in the books.
+
+### 6b TDS
+
+- **Challans:** a deposit for a month's TDS under a section (BSR code, challan serial number, date, amount, interest
+  and fee), posting TDS payable Dr, the bank Cr; the deductions of that month and section **allocated** to it (by
+  default, all not yet deposited); a deduction is deposited once.
+- **26Q data** for a quarter: the deductor (company TAN, PAN, address), the challans, and each deduction (deductee PAN
+  and name, section, date paid or credited, amount, TDS, rate, challan), as Excel in the column order of the RPU's
+  import; deductions without a PAN flagged at the higher rate. Form 16A itself is downloaded from TRACES; the app gives
+  each supplier's quarterly statement to check it against.
+- **TDS receivable:** what clients deducted (from receipts, step 3) by client TAN and quarter, matched against a 26AS
+  or AIS extract uploaded as Excel (deductor TAN, amount, TDS): matched, short, missing.
+- **Tests:** two months of 194C and 194I deductions deposited in two challans; the quarter's 26Q rows; a receivable
+  matched, one short and one missing.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -776,3 +839,67 @@ Migration `0040_subcontract_bills.sql`.
 
 **For the CA review:** labour cess deducted from the subcontractor, the bill dated its measurement date, and retention
 released without TDS.
+
+## Step 6a delivered: GST
+
+**Journey:**
+- **GST** (Accounts menu), for a company and a month:
+  - **Returns:** GSTR-3B as the return's tables — 3.1(a) outward taxable supplies; 4(A)(5) input tax, all other;
+    4(B)(1) reversed under section 17(5); 4(C) net — and **GSTR-1 for the offline tool**: a workbook with the
+    tool's sheets (`b2b`, `b2cl`, `b2cs`, `cdnr`, `hsn(b2b)`, `hsn(b2c)`, `docs`) and headings, dates as dd-MMM-yy and
+    the place of supply as "27-Maharashtra".
+  - **Outward register:** each tax invoice and credit note (credit notes less), client and GSTIN, place of supply,
+    taxable, CGST, SGST, IGST, total; **inward register:** each posted supplier's bill and debit note, with the input
+    tax blocked; both as Excel.
+  - **GSTR-2B against the purchase book:** the portal's 2B JSON uploaded for the month (replacing an earlier one);
+    each 2B invoice matched to a posted bill by GSTIN and bill number (letters and digits only, leading zeros dropped):
+    matched, differs (taxable or tax off by more than ₹1), in 2B only; and bills of the month the supplier has not
+    filed.
+- **A certified client bill** now shows its **e-invoice** (the IRP JSON, schema 1.1, downloaded; the IRN, acknowledgement
+  and signed QR recorded and shown with the QR drawn) and its **credit notes** (raised with a date, a reason and a
+  value; GST at the bill's rate and supply; each with its own e-invoice). The JSON is refused, naming what is missing,
+  without the company's and client's GSTIN, address, city and PIN code and the site's state.
+- **Companies** take a city, PIN code and "issues e-invoices"; **clients** a legal name, city, PIN, state and TAN;
+  **ledgers** "input tax blocked"; a project's **contract terms** the SAC its invoices carry (9954 by default).
+
+**What it posts:** a credit note: contract revenue and output tax Dr (with the project), the client Cr; what the client
+owes on the bill falls by it (receivables honour it). A supplier's bill line to a ledger with input tax blocked: its GST
+goes into that ledger instead of input tax.
+
+**Who does what:** `accounts.view` sees the GST page and a bill's e-invoice and credit notes; `accounts.post` raises
+credit notes, records IRNs and uploads 2B.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] B2CL is an inter-state invoice to an unregistered client above ₹1 lakh;** credit notes to unregistered
+  clients net into B2CS rather than CDNUR.
+- **[Likely] The 3B's 4(A)(5) holds all input tax and 4(B)(1) reverses the blocked part,** as the return's instructions
+  since 2022 read; the cash set-off (which credit pays which tax) is left to the portal.
+- **[Guessing] The GSTR-1 workbook's headings** follow the offline tool's template as known; to be checked against the
+  tool's current sample before the pilot files with it.
+- **[Likely] A credit note is limited to what is outstanding on the bill;** a refund after payment is a journal.
+- **Not built:** e-way bills (recorded as an open item: the bulk layout should come from a pilot's real file); the 3B
+  JSON (the portal's 3B is entered online).
+
+**API** (under `/api/tenant`):
+- `POST /client-bills/:id/credit-notes`, `GET /client-bills/:id/gst`, `GET /credit-notes/:id`.
+- `GET /accounts/gst/registers?entityId&from&to` (`format=xlsx`), `GET /accounts/gst/gstr1?entityId&period`
+  (`format=xlsx`), `GET /accounts/gst/gstr3b?entityId&period`.
+- `GET /accounts/e-invoices/:kind/:id/json`, `POST /accounts/e-invoices/:kind/:id` (`invoice` or `credit_note`).
+- `GET|POST /accounts/gst/2b?entityId&period` (POST: multipart, field `file`).
+
+Migration `0041_gst.sql`.
+
+**Tests:**
+- 4 API integration tests, every figure by hand: four invoices in August (₹41,300 in the state; ₹1,18,000 to
+  Karnataka; ₹11,800 to an unregistered client; ₹1,41,600 to an unregistered client in Goa) and a ₹5,900 credit note
+  (a worker and an over-large note refused; its voucher; the client's outstanding down to ₹35,400): the outward
+  register (₹3,06,800), every GSTR-1 section and the workbook's sheets and first B2B row; purchases of ₹64,000,
+  ₹10,500 (food, ₹500 blocked: its voucher has no input tax) and ₹1,18,000 and a ₹2,560 debit note: the inward
+  register and GSTR-3B; the e-invoice JSON field by field, the credit note's with its preceding invoice, refusals
+  naming what is missing; an IRN recorded; a 2B file with a match (`V-201` against `V/201`), a difference, one only in
+  2B and one not filed.
+- Browser tests: a credit note on the client bill journey (the receipt then settles ₹4,402) and the e-invoice refused
+  for want of the company's address; a ledger with input tax blocked, a hotel's bill to it, the GST page for September
+  (₹1,800 blocked, reversed in 3B) and a 2B file uploaded and matched.
+
+**For the CA review:** the blocked-credit list per ledger, B2CL's limit, the 3B layout and the GSTR-1 headings.

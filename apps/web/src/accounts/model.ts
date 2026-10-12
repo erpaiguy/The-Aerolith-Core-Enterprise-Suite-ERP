@@ -15,6 +15,9 @@ export interface Company {
   tan: string | null;
   stateCode: string | null;
   address: string;
+  city: string;
+  pincode: string | null;
+  eInvoicing: boolean;
   booksFrom: string | null;
   isDefault: boolean;
   vouchers: number;
@@ -31,6 +34,7 @@ export interface Account {
   partyId: string | null;
   partyName: string | null;
   needsProject: boolean;
+  itcBlocked: boolean;
   systemKey: string | null;
   closed: boolean;
   hasEntries: boolean;

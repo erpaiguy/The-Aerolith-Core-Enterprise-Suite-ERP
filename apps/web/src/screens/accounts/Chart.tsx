@@ -16,6 +16,7 @@ type Form = {
   name: string;
   kind: Account['kind'];
   needsProject: boolean;
+  itcBlocked: boolean;
   closed: boolean;
 };
 
@@ -143,6 +144,7 @@ function AccountForm({
     name: account?.name ?? '',
     kind: account?.kind ?? 'ordinary',
     needsProject: account?.needsProject ?? false,
+    itcBlocked: account?.itcBlocked ?? false,
     closed: account?.closed ?? false,
   });
   const [busy, setBusy] = useState(false);
@@ -238,6 +240,16 @@ function AccountForm({
               onChange={(e) => setF({ ...f, needsProject: e.target.checked })}
             />
             Each line names a project
+          </label>
+        )}
+        {!f.isGroup && (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={f.itcBlocked}
+              onChange={(e) => setF({ ...f, itcBlocked: e.target.checked })}
+            />
+            Input tax blocked (section 17(5)): GST on bills to it is a cost
           </label>
         )}
         {account && !account.isGroup && (

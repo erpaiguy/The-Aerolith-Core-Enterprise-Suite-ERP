@@ -195,6 +195,7 @@ function TermsForm({
     retentionCap: terms.retentionCap ?? '',
     advanceAmount: terms.advanceAmount,
     advanceRecoveryPct: terms.advanceRecoveryPct,
+    sac: terms.sac ?? '9954',
   });
   const [escalation, setEscalation] = useState(
     terms.escalation ?? {
@@ -242,7 +243,7 @@ function TermsForm({
       aria-label="Contract terms"
     >
       {error && <Alert tone="danger">{error}</Alert>}
-      <div className="grid gap-3 sm:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-6">
         <Field label="GST %">
           <Input {...field('gstPct')} inputMode="decimal" required />
         </Field>
@@ -257,6 +258,9 @@ function TermsForm({
         </Field>
         <Field label="Recovered % a bill">
           <Input {...field('advanceRecoveryPct')} inputMode="decimal" />
+        </Field>
+        <Field label="SAC" hint="On the invoice">
+          <Input {...field('sac')} inputMode="numeric" maxLength={8} />
         </Field>
       </div>
       <div className="space-y-2">

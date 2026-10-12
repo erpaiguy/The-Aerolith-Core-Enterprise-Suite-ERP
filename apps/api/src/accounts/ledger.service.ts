@@ -53,6 +53,9 @@ export interface CompanyInput {
   tan: string | null;
   stateCode: string | null;
   address: string;
+  city: string;
+  pincode: string | null;
+  eInvoicing: boolean;
   booksFrom: string | null;
 }
 export interface AccountInput {
@@ -62,6 +65,7 @@ export interface AccountInput {
   name: string;
   kind: 'ordinary' | 'bank' | 'cash' | 'tax';
   needsProject: boolean;
+  itcBlocked: boolean;
 }
 export interface LineInput {
   accountId: string | null;
@@ -92,6 +96,7 @@ export interface AccountRow {
   kind: string;
   partyId: string | null;
   needsProject: boolean;
+  itcBlocked: boolean;
   systemKey: string | null;
   closed: boolean;
   rowVersion: number;
@@ -154,7 +159,7 @@ export class LedgerService {
       }[]
     >`
       SELECT e.id, e.name, e.legal_name AS "legalName", e.gstin, e.pan, e.tan, e.state_code AS "stateCode", e.address,
-        to_char(e.books_from, 'YYYY-MM-DD') AS "booksFrom", e.is_default AS "isDefault",
+        e.city, e.pincode, e.e_invoicing AS "eInvoicing", to_char(e.books_from, 'YYYY-MM-DD') AS "booksFrom", e.is_default AS "isDefault",
         (SELECT count(*)::int FROM acc.voucher v WHERE v.entity_id = e.id) AS vouchers, e.row_version AS "rowVersion"
       FROM platform.entity e ORDER BY e.is_default DESC, lower(e.name)`;
   }
@@ -195,8 +200,10 @@ export class LedgerService {
       });
     await db.begin(async (tx) => {
       const [e] = await tx<{ id: string }[]>`
-        INSERT INTO platform.entity (name, legal_name, gstin, pan, tan, state_code, address, books_from)
-        VALUES (${b.name}, ${b.legalName}, ${b.gstin}, ${b.pan}, ${b.tan}, ${b.stateCode}, ${b.address}, ${b.booksFrom})
+        INSERT INTO platform.entity (name, legal_name, gstin, pan, tan, state_code, address, city, pincode, e_invoicing,
+          books_from)
+        VALUES (${b.name}, ${b.legalName}, ${b.gstin}, ${b.pan}, ${b.tan}, ${b.stateCode}, ${b.address}, ${b.city},
+          ${b.pincode}, ${b.eInvoicing}, ${b.booksFrom})
         RETURNING id`;
       await this.seedRoles(tx, e!.id);
       await this.audit(tx, claims, 'company.create', 'entity', e!.id, { name: b.name });
@@ -241,7 +248,8 @@ export class LedgerService {
           message: `There is already a company called ${b.name}.`,
         });
       await tx`UPDATE platform.entity SET name = ${b.name}, legal_name = ${b.legalName}, gstin = ${b.gstin}, pan = ${b.pan},
-          tan = ${b.tan}, state_code = ${b.stateCode}, address = ${b.address}, books_from = ${b.booksFrom},
+          tan = ${b.tan}, state_code = ${b.stateCode}, address = ${b.address}, city = ${b.city}, pincode = ${b.pincode},
+          e_invoicing = ${b.eInvoicing}, books_from = ${b.booksFrom},
           updated_at = now(), row_version = row_version + 1
         WHERE id = ${id}`;
       await this.audit(tx, claims, 'company.update', 'entity', id, { name: b.name });
@@ -261,7 +269,8 @@ export class LedgerService {
   private accountRows(db: Db) {
     return db<(AccountRow & { hasEntries: boolean; partyName: string | null })[]>`
       SELECT a.id, a.parent_id AS "parentId", a.is_group AS "isGroup", a.nature, a.code, a.name, a.kind,
-        a.party_id AS "partyId", a.needs_project AS "needsProject", a.system_key AS "systemKey",
+        a.party_id AS "partyId", a.needs_project AS "needsProject", a.itc_blocked AS "itcBlocked",
+        a.system_key AS "systemKey",
         a.closed_at IS NOT NULL AS closed, a.row_version AS "rowVersion",
         EXISTS (SELECT 1 FROM acc.voucher_line l WHERE l.account_id = a.id) AS "hasEntries", p.name AS "partyName"
       FROM acc.account a LEFT JOIN platform.party p ON p.id = a.party_id
@@ -277,7 +286,8 @@ export class LedgerService {
   private async account(db: Db, id: string, lock = false) {
     const [a] = await db<AccountRow[]>`
       SELECT id, parent_id AS "parentId", is_group AS "isGroup", nature, code, name, kind, party_id AS "partyId",
-        needs_project AS "needsProject", system_key AS "systemKey", closed_at IS NOT NULL AS closed,
+        needs_project AS "needsProject", itc_blocked AS "itcBlocked", system_key AS "systemKey",
+        closed_at IS NOT NULL AS closed,
         row_version AS "rowVersion"
       FROM acc.account WHERE id = ${id} ${lock ? db`FOR UPDATE` : db``}`;
     if (!a) throw new NotFoundException({ code: 'account_not_found' });
@@ -314,9 +324,9 @@ export class LedgerService {
       });
     await this.uniqueAccount(db, b.code, b.name, null);
     const [a] = await db<{ id: string }[]>`
-      INSERT INTO acc.account (parent_id, is_group, nature, code, name, kind, needs_project, created_by)
+      INSERT INTO acc.account (parent_id, is_group, nature, code, name, kind, needs_project, itc_blocked, created_by)
       VALUES (${parent.id}, ${b.isGroup}, ${parent.nature}, ${b.code}, ${b.name}, ${b.kind},
-        ${!b.isGroup && b.needsProject}, ${claims.sub})
+        ${!b.isGroup && b.needsProject}, ${!b.isGroup && b.itcBlocked}, ${claims.sub})
       RETURNING id`;
     await this.audit(db, claims, 'account.create', 'account', a!.id, {
       code: b.code,
@@ -383,7 +393,7 @@ export class LedgerService {
       }
       await this.uniqueAccount(tx, b.code, b.name, id);
       await tx`UPDATE acc.account SET code = ${b.code}, name = ${b.name}, parent_id = ${b.parentId}, kind = ${kind},
-          needs_project = ${!a.isGroup && b.needsProject},
+          needs_project = ${!a.isGroup && b.needsProject}, itc_blocked = ${!a.isGroup && b.itcBlocked},
           closed_at = ${b.closed ? (a.closed ? tx`closed_at` : tx`now()`) : null},
           updated_at = now(), row_version = row_version + 1
         WHERE id = ${id}`;

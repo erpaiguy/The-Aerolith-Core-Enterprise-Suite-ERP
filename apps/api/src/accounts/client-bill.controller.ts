@@ -39,6 +39,11 @@ const terms = z.object({
   retentionCap: positive(2).nullable().default(null),
   advanceAmount: positive(2).default('0'),
   advanceRecoveryPct: pct.default('0'),
+  sac: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{4,8}$/, 'A SAC or HSN code: 4 to 8 digits')
+    .default('9954'),
   escalation: z
     .object({
       factor: decimal(4, 2).refine((v) => Number(v) > 0 && Number(v) <= 1, {

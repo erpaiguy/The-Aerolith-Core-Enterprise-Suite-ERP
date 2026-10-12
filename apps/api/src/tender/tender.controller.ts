@@ -90,6 +90,28 @@ const partyFields = {
     .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'An IFSC looks like HDFC0001234')
     .nullable()
     .or(z.literal('').transform(() => null)),
+  // What the e-invoice and TDS returns need of a client (docs/wave3-plan.md step 6).
+  legalName: text(200),
+  city: z.string().trim().max(100),
+  pincode: z
+    .string()
+    .trim()
+    .regex(/^[1-9][0-9]{5}$/, 'A PIN code: 6 digits')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
+  stateCode: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{2}$/, 'A two-digit state code')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
+  tan: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{4}[0-9]{5}[A-Z]$/, 'A TAN: 4 letters, 5 digits, a letter')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
 };
 const partyCreate = z.object({
   ...partyFields,
@@ -108,6 +130,11 @@ const partyCreate = z.object({
   bankAccountName: partyFields.bankAccountName.default(null),
   bankAccountNo: partyFields.bankAccountNo.default(null),
   bankIfsc: partyFields.bankIfsc.default(null),
+  legalName: partyFields.legalName.default(null),
+  city: partyFields.city.default(''),
+  pincode: partyFields.pincode.default(null),
+  stateCode: partyFields.stateCode.default(null),
+  tan: partyFields.tan.default(null),
 });
 const partyUpdate = z
   .object(partyFields)

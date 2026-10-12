@@ -25,6 +25,7 @@ import { formatQty } from '../../boq/model';
 import { describeError } from '../../lib/format';
 import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
+import { ClientBillGst } from './Gst';
 
 const n = (v: string | null | undefined) => Number(v ?? 0);
 const q = (v: number) => formatQty(String(Math.round(v * 10000) / 10000));
@@ -455,6 +456,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
           </form>
         </Card>
       )}
+      <ClientBillGst billId={b.id} certified={certified} />
       {shown && (
         <Abstract
           f={shown}

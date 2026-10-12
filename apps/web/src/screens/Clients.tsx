@@ -53,6 +53,11 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
           bankAccountName: party.bankAccountName ?? '',
           bankAccountNo: party.bankAccountNo ?? '',
           bankIfsc: party.bankIfsc ?? '',
+          legalName: party.legalName ?? '',
+          city: party.city ?? '',
+          pincode: party.pincode ?? '',
+          stateCode: party.stateCode ?? '',
+          tan: party.tan ?? '',
         }
       : blank,
   );
@@ -130,6 +135,35 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
             <Input name="address" value={v.address ?? ''} onChange={set('address')} />
           </Field>
         </div>
+        {v.isClient && (
+          <div className="grid gap-4 md:grid-cols-5">
+            <Field label="Legal name" hint="For e-invoices">
+              <Input value={v.legalName ?? ''} onChange={set('legalName')} maxLength={200} />
+            </Field>
+            <Field label="City">
+              <Input value={v.city ?? ''} onChange={set('city')} maxLength={100} />
+            </Field>
+            <Field label="PIN code">
+              <Input
+                value={v.pincode ?? ''}
+                onChange={set('pincode')}
+                maxLength={6}
+                inputMode="numeric"
+              />
+            </Field>
+            <Field label="State code" hint="From the GSTIN if blank">
+              <Input value={v.stateCode ?? ''} onChange={set('stateCode')} maxLength={2} />
+            </Field>
+            <Field label="TAN" hint="Theirs, as deductor of TDS">
+              <Input
+                value={v.tan ?? ''}
+                onChange={set('tan')}
+                maxLength={10}
+                className="uppercase"
+              />
+            </Field>
+          </div>
+        )}
         {(v.isVendor || v.isSubcontractor) && (
           <div className="grid gap-4 md:grid-cols-4">
             <Field label="TDS section" hint="Deducted from their bills">

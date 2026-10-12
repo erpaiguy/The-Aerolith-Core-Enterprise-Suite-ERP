@@ -6,6 +6,8 @@ export interface EscalationTerms {
 }
 export interface BillTerms {
   gstPct: string;
+  /** The SAC or HSN its invoices carry (9954 by default). */
+  sac?: string;
   retentionPct: string;
   retentionCap: string | null;
   advanceAmount: string;

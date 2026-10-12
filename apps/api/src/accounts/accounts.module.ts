@@ -5,6 +5,8 @@ import { ProjectModule } from '../project/project.module.js';
 import { ProvisioningModule } from '../provisioning/provisioning.module.js';
 import { ClientBillController } from './client-bill.controller.js';
 import { ClientBillService } from './client-bill.service.js';
+import { GstController } from './gst.controller.js';
+import { GstService } from './gst.service.js';
 import { LedgerController } from './ledger.controller.js';
 import { LedgerService } from './ledger.service.js';
 import { PayableController } from './payable.controller.js';
@@ -23,6 +25,7 @@ import { SubcontractService } from './subcontract.service.js';
     ReceivableController,
     PayableController,
     SubcontractController,
+    GstController,
   ],
   providers: [
     LedgerService,
@@ -30,6 +33,7 @@ import { SubcontractService } from './subcontract.service.js';
     ReceivableService,
     PayableService,
     SubcontractService,
+    GstService,
   ],
   exports: [LedgerService],
 })

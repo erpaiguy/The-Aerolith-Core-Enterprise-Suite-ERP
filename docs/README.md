@@ -157,7 +157,8 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 3 | Receivables: client receipts with TDS and deductions, allocated to certified bills, retention released and advances; cancelled by reversal; ageing as at a date | **Done** |
 | 4 | Payables: suppliers' bills matched to orders and receipts (held, passed), TDS by section with catch-up, debit notes; payment runs under approval with a bank file; advances | **Done** |
 | 5 | Subcontract bills: a work order's measurement book (entries reversed, never changed); RA bills with retention to a cap, advance recovery, back-charges, labour cess and TDS; certified under approval into payables; retention released | **Done** |
-| 6 | GST and TDS registers and returns | Next |
+| 6a | GST: credit notes to clients; outward and inward registers; GSTR-1 for the offline tool and GSTR-3B; e-invoice JSON and IRNs; input tax blocked by ledger; GSTR-2B matched against the purchase book | **Done** |
+| 6b | TDS: challans, 26Q data, TDS receivable against 26AS | Next |
 | 7-8 | Bank, Tally and statements | |
 | 9-13 | Fixed assets, equipment, HR, payroll, labour contractors | |
 | 14-15 | Quality, safety | |

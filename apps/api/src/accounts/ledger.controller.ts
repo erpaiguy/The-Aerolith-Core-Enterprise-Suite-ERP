@@ -43,6 +43,9 @@ const company = z.object({
   tan: optional(/^[A-Z]{4}[0-9]{5}[A-Z]$/, 'A TAN: 4 letters, 5 digits, a letter'),
   stateCode: optional(/^[0-9]{2}$/, 'A two-digit state code'),
   address: text(1000).default(''),
+  city: text(100).default(''),
+  pincode: optional(/^[1-9][0-9]{5}$/, 'A PIN code: 6 digits'),
+  eInvoicing: z.boolean().default(false),
   booksFrom: date.nullable().default(null),
 });
 const rowVersion = z.object({ rowVersion: z.number().int().positive() });
@@ -58,6 +61,7 @@ const accountBody = z.object({
   name: z.string().trim().min(2).max(120),
   kind: z.enum(['ordinary', 'bank', 'cash', 'tax']).default('ordinary'),
   needsProject: z.boolean().default(false),
+  itcBlocked: z.boolean().default(false),
 });
 const amount = z
   .union([z.string().trim(), z.number()])

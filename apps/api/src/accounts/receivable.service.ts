@@ -74,19 +74,25 @@ export class ReceivableService {
         invoiceDate: string;
         net: string;
         received: string;
+        credited: string;
         outstanding: string;
       }[]
     >`
       SELECT b.id, b.ra_no AS "raNo", json_build_object('id', p.id, 'number', p.number, 'name', p.name) AS project,
         json_build_object('id', c.id, 'name', c.name) AS party, b.invoice_no AS "invoiceNo",
         to_char(b.invoice_date, 'YYYY-MM-DD') AS "invoiceDate", (b.certified ->> 'net') AS net,
-        coalesce(r.amount, 0)::text AS received, ((b.certified ->> 'net')::numeric - coalesce(r.amount, 0))::text AS outstanding
+        coalesce(r.amount, 0)::text AS received, coalesce(n.amount, 0)::text AS credited,
+        ((b.certified ->> 'net')::numeric - coalesce(r.amount, 0) - coalesce(n.amount, 0))::text AS outstanding
       FROM acc.client_bill b JOIN proj.project p ON p.id = b.project_id JOIN platform.party c ON c.id = p.client_id
       LEFT JOIN LATERAL (
         SELECT sum(a.amount) AS amount FROM acc.client_receipt_alloc a
         JOIN acc.client_receipt r ON r.id = a.receipt_id AND r.status = 'posted'
         WHERE a.bill_id = b.id ${asOf ? db`AND r.received_on <= ${asOf}` : db``}
       ) r ON true
+      LEFT JOIN LATERAL (
+        SELECT sum(cn.total) AS amount FROM acc.credit_note cn
+        WHERE cn.bill_id = b.id ${asOf ? db`AND cn.note_date <= ${asOf}` : db``}
+      ) n ON true
       WHERE b.status = 'certified' AND b.entity_id = ${entityId}
         ${partyId ? db`AND p.client_id = ${partyId}` : db``}
         ${asOf ? db`AND b.invoice_date <= ${asOf}` : db``}
@@ -211,7 +217,9 @@ export class ReceivableService {
                 message: `Line ${i + 1}: not a certified bill of this client.`,
               });
             const [r] = await tx<{ received: string }[]>`
-              SELECT coalesce(sum(a.amount), 0)::text AS received FROM acc.client_receipt_alloc a
+              SELECT (coalesce(sum(a.amount), 0)
+                + coalesce((SELECT sum(total) FROM acc.credit_note WHERE bill_id = ${a.billId}), 0))::text AS received
+              FROM acc.client_receipt_alloc a
               JOIN acc.client_receipt r ON r.id = a.receipt_id AND r.status = 'posted' WHERE a.bill_id = ${a.billId}`;
             const left = dec(b.net) - dec(r!.received);
             if (amount > left)

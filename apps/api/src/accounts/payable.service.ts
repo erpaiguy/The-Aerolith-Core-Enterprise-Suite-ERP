@@ -395,10 +395,33 @@ export class PayableService implements OnModuleInit {
       SELECT b.entity_id, b.party_id, b.project_id, b.bill_no, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date,
         b.cgst::text, b.sgst::text, b.igst::text, b.tds::text, b.payable::text, b.tds_section, p.name
       FROM acc.vendor_bill b JOIN platform.party p ON p.id = b.party_id WHERE b.id = ${id}`;
+    // A line to a ledger whose input tax is blocked (section 17(5) and the like) takes its GST into the expense.
     const items = await tx<
-      { account_id: string; project_id: string | null; amount: string; description: string }[]
+      {
+        account_id: string;
+        project_id: string | null;
+        amount: string;
+        gst: string;
+        description: string;
+        blocked: boolean;
+      }[]
     >`
-      SELECT account_id, project_id, amount::text, description FROM acc.vendor_bill_line WHERE bill_id = ${id} ORDER BY position`;
+      SELECT l.account_id, l.project_id, l.amount::text, l.gst::text, l.description, a.itc_blocked AS blocked
+      FROM acc.vendor_bill_line l JOIN acc.account a ON a.id = l.account_id WHERE l.bill_id = ${id} ORDER BY l.position`;
+    let blocked = 0n;
+    for (const l of items.filter((x) => x.blocked)) {
+      blocked += dec(l.gst);
+      l.amount = money(dec(l.amount) + dec(l.gst));
+    }
+    if (blocked) {
+      const igst = dec(b!.igst);
+      if (igst) b!.igst = money(igst - blocked);
+      else {
+        b!.cgst = money(dec(b!.cgst) - blocked / 2n);
+        b!.sgst = money(dec(b!.sgst) - blocked / 2n);
+      }
+      await tx`UPDATE acc.vendor_bill SET itc_blocked = ${money(blocked)} WHERE id = ${id}`;
+    }
     const line = (
       accountId: string,
       debit: string,
@@ -571,6 +594,7 @@ export class PayableService implements OnModuleInit {
         b.tds_section AS "tdsSection", b.tds_rate::text AS "tdsRate", b.tds_base::text AS "tdsBase", b.taxable::text AS taxable,
         b.cgst::text AS cgst, b.sgst::text AS sgst, b.igst::text AS igst, b.total::text AS total, b.tds::text AS tds,
         b.payable::text AS payable, ${this.outstandingSql(db)}::text AS outstanding, b.narration, b.source,
+        b.itc_blocked::text AS "itcBlocked",
         (SELECT json_build_object('id', v.id, 'number', v.number) FROM acc.voucher v WHERE v.id = b.voucher_id) AS voucher,
         coalesce((SELECT json_agg(json_build_object('position', l.position, 'lineKey', l.line_key, 'description', l.description,
           'unit', l.unit, 'qty', l.qty::text, 'rate', l.rate::text, 'gstPct', l.gst_pct::text, 'amount', l.amount::text,

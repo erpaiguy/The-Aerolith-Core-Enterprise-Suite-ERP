@@ -121,6 +121,12 @@ export interface Party {
   bankAccountName?: string | null;
   bankAccountNo?: string | null;
   bankIfsc?: string | null;
+  /** What e-invoices and TDS returns need of a client (docs/wave3-plan.md step 6). */
+  legalName?: string | null;
+  city?: string;
+  pincode?: string | null;
+  stateCode?: string | null;
+  tan?: string | null;
   rowVersion: number;
 }
 

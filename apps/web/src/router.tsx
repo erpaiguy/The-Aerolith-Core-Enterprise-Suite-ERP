@@ -61,6 +61,7 @@ import { ProjectDocumentsScreen } from './screens/ProjectDocuments';
 import { ChartScreen } from './screens/accounts/Chart';
 import { ClientBillScreen } from './screens/accounts/ClientBill';
 import { SubcontractBillScreen } from './screens/accounts/Subcontract';
+import { GstScreen } from './screens/accounts/Gst';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -539,6 +540,11 @@ const routeTree = rootRoute.addChildren([
     }),
     vendorBillRoute,
     paymentRunRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/gst',
+      component: GstScreen,
+    }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/accounts/trial-balance',

@@ -130,7 +130,7 @@ export class ClientBillService implements OnModuleInit {
   private async termsOf(
     db: Db,
     projectId: string,
-  ): Promise<BillTerms & { rowVersion: number | null }> {
+  ): Promise<BillTerms & { sac: string; rowVersion: number | null }> {
     const [t] = await db<
       {
         gst_pct: string;
@@ -139,13 +139,14 @@ export class ClientBillService implements OnModuleInit {
         advance_amount: string;
         advance_recovery_pct: string;
         escalation: BillTerms['escalation'];
+        sac: string;
         row_version: number;
       }[]
     >`
       SELECT gst_pct::text, retention_pct::text, retention_cap::text, advance_amount::text,
-        advance_recovery_pct::text, escalation, row_version
+        advance_recovery_pct::text, escalation, sac, row_version
       FROM acc.bill_terms WHERE project_id = ${projectId}`;
-    if (!t) return { ...DEFAULT_TERMS, rowVersion: null };
+    if (!t) return { ...DEFAULT_TERMS, sac: '9954', rowVersion: null };
     return {
       gstPct: t.gst_pct,
       retentionPct: t.retention_pct,
@@ -153,6 +154,7 @@ export class ClientBillService implements OnModuleInit {
       advanceAmount: t.advance_amount,
       advanceRecoveryPct: t.advance_recovery_pct,
       escalation: t.escalation,
+      sac: t.sac,
       rowVersion: t.row_version,
     };
   }
@@ -177,7 +179,7 @@ export class ClientBillService implements OnModuleInit {
   async setTerms(
     claims: TenantClaims,
     projectId: string,
-    t: BillTerms & { rowVersion: number | null },
+    t: BillTerms & { sac: string; rowVersion: number | null },
   ) {
     const db = await this.tenants.forTenant(claims.ten);
     await this.mustBill(db, claims, projectId);
@@ -205,14 +207,14 @@ export class ClientBillService implements OnModuleInit {
       if (cur)
         await tx`UPDATE acc.bill_terms SET gst_pct = ${t.gstPct}, retention_pct = ${t.retentionPct},
             retention_cap = ${t.retentionCap}, advance_amount = ${t.advanceAmount},
-            advance_recovery_pct = ${t.advanceRecoveryPct}, escalation = ${esc}, updated_at = now(),
+            advance_recovery_pct = ${t.advanceRecoveryPct}, escalation = ${esc}, sac = ${t.sac}, updated_at = now(),
             updated_by = ${claims.sub}, row_version = row_version + 1
           WHERE project_id = ${projectId}`;
       else
         await tx`INSERT INTO acc.bill_terms (project_id, gst_pct, retention_pct, retention_cap, advance_amount,
-            advance_recovery_pct, escalation, updated_by)
+            advance_recovery_pct, escalation, sac, updated_by)
           VALUES (${projectId}, ${t.gstPct}, ${t.retentionPct}, ${t.retentionCap}, ${t.advanceAmount},
-            ${t.advanceRecoveryPct}, ${esc}, ${claims.sub})`;
+            ${t.advanceRecoveryPct}, ${esc}, ${t.sac}, ${claims.sub})`;
       await audit(tx, claims.sub, 'bill_terms.set', 'project', projectId, { gstPct: t.gstPct });
     });
     return this.projectBills(claims, projectId);
