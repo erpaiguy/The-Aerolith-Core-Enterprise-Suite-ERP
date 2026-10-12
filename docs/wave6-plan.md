@@ -657,6 +657,146 @@ deployment, against "no paid tools" for anyone without one. The inbox keeps noti
   - [Likely] Portal users have no second factor in this step. Lockout and short sessions (2 hours idle) stand in for
     it until the security review (Risk 1).
 
+## Step 6 in detail (planned before building)
+
+**What is there.** [Certain]
+- Wave 3 makes **files**: Tally XML (masters and vouchers for a period) and e-invoice JSON. The IRN that comes back
+  from the portal is typed in by hand.
+- The report builder (step 3) has a reviewed model of nine views with access as on the screens.
+- There are no API keys, no webhooks and no Tally connection.
+
+**Public API** (`/api/v1`):
+- **API keys** (`platform.api_key`):
+  - Made by an admin, each with a name and scopes. The secret is shown once and kept as an HMAC.
+  - The key format is `aek1.<tenant>.<id>.<secret>`, so the tenant comes from the key, never from the caller.
+  - A key acts **as the admin or manager who made it**, so their project access applies, and a deactivated maker's
+    keys stop working.
+  - Revocable; the last use is recorded.
+- **Scopes:** `reports:read` (the report views) and `tally` (the Tally agent).
+- **Endpoints:**
+  - `GET /v1/views` and `POST /v1/views/:view/query`: the report builder's spec, so the read API is the same reviewed
+    model with the same access rules and caps. No SQL from outside.
+  - `GET /v1/openapi.json`, generated from the same zod schemas with zod's own JSON Schema output (MIT, no new
+    dependency).
+- **Rate limit:** 120 requests a minute per key, on top of the per-IP limit.
+
+**Webhooks** (`platform.webhook`, `platform.webhook_delivery`):
+- Admins add an https URL and choose events. The signing secret is shown once.
+- **Events:**
+  - `order.issued`: an order or work order issued, or re-issued after an amendment.
+  - `receipt.posted`: a goods receipt.
+  - `bill.certified`: a client RA bill or a subcontract bill.
+  - `portal.submission`: something sent from a portal.
+- Each event is written **in the same transaction** as the change (an outbox), so nothing is sent for a change that
+  rolled back.
+- **The sender:** a background loop (`WEBHOOK_WORKER`, off in tests, which call it directly).
+  - Each delivery is signed: `x-aerolith-signature: t=<unix>,v1=<HMAC-SHA256 of "t.body">`.
+  - 10-second timeout; success is any 2xx.
+  - Retries at 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours, then given up and shown as failed.
+  - Redirects are not followed.
+  - **SSRF guard:** the host is resolved and private, loopback and link-local addresses are refused (allowed only
+    by `WEBHOOK_ALLOW_PRIVATE` for tests and on-premises installs).
+- **Screen:** recent deliveries with their status and a "Send a test" button.
+
+**Tally link** (the connector agent, `tools/tally-agent`):
+- A single Node script with no dependencies, MIT like the rest, run on a PC on the tenant's LAN beside Tally Prime.
+- With a `tally` key it asks the server for vouchers not yet in Tally (`GET /v1/tally/pending`), each as its own Tally
+  XML message (Wave 3's generator, unchanged), and posts each to Tally's HTTP server (default
+  `http://localhost:9000`).
+- It reads Tally's reply (CREATED, ALTERED, ERRORS, LINEERROR) and reports it back (`POST /v1/tally/results`).
+- `acc.tally_sync` keeps, per voucher, when it went and Tally's answer. A failed voucher stays pending with Tally's
+  error shown in the app.
+- Masters (ledgers and parties) are sent first, the same way.
+- [Likely] Tally must have the company open and its HTTP server enabled (F1 > Settings > Connectivity). The agent
+  says so when it cannot connect.
+
+**e-invoice and e-way bill adapters:**
+- [Certain] **Not built in this step.** A GSP or ASP API needs the tenant's contract, sandbox credentials and the
+  provider's own authentication (NIC's uses RSA and AES session keys). Writing it without a sandbox would ship
+  untested code against a tax system.
+- What is built: the boundary (`EInvoiceProvider`, with today's file workflow as the default provider) and a setting
+  for which provider a company uses. The first real adapter is written against a tenant's sandbox when one is
+  available.
+
+**Rights:** API keys and webhooks are admin-only. Tally sync status is shown to `accounts.view`.
+
+**Tests:**
+- Unit: the signature, the retry schedule, the private-address check, and Tally's reply parsed.
+- Integration:
+  - A key made, used and revoked.
+  - A scope refused.
+  - A maker's project access applied, and a deactivated maker's key refused.
+  - The OpenAPI document served.
+  - A webhook to a local server: a receipt posted gives one signed `receipt.posted`, verified with the secret.
+  - A 500 retried on schedule, then succeeding.
+  - A private address refused without the test flag.
+  - Tally: pending vouchers fetched as XML, results recorded, and a voucher no longer pending once created.
+- The agent against a fake Tally HTTP server.
+- Browser: an admin makes a key, a request with it returns rows, and after revoking it the request is refused.
+
+**Exit check for Wave 6:**
+- A manager builds a report without help: the step 3 browser test.
+- A vendor quotes and invoices through the portal: the step 5 browser test, plus the integration test for the
+  invoice.
+- A site submits from the phone in poor signal: the step 4 browser test, for a receipt. The daily report keeps its
+  own draft and retry. The run of the whole suite is recorded under "Wave 6 exit".
+
+## Step 6 delivered
+
+- **Public API** (`/api/v1`, migration `0071_integrations.sql`):
+  - API keys (`aek1.<tenant>.<id>.<secret>`) with the HMAC kept, the last four shown, scopes, last use and revoke.
+  - Each key acts as the admin who made it, through the same services and checks as the screens.
+  - `GET /v1/views` and `POST /v1/views/:view/query` are the report builder's reviewed model, so no SQL comes from
+    outside, and access and caps are those of the screens.
+  - `GET /v1/openapi.json` is built from the same zod schemas (zod's own `toJSONSchema`).
+  - Rate limits: 120 requests a minute per key, plus the per-IP limit.
+  - A key is never accepted on staff routes, and a staff token never on `/v1`.
+- **Webhooks:**
+  - Events: `order.issued`, `receipt.posted`, `bill.certified` (client and subcontract bills) and
+    `portal.submission`.
+  - Each is written in the same transaction as the change (`integrations/events.ts`).
+  - Signed with HMAC-SHA256 over the timestamp and body. 10-second timeout; redirects are not followed.
+  - Retries at 1, 5, 30, 120 and 720 minutes, then marked failed.
+  - https only, and private, loopback and link-local addresses are refused after DNS. Both are relaxed only by
+    `WEBHOOK_ALLOW_PRIVATE`.
+  - The sending loop runs every 30 seconds behind `WEBHOOK_WORKER`.
+  - The screen has "Send a test", "Turn off" and the last 50 deliveries.
+- **Tally link:**
+  - `tools/tally-agent/agent.mjs`: Node 20 or later, no dependencies, with a README.
+  - It sends each pending voucher as its own Tally import, reads Tally's reply, and reports back.
+  - `acc.tally_sync` keeps what went in. A refused voucher stays pending with Tally's message, which the
+    Integrations screen shows.
+  - Wave 3's voucher XML is unchanged; it was factored into `voucherXml`.
+- **Screen:** Settings › Integrations (admins): API keys, webhooks, and Tally progress.
+- **Tests:**
+  - Unit: signature and tolerance, the retry schedule, private addresses (IPv4, IPv6, mapped), key format, and
+    Tally's reply.
+  - Integration (`integrations.int.spec.ts`):
+    - A key made by an admin only, reading the projects view sorted.
+    - An injected field name refused.
+    - Keys and staff tokens kept apart.
+    - A missing scope refused (403); a revoked key refused (401), with its last use recorded.
+    - The OpenAPI paths.
+    - A webhook to a local server: the test ping verified with the secret.
+    - An order issued gives exactly one delivery, written with it. The first try gets a 500, the retry is not early,
+      it is sent two minutes later, and the signature verifies.
+    - The real agent against a fake Tally: one voucher created, one refused and still pending with Tally's message,
+      and the counts on the screen.
+  - The suites whose services now emit events pass unchanged: orders, receipts, client and subcontract bills,
+    portals, BI and Tally.
+  - Browser (`integrations.spec.ts`): an admin makes a key, a request with it returns the project, and after "Revoke"
+    the same request gets 401.
+- **Departures from the plan:**
+  - **Keys are admin-only and act as that admin**, so they see every project. "A deactivated maker's keys stop" is in
+    the code (the maker must be active and not a worker) but not tested: a tenant's admin is its owner account,
+    which cannot be deactivated from inside the tenant.
+  - **No e-invoice or e-way bill adapter, and no provider boundary.** With one provider (today's file workflow) an
+    interface would be speculation. The adapter is written against a tenant's GSP sandbox, with its credentials,
+    when one exists.
+  - **Masters are not pushed by the agent.** The README says to import the masters file once, from Wave 3's
+    existing export. [Likely] Ledgers change rarely, and Tally merges masters better by hand than by an unattended
+    agent.
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own

@@ -18,6 +18,7 @@ import { ProjectService } from '../project/project.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, div, fmt, mul, type Dec } from '../rates/decimal.js';
 import { LabourService } from '../labour/labour.service.js';
+import { emit } from '../integrations/events.js';
 import { audit } from '../tender/tender-records.js';
 import { fromDb, fyOf, isRole, type Role } from './accounts-rules.js';
 import { LedgerService, type LineInput } from './ledger.service.js';
@@ -892,6 +893,14 @@ export class SubcontractService implements OnModuleInit {
         figures = ${tx.json(JSON.parse(JSON.stringify(f)))}, vendor_bill_id = ${vb!.id}, updated_at = now(),
         updated_by = ${claims.sub}, row_version = row_version + 1
       WHERE id = ${id}`;
+    await emit(tx, 'bill.certified', {
+      kind: 'subcontract',
+      billId: id,
+      orderId: b.order_id,
+      upto: b.upto,
+      gross: f.gross,
+      net: f.net,
+    });
     await audit(tx, claims.sub, 'subcontract_bill.certify', 'subcontract_bill', id, { net: f.net });
   }
 

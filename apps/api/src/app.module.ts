@@ -8,6 +8,7 @@ import { SafetyModule } from './safety/safety.module.js';
 import { ControlModule } from './control/control.module.js';
 import { BiModule } from './bi/bi.module.js';
 import { PortalModule } from './portal/portal.module.js';
+import { IntegrationsModule } from './integrations/integrations.module.js';
 import { IdempotencyInterceptor } from './common/idempotency.js';
 import { CrmModule } from './crm/crm.module.js';
 import { RealEstateModule } from './realestate/realestate.module.js';
@@ -57,6 +58,7 @@ import { TenderModule } from './tender/tender.module.js';
     RealEstateModule,
     BiModule,
     PortalModule,
+    IntegrationsModule,
     ProcurementModule,
   ],
   controllers: [HealthController],

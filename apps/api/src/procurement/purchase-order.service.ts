@@ -27,6 +27,7 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt, mul } from '../rates/decimal.js';
 import { RfqService } from '../rfq/rfq.service.js';
 import { nextNumber } from '../tender/numbering.js';
+import { emit } from '../integrations/events.js';
 import { orderProgress, receivedByLine } from './receipt-progress.js';
 import { ReceiptService } from './receipt.service.js';
 import { audit } from '../tender/tender-records.js';
@@ -471,10 +472,18 @@ export class PurchaseOrderService implements OnModuleInit {
       WHERE po_id = ${r.po_id} AND status = 'approved'`;
     await tx`UPDATE proc.po_revision SET status = 'approved', approved_at = now(), row_version = row_version + 1
       WHERE id = ${revisionId}`;
-    const [o] = await tx<{ project_id: string; number: string }[]>`
+    const [o] = await tx<{ project_id: string; number: string; kind: string; party_id: string }[]>`
       UPDATE proc.purchase_order SET status = 'issued', acknowledged_on = NULL, acknowledged_ref = NULL,
         updated_at = now(), updated_by = ${claims.sub}, row_version = row_version + 1
-      WHERE id = ${r.po_id} RETURNING project_id, number`;
+      WHERE id = ${r.po_id} RETURNING project_id, number, kind, party_id`;
+    await emit(tx, 'order.issued', {
+      orderId: r.po_id,
+      number: o!.number,
+      kind: o!.kind,
+      revision: r.revision,
+      projectId: o!.project_id,
+      partyId: o!.party_id,
+    });
     await tx`INSERT INTO proj.project_event (project_id, kind, data, actor_id)
       VALUES (${o!.project_id}, 'order_issued', ${tx.json({ number: o!.number, revision: r.revision })},
         ${claims.sub})`;

@@ -17,6 +17,7 @@ import { ProjectService } from '../project/project.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt } from '../rates/decimal.js';
 import { nextNumber } from '../tender/numbering.js';
+import { emit } from '../integrations/events.js';
 import { audit } from '../tender/tender-records.js';
 import { fromDb } from './accounts-rules.js';
 import { workBill, type BillFigures, type BillTerms } from './client-bill-math.js';
@@ -742,6 +743,14 @@ export class ClientBillService implements OnModuleInit {
             invoice_date = ${input.certifiedOn}, voucher_id = ${v!.id}, updated_at = now(), updated_by = ${claims.sub},
             row_version = row_version + 1
           WHERE id = ${id}`;
+        await emit(tx, 'bill.certified', {
+          kind: 'client',
+          billId: id,
+          invoiceNo,
+          certifiedOn: input.certifiedOn,
+          total: f.invoiceTotal,
+          net: f.net,
+        });
         await audit(tx, claims.sub, 'client_bill.certify', 'client_bill', id, {
           invoiceNo,
           total: f.invoiceTotal,

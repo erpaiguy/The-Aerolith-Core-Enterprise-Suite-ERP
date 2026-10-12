@@ -36,6 +36,7 @@ import {
   Signature,
   Handshake,
   Inbox as InboxIcon,
+  Plug,
   Home,
   ChartPie,
   MailCheck,
@@ -206,6 +207,9 @@ export function AppShell() {
                 </NavItem>
                 <NavItem to="/settings/companies" icon={<Landmark className="size-4" />}>
                   Companies
+                </NavItem>
+                <NavItem to="/settings/integrations" icon={<Plug className="size-4" />}>
+                  Integrations
                 </NavItem>
               </>
             )}

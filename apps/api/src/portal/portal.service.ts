@@ -14,6 +14,7 @@ import { DocumentsService } from '../documents/documents.service.js';
 import { cleanFileName, fileType, FileTooLargeError } from '../documents/file-store.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { TransmittalService } from '../dms/transmittal.service.js';
+import { emit } from '../integrations/events.js';
 import { audit } from '../tender/tender-records.js';
 import type { PortalClaims } from './portal-auth.service.js';
 import { submissionNumber, type PortalKind } from './portal-rules.js';
@@ -338,6 +339,14 @@ export class PortalService {
         await tx`INSERT INTO platform.notification (user_id, kind, title, link, source)
           VALUES (${userId}, 'portal', ${`${submissionNumber(row!.seq)} from ${party?.name ?? 'a portal user'}: ${s.title}`},
                   ${`/portal-submissions?id=${row!.id}`}, ${`portal:${row!.id}`})`;
+      await emit(tx, 'portal.submission', {
+        submissionId: row!.id,
+        number: submissionNumber(row!.seq),
+        kind: s.kind,
+        partyId: c.party,
+        rfqId: s.rfqId,
+        orderId: s.orderId,
+      });
       await audit(tx, c.sub, `portal.submit_${s.kind}`, 'portal_submission', row!.id, {});
       return row!.id;
     });

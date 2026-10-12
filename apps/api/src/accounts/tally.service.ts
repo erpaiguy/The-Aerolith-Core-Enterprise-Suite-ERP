@@ -256,19 +256,109 @@ export class TallyService {
       FROM acc.voucher v
       WHERE v.entity_id = ${q.entityId} AND v.type <> 'opening' AND v.voucher_date BETWEEN ${q.from} AND ${q.to}
       ORDER BY v.voucher_date, v.number`;
-    const out = vs.map((v) => {
-      const type = VOUCHER_TYPE[v.type] ?? 'Journal';
-      const entries = v.lines
-        .map((l) => {
-          const debit = dec(l.debit) - dec(l.credit);
-          return `      <ALLLEDGERENTRIES.LIST>
+    const out = vs.map(voucherXml);
+    return {
+      fileName: `Tally-vouchers-${q.from}-${q.to}.xml`,
+      xml: envelope('Vouchers', company, out.join('\n')),
+      count: vs.length,
+    };
+  }
+
+  // --- the Tally agent (docs/wave6-plan.md step 6) ---
+
+  /**
+   * Vouchers not yet in Tally, oldest first, each as its own import (so Tally's answer is per voucher). A voucher
+   * Tally refused stays pending, with its answer shown, until it goes in.
+   */
+  async pending(claims: TenantClaims, q: { entityId: string; limit: number }) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.may(claims, db);
+    const company = await this.company(db, q.entityId);
+    const vs = await db<(VoucherRow & { last_error: string | null })[]>`
+      SELECT v.id, v.type, v.number, to_char(v.voucher_date, 'YYYYMMDD') AS date, v.narration, v.reference,
+        (SELECT json_agg(json_build_object('name', a.name, 'debit', l.debit::text, 'credit', l.credit::text)
+          ORDER BY l.position) FROM acc.voucher_line l JOIN acc.account a ON a.id = l.account_id
+          WHERE l.voucher_id = v.id) AS lines,
+        s.response AS last_error
+      FROM acc.voucher v LEFT JOIN acc.tally_sync s ON s.voucher_id = v.id
+      WHERE v.entity_id = ${q.entityId} AND v.type <> 'opening' AND (s.status IS NULL OR s.status = 'failed')
+      ORDER BY v.voucher_date, v.number LIMIT ${q.limit}`;
+    return {
+      company,
+      vouchers: vs.map((v) => ({
+        voucherId: v.id,
+        number: v.number,
+        lastError: v.last_error,
+        xml: envelope('Vouchers', company, voucherXml(v)),
+      })),
+    };
+  }
+
+  /** What Tally answered for each voucher the agent sent. */
+  async results(
+    claims: TenantClaims,
+    results: { voucherId: string; ok: boolean; response: string }[],
+  ) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.may(claims, db);
+    await db.begin(async (tx) => {
+      for (const r of results)
+        await tx`
+          INSERT INTO acc.tally_sync (voucher_id, status, response)
+          SELECT ${r.voucherId}, ${r.ok ? 'created' : 'failed'}, ${r.response.slice(0, 2000)}
+          WHERE EXISTS (SELECT 1 FROM acc.voucher WHERE id = ${r.voucherId})
+          ON CONFLICT (voucher_id) DO UPDATE SET status = EXCLUDED.status, response = EXCLUDED.response,
+            attempts = acc.tally_sync.attempts + 1, synced_at = now()
+          WHERE acc.tally_sync.status <> 'created'`;
+    });
+    const [left] = await db<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM acc.voucher v LEFT JOIN acc.tally_sync s ON s.voucher_id = v.id
+      WHERE v.type <> 'opening' AND (s.status IS NULL OR s.status = 'failed')`;
+    return { recorded: results.length, pending: left!.n };
+  }
+
+  /** For the accounts screens: how far Tally has caught up. */
+  async syncStatus(claims: TenantClaims, entityId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.may(claims, db);
+    const [s] = await db`
+      SELECT count(*) FILTER (WHERE s.status = 'created')::int AS created,
+        count(*) FILTER (WHERE s.status = 'failed')::int AS failed,
+        count(*) FILTER (WHERE s.status IS NULL)::int AS waiting,
+        max(s.synced_at) AS "lastSyncAt"
+      FROM acc.voucher v LEFT JOIN acc.tally_sync s ON s.voucher_id = v.id
+      WHERE v.entity_id = ${entityId} AND v.type <> 'opening'`;
+    const failures = await db`
+      SELECT v.number, s.response, s.synced_at AS "at" FROM acc.tally_sync s JOIN acc.voucher v ON v.id = s.voucher_id
+      WHERE v.entity_id = ${entityId} AND s.status = 'failed' ORDER BY s.synced_at DESC LIMIT 20`;
+    return { ...s, failures };
+  }
+}
+
+interface VoucherRow {
+  id: string;
+  type: string;
+  number: string;
+  date: string;
+  narration: string;
+  reference: string;
+  lines: { name: string; debit: string; credit: string }[];
+}
+
+/** One voucher as a Tally message (Tally Prime's XML import). */
+function voucherXml(v: VoucherRow): string {
+  const type = VOUCHER_TYPE[v.type] ?? 'Journal';
+  const entries = v.lines
+    .map((l) => {
+      const debit = dec(l.debit) - dec(l.credit);
+      return `      <ALLLEDGERENTRIES.LIST>
        <LEDGERNAME>${x(l.name)}</LEDGERNAME>
        <ISDEEMEDPOSITIVE>${debit > 0n ? 'Yes' : 'No'}</ISDEEMEDPOSITIVE>
        <AMOUNT>${tallyAmount(debit)}</AMOUNT>
       </ALLLEDGERENTRIES.LIST>`;
-        })
-        .join('\n');
-      return `    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+    })
+    .join('\n');
+  return `    <TALLYMESSAGE xmlns:UDF="TallyUDF">
      <VOUCHER VCHTYPE="${type}" ACTION="Create">
       <DATE>${v.date}</DATE>
       <VOUCHERTYPENAME>${type}</VOUCHERTYPENAME>
@@ -277,11 +367,4 @@ export class TallyService {
 ${entries}
      </VOUCHER>
     </TALLYMESSAGE>`;
-    });
-    return {
-      fileName: `Tally-vouchers-${q.from}-${q.to}.xml`,
-      xml: envelope('Vouchers', company, out.join('\n')),
-      count: vs.length,
-    };
-  }
 }

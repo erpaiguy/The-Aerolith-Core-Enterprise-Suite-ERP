@@ -84,6 +84,7 @@ import { MepScreen } from './screens/control/Mep';
 import { ReportBuilderScreen } from './screens/bi/ReportBuilder';
 import { PortalAcceptScreen, PortalScreen } from './screens/portal/Portal';
 import { PortalSubmissionsScreen, PortalUsersScreen } from './screens/portal/PortalStaff';
+import { IntegrationsScreen } from './screens/Integrations';
 import { OutboxScreen } from './screens/Outbox';
 import { CrmScreen } from './screens/crm/Crm';
 import { SalesScreen } from './screens/realestate/Sales';
@@ -933,6 +934,15 @@ const routeTree = rootRoute.addChildren([
       component: () => (
         <AdminOnly>
           <UsersScreen />
+        </AdminOnly>
+      ),
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/settings/integrations',
+      component: () => (
+        <AdminOnly>
+          <IntegrationsScreen />
         </AdminOnly>
       ),
     }),

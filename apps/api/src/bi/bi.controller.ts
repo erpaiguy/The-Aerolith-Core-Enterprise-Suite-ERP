@@ -20,7 +20,7 @@ import { BiService } from './bi.service.js';
 import type { Spec } from './query.js';
 
 const name = z.string().regex(/^[a-z_]{1,40}$/, 'A field name');
-const spec = z.object({
+export const reportSpec = z.object({
   view: name,
   fields: z.array(name).max(30).default([]),
   filters: z
@@ -51,7 +51,7 @@ const chart = z.object({
 });
 const save = z.object({
   name: z.string().trim().min(2).max(120),
-  spec,
+  spec: reportSpec,
   chart: chart.default({ kind: 'table' }),
   sharedWith: z.enum(['nobody', 'managers', 'everyone']).default('nobody'),
 });
@@ -70,7 +70,7 @@ export class BiController {
 
   @Post('run')
   @HttpCode(200)
-  run(@Auth() c: TenantClaims, @Body(new ZodPipe(spec)) b: Spec) {
+  run(@Auth() c: TenantClaims, @Body(new ZodPipe(reportSpec)) b: Spec) {
     return this.bi.run(c, b);
   }
 
@@ -78,7 +78,11 @@ export class BiController {
   @HttpCode(200)
   async xlsx(
     @Auth() c: TenantClaims,
-    @Body(new ZodPipe(z.object({ spec, title: z.string().trim().max(120).default('Report') })))
+    @Body(
+      new ZodPipe(
+        z.object({ spec: reportSpec, title: z.string().trim().max(120).default('Report') }),
+      ),
+    )
     b: { spec: Spec; title: string },
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {

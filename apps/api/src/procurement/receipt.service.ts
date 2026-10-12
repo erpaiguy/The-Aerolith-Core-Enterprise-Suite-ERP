@@ -19,6 +19,7 @@ import { ProjectService } from '../project/project.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt } from '../rates/decimal.js';
 import { nextNumber } from '../tender/numbering.js';
+import { emit } from '../integrations/events.js';
 import { audit } from '../tender/tender-records.js';
 import { linkedDocuments } from '../documents/links.js';
 import { InventoryService } from './inventory.service.js';
@@ -266,6 +267,14 @@ export class ReceiptService {
           ${input.challanDate}, ${input.invoiceNo}, ${input.vehicleNo}, ${input.notes}, ${claims.sub}, ${claims.sub})
         RETURNING id`;
       await tx`INSERT INTO proc.grn_line ${tx(lines.map((l) => ({ ...l, receipt_id: r!.id })))}`;
+      await emit(tx, 'receipt.posted', {
+        receiptId: r!.id,
+        number,
+        orderId,
+        projectId: o.project_id,
+        receivedOn: input.receivedOn,
+        challanNo: input.challanNo,
+      });
       await this.stockAccepted(
         tx,
         claims,

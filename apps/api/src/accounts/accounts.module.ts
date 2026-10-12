@@ -59,6 +59,6 @@ import { SubcontractService } from './subcontract.service.js';
     AssetService,
     EquipmentService,
   ],
-  exports: [LedgerService, SubcontractService],
+  exports: [LedgerService, SubcontractService, TallyService],
 })
 export class AccountsModule {}

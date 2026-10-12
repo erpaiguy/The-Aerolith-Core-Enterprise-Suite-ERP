@@ -29,6 +29,8 @@ const envSchema = z.object({
   TENANT_DB_REGION: z.string().default('ap-south-1'),
   PROVISIONING_WORKER: z.enum(['on', 'off']).optional(),
   REPORTS_WORKER: z.enum(['on', 'off']).optional(),
+  WEBHOOK_WORKER: z.enum(['on', 'off']).optional(),
+  WEBHOOK_ALLOW_PRIVATE: z.enum(['true', 'false']).default('false'),
   MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
   IMPORT_DIR: z.string().optional(),
   IMPORT_MAX_MB: z.coerce.number().int().positive().max(1024).default(100),
@@ -77,6 +79,10 @@ export interface AppConfig {
   provisioningWorker: boolean;
   /** Runs scheduled report exports (docs/wave6-plan.md step 3). */
   reportsWorker: boolean;
+  /** Sends webhook deliveries (docs/wave6-plan.md step 6). */
+  webhookWorker: boolean;
+  /** Lets webhooks reach private addresses and plain http: tests and on-premises installs only. */
+  webhookAllowPrivate: boolean;
   maxTenantPools: number;
   /** Where uploaded import files wait while the user maps columns (docs/wave1-plan.md step 4). */
   importDir: string;
@@ -189,6 +195,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     tenantDbRegion: e.TENANT_DB_REGION,
     provisioningWorker: (e.PROVISIONING_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
     reportsWorker: (e.REPORTS_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
+    webhookWorker: (e.WEBHOOK_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
+    webhookAllowPrivate: e.WEBHOOK_ALLOW_PRIVATE === 'true',
     maxTenantPools: e.MAX_TENANT_POOLS,
     importDir: e.IMPORT_DIR ?? join(tmpdir(), 'aerolith-imports'),
     importMaxBytes: e.IMPORT_MAX_MB * 1024 * 1024,
