@@ -25,12 +25,16 @@ const rules = z.object({
       z
         .object({
           minAmount: money,
-          approver: z.enum(['project_lead', 'manager', 'admin', 'user']),
+          approver: z.enum(['project_lead', 'manager', 'admin', 'user', 'designation']),
           userId: z.uuid().nullable().default(null),
+          designationId: z.uuid().nullable().default(null),
           label: z.string().trim().max(100).default(''),
         })
         .refine((r) => (r.approver === 'user') === (r.userId !== null), {
           message: 'Name the person for a named approver (and only then)',
+        })
+        .refine((r) => (r.approver === 'designation') === (r.designationId !== null), {
+          message: 'Name the designation for a designation approver (and only then)',
         }),
     )
     .max(6),

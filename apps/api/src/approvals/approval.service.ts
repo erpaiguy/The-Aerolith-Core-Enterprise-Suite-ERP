@@ -1,8 +1,9 @@
 // The basic approval engine (docs/04-features.md P5, docs/wave2b-plan.md step 1). Documents register a type with it
 // and submit themselves inside their own transaction; the engine keeps the levels a request was submitted under,
-// decides who may act at each level (the project's lead, any manager, any admin, a named person, or someone standing
-// in for them while away), and tells the document when it is approved, rejected or withdrawn, inside the same
-// transaction as the decision. Nobody approves their own request.
+// decides who may act at each level (the project's lead, any manager, any admin, a named person, whoever holds a
+// designation (docs/wave3-plan.md step 11), or someone standing in for them while away), and tells the document when
+// it is approved, rejected or withdrawn, inside the same transaction as the decision. Nobody approves their own
+// request.
 import {
   BadRequestException,
   ConflictException,
@@ -16,7 +17,7 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit } from '../tender/tender-records.js';
 
 type Db = Sql | TransactionSql;
-export type Approver = 'project_lead' | 'manager' | 'admin' | 'user';
+export type Approver = 'project_lead' | 'manager' | 'admin' | 'user' | 'designation';
 export type Outcome = 'approved' | 'rejected' | 'withdrawn';
 
 /** What the engine needs from a document type. */
@@ -45,6 +46,7 @@ export interface RuleInput {
   minAmount: string;
   approver: Approver;
   userId: string | null;
+  designationId: string | null;
   label: string;
 }
 
@@ -65,6 +67,7 @@ interface StepRow {
   level: number;
   approver: Approver;
   user_id: string | null;
+  designation_id: string | null;
   to_admins: boolean;
   status: string;
 }
@@ -74,6 +77,7 @@ export const APPROVER_LABEL: Record<Approver, string> = {
   manager: 'Any manager (or admin)',
   admin: 'Any admin',
   user: 'A named person',
+  designation: 'Whoever holds a designation',
 };
 
 /** Today in India: delegations run on Indian dates. */
@@ -100,6 +104,8 @@ function matching(
       WHEN 'user' THEN u.id = ${step.user_id}
       WHEN 'manager' THEN u.role IN ('manager', 'admin')
       WHEN 'admin' THEN u.role = 'admin'
+      WHEN 'designation' THEN EXISTS (SELECT 1 FROM hr.employee e WHERE e.user_id = u.id
+        AND e.designation_id = ${step.designation_id} AND (e.left_on IS NULL OR e.left_on >= current_date))
       ELSE EXISTS (SELECT 1 FROM proj.member m WHERE m.project_id = ${projectId} AND m.user_id = u.id
         AND m.role = 'lead') END`;
 }
@@ -132,6 +138,8 @@ export function waitingOn(db: Db, claims: TenantClaims, today = indiaToday()) {
         (s.approver = 'user' AND s.user_id = a.id)
         OR (s.approver = 'manager' AND a.role IN ('manager', 'admin'))
         OR (s.approver = 'admin' AND a.role = 'admin')
+        OR (s.approver = 'designation' AND EXISTS (SELECT 1 FROM hr.employee e WHERE e.user_id = a.id
+          AND e.designation_id = s.designation_id AND (e.left_on IS NULL OR e.left_on >= current_date)))
         OR (s.approver = 'project_lead' AND EXISTS (SELECT 1 FROM proj.member m
           WHERE m.project_id = r.project_id AND m.user_id = a.id AND m.role = 'lead'))))))`;
 }
@@ -172,12 +180,15 @@ export class ApprovalService {
         approver: Approver;
         userId: string | null;
         userName: string | null;
+        designationId: string | null;
+        designationName: string | null;
         label: string;
       }[]
     >`
       SELECT r.doc_type AS "docType", r.level, r.min_amount::text AS "minAmount", r.approver, r.user_id AS "userId",
-        u.display_name AS "userName", r.label
+        u.display_name AS "userName", r.designation_id AS "designationId", d.name AS "designationName", r.label
       FROM platform.approval_rule r LEFT JOIN platform."user" u ON u.id = r.user_id
+      LEFT JOIN hr.designation d ON d.id = r.designation_id
       ORDER BY r.doc_type, r.level`;
     return {
       types: [...this.types.entries()].map(([docType, t]) => ({
@@ -214,13 +225,26 @@ export class ApprovalService {
           message: 'A named approver is not an active user.',
         });
     }
+    const designations = rules
+      .filter((r) => r.approver === 'designation')
+      .map((r) => r.designationId!);
+    if (designations.length) {
+      const found = await db<{ id: string }[]>`
+        SELECT id FROM hr.designation WHERE id = ANY(${designations}::uuid[])`;
+      if (found.length !== new Set(designations).size)
+        throw new BadRequestException({
+          code: 'designation_not_found',
+          message: 'No such designation.',
+        });
+    }
     await db.begin(async (tx) => {
       await tx`DELETE FROM platform.approval_rule WHERE doc_type = ${docType}`;
       for (const [i, r] of rules.entries())
         await tx`
-          INSERT INTO platform.approval_rule (doc_type, level, min_amount, approver, user_id, label, updated_by)
+          INSERT INTO platform.approval_rule (doc_type, level, min_amount, approver, user_id, designation_id, label,
+            updated_by)
           VALUES (${docType}, ${i + 1}, ${r.minAmount}, ${r.approver}, ${r.approver === 'user' ? r.userId : null},
-            ${r.label}, ${claims.sub})`;
+            ${r.approver === 'designation' ? r.designationId : null}, ${r.label}, ${claims.sub})`;
       await audit(tx, claims.sub, 'approval.rules', 'approval_rule', docType, { rules });
     });
     return this.rules(claims);
@@ -249,11 +273,12 @@ export class ApprovalService {
         level: number;
         approver: Approver;
         user_id: string | null;
+        designation_id: string | null;
         label: string;
         min_amount: string;
       }[]
     >`
-      SELECT level, approver, user_id, label, min_amount::text FROM platform.approval_rule
+      SELECT level, approver, user_id, designation_id, label, min_amount::text FROM platform.approval_rule
       WHERE doc_type = ${input.docType} AND min_amount <= ${input.amount} ORDER BY level`;
     const status = rules.length ? 'pending' : 'approved';
     let requestId: string;
@@ -289,8 +314,9 @@ export class ApprovalService {
           message: `No one but you could approve level ${rule.level} (${rule.label || APPROVER_LABEL[rule.approver]}). Ask the admin to change the approval rules.`,
         });
       await tx`
-        INSERT INTO platform.approval_step (request_id, level, approver, user_id, label, min_amount)
-        VALUES (${requestId}, ${rule.level}, ${rule.approver}, ${rule.user_id}, ${rule.label}, ${rule.min_amount})`;
+        INSERT INTO platform.approval_step (request_id, level, approver, user_id, designation_id, label, min_amount)
+        VALUES (${requestId}, ${rule.level}, ${rule.approver}, ${rule.user_id}, ${rule.designation_id}, ${rule.label},
+          ${rule.min_amount})`;
     }
     await this.open(tx, requestId, rules[0]!.level);
     return { requestId, status: 'pending' };
@@ -302,7 +328,7 @@ export class ApprovalService {
       RequestRow[]
     >`SELECT * FROM platform.approval_request WHERE id = ${requestId}`;
     const [step] = await tx<StepRow[]>`
-      SELECT level, approver, user_id, to_admins, status FROM platform.approval_step
+      SELECT level, approver, user_id, designation_id, to_admins, status FROM platform.approval_step
       WHERE request_id = ${requestId} AND level = ${level}`;
     let people = (await matching(tx, step!, r!.project_id, r!.submitted_by, r!.id)).map(
       (u) => u.id,
@@ -345,7 +371,7 @@ export class ApprovalService {
   ): Promise<{ onBehalfOf: string | null } | null> {
     if (r.status !== 'pending' || claims.sub === r.submitted_by) return null;
     const [step] = await db<StepRow[]>`
-      SELECT level, approver, user_id, to_admins, status FROM platform.approval_step
+      SELECT level, approver, user_id, designation_id, to_admins, status FROM platform.approval_step
       WHERE request_id = ${r.id} AND level = ${r.level}`;
     if (!step) return null;
     if (step.to_admins) return claims.role === 'admin' ? { onBehalfOf: null } : null;
@@ -542,11 +568,12 @@ export class ApprovalService {
         comment: string | null;
       }[]
     >`
-      SELECT s.level, s.approver, coalesce(nu.display_name, '') AS "approverName", s.label,
+      SELECT s.level, s.approver, coalesce(nu.display_name, nd.name, '') AS "approverName", s.label,
         s.min_amount::text AS "minAmount", s.status, s.to_admins AS "toAdmins", au.display_name AS "actedBy",
         bu.display_name AS "onBehalfOf", s.acted_at AS "actedAt", s.comment
       FROM platform.approval_step s
       LEFT JOIN platform."user" nu ON nu.id = s.user_id
+      LEFT JOIN hr.designation nd ON nd.id = s.designation_id
       LEFT JOIN platform."user" au ON au.id = s.acted_by
       LEFT JOIN platform."user" bu ON bu.id = s.on_behalf_of
       WHERE s.request_id = ${r.id} ORDER BY s.level`;
@@ -575,7 +602,7 @@ export class ApprovalService {
       steps: steps.map((s) => ({
         ...s,
         approverName:
-          s.approver === 'user'
+          s.approver === 'user' || (s.approver === 'designation' && !s.toAdmins)
             ? s.approverName
             : s.toAdmins
               ? 'Any admin'

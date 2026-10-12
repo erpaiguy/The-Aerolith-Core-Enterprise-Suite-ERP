@@ -418,6 +418,108 @@ what fuel it drank, when it is due for service, and what it cost each project.
   and the consumption flagged; a plan falling due by hours; the month's internal charge (by project) and the hire bill
   with the minimum applied; the daily report showing the logs.
 
+## Step 11 in detail (planned before building)
+
+**Goal:** the company knows its people: who they are (with the statutory numbers payroll needs, and no more personal
+data than the law allows), what they are called and what that lets them do, where they worked each day, and what
+leave they have. Step 12's payroll reads all of it.
+
+- **Designations** (a company-wide list: "Site engineer", "Purchase head"): each may carry **extra permissions** on top
+  of its holders' role (a worker who is the store keeper gets `stores.manage`), and approval rules may name a
+  designation as the approver: any active user whose employee record holds it (never the submitter). This is the
+  "custom roles" of P2: the three sign-in roles stay, and a designation adds to them, never takes away.
+- **Employees:** a code, name, gender, date of birth, phone, email, address; the company (entity) that employs them;
+  staff or worker; joining (and leaving) date, grade, designation, department, reporting manager; the sign-in user, if
+  they have one (one employee per user). **Statutory:** PAN (checked), UAN, ESI number; **Aadhaar** under the DPDP
+  Act: only its last four digits, and only with the date the employee consented, never the full number. **Bank:** the
+  account number, IFSC (checked) and bank name, for step 12's transfer file.
+  - PAN and the bank account are shown in full only to whoever has `hr.edit`; others with `hr.view` see them masked.
+- **Holiday calendars:** a company's calendars, each with its working week and named holidays for a year; one is
+  the default, and a site may follow another (Wave 2a's sites gain a calendar and, for the phone, a location).
+- **Deployment:** where an employee works from a date (a project and site, or the head office), oldest first, one
+  place at a time (as equipment's allocation). The day's place decides the attendance site, the calendar, and step
+  12's cost split.
+- **Attendance**, one row a day per employee: present, half day, absent, or on duty elsewhere, with in and out times
+  and where it came from:
+  - **Register:** a site's day marked for the employees deployed there, by someone on the project's team with
+    `attendance.mark`.
+  - **Biometric import:** a device's export (CSV or Excel: employee code, date and time of each punch), first punch
+    in and last out; four hours or more is present, less is a half day, a single punch present but flagged.
+  - **Phone:** an employee with a sign-in marks themselves in and out, with the phone's location, checked against
+    their site's location and radius; outside it, the mark stands but is flagged.
+- **Leave:** types (casual, sick, earned; paid or not; days a year; accrued monthly or credited on 1 January; how
+  many carry forward), applications for a day, a half day or a range (counting only the employee's working days),
+  approved through the approval rules (document type "Leave application"); balances (opening, accrued, taken,
+  pending, available); a year closed by carrying the capped balance forward. An approved leave and a marked present
+  on the same day are refused.
+- **The month:** each employee's days (present, half, paid leave, unpaid leave, holidays, weekly offs, absent) and
+  their payable days, the input step 12 needs.
+- **Rights:** `hr.view` (the register, attendance, leave, the month), `hr.edit` (employees, designations,
+  calendars, deployments, leave types, imports), `attendance.mark` (a site's register, as the project's lead or
+  member). Everyone signs their own phone attendance and applies for their own leave.
+- **Tests:** employees with masked fields and the Aadhaar rule; a designation that grants a permission and approves a
+  requisition; deployment history; a site's register, a biometric file and a phone check-in (in and out of the
+  radius); leave applied, approved, counted around a holiday and a weekly off, refused over the balance and against
+  attendance; carry forward; the month's summary worked by hand.
+
+## Step 12 in detail (planned before building)
+
+**Goal:** a site's staff paid for a month: earnings by their payable days (step 11), PF, ESI, professional tax,
+labour welfare fund and TDS on salary deducted by rules with effective dates, the cost charged to the projects they
+worked on, payslips, the bank file, and the statutory files. Built in two parts: **12a** the rules, salaries and the
+monthly run; **12b** the statutory files, full and final settlement and the 3b exit check.
+
+**[Certain] The rules moved recently and will move again.** Checked when planning (October 2026), from secondary
+sources, each [Guessing] until a payroll practitioner confirms:
+- The **Code on Wages** (in force from 21 November 2025): "wages" are basic, dearness and retaining allowance; when
+  the other allowances pass half of the pay, the excess counts as wages too (for PF and gratuity).
+- **EPF:** 12% employee; employer 12%, of which 8.33% to the pension scheme (on wages up to the ceiling) and the rest
+  to EPF; EDLI 0.5% and admin charges 0.5%. The wage ceiling reportedly rose from ₹15,000 to **₹25,000 from 17
+  September 2026**; employees above it contribute on the ceiling unless the company chooses actual wages.
+- **ESI:** 0.75% employee and 3.25% employer of gross wages, for those earning up to ₹21,000 a month (an employee
+  covered at the start of a contribution period, April–September or October–March, stays covered to its end).
+- **Professional tax**, by the state of the place of work: Maharashtra ₹175 from ₹7,501, ₹200 from ₹10,001 (₹300 in
+  February); women nil up to ₹25,000. Other states as data.
+- **Labour welfare fund** by state (Maharashtra: June and December).
+- **TDS on salary** (section 392 of the Income-tax Act, 2025, from 1 April 2026; 192 before): the new regime by
+  default (nil to ₹4 lakh, then 5% to 30% in ₹4 lakh steps above, 30% over ₹24 lakh; standard deduction ₹75,000;
+  rebate to ₹12 lakh; 4% cess), the old regime on the employee's choice with their declared deductions.
+
+**12a:**
+- **Compliance rules:** a table of rules by kind (PF, ESI, PT, LWF, income tax, the wages rule), state where it
+  applies, and the date from which it applies, holding its figures; seeded with the above; a new version added by
+  whoever keeps HR, never an old one changed. A month is worked by the rules in force on its last day.
+- **Pay components:** earnings (basic, DA, HRA, conveyance, special, …; whether each counts as "wages", is taxable,
+  is cut for unpaid days) and the employee's **salary** from a date: each component's monthly amount (or a percent of
+  basic); whether PF applies and on what (the ceiling or actual wages); the tax regime and, under the old one, the
+  year's declared deductions.
+- **The monthly run** for a company: each employee in service that month, their payable days (step 11) over the
+  month's days, earnings cut for the rest, **arrears** typed in (taxable earnings), other deductions (advances,
+  canteen); PF, ESI, PT, LWF and TDS worked; net pay. **TDS:** the year's taxable salary projected (paid so far in
+  the financial year, plus this month for the months left), less the standard deduction (and old-regime
+  deductions), taxed by the slabs with the rebate and cess, less TDS deducted so far, spread over the months left.
+  Draft, recalculated freely; **approved** through the approval rules (document type "Payroll run"); then posted.
+- **Posting** (one voucher): salaries and employer contributions Dr, split by project in proportion to the
+  employee's payable days at each deployment (the head office's share without a project); net pay, PF, ESI, PT, LWF
+  and TDS payable Cr (new seeded ledgers). **Paid** from a bank ledger: a payment voucher and the **bank file**
+  (account, IFSC, name, amount, CSV).
+- **Payslips:** each employee's slip as a printable page (the browser's print to PDF; no paid PDF service).
+- **Rights:** `payroll.run` (new; the run, salaries, posting and paying; managers off by default); employees see
+  their own payslips.
+
+**12b:**
+- **PF ECR** text file (the EPFO's #~# format: UAN, name, gross, EPF, EPS and EDLI wages, contributions, days not
+  paid), **ESI** monthly contribution data (Excel), **Form 16** (Form 130) year data per employee, and the monthly
+  **TDS on salary** summary for the quarterly return.
+- **Full and final:** the last month's pay, **gratuity** (15 days' wages for each completed year at the last
+  wages ÷ 26, from five years' service, or one year for fixed-term staff; capped at ₹20 lakh), **leave encashment**
+  (earned leave balance × wages ÷ 26), **notice** pay recovered or paid; posted.
+- **Exit check for 3b:** a site's staff paid for a month with every figure worked by hand, recorded as open for a
+  payroll practitioner's review.
+- **Tests:** the rules by date (the ₹25,000 ceiling either side of 17 September; the 50% wages rule); TDS under both
+  regimes by hand; a run with unpaid days, arrears, an ESI-covered worker, a PT February; the voucher by project;
+  the ECR line format; a gratuity and encashment by hand.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -1273,3 +1375,75 @@ Migration `0046_equipment.sql`.
   September costed: ₹24,750 and ₹15,000 charged to the projects, the crane ₹4,00,000 (17 hours and 183 short of the
   minimum) and the mixer ₹40,000 (20 of 30 days), billed with GST at ₹4,72,000 and ₹47,200; a second posting refused.
 - A browser test: a machine added, allocated, a day logged, September posted (₹12,000).
+
+## Step 11 delivered: HR
+
+**Journey:**
+- **My attendance** (People menu, everyone): mark yourself **in** and **out** with the phone's location (checked
+  against your site's place and radius; away from it the mark stands but is flagged), the last week's marks, your
+  leave balances, and **apply for leave** (a day, a half day or a range; withdraw while it waits).
+- **Site attendance** (the project's team with `attendance.mark`): a site and a day; everyone deployed there that
+  day with their leave, holiday or weekly off; mark present, half day, absent or on duty, with in and out times.
+- **Employees** (`hr.view`), for a company:
+  - **Employees:** the list (designation, where they work now, their sign-in); **an employee:** the record
+    (personal, statutory, bank; PAN and the account shown in full only with `hr.edit` or to the employee),
+    **where they work** from each date (**deploy** to a project and site, or the head office), and their leave.
+  - **Month:** each employee's month day by day (P, H, L, U, HO, WO, A) with present, half days, paid and unpaid
+    leave, holidays, weekly offs, absent and **payable days**, flagged marks counted.
+  - **Leave:** applications waiting, approved, rejected.
+  - **Import** (`hr.edit`): a biometric device's CSV or Excel file; what was imported and why the rest was not.
+  - **Setup** (`hr.edit`): **designations** with the permissions they add; **holiday calendars** (working week,
+    holidays, the default); **sites** (calendar, latitude, longitude, radius); **leave types**; **close a leave year**
+    (carry balances forward).
+- **Approval rules** can name a **designation**: whoever holds it approves (never the submitter). Leave applications
+  are a new document type ("Leave application"); with no rules they are approved when applied for.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Designations add permissions, never remove them,** and the three sign-in roles stay. "Custom roles" are
+  a designation's extra permissions on top of the role.
+- **[Likely] `hr.edit` is off for managers by default** (PAN, bank and Aadhaar data); the admin grants it, or a
+  designation such as "HR manager" carries it. `hr.view` is on for managers; `attendance.mark` for everyone.
+- **[Likely] Aadhaar: only the last four digits, and only with the consent date;** the full number is refused. PAN,
+  UAN, ESI number and the bank account are kept as entered (not encrypted in the tenant's database), masked on screen
+  to anyone without `hr.edit` but the employee. [Guessing] whether a CA or DPO wants these encrypted at rest.
+- **[Guessing] Four hours between the first and last punch (or the phone's in and out) is a full day,** less a half
+  day; a single punch is a full day flagged for HR to check.
+- **[Likely] No calendar at all means Monday to Saturday,** usual on Indian sites; a site follows its own calendar,
+  else the company's default.
+- **[Likely] The leave year is the calendar year.** Monthly accrual credits a twelfth on the first of each month in
+  service; annual credits the whole on 1 January (or the months left, on joining); rounded down to half days.
+  Carry-forward applies to paid types with a cap and never overwrites an opening typed by hand.
+- **[Likely] Leave counts only the employee's working days** (holidays and weekly offs inside a range are not
+  leave); a day marked present cannot be taken as leave, nor an approved leave day marked present (a half day of
+  each may share a day).
+- **[Likely] Leave is approved through the approval rules**, not automatically by the reporting manager: the rule
+  can name the designation that approves (e.g. "HR manager"). A reporting-manager approver is not built.
+- **[Likely] The phone needs a sign-in linked to the employee;** workers without phones are marked on the register
+  or by the device.
+
+**API** (under `/api/tenant/hr`): `GET permissions`; `GET|POST designations`, `PUT designations/:id`;
+`GET|POST employees`, `GET|PUT employees/:id`, `POST employees/:id/deployments`, `GET employees/:id/leave?year&asOf`,
+`PUT employees/:id/leave-openings`; `GET|POST calendars`, `PUT calendars/:id`, `PUT calendars/:id/holidays`;
+`GET sites`, `PUT sites/:id`; `GET|POST sites/:id/attendance`; `POST attendance/import`; `GET|POST attendance/me`;
+`GET attendance/month?entityId&month`; `GET|POST leave-types`, `PUT leave-types/:id`; `GET|POST leave`,
+`GET leave/:id`, `POST leave/:id/withdraw|cancel`, `POST leave/carry-forward`. Approval rules take
+`approver: 'designation'` with `designationId`.
+
+Migration `0047_hr.sql` (schema `hr`; sites gain a calendar and a location; approval rules and steps gain the
+designation approver).
+
+**Tests:**
+- 5 unit tests: weekdays against a working week and holidays; leave accrued by the year and by the month (a March
+  joiner's 8.5 of 15 by September); the phone's distance (111 m for 0.001° of latitude, 105 m of longitude at 19°
+  north); a device's punches (a full day, a short day, one punch, AM/PM times, unreadable rows) and a single
+  date-and-time column.
+- 4 API integration tests, every figure by hand: designations (a worker given `hr.view`, a manager `hr.edit`);
+  employees with the Aadhaar rule, masked PAN (`••••••234K`) and account, a masked number sent back unchanged,
+  a stale version refused; deployment refusals; a site's register (a stranger to the project refused, someone not
+  deployed refused), a device file (3 days in, a day already on the register and an unknown code reported), the phone
+  1,401 m from the site (flagged) and out within four hours (a half day), the head office without a location; leave
+  through the "HR manager" designation: 5 working days around a holiday, refused over the balance (9.5 available
+  against 11), on a day worked, twice; an unpaid day; one withdrawn; balances; September: 7.5 and 8 payable days
+  worked out day by day; the year carried forward (15, 12.5 and 15 days of earned leave).
+- A browser test: a calendar and a leave type set up, an employee deployed, a day on the site's register, a day's
+  leave, and September's six payable days.

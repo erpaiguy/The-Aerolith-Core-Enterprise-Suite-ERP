@@ -67,6 +67,9 @@ import { BankScreen } from './screens/accounts/Bank';
 import { StatementsScreen } from './screens/accounts/Statements';
 import { AssetsScreen } from './screens/accounts/Assets';
 import { EquipmentScreen } from './screens/accounts/Equipment';
+import { EmployeeScreen, SiteRegisterScreen } from './screens/hr/Employee';
+import { LeaveScreen, MyAttendanceScreen } from './screens/hr/MyAttendance';
+import { PeopleScreen } from './screens/hr/People';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -300,6 +303,22 @@ const subcontractBillRoute = createRoute({
     return <SubcontractBillScreen key={billId} billId={billId} />;
   },
 });
+const employeeRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/hr/employees/$employeeId',
+  component: function EmployeePage() {
+    const { employeeId } = employeeRoute.useParams();
+    return <EmployeeScreen key={employeeId} employeeId={employeeId} />;
+  },
+});
+const leaveRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/hr/leave/$leaveId',
+  component: function LeavePage() {
+    const { leaveId } = leaveRoute.useParams();
+    return <LeaveScreen key={leaveId} leaveId={leaveId} />;
+  },
+});
 const clientReceiptRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/accounts/client-receipts/$receiptId',
@@ -517,6 +536,8 @@ const routeTree = rootRoute.addChildren([
     ledgerRoute,
     clientBillRoute,
     subcontractBillRoute,
+    employeeRoute,
+    leaveRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/accounts/receivables',
@@ -574,6 +595,21 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/equipment',
       component: EquipmentScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/hr',
+      component: PeopleScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/hr/me',
+      component: MyAttendanceScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/hr/register',
+      component: SiteRegisterScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

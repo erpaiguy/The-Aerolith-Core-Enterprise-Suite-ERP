@@ -20,7 +20,10 @@ export type Permission =
   | 'accounts.view'
   | 'accounts.post'
   | 'billing.edit'
-  | 'dsr.acknowledge';
+  | 'dsr.acknowledge'
+  | 'hr.view'
+  | 'hr.edit'
+  | 'attendance.mark';
 
 export function usePermission(p: Permission): boolean {
   const { user, licence } = useSession();

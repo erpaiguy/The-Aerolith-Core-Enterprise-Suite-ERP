@@ -2,6 +2,9 @@ import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
+  ClipboardCheck,
+  Fingerprint,
+  IdCard,
   ChartColumn,
   LayoutDashboard,
   LayoutTemplate,
@@ -105,6 +108,8 @@ export function AppShell() {
   const session = useSession();
   const isAdmin = session.user?.role === 'admin';
   const mayBooks = usePermission('accounts.view');
+  const mayPeople = usePermission('hr.view');
+  const mayMark = usePermission('attendance.mark');
   const inbox = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.request<Inbox>('/api/tenant/inbox'),
@@ -231,6 +236,22 @@ export function AppShell() {
             <NavItem to="/procurement-reports" icon={<ClipboardList className="size-4" />}>
               Procurement reports
             </NavItem>
+            <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+              People
+            </div>
+            <NavItem to="/hr/me" icon={<Fingerprint className="size-4" />}>
+              My attendance
+            </NavItem>
+            {mayMark && (
+              <NavItem to="/hr/register" icon={<ClipboardCheck className="size-4" />}>
+                Site attendance
+              </NavItem>
+            )}
+            {mayPeople && (
+              <NavItem to="/hr" icon={<IdCard className="size-4" />}>
+                Employees
+              </NavItem>
+            )}
             {mayBooks && (
               <>
                 <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">

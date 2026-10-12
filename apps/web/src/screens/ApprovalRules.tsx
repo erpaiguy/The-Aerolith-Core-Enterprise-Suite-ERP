@@ -16,6 +16,8 @@ interface Rule {
   approver: Approver;
   userId: string | null;
   userName: string | null;
+  designationId: string | null;
+  designationName: string | null;
   label: string;
 }
 interface RuleSet {
@@ -27,7 +29,12 @@ const APPROVERS: { value: Approver; label: string; project?: boolean }[] = [
   { value: 'manager', label: 'Any manager (or admin)' },
   { value: 'admin', label: 'Any admin' },
   { value: 'user', label: 'A named person' },
+  { value: 'designation', label: 'Whoever holds a designation' },
 ];
+interface Designation {
+  id: string;
+  name: string;
+}
 
 export function ApprovalRulesScreen() {
   const rules = useQuery({
@@ -37,6 +44,10 @@ export function ApprovalRulesScreen() {
   const people = useQuery({
     queryKey: ['people'],
     queryFn: () => api.request<Person[]>('/api/tenant/people'),
+  });
+  const designations = useQuery({
+    queryKey: ['designations'],
+    queryFn: () => api.request<Designation[]>('/api/tenant/hr/designations'),
   });
   if (rules.isPending) return <Spinner />;
   if (rules.isError) return <Alert tone="danger">{describeError(rules.error)}</Alert>;
@@ -48,22 +59,32 @@ export function ApprovalRulesScreen() {
       />
       {rules.data.types.map((t) => (
         <TypeRules
-          key={`${t.docType}-${t.rules.map((r) => `${r.level}${r.minAmount}${r.approver}${r.userId}`).join()}`}
+          key={`${t.docType}-${t.rules.map((r) => `${r.level}${r.minAmount}${r.approver}${r.userId}${r.designationId}`).join()}`}
           type={t}
           people={people.data ?? []}
+          designations={designations.data ?? []}
         />
       ))}
     </div>
   );
 }
 
-function TypeRules({ type, people }: { type: RuleSet['types'][number]; people: Person[] }) {
+function TypeRules({
+  type,
+  people,
+  designations,
+}: {
+  type: RuleSet['types'][number];
+  people: Person[];
+  designations: Designation[];
+}) {
   const qc = useQueryClient();
   const [rows, setRows] = useState(
     type.rules.map((r) => ({
       minAmount: r.minAmount.replace(/\.00$/, ''),
       approver: r.approver,
       userId: r.userId ?? '',
+      designationId: r.designationId ?? '',
       label: r.label,
     })),
   );
@@ -92,6 +113,7 @@ function TypeRules({ type, people }: { type: RuleSet['types'][number]; people: P
                   minAmount: r.minAmount || '0',
                   approver: r.approver,
                   userId: r.approver === 'user' ? r.userId || null : null,
+                  designationId: r.approver === 'designation' ? r.designationId || null : null,
                   label: r.label,
                 })),
               },
@@ -147,6 +169,24 @@ function TypeRules({ type, people }: { type: RuleSet['types'][number]; people: P
                 </Field>
               </div>
             )}
+            {r.approver === 'designation' && (
+              <div className="w-48">
+                <Field label="Designation">
+                  <Select
+                    value={r.designationId}
+                    onChange={(e) => set(i, { designationId: e.target.value })}
+                    required
+                  >
+                    <option value="">Choose…</option>
+                    {designations.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            )}
             <Field label="Name of the level">
               <Input
                 value={r.label}
@@ -177,6 +217,7 @@ function TypeRules({ type, people }: { type: RuleSet['types'][number]; people: P
                     minAmount: rows.length ? rows[rows.length - 1]!.minAmount : '0',
                     approver: type.projectScoped && !rows.length ? 'project_lead' : 'manager',
                     userId: '',
+                    designationId: '',
                     label: '',
                   },
                 ])
@@ -197,7 +238,9 @@ function TypeRules({ type, people }: { type: RuleSet['types'][number]; people: P
                   `Level ${i + 1} from ${formatInr(r.minAmount || '0')}: ${
                     r.approver === 'user'
                       ? (people.find((p) => p.id === r.userId)?.displayName ?? 'a named person')
-                      : APPROVERS.find((a) => a.value === r.approver)!.label.toLowerCase()
+                      : r.approver === 'designation'
+                        ? `any ${designations.find((d) => d.id === r.designationId)?.name ?? 'holder of a designation'}`
+                        : APPROVERS.find((a) => a.value === r.approver)!.label.toLowerCase()
                   }`,
               )
               .join('; ')}

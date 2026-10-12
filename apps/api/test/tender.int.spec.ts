@@ -346,6 +346,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
       expect((await get('/tenant/permissions/mine', worker)).json()).toEqual([
         'documents.edit',
         'stores.receive',
+        'attendance.mark',
       ]);
       expect((await get('/tenant/permissions/mine', manager)).json()).toEqual([
         'tender.edit',
@@ -365,6 +366,8 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'accounts.post',
         'billing.edit',
         'dsr.acknowledge',
+        'hr.view',
+        'attendance.mark',
       ]);
       expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
         'tender.edit',
@@ -384,6 +387,9 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'accounts.post',
         'billing.edit',
         'dsr.acknowledge',
+        'hr.view',
+        'hr.edit',
+        'attendance.mark',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
       const all = (await get('/tenant/permissions', t.admin)).json<{
@@ -408,6 +414,9 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'accounts.post': true,
           'billing.edit': true,
           'dsr.acknowledge': true,
+          'hr.view': true,
+          'hr.edit': false,
+          'attendance.mark': true,
         },
         worker: {
           'tender.edit': false,
@@ -427,6 +436,9 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'accounts.post': false,
           'billing.edit': false,
           'dsr.acknowledge': false,
+          'hr.view': false,
+          'hr.edit': false,
+          'attendance.mark': true,
         },
       });
     });
@@ -447,6 +459,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'boq.edit',
         'documents.edit',
         'stores.receive',
+        'attendance.mark',
       ]);
       expect(
         (await post(`/tenant/tenders/${tenderId}/boqs`, { name: 'Worker BOQ' }, worker)).statusCode,

@@ -1,5 +1,6 @@
 // Admin-configurable permissions per role (owner decision, Wave 1). Admins can always do everything; managers and
-// workers get the defaults below unless the tenant admin changed them (platform.role_permission).
+// workers get the defaults below unless the tenant admin changed them (platform.role_permission). A designation (HR,
+// docs/wave3-plan.md step 11) may add permissions to its holders' role, never take any away.
 import {
   CanActivate,
   ForbiddenException,
@@ -87,6 +88,19 @@ export const PERMISSIONS = {
     label: "Acknowledge a project's daily site reports (as its lead)",
     defaults: { manager: true, worker: false },
   },
+  'hr.view': {
+    label: "See the company's employees, attendance, leave and each month's days",
+    defaults: { manager: true, worker: false },
+  },
+  'hr.edit': {
+    label:
+      'Keep the employee records (with PAN and bank in full), designations, holiday calendars, deployments and leave types',
+    defaults: { manager: false, worker: false },
+  },
+  'attendance.mark': {
+    label: "Mark a site's attendance register (as the project's lead or member)",
+    defaults: { manager: true, worker: true },
+  },
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -105,6 +119,10 @@ const CACHE_MS = 30_000;
 @Injectable()
 export class PermissionsService {
   private readonly cache = new Map<string, { at: number; grants: Grants }>();
+  private readonly extraCache = new Map<
+    string,
+    { at: number; byUser: Map<string, Permission[]> }
+  >();
 
   constructor(private readonly tenants: TenantConnections) {}
 
@@ -129,16 +147,40 @@ export class PermissionsService {
     return grants;
   }
 
+  /** What each user's designation adds (employees still with the company). */
+  private async extras(tenantId: string, now = Date.now()) {
+    const hit = this.extraCache.get(tenantId);
+    if (hit && now - hit.at < CACHE_MS) return hit.byUser;
+    const db = await this.tenants.forTenant(tenantId);
+    const rows = await db<{ user_id: string; permission: string }[]>`
+      SELECT e.user_id, dp.permission FROM hr.employee e
+      JOIN hr.designation_permission dp ON dp.designation_id = e.designation_id
+      WHERE e.user_id IS NOT NULL AND (e.left_on IS NULL OR e.left_on >= current_date)`;
+    const byUser = new Map<string, Permission[]>();
+    for (const r of rows)
+      if (isPermission(r.permission))
+        byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), r.permission]);
+    this.extraCache.set(tenantId, { at: now, byUser });
+    return byUser;
+  }
+
+  /** Designations or employees changed: read them afresh. */
+  forget(tenantId: string) {
+    this.extraCache.delete(tenantId);
+  }
+
   async can(claims: TenantClaims, p: Permission): Promise<boolean> {
     if (claims.role === 'admin') return true;
-    return (await this.grants(claims.ten))[claims.role][p];
+    if ((await this.grants(claims.ten))[claims.role][p]) return true;
+    return (await this.extras(claims.ten)).get(claims.sub)?.includes(p) ?? false;
   }
 
   async mine(claims: TenantClaims): Promise<Permission[]> {
     const all = Object.keys(PERMISSIONS) as Permission[];
     if (claims.role === 'admin') return all;
     const g = (await this.grants(claims.ten))[claims.role];
-    return all.filter((p) => g[p]);
+    const extra = (await this.extras(claims.ten)).get(claims.sub) ?? [];
+    return all.filter((p) => g[p] || extra.includes(p));
   }
 
   async set(claims: TenantClaims, role: ConfigurableRole, p: Permission, granted: boolean) {

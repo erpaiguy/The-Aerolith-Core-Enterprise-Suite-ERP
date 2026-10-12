@@ -163,6 +163,7 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 8 | Statements (Schedule III P&L and balance sheet, cash flow), project P&L, year end with closing stock; Tally XML export and the accounts mode; the 3a exit check | **Done** |
 | 9 | Fixed assets: register from bills or opening balances, transfers, depreciation runs (Companies Act, by project), Income Tax blocks, disposals with gain or loss | **Done** |
 | 10 | Equipment: register (own or hired), allocation, log sheets (in the daily report), fuel against the norm, maintenance, the month costed (own charged to projects, hire bills from the logs) | **Done** |
-| 11 | HR | Next |
-| 12-13 | Payroll, labour contractors | |
+| 11 | HR: employees (DPDP Aadhaar rule, masked PAN and bank), designations that add permissions and approve, calendars, deployment, attendance (register, biometric file, phone with location), leave (types, balances, applications through approvals, carry forward), the month's payable days | **Done** |
+| 12 | Payroll | Next |
+| 13 | Labour contractors | |
 | 14-15 | Quality, safety | |
