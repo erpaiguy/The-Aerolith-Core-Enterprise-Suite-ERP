@@ -73,6 +73,7 @@ import { PeopleScreen } from './screens/hr/People';
 import { PayrollRunScreen, PayrollScreen, PayslipScreen } from './screens/payroll/Payroll';
 import { LabourScreen, MusterScreen, WageSheetScreen } from './screens/labour/Labour';
 import { QualityScreen } from './screens/quality/Quality';
+import { SafetyScreen } from './screens/safety/Safety';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -660,6 +661,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/quality',
       component: QualityScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/safety',
+      component: SafetyScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

@@ -369,6 +369,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'hr.view',
         'labour.manage',
         'quality.manage',
+        'safety.manage',
         'attendance.mark',
       ]);
       expect((await get('/tenant/permissions/mine', t.admin)).json()).toEqual([
@@ -394,6 +395,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
         'payroll.run',
         'labour.manage',
         'quality.manage',
+        'safety.manage',
         'attendance.mark',
       ]);
       expect((await get('/tenant/permissions', worker)).statusCode).toBe(403);
@@ -424,6 +426,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'payroll.run': false,
           'labour.manage': true,
           'quality.manage': true,
+          'safety.manage': true,
           'attendance.mark': true,
         },
         worker: {
@@ -449,6 +452,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tender register (integration)', () =>
           'payroll.run': false,
           'labour.manage': false,
           'quality.manage': false,
+          'safety.manage': false,
           'attendance.mark': true,
         },
       });

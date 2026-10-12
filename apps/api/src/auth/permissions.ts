@@ -111,6 +111,11 @@ export const PERMISSIONS = {
       'Decide inspections, keep checklist templates and test criteria, close NCRs, approve makes, hold uninspected work from bills',
     defaults: { manager: true, worker: false },
   },
+  'safety.manage': {
+    label:
+      'Issue permits to work and close incidents (whoever asked or acted cannot issue or verify their own)',
+    defaults: { manager: true, worker: false },
+  },
   'attendance.mark': {
     label: "Mark a site's attendance register (as the project's lead or member)",
     defaults: { manager: true, worker: true },

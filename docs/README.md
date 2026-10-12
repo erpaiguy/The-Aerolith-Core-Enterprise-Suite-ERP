@@ -168,4 +168,6 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 12b | Payroll: PF ECR, ESI data, Form 16 (Form 130) data, full and final (gratuity, encashment, notice), the 3b exit check | **Done** (practitioner review open) |
 | 13 | Labour contractors: licences, workers, minimum wages as data, the daily muster (in the daily report), wage sheets checked against the minimum wage and verified as paid, CLRA registers, BOCW cess | **Done** |
 | 14 | Quality: inspection requests (holding uninspected work from bills), checklists with photos, tests against criteria held as data, NCRs closed by someone else, snags, material approvals an order needs | **Done** |
-| 15 | Safety | Next |
+| 15 | Safety: incidents investigated to closure, permits to work issued only with their precautions and never to oneself, toolbox talks, safety inspections, man-hours from attendance and musters, frequency and severity rates; the 3c exit check | **Done** |
+
+**Wave 3 is complete.** Professional reviews still open: a chartered accountant (3a), a payroll practitioner (statutory figures), a quality engineer (acceptance criteria) and a safety officer (IS 3786 rates, permit precautions).

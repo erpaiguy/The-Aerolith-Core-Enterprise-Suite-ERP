@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   Settings2,
+  ShieldCheck,
   Boxes,
   BriefcaseBusiness,
   Calculator,
@@ -244,6 +245,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/quality" icon={<BadgeCheck className="size-4" />}>
               Quality
+            </NavItem>
+            <NavItem to="/safety" icon={<ShieldCheck className="size-4" />}>
+              Safety
             </NavItem>
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               People

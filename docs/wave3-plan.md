@@ -1752,3 +1752,58 @@ Migration `0051_quality.sql` (schema `qa`; projects gain `hold_uninspected`).
   closing their own action; a snag refused closing before it is fixed; an order refused for waterproofing compound
   without an approved make, issued once one is approved.
 - A browser test: a template, a checklist failed, cubes failed with NCR-001 raised, a snag fixed and closed.
+
+## Step 15 delivered: safety
+
+**Journey:**
+- **Safety** (Projects menu), for a project:
+  - **Incidents** (INC-001…): when, where, the kind (near miss, first aid, medical treatment, lost time, fatal,
+    property damage), what happened, who was hurt (an employee, a contract worker or a name), days lost. An
+    **investigation** (root cause) with **actions** (what, who, by when), each marked done. **Closed** with
+    `safety.manage` once every action is done; anything worse than first aid needs its investigation first.
+  - **Permits to work** (PTW-001…): height, hot work, confined space, excavation or electrical, at a location for at
+    most 12 hours. **Issued** with `safety.manage` only when every precaution on the type's fixed list is confirmed,
+    never by whoever asked for it, and never once its time has passed. **Closed** when the work ends. An issued permit
+    past its end shows as expired.
+  - **Toolbox talks:** the date, topic, speaker and attendance (employees, contract workers, others).
+  - **Safety inspections:** step 14's checklists whose template's work type is "Safety", listed here.
+  - **Statistics** for a period:
+    - **Man-hours:** employees' attendance at the project's sites, 8 hours a day and 4 for a half day, plus
+      contract workers' musters, 8 hours a day plus overtime.
+    - Lost-time injuries and days lost, with a fatality charged 6,000 days.
+    - The **frequency rate** and **severity rate**, both per million man-hours.
+    - Incidents by kind.
+
+**Decisions made while building (change any you disagree with):**
+- **[Guessing] The rates follow IS 3786's definitions**, and the permit precautions are a typical construction list.
+  A safety officer should confirm both.
+- **[Likely] A near miss or first-aid case can be closed without an investigation;** every other kind needs one.
+- **[Likely] The precautions are a fixed list per permit type,** not tenant data. Making them editable is a later
+  change if sites ask for it.
+- **[Likely] Man-hours come only from what is recorded** (attendance and musters), never typed in. A site that
+  keeps neither shows zero hours and no rates.
+
+**API** (under `/api/tenant`):
+- Register and statistics: `GET projects/:id/safety`, `GET projects/:id/safety/statistics?from&to`.
+- Incidents: `POST projects/:id/incidents`, `GET incidents/:id`, `POST incidents/:id/investigation`,
+  `POST incident-actions/:id/done`, `POST incidents/:id/close`.
+- Permits: `POST projects/:id/permits`, `GET permits/:id`, `POST permits/:id/issue`, `POST permits/:id/close`.
+- Toolbox talks: `POST projects/:id/toolbox-talks`.
+
+Migration `0052_safety.sql` adds schema `hse`. New permission: `safety.manage`, on for managers.
+
+**Tests:**
+- 2 unit tests: the frequency and severity rates, including a fatality and zero hours; precautions for every permit
+  type.
+- 4 API integration tests:
+  - A pilot site's September: attendance, contract-labour musters, a safety checklist and a cube test.
+  - Incidents: a lost-time injury refused closing without its investigation and with an action open, then closed; a
+    near miss closed directly.
+  - Permits: refused issue by the requester, without every precaution, or once past its time; issued and closed.
+  - A toolbox talk with attendance 6, and the month's rates (the exit check below).
+- A browser test: a near miss closed, a permit that its requester cannot issue, a toolbox talk.
+
+**Wave 3 exit check (3c):** one integration test holds a month of a pilot site's quality and safety records. The
+man-hours are 114: 44 staff plus 70 contract labour (Ramesh 42, Sunita 28). One lost-time injury of 3 days gives a
+frequency rate of 8,771.93 and a severity rate of 26,315.79, both worked by hand. The test also checks that the
+month's cube test passed. It sits beside the 3a and 3b checks.

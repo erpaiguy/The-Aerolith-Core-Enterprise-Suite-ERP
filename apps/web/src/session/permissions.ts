@@ -26,6 +26,7 @@ export type Permission =
   | 'payroll.run'
   | 'labour.manage'
   | 'quality.manage'
+  | 'safety.manage'
   | 'attendance.mark';
 
 export function usePermission(p: Permission): boolean {

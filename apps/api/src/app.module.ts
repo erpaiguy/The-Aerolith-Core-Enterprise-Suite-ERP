@@ -4,6 +4,7 @@ import { AccountsModule } from './accounts/accounts.module.js';
 import { HrModule } from './hr/hr.module.js';
 import { LabourModule } from './labour/labour.module.js';
 import { QualityModule } from './quality/quality.module.js';
+import { SafetyModule } from './safety/safety.module.js';
 import { PayrollModule } from './payroll/payroll.module.js';
 import { ApprovalModule } from './approvals/approval.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -42,6 +43,7 @@ import { TenderModule } from './tender/tender.module.js';
     PayrollModule,
     LabourModule,
     QualityModule,
+    SafetyModule,
     ProcurementModule,
   ],
   controllers: [HealthController],
