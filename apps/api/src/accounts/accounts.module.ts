@@ -13,6 +13,8 @@ import { PayableController } from './payable.controller.js';
 import { PayableService } from './payable.service.js';
 import { ReceivableController } from './receivable.controller.js';
 import { ReceivableService } from './receivable.service.js';
+import { TdsReturnController } from './tds-returns.controller.js';
+import { TdsReturnService } from './tds-returns.service.js';
 import { SubcontractController } from './subcontract.controller.js';
 import { SubcontractService } from './subcontract.service.js';
 
@@ -26,6 +28,7 @@ import { SubcontractService } from './subcontract.service.js';
     PayableController,
     SubcontractController,
     GstController,
+    TdsReturnController,
   ],
   providers: [
     LedgerService,
@@ -34,6 +37,7 @@ import { SubcontractService } from './subcontract.service.js';
     PayableService,
     SubcontractService,
     GstService,
+    TdsReturnService,
   ],
   exports: [LedgerService],
 })

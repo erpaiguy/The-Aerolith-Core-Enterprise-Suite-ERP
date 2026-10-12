@@ -903,3 +903,49 @@ Migration `0041_gst.sql`.
   (₹1,800 blocked, reversed in 3B) and a 2B file uploaded and matched.
 
 **For the CA review:** the blocked-credit list per ledger, B2CL's limit, the 3B layout and the GSTR-1 headings.
+
+## Step 6b delivered: TDS
+
+**Journey:**
+- **TDS** (Accounts menu), for a company and a financial-year quarter:
+  - **Deducted from suppliers:** each posted supplier's bill with TDS (date, supplier and PAN, section, paid or
+    credited, TDS) and the challan that deposited it, or "to deposit"; the 26Q's problems (no TAN, deductions not in a
+    challan, deductees without a PAN).
+  - **Record a challan:** a section and month with deductions left (the amount shown), the date deposited, BSR code,
+    challan serial number, interest and fee, the bank; every open deduction of that section and month goes into it.
+  - **Challans** of the quarter; **26Q for the return utility:** a workbook of the deductor, the challans and the
+    deductees (PAN, or `PANNOTAVBL` with remark C; section; date; amount; base; rate; TDS; challan).
+  - **Deducted by clients:** each client's TDS on receipts of the quarter, by the client's TAN, against a 26AS or AIS
+    extract uploaded as Excel (a header row naming TAN and TDS, and the deductor and amount): matched (within ₹1),
+    short in 26AS, more in 26AS, not in 26AS, not in the books; clients without a TAN listed apart.
+
+**What it posts:** a challan: TDS payable (the section's ledger) Dr the tax, interest and fees on TDS Dr (a new seeded
+ledger, X7090), the bank Cr.
+
+**Who does what:** `accounts.view` sees it; `accounts.post` records challans and uploads 26AS.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] A deduction is deposited once, in the challan for its section and month;** a challan is not cancelled
+  (an error is corrected at the bank and TRACES, then by a journal).
+- **[Guessing] The 26Q workbook's columns** are those the NSDL utility asks for, in its order as known; checked against
+  the utility before the pilot's first return. The FVU file itself comes from the free utility, as planned.
+- **[Likely] Form 16A is downloaded from TRACES**; the deductions list per supplier is what to check it against.
+- **[Likely] Clients' TDS is matched by TAN and quarter totals,** not deduction by deduction (26AS has no invoice
+  numbers).
+
+**API** (under `/api/tenant`): `GET /accounts/tds/deductions?entityId&from&to[&section]`;
+`GET|POST /accounts/tds/challans`, `GET /accounts/tds/challans/:id`; `GET /accounts/tds/26q?entityId&quarter`
+(`format=xlsx`); `GET|POST /accounts/tds/credits?entityId&quarter` (POST: multipart, field `file`).
+
+Migration `0042_tds.sql`.
+
+**Tests:**
+- 2 API integration tests, every figure by hand: rent of ₹2,50,000 under 194I (₹25,000); a contractor's ₹40,000
+  (₹400), ₹20,000 (nothing) and ₹50,000 (₹700 on the ₹70,000 untaxed once the year passes ₹1 lakh); the 26Q's problems
+  before deposit; challans of ₹400, ₹25,000 and ₹721 (₹21 interest; its voucher), a worker, a repeat and a duplicate
+  serial refused; the 26Q's challans, deductees and workbook. Clients' TDS of ₹1,000, ₹2,000 and ₹500 against a 26AS
+  extract: matched, short by ₹200, no TAN, and a deductor not in the books.
+- A browser test: a landlord's ₹2,50,000 rent bill, its ₹25,000 shown to deposit, the challan recorded, the 26Q
+  workbook downloaded.
+
+**For the CA review:** the 26Q columns, interest and fees posted to one ledger, matching clients' TDS by quarter.

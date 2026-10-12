@@ -14,6 +14,7 @@ import {
   CheckCheck,
   HandCoins,
   Landmark,
+  Percent,
   ListTree,
   ReceiptText,
   Scale,
@@ -243,6 +244,9 @@ export function AppShell() {
                 </NavItem>
                 <NavItem to="/accounts/gst" icon={<Landmark className="size-4" />}>
                   GST
+                </NavItem>
+                <NavItem to="/accounts/tds" icon={<Percent className="size-4" />}>
+                  TDS
                 </NavItem>
                 <NavItem to="/accounts/trial-balance" icon={<Scale className="size-4" />}>
                   Trial balance
