@@ -311,6 +311,85 @@ above the limit, and the bulk JSON layout should be taken from a pilot's real fi
   in transit and bank charges: suggestions, matches (one to two vouchers), charges posted in one click, the
   reconciliation statement agreeing with the statement's balance; the same file again refused; OFX and MT940 parsed.
 
+## Step 8 in detail (planned before building)
+
+**Goal:** the books give the statements a CA signs, close a year, and leave in Tally's own format. Built in two parts:
+**8a** statements, project P&L and year end; **8b** the Tally export, the accounts mode and the exit check for 3a.
+
+**The uncomfortable part first:** [Certain] the app cannot prove Tally accepts its XML: Tally Prime is a paid product
+and is never bundled or used in tests. The export follows Tally's published XML import format and is checked for
+shape in tests; the first pilot's import into its own Tally is the real check, recorded as an open item.
+
+### 8a Statements and year end
+
+- **Schedule III mapping:** every top group of the chart maps to a Schedule III line (share capital; other equity;
+  long-term borrowings; short-term borrowings; trade payables; other current liabilities (with duties and taxes);
+  short-term provisions; property, plant and equipment; inventories; trade receivables; cash and cash equivalents;
+  short-term loans and advances; revenue from operations; other income; cost of materials consumed; subcontract and
+  labour; employee benefits; finance costs; depreciation and amortisation; other expenses (site and other)). A group the
+  admin adds sits under its top group's line.
+- **Profit and loss** for a period and **balance sheet** as at a date, by company, each with the previous year
+  beside it; the profit not yet closed shown in other equity, so the balance sheet balances before and after the
+  year is closed; as Excel.
+- **Cash flow (indirect method)** for a period: profit, depreciation added back, the change in working capital
+  (inventories, receivables, advances, payables, other liabilities, provisions); investing (fixed assets); financing
+  (capital, reserves other than the year's profit, borrowings); the net change equal to the change in cash and bank.
+- **Project P&L**, every project of a company for a period: revenue (contract revenue less credit notes, by project),
+  costs by group (materials, subcontract, site, other) and by cost code, the margin; and billed (invoiced) against
+  certified, received and outstanding.
+- **Year end** for a financial year: the closing stock (the stores' valuation as at 31 March offered, typed or
+  confirmed) posted as stock Dr, material consumption Cr on 31 March, and reversed on 1 April; then every income and
+  expense ledger closed into the profit and loss account (a `year_end` voucher); then the twelve months locked. Done
+  once a year; the statements leave the `year_end` voucher out of the year's profit.
+- **Rights:** `accounts.view` sees the statements; the admin closes the year.
+- **Tests:** a year's books by hand (capital, a loan, a plant bought, depreciation, a client billed and paid, a
+  supplier billed and part paid, expenses): P&L, balance sheet balanced, cash flow agreeing with the bank and cash;
+  two projects' P&L; the year closed with closing stock, the balance sheet unchanged by the close, the next year
+  opening with the stock reversed and the months locked.
+
+### 8b Tally export and the exit check
+
+- **Tally XML** for a company and a period: masters (groups under Tally's own primary groups by Schedule III line,
+  ledgers with opening balances, parties with GSTIN, state and address) and vouchers (type, number, date, narration,
+  reference, each ledger entry with Tally's sign convention), one file to import into Tally Prime.
+- **Accounts mode** per tenant (admin): (a) native books; (b) native books and the Tally export; (c) Tally holds the
+  books: typed-in vouchers are refused (bills, receipts and payments still post, to be exported), the export is the
+  way out. The live Tally link is Wave 6.
+- **Exit check for 3a**, as an integration test: a project billed to a client, certified and paid; a supplier's bill
+  and a subcontract bill passed and paid in a run; GST registers and GSTR-1, TDS challan and 26Q produced; the bank
+  reconciled; the trial balance, P&L and balance sheet agreeing; the Tally XML well formed with every voucher in it.
+
+## Step 9 in detail (planned before building)
+
+**Goal:** every asset the company owns is on a register, depreciated twice (the books by the Companies Act, tax by
+the Income Tax Act's blocks), moved between sites, and sold with its gain or loss.
+
+- **Asset classes**, seeded and editable by the admin: a Schedule II useful life (years), the books' method (straight
+  line or written-down value), a residual value (5%), the Income Tax block's rate, and the fixed asset ledger it sits
+  in. Seeded [Guessing, for the CA]: buildings 30 years / 10%; plant and machinery 15 years / 15%; construction
+  equipment (concreting, crushing, piling, road making) 12 years / 15%; motor vehicles 8 years / 15%; furniture 10
+  years / 10%; office equipment 5 years / 15%; computers 3 years / 40%.
+- **The register:** an asset number (FA/2026-27/0001), name, class, company, the supplier's bill it came on (a
+  posted bill line to a fixed asset ledger) or an opening asset (with its depreciation to date), purchase and
+  put-to-use dates, cost, the site and project it stands at, a custodian. Registering posts nothing (the bill or the
+  opening balances already did).
+- **Depreciation run** for a company up to a date (a month or the year): each asset from where its last run stopped
+  (or its put-to-use date) to the date or its disposal, by its class's method and life, day by day (a year of 365
+  days), never below the residual value; posted as one journal: depreciation Dr (on each asset's project), the asset's
+  ledger Cr. A run is undone by reversing its voucher (the assets fall back).
+- **Income Tax depreciation** for a financial year, by block: opening written-down value, additions used 180 days or
+  more (full rate) and fewer (half rate), sales, depreciation and the closing value; reported, not posted.
+- **Transfers** of an asset to another site and project, dated, kept as history; depreciation goes to the project it
+  stood at.
+- **Disposal:** a date and the proceeds (into a bank or from a buyer); depreciation to that date first; posted: the
+  bank or buyer Dr the proceeds, the asset's ledger Cr its book value, the difference to "profit or loss on sale of
+  assets".
+- **Rights:** `accounts.view` sees the register; `accounts.post` registers, runs, transfers and disposes; the admin
+  edits classes.
+- **Tests:** a bill's line capitalised and an opening asset; a run for the year (straight line and WDV, a part year, a
+  transfer mid-year splitting the charge between projects); a run reversed; the tax blocks with a half-rate addition
+  and a sale; a disposal at a gain and one at a loss.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -1023,3 +1102,60 @@ Migration `0043_bank.sql`.
   ₹20,000 not credited = ₹62,353, the statement's balance); a longer file taking only its one new line.
 - A browser test: the mapping saved, a statement imported and refused again, two lines made vouchers, the books and
   the statement agreeing at ₹353.
+
+## Step 8 delivered: statements, year end, Tally export and the exit check
+
+**Journey:**
+- **Statements** (Accounts menu), for a company:
+  - **Profit and loss** for a period and **balance sheet** as at a date in Schedule III's lines, the previous year
+    beside them, as Excel; the profit not yet closed shown within other equity (so the balance sheet balances before
+    and after the close), and a warning if it ever does not balance.
+  - **Cash flow** (indirect method): profit, depreciation added back, each change in working capital, investing,
+    financing, the net change, and cash and bank at the start and end; a warning if the flows do not add up.
+  - **Projects:** each project with income or costs in the period: revenue, costs (by Schedule III line and by cost
+    code), margin and its %, invoiced, received, outstanding.
+  - **Year end** (admin): the financial year and the closing stock; closed once: closing stock posted on 31 March and
+    reversed on 1 April, income and expenses (by project) closed into the profit and loss account, the twelve months
+    locked; the years closed listed.
+  - **Tally:** the accounts mode (admin): the app keeps the books; keeps them and exports to Tally; or Tally keeps them
+    (typed-in vouchers refused, bills, receipts and payments still post). With the export on: **masters** as at a date
+    (groups under Tally's primary groups, ledgers with opening balances, parties with GSTIN, state, PIN and address) and
+    **vouchers** for a period, as Tally Prime's XML import takes them.
+
+**What it posts:** the year end: stock Dr, changes in inventories Cr (and back on 1 April); each income and expense
+ledger closed against the profit and loss account (a `year_end` voucher, left out of the year's P&L).
+
+**Who does what:** `accounts.view` sees the statements and exports; the admin closes a year and sets the mode.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Subcontract and labour is its own line** in the P&L (Schedule III folds it into other expenses; many
+  contractors show it apart), and site expenses fall in other expenses.
+- **[Likely] Investing activities are worked from fixed assets plus depreciation** (the chart writes depreciation off
+  the asset ledger); a separate accumulated depreciation ledger under fixed assets works the same.
+- **[Likely] Closing stock is typed or confirmed at the year end** from the stores' valuation; materials are costed
+  when billed (step 4), so the stock is a year-end adjustment, reversed the next day.
+- **[Likely] The Tally export is two files** (masters, then vouchers), the order Tally imports them in; projects are not
+  sent as Tally cost centres yet.
+- **[Certain] Tally accepting the files is not tested here** (Tally Prime is paid and never used in tests); the first
+  pilot's import is the check (open item).
+
+**API** (under `/api/tenant`): `GET /accounts/statements/profit-and-loss?entityId&from&to`,
+`GET /accounts/statements/balance-sheet?entityId&asOf` (both `format=xlsx`), `GET /accounts/statements/cash-flow`,
+`GET /accounts/statements/projects`; `GET|POST /accounts/year-end`; `GET|PUT /accounts/mode`;
+`GET /accounts/tally/masters?entityId&from`, `GET /accounts/tally/vouchers?entityId&from&to`.
+
+Migration `0044_year_end.sql` (the "Changes in inventories" ledger and role).
+
+**Tests:**
+- 2 API integration tests, every figure by hand: a year (₹10 lakh capital, ₹5 lakh loan, ₹6 lakh plant, ₹3 lakh billed
+  and paid, ₹1 lakh cement part paid, site overheads, depreciation, interest): P&L ₹90,000; balance sheet ₹16,92,000 a
+  side; cash flow ₹2,34,000 + (−₹6,00,000) + ₹15,00,000 = the bank's ₹11,34,000; two projects' P&L. The year closed
+  by the admin (a manager and a worker refused, a second close refused) with ₹25,000 stock: profit ₹1,15,000, the
+  balance sheet ₹17,17,000 a side and balanced, March locked, April's P&L carrying the stock back.
+- **The exit check for 3a** (one integration test): a project's RA bill certified (₹59,000) and paid with TDS; a
+  supplier's bill (₹23,600) and a subcontract bill (₹47,200, TDS ₹400) paid in one ₹70,400 run; GSTR-1 and GSTR-3B for
+  August; the TDS challan and a clean 26Q; a five-line bank statement matched (charges posted in one click) and
+  reconciled to the paisa; the trial balance balanced, P&L (−₹10,059), balance sheet and project P&L agreeing; the Tally
+  export refused until turned on (by the admin only), then masters and all eight vouchers well formed, each balanced;
+  a typed voucher refused once Tally keeps the books.
+- A browser test: three vouchers; the P&L (₹8,000), balance sheet (₹58,000) and cash flow; the year closed.

@@ -621,6 +621,15 @@ export class LedgerService {
     await this.may(claims, 'accounts.post');
     if (!TYPED_IN.includes(v.type)) throw new BadRequestException({ code: 'voucher_type' });
     const db = await this.tenants.forTenant(claims.ten);
+    // In the accounts mode where Tally holds the books (step 8b), vouchers are typed into Tally, not here.
+    const [mode] = await db<{ value: unknown }[]>`
+      SELECT value FROM platform.setting WHERE key = 'accounts.mode'`;
+    if (mode?.value === 'tally')
+      throw new ConflictException({
+        code: 'tally_mode',
+        message:
+          'Tally keeps the books: type the voucher in Tally. Bills, receipts and payments still post here.',
+      });
     const made = await db.begin((tx) => this.post(tx, claims, v)).catch(fromDb);
     return this.voucher(claims, made!.id);
   }

@@ -53,6 +53,7 @@ export const ROLES = {
   stock: { label: 'Stock of materials', key: 'stock' },
   grn_clearing: { label: 'Goods received, not invoiced', key: 'grn_clearing' },
   material_consumption: { label: 'Material consumption', key: 'material_consumption' },
+  inventory_change: { label: 'Changes in inventories (closing stock)', key: 'inventory_change' },
   subcontract_cost: { label: 'Subcontract cost', key: 'subcontract_cost' },
   labour_cess_payable: { label: 'Labour cess payable', key: 'labour_cess_payable' },
   round_off: { label: 'Round off', key: 'round_off' },

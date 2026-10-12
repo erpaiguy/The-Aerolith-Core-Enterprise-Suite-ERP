@@ -164,7 +164,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     tenantB = await newTenant('b@provision.in');
     await post(`/owner/tenants/${tenantB}/provision`, { provider: 'local_postgres' });
     expect(await provisioning().runUntilSettled(tenantB)).toMatchObject({ status: 'ready' });
-  });
+  }, 60_000); // Provisioning runs every tenant migration; the count grows wave by wave.
 
   it('stores only sealed credentials', async () => {
     const s = await secrets(tenantA);
