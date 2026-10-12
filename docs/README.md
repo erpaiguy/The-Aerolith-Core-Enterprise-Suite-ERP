@@ -75,7 +75,7 @@ the least certain and are revised as earlier waves reach pilots.
 | 1 Estimation, Bid/Tender, Documents | [wave1-plan.md](wave1-plan.md) | Built; pilot not yet |
 | 2a Projects and scheduling | [wave2a-plan.md](wave2a-plan.md) | Built; pilot not yet |
 | 2b Procurement, inventory, site reports | [wave2b-plan.md](wave2b-plan.md) | Steps 1-9 built; the exit criterion waits on a pilot site |
-| 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Building: steps 1-2 done |
+| 3 Operations and finance (3a Money, 3b People and equipment, 3c Quality and safety) | [wave3-plan.md](wave3-plan.md) | Building: steps 1-3 done |
 | 4 Control | [wave4-plan.md](wave4-plan.md) | Planned |
 | 5 Document workflow | [wave5-plan.md](wave5-plan.md) | Planned |
 | 6 Growth (completes v1) | [wave6-plan.md](wave6-plan.md) | Planned |
@@ -154,7 +154,8 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 |------|------|--------|
 | 1 | Ledger core: companies, one chart of accounts, the account map, vouchers that always balance (the database refuses anything else), reversals, locked months, opening balances from Excel, day book, ledger, trial balance | **Done** |
 | 2 | Client RA bills: contract terms (GST, retention to a cap, the mobilisation advance and its recovery, CPWD-style escalation); bills from the measurement book less the last certified bill; submitted under the approval rules; certified for less; a tax invoice posted on certification | **Done** |
-| 3 | Receivables | Next |
-| 4-8 | Payables, subcontract bills, GST and TDS, bank, Tally and statements | |
+| 3 | Receivables: client receipts with TDS and deductions, allocated to certified bills, retention released and advances; cancelled by reversal; ageing as at a date | **Done** |
+| 4 | Vendor bills and payables | Next |
+| 5-8 | Subcontract bills, GST and TDS, bank, Tally and statements | |
 | 9-13 | Fixed assets, equipment, HR, payroll, labour contractors | |
 | 14-15 | Quality, safety | |

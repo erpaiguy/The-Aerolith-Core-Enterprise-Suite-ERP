@@ -139,4 +139,30 @@ test('an RA bill from the measurement book, certified for less and posted', asyn
   await expect(lines.getByRole('row').filter({ hasText: 'Contract revenue' })).toContainText(
     '4,000.00',
   );
+
+  // 6. The client pays ₹4,440 into cash and deducts ₹80 TDS: ₹4,520 settled, the bill in full.
+  await nav('Receivables');
+  await expect(page.getByRole('rowgroup', { name: 'Bills outstanding' })).toContainText(
+    '₹4,520.00',
+  );
+  await page.getByRole('link', { name: 'Record a receipt' }).click();
+  const receipt = page.getByRole('form', { name: 'Receipt' });
+  await receipt.getByLabel('Client').selectOption({ label: 'Public Works Division, Washim' });
+  await receipt.getByLabel('Into').selectOption({ label: 'A4001 Cash in hand' });
+  await receipt.getByLabel('Amount received ₹').fill('4440');
+  await receipt.getByLabel('TDS deducted ₹').fill('80');
+  await receipt.getByRole('button', { name: 'Oldest bills first' }).click();
+  await expect(receipt.getByLabel('Allocation')).toContainText(
+    'Settles ₹4,520.00; allocated ₹4,520.00',
+  );
+  await receipt.getByRole('button', { name: 'Record the receipt' }).click();
+  await page.waitForURL(/\/accounts\/client-receipts\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole('rowgroup', { name: 'Allocations' })).toContainText('₹4,520.00');
+  await nav('Receivables');
+  // Nothing outstanding on the bill; the ₹200 retention is still held.
+  await expect(page.getByRole('rowgroup', { name: 'Bills outstanding' })).toHaveCount(0);
+  await expect(
+    page.getByRole('rowgroup', { name: 'Receivables by client' }).getByRole('row').first(),
+  ).toContainText('₹200.00');
+  await shot(page, 'client-bill-02-received');
 });

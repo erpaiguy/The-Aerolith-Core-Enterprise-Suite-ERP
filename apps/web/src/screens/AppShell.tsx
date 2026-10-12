@@ -12,6 +12,7 @@ import {
   BookOpen,
   CalendarCheck,
   CheckCheck,
+  HandCoins,
   Landmark,
   ListTree,
   ReceiptText,
@@ -232,6 +233,9 @@ export function AppShell() {
                 </div>
                 <NavItem to="/accounts/vouchers" icon={<ReceiptText className="size-4" />}>
                   Vouchers
+                </NavItem>
+                <NavItem to="/accounts/receivables" icon={<HandCoins className="size-4" />}>
+                  Receivables
                 </NavItem>
                 <NavItem to="/accounts/trial-balance" icon={<Scale className="size-4" />}>
                   Trial balance

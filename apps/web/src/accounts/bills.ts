@@ -107,6 +107,7 @@ export interface ClientBill {
     amount: string;
     account: { id: string; code: string; name: string };
   }[];
+  receipts: { id: string; receivedOn: string; amount: string; voucher: string }[];
   approval: { id: string; status: string } | null;
   mayEdit: boolean;
   maySubmit: boolean;

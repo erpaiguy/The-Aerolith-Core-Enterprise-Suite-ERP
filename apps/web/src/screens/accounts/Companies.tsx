@@ -34,7 +34,7 @@ export function CompaniesScreen() {
         actions={
           mayEdit &&
           editing !== 'new' && (
-            <Button onClick={() => setEditing('new')}>
+            <Button type="button" onClick={() => setEditing('new')}>
               <Plus className="size-4" aria-hidden /> Add a company
             </Button>
           )
@@ -77,6 +77,7 @@ export function CompaniesScreen() {
                   <td className="text-right">
                     {mayEdit && (
                       <Button
+                        type="button"
                         variant="ghost"
                         onClick={() => setEditing(c.id)}
                         aria-label={`Edit ${c.name}`}
@@ -175,7 +176,7 @@ function CompanyForm({ company, onClose }: { company?: Company; onClose: () => v
           <Button type="submit" busy={busy}>
             {company ? 'Save' : 'Add company'}
           </Button>
-          <Button variant="ghost" onClick={onClose}>
+          <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
         </div>

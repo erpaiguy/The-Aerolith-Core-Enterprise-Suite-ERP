@@ -154,7 +154,7 @@ function Drawings({ projectId }: { projectId: string }) {
         actions={
           mayEdit &&
           !adding && (
-            <Button variant="secondary" onClick={() => setAdding(true)}>
+            <Button type="button" variant="secondary" onClick={() => setAdding(true)}>
               <Plus className="size-4" aria-hidden /> Add a drawing
             </Button>
           )
@@ -298,7 +298,7 @@ function NewDrawing({
         <Button type="submit" busy={busy}>
           Add drawing
         </Button>
-        <Button variant="ghost" onClick={() => onDone(null)}>
+        <Button type="button" variant="ghost" onClick={() => onDone(null)}>
           Cancel
         </Button>
       </div>
@@ -361,6 +361,7 @@ function DrawingCard({ drawingId, onChanged }: { drawingId: string; onChanged: (
                   <td>
                     {r.versionNo && (
                       <Button
+                        type="button"
                         variant="ghost"
                         aria-label={`Download revision ${r.revision}`}
                         onClick={() => get(r.versionNo)}

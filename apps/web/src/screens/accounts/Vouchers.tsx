@@ -429,6 +429,7 @@ export function NewVoucherScreen() {
                         }
                       />
                       <Button
+                        type="button"
                         variant="ghost"
                         aria-label={`Remove line ${i + 1}`}
                         disabled={lines.length <= 2}
@@ -463,6 +464,7 @@ export function NewVoucherScreen() {
                   );
                 })}
                 <Button
+                  type="button"
                   variant="secondary"
                   onClick={() =>
                     setLines((ls) => [...ls, blank(Math.max(...ls.map((x) => x.key)) + 1)])
@@ -583,7 +585,7 @@ export function VoucherScreen({ voucherId }: { voucherId: string }) {
         actions={
           x.mayReverse &&
           !reversing && (
-            <Button variant="secondary" onClick={() => setReversing(true)}>
+            <Button type="button" variant="secondary" onClick={() => setReversing(true)}>
               <Undo2 className="size-4" aria-hidden /> Reverse
             </Button>
           )
@@ -620,7 +622,7 @@ export function VoucherScreen({ voucherId }: { voucherId: string }) {
               <Button type="submit" busy={busy}>
                 Reverse
               </Button>
-              <Button variant="ghost" onClick={() => setReversing(false)}>
+              <Button type="button" variant="ghost" onClick={() => setReversing(false)}>
                 Keep it
               </Button>
             </div>

@@ -438,11 +438,18 @@ export class ClientBillService implements OnModuleInit {
       JOIN platform.entity e ON e.id = b.entity_id LEFT JOIN platform.party c ON c.id = p.client_id
       WHERE b.id = ${id}`;
     const working = b.status === 'draft' ? await this.figures(db, b, false) : null;
+    const receipts = await db<
+      { id: string; receivedOn: string; amount: string; voucher: string }[]
+    >`
+      SELECT r.id, to_char(r.received_on, 'YYYY-MM-DD') AS "receivedOn", a.amount::text AS amount, v.number AS voucher
+      FROM acc.client_receipt_alloc a JOIN acc.client_receipt r ON r.id = a.receipt_id AND r.status = 'posted'
+      JOIN acc.voucher v ON v.id = r.voucher_id WHERE a.bill_id = ${id} ORDER BY r.received_on`;
     return {
       ...h!,
       lines: await this.lines(db, id),
       deductions: await this.deductions(db, id),
       figures: working,
+      receipts,
       approval: await this.approvals.latestFor(db, claims, CLIENT_BILL, id),
       mayEdit: may && b.status === 'draft',
       maySubmit: may && b.status === 'draft',

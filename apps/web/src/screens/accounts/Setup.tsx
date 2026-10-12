@@ -120,6 +120,7 @@ function Periods({ entityId }: { entityId: string }) {
                 <td className="text-right">
                   {p.data.mayEdit && (
                     <Button
+                      type="button"
                       variant="ghost"
                       busy={busy === m.month}
                       aria-label={`${m.lockedAt ? 'Reopen' : 'Lock'} ${MONTH.format(new Date(`${m.month}T00:00:00Z`))}`}
@@ -271,7 +272,7 @@ function Opening({ entityId }: { entityId: string }) {
                   {check.balanced ? '.' : ' — the two sides must agree.'}
                 </p>
                 {!check.problems.length && check.balanced && file && (
-                  <Button busy={busy} onClick={() => void send(file, true)}>
+                  <Button type="button" busy={busy} onClick={() => void send(file, true)}>
                     <Upload className="size-4" aria-hidden /> Post the opening balances
                   </Button>
                 )}

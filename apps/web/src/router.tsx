@@ -60,6 +60,11 @@ import {
 import { ProjectDocumentsScreen } from './screens/ProjectDocuments';
 import { ChartScreen } from './screens/accounts/Chart';
 import { ClientBillScreen } from './screens/accounts/ClientBill';
+import {
+  ClientReceiptScreen,
+  NewClientReceiptScreen,
+  ReceivablesScreen,
+} from './screens/accounts/Receivables';
 import { CompaniesScreen } from './screens/accounts/Companies';
 import { DayBookScreen, LedgerScreen, TrialBalanceScreen } from './screens/accounts/Reports';
 import { BooksSetupScreen } from './screens/accounts/Setup';
@@ -273,6 +278,14 @@ const clientBillRoute = createRoute({
     return <ClientBillScreen key={billId} billId={billId} />;
   },
 });
+const clientReceiptRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/accounts/client-receipts/$receiptId',
+  component: function ClientReceiptPage() {
+    const { receiptId } = clientReceiptRoute.useParams();
+    return <ClientReceiptScreen key={receiptId} receiptId={receiptId} />;
+  },
+});
 const voucherRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/accounts/vouchers/$voucherId',
@@ -465,6 +478,17 @@ const routeTree = rootRoute.addChildren([
     voucherRoute,
     ledgerRoute,
     clientBillRoute,
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/receivables',
+      component: ReceivablesScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/client-receipts/new',
+      component: NewClientReceiptScreen,
+    }),
+    clientReceiptRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/accounts/trial-balance',

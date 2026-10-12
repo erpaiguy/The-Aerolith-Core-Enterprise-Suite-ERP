@@ -521,3 +521,48 @@ Migration `0037_client_bills.sql`.
   ₹5,900 with GST and ₹5,650 net, submitted; certified for 40 cum (net ₹4,520, ₹1,130 less) and its voucher.
 
 **For the CA review:** the posting on certification, tax invoice timing, and the escalation formula.
+
+## Step 3 delivered: receivables
+
+**Journey:**
+- **Receivables** (Accounts menu), for a company as at a date: each client's outstanding by age (0-30, 31-60, 61-90,
+  over 90 days from the invoice date), retention held and mobilisation advance still to recover; the bills
+  outstanding with what they received; the receipts; as Excel.
+- **Record a receipt:** the client, the date, the bank or cash ledger, the amount received, the TDS the client deducted,
+  other deductions (each to its ledger), the UTR or cheque number. The client's open items are listed: each certified
+  bill with what is outstanding, each project's retention held, and its mobilisation advance. **Oldest bills first**
+  fills the bills in invoice order; the screen shows what is settled and what is still to allocate, and records only
+  when they agree.
+- **A receipt's page** shows what it settled and its voucher; **Cancel the receipt** (with a reason) reverses the
+  voucher and opens the bills again. A bill's page lists what it has received and what is outstanding.
+
+**What it posts:** a receipt voucher: the bank Dr the amount, TDS receivable Dr the TDS, each deduction's ledger Dr; the
+client Cr each bill's share (with the bill's project), retention receivable Cr the retention released, mobilisation
+advance received Cr the advance (with the project).
+
+**Who does what:** `accounts.post` records and cancels; `accounts.view` reads.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] Every rupee settled is allocated** (received + TDS + deductions = allocations); unallocated money on
+  account waits for a later step if pilots need it.
+- **[Likely] A cancellation is dated when it is made,** like any reversal.
+- **[Likely] An advance can be received for any amount** on a project of the client; recovery is by the bills (step 2).
+- **[Certain] Interest on late payment is not calculated,** as planned; 26AS matching is step 6.
+
+**API** (under `/api/tenant`): `GET /accounts/open-items?entityId&partyId`; `GET|POST /accounts/client-receipts`;
+`GET /accounts/client-receipts/:id`, `POST /accounts/client-receipts/:id/cancel`;
+`GET /accounts/receivables?entityId&asOf` (`format=xlsx`). A client bill now returns its `receipts`. Migration
+`0038_client_receipts.sql`.
+
+**Tests:**
+- 2 API integration tests, by hand: a ₹20,000 advance; RA 1 (net ₹14,420) and RA 2 (net ₹21,630) certified; ₹30,000
+  received with ₹700 TDS settling RA 1 in full and RA 2 by ₹16,280 (refused: more than RA 1 owes, an unallocated
+  amount, a worker); the voucher's lines; retention: ₹2,000 refused against ₹1,750 held, ₹1,000 released; as at 30
+  September RA 2 owes ₹5,350 at 51 days, retention ₹750 held, ₹16,500 of advance to recover; as at 15 August ₹36,050;
+  the project's trial balance; the payment cancelled and both bills owed again (61-90 and 31-60 days).
+- The browser test (with step 2): ₹4,440 received with ₹80 TDS settles the certified bill, oldest first; nothing
+  outstanding, ₹200 retention still held.
+
+**Also:** buttons in the forms added since Wave 2b that are not the form's own submit (add a line, remove, cancel,
+oldest first) no longer submit the form.
+

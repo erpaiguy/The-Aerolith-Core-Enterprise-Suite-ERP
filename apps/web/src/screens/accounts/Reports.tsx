@@ -28,6 +28,7 @@ function Excel({ url }: { url: string }) {
   return (
     <span className="inline-flex items-center gap-2">
       <Button
+        type="button"
         variant="secondary"
         busy={busy}
         onClick={() => {

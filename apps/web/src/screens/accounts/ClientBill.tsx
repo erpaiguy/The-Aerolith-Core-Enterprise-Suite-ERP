@@ -139,14 +139,15 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
         }
         actions={
           <div className="flex flex-wrap gap-2 print:hidden">
-            <Button variant="secondary" onClick={excel}>
+            <Button type="button" variant="secondary" onClick={excel}>
               <FileSpreadsheet className="size-4" aria-hidden /> Excel
             </Button>
-            <Button variant="secondary" onClick={() => window.print()}>
+            <Button type="button" variant="secondary" onClick={() => window.print()}>
               <Printer className="size-4" aria-hidden /> Print
             </Button>
             {b.mayCancel && (
               <Button
+                type="button"
                 variant="ghost"
                 busy={busy === 'cancel'}
                 onClick={() => {
@@ -347,6 +348,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
                     ))}
                   </Select>
                   <Button
+                    type="button"
                     variant="ghost"
                     aria-label={`Remove deduction ${i + 1}`}
                     onClick={() => setDeductions(deductions.filter((_, j) => j !== i))}
@@ -356,6 +358,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
                 </fieldset>
               ))}
               <Button
+                type="button"
                 variant="secondary"
                 onClick={() =>
                   setDeductions([...deductions, { description: '', amount: '', accountId: '' }])
@@ -365,10 +368,16 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button busy={busy === 'save'} disabled={!dirty} onClick={() => void save()}>
+              <Button
+                type="button"
+                busy={busy === 'save'}
+                disabled={!dirty}
+                onClick={() => void save()}
+              >
                 Save and work out
               </Button>
               <Button
+                type="button"
                 variant="secondary"
                 busy={busy === 'refresh'}
                 onClick={() => {
@@ -383,6 +392,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
                 Take the measurement book again
               </Button>
               <Button
+                type="button"
                 variant="secondary"
                 busy={busy === 'submit'}
                 disabled={dirty}
@@ -465,6 +475,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
             ) : null
           }
           voucherId={b.voucherId}
+          receipts={b.receipts}
         />
       )}
     </div>
@@ -477,12 +488,14 @@ function Abstract({
   others,
   extra,
   voucherId,
+  receipts = [],
 }: {
   f: Figures;
   title: string;
   others: { label: string; amount: string }[];
   extra: ReactNode;
   voucherId: string | null;
+  receipts?: { id: string; receivedOn: string; amount: string; voucher: string }[];
 }) {
   const row = (label: string, v: string, strong = false, show = n(v) !== 0) =>
     show && (
@@ -513,6 +526,25 @@ function Abstract({
         {n(f.advanceLeftAfter) > 0 && (
           <p className="text-xs text-fg-muted">
             Advance still to recover: {rupees(f.advanceLeftAfter)}
+          </p>
+        )}
+        {receipts.length > 0 && (
+          <p className="text-sm" aria-label="Received against the bill">
+            Received:{' '}
+            {receipts.map((r, i) => (
+              <span key={r.id}>
+                {i > 0 && '; '}
+                <Link
+                  to="/accounts/client-receipts/$receiptId"
+                  params={{ receiptId: r.id }}
+                  className="text-accent hover:underline"
+                >
+                  {rupees(r.amount)} on {shortDate(r.receivedOn)}
+                </Link>
+              </span>
+            ))}{' '}
+            — outstanding{' '}
+            {rupees((n(f.net) - receipts.reduce((s, r) => s + n(r.amount), 0)).toFixed(2))}
           </p>
         )}
         {voucherId && (

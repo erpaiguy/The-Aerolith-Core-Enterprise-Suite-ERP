@@ -137,7 +137,7 @@ function Report<T>({
     <Card
       title={title}
       actions={
-        <Button variant="secondary" busy={busy} onClick={() => void excel()}>
+        <Button type="button" variant="secondary" busy={busy} onClick={() => void excel()}>
           <FileSpreadsheet className="size-4" aria-hidden /> Excel
         </Button>
       }

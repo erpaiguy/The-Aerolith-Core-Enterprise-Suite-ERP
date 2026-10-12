@@ -60,7 +60,7 @@ export function ChartScreen() {
               actions={
                 chart.data.mayEdit &&
                 editing !== 'new' && (
-                  <Button variant="secondary" onClick={() => setEditing('new')}>
+                  <Button type="button" variant="secondary" onClick={() => setEditing('new')}>
                     <Plus className="size-4" aria-hidden /> Add an account
                   </Button>
                 )
@@ -103,6 +103,7 @@ export function ChartScreen() {
                       <td className="text-right">
                         {chart.data.mayEdit && a.parentId && editing !== a.id && (
                           <Button
+                            type="button"
                             variant="ghost"
                             onClick={() => setEditing(a.id)}
                             aria-label={`Edit ${a.name}`}
@@ -254,7 +255,7 @@ function AccountForm({
         <Button type="submit" busy={busy}>
           {account ? 'Save' : 'Add'}
         </Button>
-        <Button variant="ghost" onClick={onCancel}>
+        <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </div>

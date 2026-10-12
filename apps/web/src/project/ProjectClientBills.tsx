@@ -61,11 +61,11 @@ export function ProjectClientBills({ project: p }: { project: ProjectDetail }) {
       actions={
         d.mayBill && (
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setEditingTerms(!editingTerms)}>
+            <Button type="button" variant="ghost" onClick={() => setEditingTerms(!editingTerms)}>
               <Settings2 className="size-4" aria-hidden /> Contract terms
             </Button>
             {!making && (
-              <Button variant="secondary" onClick={() => setMaking(true)}>
+              <Button type="button" variant="secondary" onClick={() => setMaking(true)}>
                 <Plus className="size-4" aria-hidden /> New RA bill
               </Button>
             )}
@@ -126,7 +126,7 @@ export function ProjectClientBills({ project: p }: { project: ProjectDetail }) {
             <Button type="submit" busy={busy}>
               Make the bill
             </Button>
-            <Button variant="ghost" onClick={() => setMaking(false)}>
+            <Button type="button" variant="ghost" onClick={() => setMaking(false)}>
               Cancel
             </Button>
           </form>
@@ -308,6 +308,7 @@ function TermsForm({
               onChange={(e) => setComponent(i, { baseIndex: e.target.value })}
             />
             <Button
+              type="button"
               variant="ghost"
               aria-label={`Remove component ${i + 1}`}
               onClick={() =>
@@ -322,6 +323,7 @@ function TermsForm({
           </fieldset>
         ))}
         <Button
+          type="button"
           variant="secondary"
           onClick={() =>
             setEscalation({
@@ -340,7 +342,7 @@ function TermsForm({
         <Button type="submit" busy={busy}>
           Save the terms
         </Button>
-        <Button variant="ghost" onClick={onCancel}>
+        <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </div>
