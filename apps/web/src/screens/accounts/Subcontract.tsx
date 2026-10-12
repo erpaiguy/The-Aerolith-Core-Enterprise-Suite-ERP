@@ -120,6 +120,8 @@ interface ScBill {
   certified: Figures | null;
   figures: Figures | null;
   problem: string | null;
+  /** A labour contractor's months not yet verified as paid (step 13). */
+  unverifiedWages?: { month: string; site: string; status: string }[];
   rowVersion: number;
   vendorBill: { id: string; billNo: string; voucher: string | null } | null;
   project: { id: string; number: string; name: string };
@@ -598,6 +600,13 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
         </Alert>
       )}
       {b.problem && <Alert tone="warning">{b.problem}</Alert>}
+      {(b.unverifiedWages?.length ?? 0) > 0 && (
+        <Alert tone="warning">
+          Wages not verified as paid:{' '}
+          {b.unverifiedWages!.map((x) => `${x.month} at ${x.site} (${x.status})`).join('; ')}. Check
+          before certifying.
+        </Alert>
+      )}
       {error && <Alert tone="danger">{error}</Alert>}
       <Card title="Items">
         <Table minWidth="48rem">

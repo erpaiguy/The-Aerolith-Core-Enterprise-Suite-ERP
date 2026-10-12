@@ -1617,3 +1617,54 @@ Migration `0049_payroll_settlement.sql` (the gratuity rule, `hr.employee.fixed_t
 
 **CI:** the Windows installer (~100 MB) is now kept as an artifact from `main` only, for three days, so branch pushes
 no longer fill the account's artifact storage (runs 89–90 failed only on that upload).
+
+## Step 13 delivered: labour contractors
+
+**Journey:**
+- **Contract labour** (People menu, `labour.manage`): **contractors** (a supplier with its CLRA licence: number, workers
+  allowed, valid to; BOCW registration), flagged when the licence lapses within 30 days or has lapsed, or when more
+  workers are on the books than it allows; a contractor's **workers** (name, father's or husband's name, sex, trade,
+  skill, daily wage, joined; Aadhaar only as its last four digits with consent); its **wage sheets**; **minimum
+  wages** (state, skill, zone, from a date: none filled in, the tenant enters its notification); **BOCW cess** for a
+  project (the cost booked, 1% due, deducted from subcontractors, paid, balance) and a challan paid from the bank.
+- **Labour muster** (the project's team with `attendance.mark`, or `labour.manage`): a site, a contractor and a day;
+  each worker present, half day or absent with overtime hours; a worker already on another site that day is refused.
+- **A wage sheet** (a contractor, site and month from the musters): each worker's days, wages, overtime at twice the
+  ordinary rate (the day's wage ÷ 8), gross and the minimum wage for their skill, with any shortfall; **passing** is
+  refused while anyone is paid below the minimum; **verified** with the contractor's proof of payment (date,
+  reference, mode); the **registers** (Excel: register of workmen, muster roll, register of wages). Once passed, the
+  month's musters are closed.
+- The **daily site report** shows the day's muster by contractor and trade; a **subcontract bill** warns of the
+  contractor's months not yet verified as paid.
+
+**What it posts:** only cess paid: labour cess payable Dr (on the project), bank Cr.
+
+**Decisions made while building (change any you disagree with):**
+- **[Certain] No minimum wage is seeded:** rates change twice a year by state, zone and skill; a figure typed from
+  memory would be wrong. With none on record, the wage sheet says so instead of passing silently as compliant.
+- **[Likely] The highest zone's rate in force on the month's last day** is the minimum (the safe reading, as a site
+  is not tied to a zone yet).
+- **[Likely] Overtime at twice the ordinary rate on an eight-hour day.**
+- **[Guessing] The registers follow the central CLRA rules' Forms XIII, XVI and XVII;** states number and lay them
+  out differently.
+- **[Likely] Cess is 1% of the cost of construction** booked to the project (its expense ledgers, to date); cess
+  deducted from subcontract bills is shown beside it, not netted.
+- **[Likely] Contractors' deductions (their PF, ESI, advances) are not taken on the sheet;** what the principal
+  employer checks is the gross against the minimum wage and the proof of payment.
+
+**API** (under `/api/tenant/labour`): `GET contractors`, `PUT contractors/:partyId`,
+`GET|POST contractors/:partyId/workers`, `PUT workers/:id`, `GET contractors/:partyId/wage-sheets`,
+`GET|POST min-wages`, `GET|POST sites/:id/muster`, `POST wage-sheets`, `GET wage-sheets/:id`,
+`POST wage-sheets/:id/work|pass|verify`, `GET wage-sheets/:id/registers`, `GET|POST projects/:id/cess`.
+
+Migration `0050_labour.sql` (schema `lab`).
+
+**Tests:**
+- 2 unit tests: a month with half days and overtime against the minimum wage (₹10,125, ₹1,125 short); a licence's
+  days left.
+- 4 API integration tests, every figure by hand: a contractor with three workers on a licence for two, 20 days from
+  its end; the muster (a stranger refused, a day to come refused, a worker on two sites refused), the daily report's
+  counts; September's sheet (₹4,125 with overtime, ₹1,575 for Sunita ₹175 below the minimum, ₹2,080; ₹7,780) refused,
+  her rate raised, worked again (₹7,955), passed, verified, the month closed; the registers' rows; ₹10 lakh of cost,
+  ₹10,000 cess due, ₹6,000 paid, ₹4,000 balance.
+- A browser test: a contractor, a worker, a minimum wage, a day mustered, the sheet refused below the minimum.

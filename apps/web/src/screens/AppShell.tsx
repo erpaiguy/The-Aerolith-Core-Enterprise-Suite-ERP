@@ -5,6 +5,7 @@ import {
   Bell,
   ClipboardCheck,
   Fingerprint,
+  HardHat,
   IdCard,
   ChartColumn,
   LayoutDashboard,
@@ -38,6 +39,7 @@ import {
   ScrollText,
   Tags,
   Users,
+  UsersRound,
   Wallet,
   Warehouse,
 } from 'lucide-react';
@@ -112,6 +114,7 @@ export function AppShell() {
   const mayPeople = usePermission('hr.view');
   const mayMark = usePermission('attendance.mark');
   const mayPayroll = usePermission('payroll.run');
+  const mayLabour = usePermission('labour.manage');
   const inbox = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.request<Inbox>('/api/tenant/inbox'),
@@ -257,6 +260,16 @@ export function AppShell() {
             {mayPayroll && (
               <NavItem to="/payroll" icon={<Banknote className="size-4" />}>
                 Payroll
+              </NavItem>
+            )}
+            {mayLabour && (
+              <NavItem to="/labour" icon={<HardHat className="size-4" />}>
+                Contract labour
+              </NavItem>
+            )}
+            {(mayLabour || mayMark) && (
+              <NavItem to="/labour/muster" icon={<UsersRound className="size-4" />}>
+                Labour muster
               </NavItem>
             )}
             {mayBooks && (

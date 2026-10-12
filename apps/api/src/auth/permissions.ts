@@ -101,6 +101,11 @@ export const PERMISSIONS = {
     label: 'Run payroll: rules, pay components, salaries, the monthly run, posting and paying it',
     defaults: { manager: false, worker: false },
   },
+  'labour.manage': {
+    label:
+      'Keep labour contractors and their workers, minimum wages, wage sheets (pass and verify) and BOCW cess',
+    defaults: { manager: true, worker: false },
+  },
   'attendance.mark': {
     label: "Mark a site's attendance register (as the project's lead or member)",
     defaults: { manager: true, worker: true },

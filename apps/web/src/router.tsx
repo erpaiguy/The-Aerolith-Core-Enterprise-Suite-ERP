@@ -71,6 +71,7 @@ import { EmployeeScreen, SiteRegisterScreen } from './screens/hr/Employee';
 import { LeaveScreen, MyAttendanceScreen } from './screens/hr/MyAttendance';
 import { PeopleScreen } from './screens/hr/People';
 import { PayrollRunScreen, PayrollScreen, PayslipScreen } from './screens/payroll/Payroll';
+import { LabourScreen, MusterScreen, WageSheetScreen } from './screens/labour/Labour';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -336,6 +337,14 @@ const payslipRoute = createRoute({
     return <PayslipScreen key={`${runId}-${employeeId}`} runId={runId} employeeId={employeeId} />;
   },
 });
+const wageSheetRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/labour/wage-sheets/$sheetId',
+  component: function WageSheetPage() {
+    const { sheetId } = wageSheetRoute.useParams();
+    return <WageSheetScreen key={sheetId} sheetId={sheetId} />;
+  },
+});
 const clientReceiptRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/accounts/client-receipts/$receiptId',
@@ -557,6 +566,7 @@ const routeTree = rootRoute.addChildren([
     leaveRoute,
     payrollRunRoute,
     payslipRoute,
+    wageSheetRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/accounts/receivables',
@@ -634,6 +644,16 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/payroll',
       component: PayrollScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/labour',
+      component: LabourScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/labour/muster',
+      component: MusterScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

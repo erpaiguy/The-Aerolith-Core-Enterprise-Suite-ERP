@@ -316,6 +316,19 @@ function ReportView({ initial }: { initial: DailyReport }) {
           </ul>
         </Card>
       )}
+      {(r.muster?.length ?? 0) > 0 && (
+        <Card title="Contract labour mustered">
+          <ul className="space-y-1 text-sm" aria-label="Contract labour mustered">
+            {r.muster!.map((m) => (
+              <li key={`${m.contractor}-${m.trade}`}>
+                {m.contractor}, {m.trade}: {m.present} present
+                {m.halfDays > 0 && `, ${m.halfDays} half day`}
+                {Number(m.overtimeHours) > 0 && `, ${Number(m.overtimeHours)} hours' overtime`}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card title="Received today">
         {r.received.length === 0 ? (
           <p className="text-sm text-fg-muted">No goods received at this site on this day.</p>

@@ -121,6 +121,14 @@ export interface DailyReport {
     breakdownHours: string;
     operator: string;
   }[];
+  /** The contract labour mustered at the site that day (docs/wave3-plan.md step 13). */
+  muster?: {
+    contractor: string;
+    trade: string;
+    present: number;
+    halfDays: number;
+    overtimeHours: string;
+  }[];
   work: WorkLine[];
   hindrances: HindranceLine[];
   photos: { id: string; caption: string; mime: string; size: number; createdAt: string }[];

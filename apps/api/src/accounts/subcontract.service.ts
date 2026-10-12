@@ -17,6 +17,7 @@ import { PermissionsService } from '../auth/permissions.js';
 import { ProjectService } from '../project/project.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, div, fmt, mul, type Dec } from '../rates/decimal.js';
+import { LabourService } from '../labour/labour.service.js';
 import { audit } from '../tender/tender-records.js';
 import { fromDb, fyOf, isRole, type Role } from './accounts-rules.js';
 import { LedgerService, type LineInput } from './ledger.service.js';
@@ -613,6 +614,11 @@ export class SubcontractService implements OnModuleInit {
       figures: working,
       problem,
       approval: await this.approvals.latestFor(db, claims, SUBCONTRACT_BILL, id),
+      // A labour contractor's months to the bill's date whose wages are not verified as paid (step 13).
+      unverifiedWages:
+        b.status === 'certified'
+          ? []
+          : await LabourService.unverified(db, o.party_id, String((h as { upto: string }).upto)),
       mayEdit: may && b.status === 'draft',
       maySubmit: may && b.status === 'draft' && !problem,
       mayCancel: may && ['draft', 'pending'].includes(b.status),

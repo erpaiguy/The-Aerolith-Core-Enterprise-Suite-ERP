@@ -20,6 +20,7 @@ import { FileTooLargeError } from '../documents/file-store.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit } from '../tender/tender-records.js';
 import { ProjectService } from './project.service.js';
+import { LabourService } from '../labour/labour.service.js';
 
 type Db = Sql | TransactionSql;
 export type Weather = 'clear' | 'cloudy' | 'rain' | 'heavy_rain' | 'storm';
@@ -68,10 +69,10 @@ interface ReportRow {
   row_version: number;
 }
 
-const PHOTO_MAX = 8 * 1024 * 1024;
+export const PHOTO_MAX = 8 * 1024 * 1024;
 const MISSING_DAYS = 14;
 /** Picture formats by their first bytes. */
-function imageType(head: Buffer): 'image/jpeg' | 'image/png' | 'image/webp' | null {
+export function imageType(head: Buffer): 'image/jpeg' | 'image/png' | 'image/webp' | null {
   if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'image/jpeg';
   if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
     return 'image/png';
@@ -502,12 +503,15 @@ export class DailyReportService {
         l.idle_reason AS "idleReason", l.breakdown_hours::text AS "breakdownHours", l.operator
       FROM eqp.log l JOIN eqp.equipment e ON e.id = l.equipment_id
       WHERE l.site_id = ${r.site_id} AND l.log_date = ${r.report_date} ORDER BY e.code`;
+    // The contract labour mustered at the site that day (docs/wave3-plan.md step 13).
+    const muster = await LabourService.dayCounts(db, r.site_id, r.report_date);
     const draft = r.status === 'draft';
     return {
       ...head!,
       manpower,
       equipment,
       equipmentLogs,
+      muster,
       work,
       hindrances,
       photos,
