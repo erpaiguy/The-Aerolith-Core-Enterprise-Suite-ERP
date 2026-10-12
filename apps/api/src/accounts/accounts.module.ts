@@ -3,6 +3,8 @@ import { ApprovalModule } from '../approvals/approval.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { ProjectModule } from '../project/project.module.js';
 import { ProvisioningModule } from '../provisioning/provisioning.module.js';
+import { AssetController } from './assets.controller.js';
+import { AssetService } from './assets.service.js';
 import { BankController } from './bank.controller.js';
 import { BankService } from './bank.service.js';
 import { ClientBillController } from './client-bill.controller.js';
@@ -38,6 +40,7 @@ import { SubcontractService } from './subcontract.service.js';
     BankController,
     StatementController,
     TallyController,
+    AssetController,
   ],
   providers: [
     LedgerService,
@@ -50,6 +53,7 @@ import { SubcontractService } from './subcontract.service.js';
     BankService,
     StatementService,
     TallyService,
+    AssetService,
   ],
   exports: [LedgerService],
 })

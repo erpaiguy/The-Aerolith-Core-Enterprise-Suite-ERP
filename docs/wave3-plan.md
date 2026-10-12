@@ -374,8 +374,8 @@ the Income Tax Act's blocks), moved between sites, and sold with its gain or los
   put-to-use dates, cost, the site and project it stands at, a custodian. Registering posts nothing (the bill or the
   opening balances already did).
 - **Depreciation run** for a company up to a date (a month or the year): each asset from where its last run stopped
-  (or its put-to-use date) to the date or its disposal, by its class's method and life, day by day (a year of 365
-  days), never below the residual value; posted as one journal: depreciation Dr (on each asset's project), the asset's
+  (or its put-to-use date) to the date or its disposal, by its class's method and life, day by day (over the days of
+  the financial year), never below the residual value; posted as one journal: depreciation Dr (on each asset's project), the asset's
   ledger Cr. A run is undone by reversing its voucher (the assets fall back).
 - **Income Tax depreciation** for a financial year, by block: opening written-down value, additions used 180 days or
   more (full rate) and fewer (half rate), sales, depreciation and the closing value; reported, not posted.
@@ -1159,3 +1159,46 @@ Migration `0044_year_end.sql` (the "Changes in inventories" ledger and role).
   export refused until turned on (by the admin only), then masters and all eight vouchers well formed, each balanced;
   a typed voucher refused once Tally keeps the books.
 - A browser test: three vouchers; the P&L (₹8,000), balance sheet (₹58,000) and cash flow; the year closed.
+
+## Step 9 delivered: fixed assets
+
+**Journey:**
+- **Fixed assets** (Accounts menu), for a company:
+  - **Register:** each asset's number, name, class, project, cost and book value, disposed ones marked. **Register an
+    asset** from a posted supplier's bill (no more than the bill put on the class's ledger) or from the opening balances
+    (its depreciation to date and tax written-down value); its project. **Move or sell:** a transfer to another project
+    from a date (after its last depreciation), or a disposal for a price into a bank or cash ledger.
+  - **Depreciation:** a run up to a date charges every active asset from where it last stopped (an opening asset from
+    the books' start), split where it moved and where a year starts, posted as one journal; runs listed, the latest
+    reversed with a reason.
+  - **Income Tax depreciation** for a financial year, block by block, worked from the books' first year.
+- Asset classes (six seeded) are the admin's to change through the API (`/accounts/asset-classes`); a screen for them
+  waits for a pilot to ask.
+
+**What it posts:** a run: depreciation Dr by project, each asset's ledger Cr (the chart writes depreciation off the
+asset ledger). A disposal: the bank or buyer Dr the price, the asset's ledger Cr its book value, the gain Cr or the loss
+Dr "profit or loss on sale of assets" (a new seeded ledger, I2003). Registering posts nothing.
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] A part year is by the days of that financial year** (366 when it holds 29 February), so a full year
+  charges exactly the year's depreciation.
+- **[Likely] The WDV rate is 1 − (residual ÷ cost)^(1 ÷ life)** to four places (31.23% for 8 years and 5%).
+- **[Likely] Only the latest run is reversed,** and not once an asset in it is disposed.
+- **[Guessing] The seeded lives and tax rates** (plant 15 years and 15%, construction equipment 12 years, vehicles 8
+  years WDV, furniture 10 years and 10%, office equipment 5 years, computers 3 years and 40%) are the CA's to confirm.
+
+**API** (under `/api/tenant`): `GET|POST /accounts/asset-classes`, `PUT /accounts/asset-classes/:id`;
+`GET|POST /accounts/assets`, `GET /accounts/assets/:id`, `POST /accounts/assets/:id/transfer|dispose`,
+`GET /accounts/assets/tax-depreciation?entityId&fy`; `GET|POST /accounts/depreciation-runs`,
+`POST /accounts/depreciation-runs/:id/reverse`.
+
+Migration `0045_fixed_assets.sql`.
+
+**Tests:**
+- 3 unit tests: straight line split by a transfer (₹2,394.52 and ₹2,342.47 of ₹9,500 a year); WDV across a year end
+  (₹3,12,300 then ₹2,14,768.71); the residual floor; a tax block with a half-rate addition and a sale (₹1,05,000).
+- 3 API integration tests, every figure by hand: a ₹12 lakh excavator from a bill (a worker and an over-bill refused)
+  and a jeep from the opening balances; a year's run of ₹3,21,155.07 (its voucher by project and ledger), refused a
+  second time, reversed and run again; the tax blocks (₹1,80,000 and ₹90,000); the jeep sold at a ₹9,840 gain and the
+  excavator at a ₹2,28,684.93 loss (their vouchers); the run then not reversible and the jeep not movable.
+- A browser test: the jeep registered, a year's ₹2,49,840 run, the jeep sold.

@@ -65,6 +65,7 @@ import { GstScreen } from './screens/accounts/Gst';
 import { TdsScreen } from './screens/accounts/Tds';
 import { BankScreen } from './screens/accounts/Bank';
 import { StatementsScreen } from './screens/accounts/Statements';
+import { AssetsScreen } from './screens/accounts/Assets';
 import {
   ClientReceiptScreen,
   NewClientReceiptScreen,
@@ -562,6 +563,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/accounts/statements',
       component: StatementsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/assets',
+      component: AssetsScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

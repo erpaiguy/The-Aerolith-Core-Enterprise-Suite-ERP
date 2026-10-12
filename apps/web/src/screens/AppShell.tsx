@@ -23,6 +23,7 @@ import {
   PackageCheck,
   ShoppingCart,
   Building2,
+  Truck,
   FileBarChart,
   Contact,
   FileStack,
@@ -251,6 +252,9 @@ export function AppShell() {
                 </NavItem>
                 <NavItem to="/accounts/bank" icon={<Building2 className="size-4" />}>
                   Bank
+                </NavItem>
+                <NavItem to="/accounts/assets" icon={<Truck className="size-4" />}>
+                  Fixed assets
                 </NavItem>
                 <NavItem to="/accounts/statements" icon={<FileBarChart className="size-4" />}>
                   Statements
