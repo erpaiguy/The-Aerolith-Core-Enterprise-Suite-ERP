@@ -228,20 +228,26 @@ export class CashFlowService {
     }
     shares.forEach((v, i) => billNow(v, months[i]!, 'work', `Work in ${months[i]!.slice(0, 7)}`));
 
-    // Out: supplier bills not fully paid, on their due dates (input GST in the bill's month).
+    // Out: supplier bills not fully paid, on their due dates (input GST in the bill's month). A bill's lines say
+    // which projects it is for: each project takes its lines' share of what is owed.
     const vb = await db<
       { bill: string; party: string; due: string; date: string; gst: string; owed: string }[]
     >`
+      WITH share AS (
+        SELECT l.bill_id, sum(l.amount + l.gst) / nullif((SELECT sum(x.amount + x.gst) FROM acc.vendor_bill_line x
+          WHERE x.bill_id = l.bill_id), 0) AS s
+        FROM acc.vendor_bill_line l WHERE coalesce(l.project_id, (SELECT project_id FROM acc.vendor_bill WHERE id = l.bill_id)) = ${projectId}
+        GROUP BY l.bill_id)
       SELECT b.bill_no AS bill, p.name AS party, to_char(b.due_date, 'YYYY-MM-DD') AS due,
-        to_char(b.bill_date, 'YYYY-MM-DD') AS date, (b.cgst + b.sgst + b.igst)::text AS gst,
-        (b.payable
+        to_char(b.bill_date, 'YYYY-MM-DD') AS date, round((b.cgst + b.sgst + b.igst) * sh.s, 2)::text AS gst,
+        round(sh.s * (b.payable
           - coalesce((SELECT sum(l.amount) FROM acc.payment_run_line l JOIN acc.payment_run r ON r.id = l.run_id
               WHERE l.bill_id = b.id AND r.status = 'paid' AND r.paid_on < ${asOf}), 0)
           - coalesce((SELECT sum(a.amount) FROM acc.advance_application a WHERE a.bill_id = b.id AND a.applied_on < ${asOf}), 0)
-          - coalesce((SELECT sum(d.total) FROM acc.debit_note d WHERE d.bill_id = b.id AND d.note_date < ${asOf}), 0))::text
+          - coalesce((SELECT sum(d.total) FROM acc.debit_note d WHERE d.bill_id = b.id AND d.note_date < ${asOf}), 0)), 2)::text
           AS owed
-      FROM acc.vendor_bill b JOIN platform.party p ON p.id = b.party_id
-      WHERE b.project_id = ${projectId} AND b.status = 'posted' AND b.bill_date < ${asOf}`;
+      FROM share sh JOIN acc.vendor_bill b ON b.id = sh.bill_id JOIN platform.party p ON p.id = b.party_id
+      WHERE b.status = 'posted' AND b.bill_date < ${asOf}`;
     for (const b of vb)
       if (cents(b.owed) > 0n)
         flows.push(
@@ -302,10 +308,17 @@ export class CashFlowService {
       WHERE a.project_id = ${projectId} AND r.status = 'posted' AND r.received_on < ${asOf}`;
     for (const r of rec) flows.push(asFlow('received', r.date, cents(r.amount), r.label));
     const paid = await db<{ date: string; amount: string; label: string; kind: string }[]>`
-      SELECT to_char(r.paid_on, 'YYYY-MM-DD') AS date, sum(l.amount)::text AS amount, p.name AS label, 'paid' AS kind
+      SELECT to_char(r.paid_on, 'YYYY-MM-DD') AS date,
+        round(sum(l.amount * CASE WHEN l.kind = 'advance' THEN 1 ELSE coalesce((
+          SELECT sum(x.amount + x.gst) FILTER (WHERE coalesce(x.project_id, b.project_id) = ${projectId})
+            / nullif(sum(x.amount + x.gst), 0)
+          FROM acc.vendor_bill_line x WHERE x.bill_id = l.bill_id), 0) END), 2)::text AS amount,
+        p.name AS label, 'paid' AS kind
       FROM acc.payment_run_line l JOIN acc.payment_run r ON r.id = l.run_id JOIN platform.party p ON p.id = l.party_id
       LEFT JOIN acc.vendor_bill b ON b.id = l.bill_id
-      WHERE coalesce(l.project_id, b.project_id) = ${projectId} AND r.status = 'paid' AND r.paid_on < ${asOf}
+      WHERE r.status = 'paid' AND r.paid_on < ${asOf}
+        AND (CASE WHEN l.kind = 'advance' THEN l.project_id = ${projectId} ELSE EXISTS (SELECT 1 FROM acc.vendor_bill_line x
+          WHERE x.bill_id = l.bill_id AND coalesce(x.project_id, b.project_id) = ${projectId}) END)
       GROUP BY r.paid_on, p.name
       UNION ALL
       SELECT to_char(v.voucher_date, 'YYYY-MM-DD'), round(sum(
@@ -512,8 +525,8 @@ export class CashFlowService {
         { key: 'later', label: 'Later', from: addDays(ps.at(-1)!.to, 1), to: '', actual: false },
       ],
       ...this.table(flows, ps, cents(open!.start)),
-      opening: open!.start,
-      cashNow: open!.now,
+      opening: fromCents(cents(open!.start)),
+      cashNow: fromCents(cents(open!.now)),
       projects: byProject,
       overheadsMonthly: set?.overheads ?? '0.00',
       notes,
