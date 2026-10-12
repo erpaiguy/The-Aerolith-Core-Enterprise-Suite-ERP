@@ -167,5 +167,5 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 12a | Payroll: compliance rules with effective dates, pay components, salaries, the monthly run (PF, ESI, PT, LWF, TDS), approval, posting by project, the bank file, payslips | **Done** |
 | 12b | Payroll: PF ECR, ESI data, Form 16 (Form 130) data, full and final (gratuity, encashment, notice), the 3b exit check | **Done** (practitioner review open) |
 | 13 | Labour contractors: licences, workers, minimum wages as data, the daily muster (in the daily report), wage sheets checked against the minimum wage and verified as paid, CLRA registers, BOCW cess | **Done** |
-| 14 | Quality | Next |
-| 15 | Safety | |
+| 14 | Quality: inspection requests (holding uninspected work from bills), checklists with photos, tests against criteria held as data, NCRs closed by someone else, snags, material approvals an order needs | **Done** |
+| 15 | Safety | Next |

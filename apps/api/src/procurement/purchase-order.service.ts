@@ -30,6 +30,7 @@ import { nextNumber } from '../tender/numbering.js';
 import { orderProgress, receivedByLine } from './receipt-progress.js';
 import { ReceiptService } from './receipt.service.js';
 import { audit } from '../tender/tender-records.js';
+import { QualityService } from '../quality/quality.service.js';
 
 type Db = Sql | TransactionSql;
 export const PURCHASE_ORDER = 'purchase_order';
@@ -413,6 +414,13 @@ export class PurchaseOrderService implements OnModuleInit {
           message: check!.site
             ? "The site has no GST state code: set it on the project's page, so GST can be worked out."
             : 'Say which site it is delivered to: that decides the GST.',
+        });
+      // Items the project buys only in an approved make (step 14).
+      const unapproved = await QualityService.unapprovedMakes(tx, o.project_id, revisionId);
+      if (unapproved.length)
+        throw new ConflictException({
+          code: 'make_not_approved',
+          message: `No approved make yet for ${unapproved.map((u) => `${u.code} ${u.name}`).join(', ')}.`,
         });
       // Not below what has already come (accepted or on hold), nor without a line something came for.
       const got = await receivedByLine(tx, o.id);

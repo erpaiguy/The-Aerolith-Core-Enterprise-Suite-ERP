@@ -237,8 +237,14 @@ export class ClientBillService implements OnModuleInit {
       }[]
     >`
       WITH done AS (
-        SELECT line_key, sum(qty) AS qty FROM proj.measurement
-        WHERE project_id = ${projectId} AND measured_on <= ${upto} GROUP BY line_key
+        -- A project holding uninspected work (step 14) bills only entries an approved inspection covers (and their
+        -- corrections).
+        SELECT line_key, sum(qty) AS qty FROM proj.measurement m
+        WHERE project_id = ${projectId} AND measured_on <= ${upto}
+          AND (NOT (SELECT hold_uninspected FROM proj.project WHERE id = ${projectId}) OR EXISTS (
+            SELECT 1 FROM qa.inspection_measurement x JOIN qa.inspection i ON i.id = x.inspection_id
+            WHERE x.measurement_id = coalesce(m.reverses, m.id) AND i.status IN ('approved', 'approved_with_comments')))
+        GROUP BY line_key
       ), last AS (
         SELECT l.line_key, l.cert_qty FROM acc.client_bill_line l
         WHERE l.bill_id = (SELECT id FROM acc.client_bill WHERE project_id = ${projectId} AND status = 'certified'

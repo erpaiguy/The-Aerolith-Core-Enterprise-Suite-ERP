@@ -1,6 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
+  BadgeCheck,
   Banknote,
   Bell,
   ClipboardCheck,
@@ -240,6 +241,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/procurement-reports" icon={<ClipboardList className="size-4" />}>
               Procurement reports
+            </NavItem>
+            <NavItem to="/quality" icon={<BadgeCheck className="size-4" />}>
+              Quality
             </NavItem>
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               People

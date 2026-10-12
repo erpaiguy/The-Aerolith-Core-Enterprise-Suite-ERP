@@ -588,6 +588,35 @@ criteria and a failure is followed to closure; materials and makes are approved 
   and off; a checklist failed and passed; cubes passing and failing (an NCR raised and closed by another person);
   steel and slump; a snag; a make required and a PO refused, then approved.
 
+## Step 15 in detail (planned before building)
+
+**Goal:** every incident on a site is recorded and investigated to closure; risky work happens only under a valid
+permit; toolbox talks and safety inspections are on record; the project's injury rates are worked from the hours
+actually recorded.
+
+- **Incidents** (INC-001… per project): when and where, the kind (near miss, first aid, medical treatment, lost time,
+  fatal, property damage), what happened, who was hurt (an employee, a contract worker or a name), days lost; an
+  **investigation** (root cause) and **actions** (what, who, by when, done); closed with `safety.manage` once every
+  action is done.
+- **Permits to work** (PTW-001…): height, hot work, confined space, excavation or electrical work at a location for a
+  stated time; each type's precautions (from a fixed list per type) confirmed before it is **issued** with
+  `safety.manage` (never by whoever asked for it); **closed** when the work ends; a permit past its end without closing
+  shows as expired. Valid for at most 12 hours.
+- **Toolbox talks:** a date, topic, who spoke and the attendance (employees and contract workers present that day).
+- **Safety inspections:** checklists (step 14's templates, work type "Safety") filled on the site, listed here.
+- **Statistics** for a project and period: **man-hours** from what is recorded: employees' attendance at its sites (8
+  hours a day, 4 a half day) and contract workers' musters (the same, plus overtime); lost-time injuries, days lost
+  (a fatality charged 6,000 days), the **frequency rate** (lost-time injuries per million man-hours) and the
+  **severity rate** (days lost per million man-hours), incidents by kind. [Guessing] IS 3786's definitions; a safety
+  officer should confirm.
+- **Rights:** `safety.manage` (new: issue permits, close incidents; managers on by default); the project's team
+  reports incidents, asks for permits, holds toolbox talks.
+- **Tests:** a lost-time injury investigated, refused closing with an action open, closed; a near miss; a permit
+  refused issue by its requester and without its precautions, issued, expired, closed; a toolbox talk with
+  attendance; a month's man-hours worked by hand from attendance and musters, and the rates.
+- **Exit check for Wave 3 (3c):** a month of quality and safety records on a pilot site in one integration test,
+  beside the 3a and 3b checks already in.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -1668,3 +1697,58 @@ Migration `0050_labour.sql` (schema `lab`).
   her rate raised, worked again (₹7,955), passed, verified, the month closed; the registers' rows; ₹10 lakh of cost,
   ₹10,000 cess due, ₹6,000 paid, ₹4,000 balance.
 - A browser test: a contractor, a worker, a minimum wage, a day mustered, the sheet refused below the minimum.
+
+## Step 14 delivered: quality
+
+**Journey:**
+- **Quality** (Projects menu), for a project:
+  - **Inspection requests:** the measured work waiting (each contract BOQ line's entries no standing request
+    covers); request one (location, activity, date): numbered IR-001…, it takes those entries; the inspector's
+    decision recorded with `quality.manage` (approved, with comments, rejected: a rejection needs its reason, raises an
+    NCR and frees the entries for a new request). **Bill only inspected work** (a project setting): a client bill then
+    counts only measurements an approved inspection covers (and their corrections).
+  - **Checklists:** a company template filled for a location (yes / no / n.a., numbers within limits, notes); failed
+    on a required "no", a blank required item or a number out of limits; photos added (JPEG, PNG, WebP).
+  - **Tests:** concrete cubes (grade, 7 or 28 days, three cubes) and slump on the screen; steel, soil and bricks
+    through the API; numbered QT-001…; judged by the criteria in force on the test date; a failure raises an NCR.
+  - **NCRs** (NCR-001…: from a test, a rejected inspection, or by hand): the cause and the action recorded by the
+    team; **closed** with `quality.manage` by someone other than whoever took the action, or reopened.
+  - **Snags** by area: open, fixed, closed (only once fixed), with photos.
+  - **Material approvals:** a make submitted for an item, approved or rejected; an item marked as needing an approved
+    make makes a **purchase order** for it refused on submission until one is approved.
+- With no project chosen: the company's **checklist templates**.
+
+**Decisions made while building (change any you disagree with):**
+- **[Guessing] Acceptance criteria** (held as data, a new version from a date): IS 456 cubes (a 28-day sample, the
+  mean of three, at least fck − 3 for M20 and above or fck − 2 below; a cube over 15% from the mean voids the sample;
+  7 days indicative against 65% of fck); slump ± 25 mm; IS 1786 steel (Fe 415, 500, 500D, 550); soil 95% compaction
+  unless specified; IS 1077 bricks (the class's strength, absorption up to 20%). A quality engineer should confirm.
+- **[Likely] An inspection covers a whole line's measured entries up to its date,** not chosen entries; a partial
+  inspection is a second request later.
+- **[Likely] The hold is a project setting off by default,** applied when a bill is worked; bills already certified
+  are not touched.
+- **[Likely] Rejected inspections and failed tests raise NCRs automatically;** a failed checklist does not (it is
+  redone); an NCR can be raised by hand from it.
+- **[Likely] Make approval is by item and project,** not by order line: once one make is approved the item can be
+  ordered (the order does not name the make yet).
+
+**API** (under `/api/tenant`): `GET projects/:id/quality`, `PUT projects/:id/quality/hold`,
+`POST projects/:id/inspections`, `GET inspections/:id`, `POST inspections/:id/decide`,
+`GET|POST quality/checklist-templates`, `POST projects/:id/checklists`, `GET checklists/:id`,
+`POST quality/photos?checklistId|snagId`, `GET quality/photos/:id`, `GET|POST quality/test-criteria`,
+`POST projects/:id/tests`, `POST projects/:id/ncrs`, `GET|PUT ncrs/:id`, `POST ncrs/:id/close`,
+`POST projects/:id/snags`, `PUT snags/:id`, `PUT projects/:id/make-required/:resourceId`,
+`POST projects/:id/material-approvals`, `POST material-approvals/:id/decide`.
+
+Migration `0051_quality.sql` (schema `qa`; projects gain `hold_uninspected`).
+
+**Tests:**
+- 3 unit tests: cubes at 28 days passing (mean 25.2) and failing (21.5 under 22), a cube 20% off the mean, 7 days
+  indicative (15 under 16.3); slump; steel (tensile ÷ yield 1.06 under 1.08); soil (93.8% under 95%); bricks; a
+  checklist passed and failed.
+- 3 API integration tests: an inspection rejected (an NCR raised) and a new one approved; 10 cum measured after it
+  held from the bill (60 billed, not 70); a checklist failed then passed with a photo; cubes passed and failed (an NCR),
+  slump, a bad steel grade refused; the NCR acted on by the site and closed by the manager, and the manager refused
+  closing their own action; a snag refused closing before it is fixed; an order refused for waterproofing compound
+  without an approved make, issued once one is approved.
+- A browser test: a template, a checklist failed, cubes failed with NCR-001 raised, a snag fixed and closed.
