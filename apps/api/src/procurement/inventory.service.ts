@@ -48,6 +48,8 @@ export interface IssueInput {
   issuedTo: string;
   purpose: string;
   lines: { resourceId: string; qty: string; boqCode: string | null }[];
+  /** The machine the fuel or spares went to (docs/wave3-plan.md step 10). */
+  equipmentId?: string | null;
 }
 export interface TransferInput {
   toStoreId: string;
@@ -427,9 +429,10 @@ export class InventoryService implements OnModuleInit {
         new Date(),
       );
       const [iss] = await tx<{ id: string }[]>`
-        INSERT INTO proc.stock_issue (project_id, store_id, number, issued_on, wbs_id, issued_to, purpose, created_by)
+        INSERT INTO proc.stock_issue (project_id, store_id, number, issued_on, wbs_id, issued_to, purpose, equipment_id,
+          created_by)
         VALUES (${s.project_id}, ${storeId}, ${number}, ${input.issuedOn}, ${wbs.id}, ${input.issuedTo},
-          ${input.purpose}, ${claims.sub})
+          ${input.purpose}, ${input.equipmentId ?? null}, ${claims.sub})
         RETURNING id`;
       for (const [i, l] of input.lines.entries()) {
         const qty = dec(l.qty);

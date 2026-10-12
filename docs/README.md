@@ -162,6 +162,7 @@ Joineries later). **Nothing in 3a is to be relied on for filing until a chartere
 | 7 | Bank: statements imported (mapped CSV or Excel, OFX, MT940) once; lines matched to vouchers (suggested, picked, or posted in one click); the reconciliation as at a date | **Done** |
 | 8 | Statements (Schedule III P&L and balance sheet, cash flow), project P&L, year end with closing stock; Tally XML export and the accounts mode; the 3a exit check | **Done** |
 | 9 | Fixed assets: register from bills or opening balances, transfers, depreciation runs (Companies Act, by project), Income Tax blocks, disposals with gain or loss | **Done** |
-| 10 | Equipment and fleet | Next |
-| 11-13 | HR, payroll, labour contractors | |
+| 10 | Equipment: register (own or hired), allocation, log sheets (in the daily report), fuel against the norm, maintenance, the month costed (own charged to projects, hire bills from the logs) | **Done** |
+| 11 | HR | Next |
+| 12-13 | Payroll, labour contractors | |
 | 14-15 | Quality, safety | |

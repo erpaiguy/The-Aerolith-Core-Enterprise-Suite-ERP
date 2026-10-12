@@ -300,6 +300,22 @@ function ReportView({ initial }: { initial: DailyReport }) {
           qc.setQueryData(['daily-report', r.id], next);
         }}
       />
+      {(r.equipmentLogs?.length ?? 0) > 0 && (
+        <Card title="Equipment log sheets">
+          <ul className="space-y-1 text-sm" aria-label="Equipment log sheets">
+            {r.equipmentLogs!.map((l) => (
+              <li key={l.code}>
+                <span className="font-mono text-xs">{l.code}</span> {l.name}: worked{' '}
+                {Number(l.worked)}
+                {Number(l.idleHours) > 0 &&
+                  `, idle ${Number(l.idleHours)} (${l.idleReason || 'no reason'})`}
+                {Number(l.breakdownHours) > 0 && `, broken down ${Number(l.breakdownHours)}`}
+                {l.operator && <span className="text-fg-muted"> · {l.operator}</span>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card title="Received today">
         {r.received.length === 0 ? (
           <p className="text-sm text-fg-muted">No goods received at this site on this day.</p>

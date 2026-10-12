@@ -9,6 +9,8 @@ import { BankController } from './bank.controller.js';
 import { BankService } from './bank.service.js';
 import { ClientBillController } from './client-bill.controller.js';
 import { ClientBillService } from './client-bill.service.js';
+import { EquipmentController } from './equipment.controller.js';
+import { EquipmentService } from './equipment.service.js';
 import { GstController } from './gst.controller.js';
 import { GstService } from './gst.service.js';
 import { LedgerController } from './ledger.controller.js';
@@ -41,6 +43,7 @@ import { SubcontractService } from './subcontract.service.js';
     StatementController,
     TallyController,
     AssetController,
+    EquipmentController,
   ],
   providers: [
     LedgerService,
@@ -54,6 +57,7 @@ import { SubcontractService } from './subcontract.service.js';
     StatementService,
     TallyService,
     AssetService,
+    EquipmentService,
   ],
   exports: [LedgerService],
 })

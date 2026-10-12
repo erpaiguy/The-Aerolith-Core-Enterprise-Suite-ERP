@@ -390,6 +390,34 @@ the Income Tax Act's blocks), moved between sites, and sold with its gain or los
   transfer mid-year splitting the charge between projects); a run reversed; the tax blocks with a half-rate addition
   and a sale; a disposal at a gain and one at a loss.
 
+## Step 10 in detail (planned before building)
+
+**Goal:** every machine on every site is known: whose it is, where it is, how many hours it worked or stood idle,
+what fuel it drank, when it is due for service, and what it cost each project.
+
+- **Equipment register:** a code, name, category (excavator, crane, mixer, vehicle, pump, other), the meter it is read
+  by (hours or km); **own** (linked to its fixed asset, step 9; an internal rate per hour charged to projects) or
+  **hired** (the supplier, a rate per hour, day or month, a monthly minimum of hours, whether the operator and the fuel
+  are the hirer's or ours); a fuel norm in litres per hour (or per km).
+- **Allocation** to a project and site from a date; one place at a time.
+- **Log sheets:** a day's opening and closing reading, hours worked (the reading's difference for an hour meter),
+  idle hours with the reason, breakdown hours, the operator; one a day per machine, on the project it was allocated to
+  that day. The **daily site report** (Wave 2b step 7) shows the day's log sheets of its site beside the hand-typed
+  equipment rows.
+- **Fuel** issued from stores against a machine (a stock issue names the equipment); consumption per hour (or km) for
+  a period against the norm, flagged when more than 20% off.
+- **Maintenance:** plans by hours or days (an oil change every 250 hours, an inspection every 90 days) with what is
+  due or overdue; service and breakdown records (date, reading, what was done, downtime, cost).
+- **Costing:** for a month, **own** machines' hours on each project at their internal rate, posted as one journal
+  (equipment charges Dr by project, equipment recovered Cr); **hired** machines' hire bill worked from the log sheets
+  (hours, with the monthly minimum; days worked; or the month pro rata to the days allocated), entered as a supplier's
+  bill (step 4) with a line for each project.
+- **Rights:** whoever may write the project's daily report keeps its log sheets; `accounts.view` sees the
+  register; `accounts.post` manages the register, allocations, maintenance and the month's costing.
+- **Tests:** an own excavator and a hired crane: allocations, a month's log sheets (one with a breakdown); fuel issued
+  and the consumption flagged; a plan falling due by hours; the month's internal charge (by project) and the hire bill
+  with the minimum applied; the daily report showing the logs.
+
 ## Steps
 
 | # | Part | Step | Features | Depends on |
@@ -1202,3 +1230,46 @@ Migration `0045_fixed_assets.sql`.
   second time, reversed and run again; the tax blocks (₹1,80,000 and ₹90,000); the jeep sold at a ₹9,840 gain and the
   excavator at a ₹2,28,684.93 loss (their vouchers); the run then not reversible and the jeep not movable.
 - A browser test: the jeep registered, a year's ₹2,49,840 run, the jeep sold.
+
+## Step 10 delivered: equipment and fleet
+
+**Journey:**
+- **Equipment** (Accounts menu), for a company:
+  - **Register:** each machine (code, name, category, hours or km meter), own (an internal rate; optionally its fixed
+    asset) or hired (the supplier, by the hour with a monthly minimum, by the day or by the month), its fuel norm, and
+    where it is now.
+  - **A machine:** where it has been; **allocate** it to a project and site (or the yard) from a date, not before its
+    last log sheet; **log sheets** for a day (readings or hours worked, idle with why, breakdown, operator), refused for
+    a day it was on no project, a reading below the last one, or more than 24 hours; the month's logs; **maintenance**
+    plans by hours or days, what is due, and a service recorded.
+  - **Month's costing:** own machines' charge and each hired machine's hire before GST; **post the month** once.
+  - **Fuel:** for a month, each machine's work, the litres issued against it, per hour against the norm, flagged when
+    more than 20% off.
+- A **stock issue** can name the machine it went to (the API's `equipmentId`).
+- The **daily report** shows the day's log sheets of its site beside the typed equipment rows.
+
+**What it posts:** the month: equipment charges Dr by project, equipment recovered Cr (two new seeded ledgers, X3005
+and X3006, so the company's total cost is unchanged and each project carries its share); a supplier's bill for each
+hired machine (`HIRE/<code>/<month>`, its lines on "Equipment hire" by project, GST at 18%).
+
+**Decisions made while building (change any you disagree with):**
+- **[Likely] A monthly minimum's shortfall is charged to the project the machine worked most on.**
+- **[Likely] Hire by the month is shared by the days allocated** to each project; by the day, the days with hours.
+- **[Guessing] GST at 18% on hire** (machinery hire with or without operator); the bill can be changed in payables
+  before it is paid.
+- **[Likely] Fuel is the quantity issued against the machine,** whatever the item; a store keeps diesel apart.
+
+**API** (under `/api/tenant`): `GET|POST /equipment`, `GET /equipment/:id`, `POST /equipment/:id/allocate`,
+`GET|POST /equipment/:id/logs`, `GET /equipment/:id/maintenance?asOf`, `POST /equipment/:id/maintenance-plans|maintenance-records`,
+`GET /equipment/fuel?entityId&from&to`, `GET|POST /equipment/costing`.
+
+Migration `0046_equipment.sql`.
+
+**Tests:**
+- 3 API integration tests, every figure by hand: an own excavator moved between two projects, a crane hired by the
+  hour (minimum 200 a month) and a mixer by the month; log sheets with refusals (overlapping readings, over 24 hours,
+  not allocated, a stranger, a move before a log); the daily report showing the log; 400 litres for 26.5 hours (15.09
+  against 12: 25.8% over, flagged); an inspection due by days, recorded, and an oil change not yet due by hours;
+  September costed: ₹24,750 and ₹15,000 charged to the projects, the crane ₹4,00,000 (17 hours and 183 short of the
+  minimum) and the mixer ₹40,000 (20 of 30 days), billed with GST at ₹4,72,000 and ₹47,200; a second posting refused.
+- A browser test: a machine added, allocated, a day logged, September posted (₹12,000).

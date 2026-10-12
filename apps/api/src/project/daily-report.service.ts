@@ -496,11 +496,18 @@ export class DailyReportService {
         WHERE s.site_id = ${r.site_id} AND i.issued_on = ${r.report_date}
         ORDER BY i.number, l.position`,
       ]);
+    // The machines' log sheets at the site that day (docs/wave3-plan.md step 10).
+    const equipmentLogs = await db`
+      SELECT e.code, e.name, e.ownership, l.worked::text AS worked, l.idle_hours::text AS "idleHours",
+        l.idle_reason AS "idleReason", l.breakdown_hours::text AS "breakdownHours", l.operator
+      FROM eqp.log l JOIN eqp.equipment e ON e.id = l.equipment_id
+      WHERE l.site_id = ${r.site_id} AND l.log_date = ${r.report_date} ORDER BY e.code`;
     const draft = r.status === 'draft';
     return {
       ...head!,
       manpower,
       equipment,
+      equipmentLogs,
       work,
       hindrances,
       photos,

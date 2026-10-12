@@ -110,6 +110,17 @@ export interface DailyReport {
   updatedAt: string;
   manpower: ManpowerLine[];
   equipment: EquipmentLine[];
+  /** The machines' log sheets at the site that day (docs/wave3-plan.md step 10). */
+  equipmentLogs?: {
+    code: string;
+    name: string;
+    ownership: 'own' | 'hired';
+    worked: string;
+    idleHours: string;
+    idleReason: string;
+    breakdownHours: string;
+    operator: string;
+  }[];
   work: WorkLine[];
   hindrances: HindranceLine[];
   photos: { id: string; caption: string; mime: string; size: number; createdAt: string }[];
