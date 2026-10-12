@@ -797,6 +797,34 @@ deployment, against "no paid tools" for anyone without one. The inbox keeps noti
     existing export. [Likely] Ledgers change rarely, and Tally merges masters better by hand than by an unattended
     agent.
 
+## Wave 6 exit (2026-10-12)
+
+- **Full check green:**
+  - API: 549 tests in 107 files.
+  - Web: 32. Owner: 3. Desktop: 4. Shared: 19. Bench: 3.
+  - Format, lint, types and the licence gate: 617 third-party packages, all allowed.
+- **Browser suite: 64 of 64**, on a clean run of 23.9 minutes. A first run failed 2 of 64: three tests looked for the
+  "Users" link by substring, and the new "Portal users" link matched too. The locators were made exact and the whole
+  suite was run again.
+- **The exit criteria:**
+  - **A manager builds a report without help:** `report-builder.spec.ts` (leads grouped by source, charted, saved,
+    sent to Excel).
+  - **A vendor quotes and invoices through the portal:** `portal.spec.ts` covers the quote, from invitation to the
+    comparative statement. `portal.int.spec.ts` covers the invoice upload, the type check, staff fetching it and
+    the rejection.
+  - **A site submits from the phone in poor signal:** `offline.spec.ts` covers a receipt saved offline, the page
+    reloaded with no signal, and the receipt sent once when the signal returns. The daily report keeps its Wave 2
+    draft-and-retry; a new day's report needs signal once.
+- [Certain] **None of this has met a real pilot site, vendor or client.** As with Waves 1 to 5, the exit criteria are
+  proven in tests, not in use.
+- **Open items carried forward:**
+  1. The e-invoice and e-way bill GSP adapter waits for a tenant's sandbox credentials.
+  2. The portal's security review before release (Risk 1). There is no second factor for portal users yet.
+  3. Apple's review of the store wrapper (guideline 4.2) is untested until a build is submitted.
+  4. **The Wave 7 outline counted on "a model-serving interface behind a feature flag (to be added in Wave 6 at the
+     latest)". It was not built in Wave 6.** It is the first item to decide before Wave 7 or before v1 is called
+     complete.
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own
