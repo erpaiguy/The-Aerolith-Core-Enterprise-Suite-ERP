@@ -92,6 +92,77 @@ Tags: [Certain] fact or decided; [Likely] strong inference; [Guessing] to be che
 - **Exit check for Wave 5:** a drawing reviewed in three stages, revised, issued on a transmittal, signed with a DSC,
   acknowledged by the recipient.
 
+## Step 1 in detail (planned before building)
+
+**What is there.** [Certain] Documents are versioned and immutable (`doc.document_version`, keyed by document and
+version number). Drawings are documents whose versions are revisions. Nothing reviews them.
+
+**Status codes** (the company's): A approved, B approved with comments, C revise and resubmit, D rejected, seeded.
+- Each code carries an **effect**: approve, approve with comments, return or reject.
+- Codes can be renamed or added; the effects are fixed.
+- [Likely] A stage's worst effect wins: reject, then return, then approve with comments, then approve.
+
+**Workflow templates** (company-wide, or one project's):
+- A name and stages in order.
+- Each stage has reviewers: named users, the project's leads, the project's members, or holders of a designation
+  (Wave 3).
+- Each stage needs **everyone** or **anyone** to respond, and has a number of due days.
+
+**A review** (RV-001… per project):
+- A document version (a drawing's revision included), a workflow and a title.
+- Stages run one after another. Each stage's reviewers are resolved when it starts, and it is due its days later.
+- Each reviewer gives a code and a comment.
+- **When a stage closes:**
+  - A or B moves to the next stage. After the last stage the review is **approved**, "with comments" if any B.
+  - C **returns** it to the author. They upload a new version and **resubmit**, which starts a new review of that
+    version linked to the old one.
+  - D **rejects** it.
+- An "anyone" stage closes on its first response. An "everyone" stage closes when all have responded.
+- The author can withdraw a review.
+
+**Reminders and the inbox:**
+- Reviewers are notified when their stage starts, the day before it is due, and on the due day if they have not
+  responded.
+- "Waiting on me" counts their open review tasks beside approvals.
+
+**Rights:**
+- Templates: `documents.edit`.
+- Starting a review: the project's team.
+- Responding: only the reviewers named on the task.
+- Everyone on the project reads.
+
+**Tests:**
+- An integration test, a three-stage review:
+  - Design, by a named engineer: A.
+  - The project lead: C, so the review is returned.
+  - A new version is resubmitted. Design B, the lead A, the client's representative (anyone of two) A, so the review
+    is approved with comments.
+  - Reminders and the inbox count.
+  - A stranger refused, and a reviewer answering twice refused.
+- A browser test: a template, a review started on a document, answered from "waiting on me".
+
+## Step 1 delivered
+
+[Certain] As planned, on its own engine (`dms` schema, migration 0060), separate from the purchase approvals:
+- **Codes** A, B, C and D seeded with fixed effects. Codes can be relabelled or added (`documents.edit`). The worst
+  effect at a stage wins (`review-rules.ts`, unit-tested).
+- **Workflows** company-wide or for one project. Each stage is "everyone" or "the first answer", has due days, and
+  reviewers who are named users, the project lead, project members or a designation's holders. Reviewers are resolved
+  when the stage starts; a stage nobody can review refuses to start.
+- **Reviews** RV-001… per project on a vault document's version. A version already in review is refused. C returns the
+  review to its author, who resubmits a newer version as a new review linked to the old one. D rejects it. A and B move
+  it on, and after the last stage it is approved, "with comments" if any B. In an "anyone" stage, the others' tasks are
+  marked not needed.
+- **Notices:** a notice when a stage starts, and reminders at 09:00 the day before and on the due day. They are cleared
+  when the task closes. "Waiting on me" counts in the inbox and on the Reviews menu item.
+- **Screen:** Reviews. It shows what is waiting on me, a project's reviews, starting one, responding with a code and
+  comment, withdrawing and resubmitting, and building workflows stage by stage.
+- **Tests:**
+  - `review-rules.spec.ts`.
+  - `reviews.int.spec.ts`: the three-stage review returned at the lead, resubmitted and approved with comments; the
+    "anyone" stage; notices and the inbox; and the refusals.
+  - The browser test `reviews.spec.ts`: a workflow, a drawing returned with C, revised, resubmitted and approved.
+
 ## Risks
 
 1. [Likely] DSC tokens from different vendors ship different drivers; support will hit token-specific problems.

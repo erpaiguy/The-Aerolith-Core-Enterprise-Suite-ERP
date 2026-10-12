@@ -189,3 +189,16 @@ method, variations billed once the client approves.
 
 **Wave 4 is complete.** Its forecasts rest on defaults nobody has checked against a real project yet (cash terms,
 markup on new items, risk scales, the 4-hour hindrance day); a pilot site's monthly review is the test that matters.
+
+## Wave 5 build progress ([plan](wave5-plan.md))
+
+Document control on its own review engine. Sign-off is a drawn signature on screen; no Aadhaar eSign or DSC (the
+owner's call).
+
+| Step | What | Status |
+|------|------|--------|
+| 1 | Review workflows: status codes A/B/C/D with fixed effects, company or project workflows of stages (everyone or the first answer, due days, named users, the lead, members or a designation), reviews of a document version, returned on C and resubmitted on a new version, reminders and "waiting on me" | **Done** |
+| 2 | Mark-up and comments on a document version | Next |
+| 3 | Transmittals, RFIs and submittals; outside parties acknowledge through an expiring link | Planned |
+| 4 | Controlled revisions | Planned |
+| 5 | Internal sign-off with a drawn signature, stamped on the PDF with an audit certificate | Planned |

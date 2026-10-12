@@ -31,6 +31,7 @@ import {
   Scale,
   TriangleAlert,
   Fan,
+  FileCheck2,
   LayoutGrid,
   ClipboardList,
   ListChecks,
@@ -258,6 +259,13 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/mep" icon={<Fan className="size-4" />}>
               MEP
+            </NavItem>
+            <NavItem
+              to="/reviews"
+              icon={<FileCheck2 className="size-4" />}
+              badge={inbox.data?.pending.reviews}
+            >
+              Reviews
             </NavItem>
             <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
               Cost codes

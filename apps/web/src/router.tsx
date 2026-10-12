@@ -81,6 +81,7 @@ import { VariationsScreen } from './screens/control/Variations';
 import { ContractsScreen } from './screens/control/Contracts';
 import { RisksScreen } from './screens/control/Risks';
 import { MepScreen } from './screens/control/Mep';
+import { ReviewsScreen } from './screens/dms/Reviews';
 import { MonthlyReviewScreen, PortfolioScreen } from './screens/control/Portfolio';
 import {
   ClientReceiptScreen,
@@ -719,6 +720,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/mep',
       component: MepScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/reviews',
+      component: ReviewsScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,
