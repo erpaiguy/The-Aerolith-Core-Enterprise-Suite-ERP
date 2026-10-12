@@ -1,0 +1,22 @@
+{
+  "name": "@aerolith/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Aerolith Core phone app (Capacitor shell around the web app; docs/wave6-plan.md step 4)",
+  "type": "module",
+  "scripts": {
+    "configure": "node configure.mjs",
+    "android": "node configure.mjs && cap add android && cap sync android",
+    "ios": "node configure.mjs && cap add ios && cap sync ios",
+    "sync": "node configure.mjs && cap sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

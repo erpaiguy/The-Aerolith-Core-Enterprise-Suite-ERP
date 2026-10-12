@@ -18,6 +18,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
+import { Idempotent } from '../common/idempotency.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { QualityService } from './quality.service.js';
 
@@ -137,6 +138,7 @@ export class QualityController {
   }
 
   @Post('projects/:id/checklists')
+  @Idempotent()
   @HttpCode(200)
   @RequiresFeatures()
   fill(

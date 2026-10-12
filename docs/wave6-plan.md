@@ -377,6 +377,131 @@ managers and admins.
     is deactivated skipped.
 - A browser test: a report built (bookings by tower, value summed), shown as a bar chart, saved, exported to Excel.
 
+## Step 4 in detail (planned before building)
+
+**What is there.** [Certain] One web app, served by Caddy, with the desktop app (Electron) wrapping it. No manifest,
+no service worker; a lost connection fails a save with "network error".
+
+[Certain] **This container has no Android SDK or Xcode.** Store packages can be built and signed only on a machine
+that has them. So the step ships two things:
+1. The web app as an **installable PWA** with the offline outbox. This is what phones use from day one ("Add to Home
+   screen"), and what the store app wraps.
+2. **`apps/mobile`**, a Capacitor (MIT) project: its configuration, and the steps to generate and sign the Android
+   and iOS projects where the SDKs are.
+
+**PWA:**
+- A web manifest (name, icons, standalone display, theme) and a hand-written service worker. The worker caches the
+  app shell (the page and its hashed assets) so the app opens with no signal. API calls are never cached: data stays
+  live or comes from the outbox.
+
+**The offline outbox** (in the browser, IndexedDB):
+- Only these forms queue, the owner's list:
+  - The daily site report: create and save its sections.
+  - Attendance at a site.
+  - A goods receipt against an order.
+  - A store issue.
+  - A quality checklist.
+- With no signal (offline, or a network error), the request is kept with an **idempotency key** made on the phone.
+  The screen says "Saved on this phone; it will be sent when there is signal". An "Outbox" chip shows how many are
+  waiting.
+- Sending happens on regaining signal, every 30 seconds, and from the Outbox page:
+  - Oldest first, one at a time.
+  - Stopped at the first refusal, which stays in the outbox with its reason for the person to fix or discard.
+  - Nothing else is retried behind a refused item, so the order holds.
+
+**The server's half: idempotency** (`platform.idempotency`):
+- Those routes accept an `Idempotency-Key`. The first request's status and response are stored against
+  (key, user, route) for 7 days, and a repeat returns the stored response without running again.
+- [Certain] **A receipt cannot be posted twice however many times the phone retries.**
+- The daily report already merges by section: each save updates its sections of that day's report.
+
+**Camera and location** come with the store app (Capacitor plugins, MIT). The PWA uses the browser's file input with
+`capture`, which opens the camera on phones, and `navigator.geolocation` for the site check-in.
+
+[Likely] **No push notifications** in this step. Push needs Firebase Cloud Messaging or APNs: an account and keys per
+deployment, against "no paid tools" for anyone without one. The inbox keeps notifying in the app.
+
+**Tests:**
+- Unit: the outbox (queue, order, stop at the first refusal, discard) against a fake IndexedDB and fake fetch.
+- An integration test: the idempotency layer, the same key twice making one receipt and returning the same body; a
+  different user with the same key not seeing the first user's response; a key reused on a different route refused.
+- A browser test in a poor-signal area: the browser set offline, a daily report and a goods receipt saved into the
+  outbox, the page reloaded offline (the app shell from the cache), back online, both sent once, the outbox empty,
+  and the receipt appearing once.
+
+## Step 3 delivered
+
+- **Reporting model** (`apps/api/src/bi/views.ts`): nine views (projects, purchase orders, goods receipts, vendor
+  bills, client bills, ledger lines, CRM leads, flat bookings, RFIs). Each has typed fields and its own access: a
+  project column scoped to the person's projects, and the ledger behind `accounts.view`.
+- **Query builder** (`bi/query.ts`):
+  - A spec becomes SQL only from registry identifiers.
+  - Every value is a bound parameter.
+  - Refused with a reason: an unknown view or field, a wrong-typed filter, and a group-by without a sum.
+  - Capped at 10,000 rows on screen and 100,000 in Excel.
+- **Saved reports, sharing, scheduled exports** (migration `0068_bi.sql`: `bi.report`, `bi.schedule`, `bi.export`):
+  - Schedules run daily, weekly or monthly at 07:00 IST.
+  - The hourly runner (`REPORTS_WORKER`, off in tests) runs each report as its owner and skips an inactive owner with
+    a reason.
+  - Files are kept 30 days. Recipients get an inbox notice with the download link.
+- **Screen:** "Report builder" (`/reports/builder`): view, fields, filters, grouping and sums; table or bar, line or
+  pie chart; save, share, Excel, schedule.
+- **Tests:**
+  - Unit: the query builder and the next-run clock.
+  - Integration (`bi.int.spec.ts`): grouped sums checked against the data made, a worker's scope, the ledger refused,
+    share and open, the runner with a clock, the file parsed, the inactive owner skipped.
+  - Browser (`report-builder.spec.ts`).
+- **Departure from the plan:**
+  - The browser test groups **CRM leads by source**, not bookings by tower. A booking needs the whole sales setup
+    first, and the sales spec already covers bookings.
+  - The integration test also groups leads, not purchase orders, for the same reason. The purchase-orders view is
+    covered by the unit tests only. [Likely] That is enough because every view shares one builder; the per-view
+    risk is in its source SQL, which runs in the scope test.
+
+## Step 4 delivered
+
+- **Installable app:**
+  - `apps/web/public/manifest.webmanifest` and an icon.
+  - A hand-written service worker (`public/sw.js`):
+    - On install it caches the page and the assets the page names. Later assets are cached as they load.
+    - Pages are network-first, with the last good copy when there is no signal.
+    - `/api` is never cached.
+  - Registered in production builds, not in the desktop app.
+- **Offline resume:** the last signed-in user is kept on the device. A reload with no signal opens the app signed in,
+  and the first request after the signal returns refreshes the session, or signs out if it is gone. Signing out
+  forgets it.
+- **The outbox** (`apps/web/src/offline`, IndexedDB):
+  - Used by the goods receipt, store issue, site attendance and quality checklist.
+  - Each is sent with an idempotency key made on the phone, or kept with "Saved on this phone".
+  - The header chip shows how many are waiting; the Outbox page lists them.
+  - Sending is in order and stops at the first refusal.
+- **The daily report keeps its own path.** Since Wave 2 it has saved a local draft and retried every 10 seconds with
+  no signal. Its saves carry the row version, so a repeat is refused rather than applied twice. Its routes also accept an idempotency key, for the store app.
+  - **Departure from the plan:** a new day's report must be opened once with signal. [Likely] This is rare in
+    practice, because the site opens the day's report in the morning.
+- **Idempotency on the server** (migration `0069_idempotency.sql`, `common/idempotency.ts`):
+  - On the six site-form routes, the first success is kept per person and key for 7 days and replayed.
+  - The same key on another route is refused (409).
+  - A request still running is told to wait.
+  - A refusal is not kept, so the person can fix the form and resend.
+- **`apps/mobile`:**
+  - A Capacitor 8 (MIT) shell that opens one deployment's web app, configured by `AEROLITH_SERVER_URL`.
+  - `pnpm --filter @aerolith/mobile android|ios` where the SDKs are. The generated projects and signing keys are not
+    committed.
+  - [Likely] Apple's review may refuse a wrapper (guideline 4.2). The README gives the fallback: bundle the web app
+    and keep the refresh token in native secure storage.
+- **Tests:**
+  - Unit: the outbox.
+  - Integration (`idempotency.int.spec.ts`):
+    - One report however often it is sent, with the same answer each time.
+    - A stale-version save replayed, not refused.
+    - Another person's same key runs as their own.
+    - A key reused on another route is refused.
+    - A bad key is refused.
+  - Browser (`offline.spec.ts`): offline, a receipt saved on the phone, the page reloaded with no signal (the app from
+    its cache, still signed in, the outbox listing it), signal back, sent once, the outbox empty, one GRN on the
+    order.
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own

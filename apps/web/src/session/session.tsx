@@ -22,6 +22,23 @@ import { clientKind, desktop } from '../platform';
 
 const ENTITLEMENT_KEY = 'aerolith.entitlement';
 const DEVICE_KEY = 'aerolith.deviceId';
+// The last signed-in user, so a reload with no signal still opens the app and its outbox (docs/wave6-plan.md step 4).
+// The server still checks every request; this only decides what the screen shows while offline.
+const LAST_USER_KEY = 'aerolith.lastUser';
+
+function rememberUser(me: Me | null) {
+  save(LAST_USER_KEY, me ? JSON.stringify(me) : null);
+}
+
+function lastUser(): Me | null {
+  const raw = load(LAST_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Me;
+  } catch {
+    return null;
+  }
+}
 
 export type SessionStatus = 'loading' | 'needs_activation' | 'signed_out' | 'signed_in';
 
@@ -133,12 +150,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         entitlement: decodeEntitlement(token),
         licenceProblem: problem,
       };
-      const refreshed = problem ? null : await api.refresh().catch(() => null);
+      let offline = false;
+      const refreshed = problem
+        ? null
+        : await api.refresh().catch((err: unknown) => {
+            offline = err instanceof ApiError && err.status === 0;
+            return null;
+          });
       if (!refreshed) {
-        if (!cancelled) setState({ ...base, status: 'signed_out' });
+        // No signal: resume as the last user; the first request after the signal returns refreshes the session, or
+        // signs out if it is gone.
+        const cached = offline ? lastUser() : null;
+        if (cancelled) return;
+        setState(
+          cached
+            ? {
+                ...base,
+                status: 'signed_in',
+                user: cached,
+                mustChangePassword: cached.mustChangePassword,
+                licence: cached.licence,
+              }
+            : { ...base, status: 'signed_out' },
+        );
         return;
       }
       const me = await api.request<Me>('/api/auth/me').catch(() => null);
+      rememberUser(me);
       if (cancelled) return;
       setState(
         me
@@ -158,8 +196,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    api.onSessionLost = () =>
+    api.onSessionLost = () => {
+      rememberUser(null);
       setState((s) => (s.status === 'signed_in' ? { ...s, status: 'signed_out', user: null } : s));
+    };
   }, []);
 
   const value = useMemo<SessionApi>(
@@ -183,6 +223,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       async signedIn(result) {
         api.setAccessToken(result.accessToken);
         if (result.refreshToken) await desktop()?.setRefreshToken(result.refreshToken);
+        rememberUser({
+          ...result.user,
+          mustChangePassword: result.mustChangePassword,
+          licence: result.licence,
+        });
         setState((s) => ({
           ...s,
           status: 'signed_in',
@@ -200,6 +245,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         await api.request('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+        rememberUser(null);
         api.setAccessToken(null);
         await desktop()?.setRefreshToken(null);
         setState((s) => ({

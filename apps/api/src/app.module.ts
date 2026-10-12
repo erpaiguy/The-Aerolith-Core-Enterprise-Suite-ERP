@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AccountsModule } from './accounts/accounts.module.js';
 import { HrModule } from './hr/hr.module.js';
 import { LabourModule } from './labour/labour.module.js';
 import { QualityModule } from './quality/quality.module.js';
 import { SafetyModule } from './safety/safety.module.js';
 import { ControlModule } from './control/control.module.js';
+import { BiModule } from './bi/bi.module.js';
+import { IdempotencyInterceptor } from './common/idempotency.js';
 import { CrmModule } from './crm/crm.module.js';
 import { RealEstateModule } from './realestate/realestate.module.js';
 import { DmsModule } from './dms/dms.module.js';
@@ -52,10 +54,14 @@ import { TenderModule } from './tender/tender.module.js';
     DmsModule,
     CrmModule,
     RealEstateModule,
+    BiModule,
     ProcurementModule,
   ],
   controllers: [HealthController],
   // Runs before route guards; only acts on routes marked with @RateLimit.
-  providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+  ],
 })
 export class AppModule {}

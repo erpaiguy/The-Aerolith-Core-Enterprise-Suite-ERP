@@ -28,6 +28,7 @@ const envSchema = z.object({
   SUPABASE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
   TENANT_DB_REGION: z.string().default('ap-south-1'),
   PROVISIONING_WORKER: z.enum(['on', 'off']).optional(),
+  REPORTS_WORKER: z.enum(['on', 'off']).optional(),
   MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
   IMPORT_DIR: z.string().optional(),
   IMPORT_MAX_MB: z.coerce.number().int().positive().max(1024).default(100),
@@ -74,6 +75,8 @@ export interface AppConfig {
   supabase: { apiUrl: string; clientId: string; clientSecret: string; redirectUri: string } | null;
   tenantDbRegion: string;
   provisioningWorker: boolean;
+  /** Runs scheduled report exports (docs/wave6-plan.md step 3). */
+  reportsWorker: boolean;
   maxTenantPools: number;
   /** Where uploaded import files wait while the user maps columns (docs/wave1-plan.md step 4). */
   importDir: string;
@@ -185,6 +188,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         : null,
     tenantDbRegion: e.TENANT_DB_REGION,
     provisioningWorker: (e.PROVISIONING_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
+    reportsWorker: (e.REPORTS_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
     maxTenantPools: e.MAX_TENANT_POOLS,
     importDir: e.IMPORT_DIR ?? join(tmpdir(), 'aerolith-imports'),
     importMaxBytes: e.IMPORT_MAX_MB * 1024 * 1024,

@@ -17,6 +17,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
+import { Idempotent } from '../common/idempotency.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { DailyReportService } from './daily-report.service.js';
 
@@ -148,6 +149,7 @@ export class DailyReportController {
   }
 
   @Post('projects/:id/daily-reports')
+  @Idempotent()
   @HttpCode(200)
   @RequiresFeatures()
   create(
@@ -164,6 +166,7 @@ export class DailyReportController {
   }
 
   @Post('daily-reports/:id')
+  @Idempotent()
   @HttpCode(200)
   @RequiresFeatures()
   update(

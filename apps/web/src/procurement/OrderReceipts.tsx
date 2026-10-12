@@ -6,6 +6,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { PackageCheck } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api/client';
+import { sendOrKeep } from '../offline';
 import type { ProjectDetail } from '../api/types';
 import { useRun } from '../approvals/model';
 import { formatQty } from '../boq/model';
@@ -152,6 +153,7 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
   const set = (k: string, patch: Partial<LineIn>) =>
     setLines({ ...lines, [k]: { ...lines[k]!, ...patch } });
   const { run, busy, error } = useRun(() => undefined);
+  const [queued, setQueued] = useState(false);
   const chosen = owed.filter((l) => Number(lines[l.lineKey]?.qty) > 0);
   const siteStores = (stores.data ?? []).filter((s) => s.active && s.site.id === head.siteId);
   return (
@@ -161,9 +163,10 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
       onSubmit={(e) => {
         e.preventDefault();
         void run('receive', async () => {
-          const r = await api.request<Receipt>(`/api/tenant/orders/${o.id}/receipts`, {
-            method: 'POST',
-            body: {
+          const sent = await sendOrKeep<Receipt>(
+            `Goods receipt for ${o.number}, challan ${head.challanNo.trim()}`,
+            `/api/tenant/orders/${o.id}/receipts`,
+            {
               receivedOn: head.receivedOn,
               siteId: head.siteId || null,
               storeId: head.storeId || null,
@@ -182,13 +185,24 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
                 };
               }),
             },
-          });
+          );
+          if (sent.queued) {
+            setQueued(true);
+            return;
+          }
           void qc.invalidateQueries({ queryKey: ['order', o.id] });
           void qc.invalidateQueries({ queryKey: ['receipts'] });
-          await navigate({ to: '/receipts/$receiptId', params: { receiptId: r.id } });
+          await navigate({ to: '/receipts/$receiptId', params: { receiptId: sent.result.id } });
         });
       }}
     >
+      {queued && (
+        <Alert tone="warning">
+          <span data-testid="receipt-queued">
+            Saved on this phone; it will be sent when there is signal (see the Outbox).
+          </span>
+        </Alert>
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Received on">
           <Input

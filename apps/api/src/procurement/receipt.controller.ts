@@ -12,6 +12,7 @@ import {
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
+import { Idempotent } from '../common/idempotency.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { ReceiptService } from './receipt.service.js';
 
@@ -99,6 +100,7 @@ export class ReceiptController {
   }
 
   @Post('orders/:id/receipts')
+  @Idempotent()
   @HttpCode(200)
   @RequiresFeatures()
   receive(

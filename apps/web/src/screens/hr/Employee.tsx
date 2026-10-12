@@ -18,6 +18,7 @@ import { api } from '../../api/client';
 import type { Person, ProjectDetail, ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { sendOrKeep } from '../../offline';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
 import { SalaryCard, SettlementCard } from '../payroll/Payroll';
@@ -353,10 +354,12 @@ export function SiteRegisterScreen() {
   const [edits, setEdits] = useState<Record<string, Partial<RegisterRow>>>({});
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [queued, setQueued] = useState(false);
   const save = async (ev: FormEvent) => {
     ev.preventDefault();
     setError(null);
     setSaved(false);
+    setQueued(false);
     try {
       const marks = Object.entries(edits).map(([employeeId, e]) => {
         const r = register.data!.rows.find((x) => x.employeeId === employeeId)!;
@@ -369,13 +372,13 @@ export function SiteRegisterScreen() {
           note: m.note ?? '',
         };
       });
-      qc.setQueryData(
-        key,
-        await api.request(`/api/tenant/hr/sites/${siteId}/attendance`, {
-          method: 'POST',
-          body: { date: day, marks },
-        }),
+      const sent = await sendOrKeep(
+        `Attendance for ${day}`,
+        `/api/tenant/hr/sites/${siteId}/attendance`,
+        { date: day, marks },
       );
+      if (sent.queued) setQueued(true);
+      else qc.setQueryData(key, sent.result);
       setEdits({});
       setSaved(true);
     } catch (err) {
@@ -526,7 +529,16 @@ export function SiteRegisterScreen() {
                 <Button type="submit" disabled={Object.keys(edits).length === 0}>
                   Save the register
                 </Button>
-                {saved && <span className="text-sm text-fg-muted">Saved.</span>}
+                {saved && (
+                  <span
+                    className="text-sm text-fg-muted"
+                    data-testid={queued ? 'attendance-queued' : undefined}
+                  >
+                    {queued
+                      ? 'Saved on this phone; it will be sent when there is signal (see the Outbox).'
+                      : 'Saved.'}
+                  </span>
+                )}
               </div>
               {error && <Alert tone="danger">{error}</Alert>}
             </form>

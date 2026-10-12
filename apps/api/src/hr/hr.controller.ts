@@ -19,6 +19,7 @@ import { parseCsv } from '../accounts/bank-parse.js';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { PERMISSIONS } from '../auth/permissions.js';
+import { Idempotent } from '../common/idempotency.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { AttendanceService, type Mark } from './attendance.service.js';
 import { IFSC, PAN } from './hr-rules.js';
@@ -420,6 +421,7 @@ export class HrController {
   }
 
   @Post('sites/:id/attendance')
+  @Idempotent()
   @HttpCode(200)
   @RequiresFeatures()
   mark(

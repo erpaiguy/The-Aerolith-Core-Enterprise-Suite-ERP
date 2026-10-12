@@ -12,6 +12,7 @@ import {
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
+import { Idempotent } from '../common/idempotency.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { InventoryService } from './inventory.service.js';
 
@@ -146,6 +147,7 @@ export class InventoryController {
   }
 
   @Post('stores/:id/issues')
+  @Idempotent()
   @HttpCode(200)
   @RequiresFeatures()
   issue(

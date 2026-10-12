@@ -99,3 +99,36 @@ describe('report query builder', () => {
     expect(build(spec({ fields: ['number'] }), null).sql).not.toContain('= ANY(');
   });
 });
+
+describe('report schedules', () => {
+  it('runs at 07:00 IST on the next matching day', async () => {
+    const { nextRun } = await import('../src/bi/bi.service.js');
+    // Monday 12 October 2026, 06:00 IST: today at 07:00; at 08:00 IST: tomorrow.
+    expect(
+      nextRun(
+        { cadence: 'daily', weekday: null, monthday: null },
+        new Date('2026-10-12T00:30:00Z'),
+      ).toISOString(),
+    ).toBe('2026-10-12T01:30:00.000Z');
+    expect(
+      nextRun(
+        { cadence: 'daily', weekday: null, monthday: null },
+        new Date('2026-10-12T02:30:00Z'),
+      ).toISOString(),
+    ).toBe('2026-10-13T01:30:00.000Z');
+    // Weekly on Friday (5): 16 October.
+    expect(
+      nextRun(
+        { cadence: 'weekly', weekday: 5, monthday: null },
+        new Date('2026-10-12T02:30:00Z'),
+      ).toISOString(),
+    ).toBe('2026-10-16T01:30:00.000Z');
+    // Monthly on the 1st: 1 November.
+    expect(
+      nextRun(
+        { cadence: 'monthly', weekday: null, monthday: 1 },
+        new Date('2026-10-12T02:30:00Z'),
+      ).toISOString(),
+    ).toBe('2026-11-01T01:30:00.000Z');
+  });
+});

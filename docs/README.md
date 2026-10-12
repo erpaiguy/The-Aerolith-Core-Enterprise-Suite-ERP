@@ -216,7 +216,7 @@ portal users are free within a fair-use cap.
 |------|------|--------|
 | 1 | CRM: contacts, leads with stage, value, probability and expected month, interactions with follow-ups, conversion to a tender whose outcome the lead follows, the pipeline | **Done** |
 | 2 | Real estate sales and RERA (Maharashtra): towers and units, bookings with buyer ledgers, payment plans by milestone, demands with GST (held by §13 before the agreement), receipts, delay interest, the designated account's 70% with certified withdrawals, the quarterly update | **Done** |
-| 3 | Report builder and BI | Next |
-| 4 | Mobile app with offline site forms | Planned |
-| 5 | Portals (vendor, subcontractor, client) | Planned |
+| 3 | Report builder and BI: nine views with access as on the screens, saved and shared reports, charts, Excel, scheduled exports to the inbox | **Done** |
+| 4 | Mobile: installable app with an offline cache, an outbox for the site forms, idempotent writes on the server, a Capacitor shell for the stores | **Done** |
+| 5 | Portals (vendor, subcontractor, client) | Next |
 | 6 | Integrations: public API, webhooks, Tally link, e-invoice adapters | Planned |

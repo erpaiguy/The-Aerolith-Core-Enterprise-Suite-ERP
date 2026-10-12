@@ -40,7 +40,7 @@ export class ApiClient {
 
   async request<T>(
     path: string,
-    init: { method?: string; body?: unknown; auth?: boolean } = {},
+    init: { method?: string; body?: unknown; auth?: boolean; idempotencyKey?: string } = {},
   ): Promise<T> {
     return this.parse<T>(await this.authed(path, init));
   }
@@ -65,7 +65,7 @@ export class ApiClient {
   /** One request; on 401 refreshes the session once and retries. */
   private async authed(
     path: string,
-    init: { method?: string; body?: unknown; auth?: boolean },
+    init: { method?: string; body?: unknown; auth?: boolean; idempotencyKey?: string },
   ): Promise<Response> {
     const auth = init.auth ?? true;
     const res = await this.send(path, init, auth);
@@ -110,10 +110,11 @@ export class ApiClient {
 
   private async send(
     path: string,
-    init: { method?: string; body?: unknown },
+    init: { method?: string; body?: unknown; idempotencyKey?: string },
     auth: boolean,
   ): Promise<Response> {
     const headers: Record<string, string> = { 'x-aerolith-client': clientKind() };
+    if (init.idempotencyKey) headers['idempotency-key'] = init.idempotencyKey;
     const form = init.body instanceof FormData;
     // FormData sets its own multipart content type with the boundary.
     if (init.body !== undefined && !form) headers['content-type'] = 'application/json';

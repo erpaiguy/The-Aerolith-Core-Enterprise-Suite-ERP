@@ -19,6 +19,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import type { WbsNode } from '../api/types';
 import { useRun } from '../approvals/model';
+import { sendOrKeep } from '../offline';
 import { formatQty, formatRate } from '../boq/model';
 import { describeError } from '../lib/format';
 import { rupees } from '../procurement/OrderLines';
@@ -398,6 +399,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
   const [head, setHead] = useState({ issuedOn: today(), wbsCode: '', issuedTo: '', purpose: '' });
   const [qty, setQty] = useState<Record<string, string>>({});
   const [boq, setBoq] = useState<Record<string, string>>({});
+  const [queued, setQueued] = useState(false);
   const { run, busy, error } = useRun(() => undefined);
   const inStock = s.stock.filter((x) => Number(x.qty) > 0);
   const lines = inStock.filter((x) => Number(qty[x.resourceId]) > 0);
@@ -409,9 +411,10 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
         onSubmit={(e) => {
           e.preventDefault();
           void run('issue', async () => {
-            const i = await api.request<Issue>(`/api/tenant/stores/${s.id}/issues`, {
-              method: 'POST',
-              body: {
+            const sent = await sendOrKeep<Issue>(
+              `Issue from ${s.name} on ${head.issuedOn}`,
+              `/api/tenant/stores/${s.id}/issues`,
+              {
                 ...head,
                 lines: lines.map((x) => ({
                   resourceId: x.resourceId,
@@ -419,9 +422,14 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
                   boqCode: boq[x.resourceId]?.trim() || null,
                 })),
               },
-            });
+            );
+            if (sent.queued) {
+              setQueued(true);
+              setQty({});
+              return;
+            }
             void qc.invalidateQueries({ queryKey: ['store', s.id] });
-            await navigate({ to: '/issues/$issueId', params: { issueId: i.id } });
+            await navigate({ to: '/issues/$issueId', params: { issueId: sent.result.id } });
           });
         }}
       >
@@ -515,6 +523,13 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
             Cancel
           </Button>
         </div>
+        {queued && (
+          <Alert tone="warning">
+            <span data-testid="issue-queued">
+              Saved on this phone; it will be sent when there is signal (see the Outbox).
+            </span>
+          </Alert>
+        )}
         {error && <Alert tone="danger">{error}</Alert>}
       </form>
     </Card>

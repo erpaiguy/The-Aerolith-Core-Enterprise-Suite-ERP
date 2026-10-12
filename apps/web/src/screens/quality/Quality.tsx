@@ -18,6 +18,7 @@ import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { sendOrKeep } from '../../offline';
 
 interface Register {
   holdUninspected: boolean;
@@ -381,9 +382,11 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void call(
+            setError(null);
+            setNotice(null);
+            void sendOrKeep<{ result: string; findings: string[] }>(
+              `Checklist: ${tpl?.name ?? 'quality'}${ck.location ? ` at ${ck.location}` : ''}`,
               `/api/tenant/projects/${projectId}/checklists`,
-              'POST',
               {
                 templateId: ck.templateId,
                 doneOn: today(),
@@ -393,12 +396,21 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                   return { answer: it.kind === 'number' && a !== '' ? Number(a) : a };
                 }),
               },
-              (x) => {
-                const res = x as { result: string; findings: string[] };
+            ).then(
+              (sent) => {
+                if (sent.queued) {
+                  setNotice(
+                    'Checklist saved on this phone; it will be sent when there is signal (see the Outbox).',
+                  );
+                  return;
+                }
+                const res = sent.result;
                 setNotice(
                   `Checklist ${res.result}${res.findings.length ? `: ${res.findings.join(' ')}` : '.'}`,
                 );
+                void qc.invalidateQueries({ queryKey: key });
               },
+              (err: unknown) => setError(describeError(err)),
             );
           }}
         >

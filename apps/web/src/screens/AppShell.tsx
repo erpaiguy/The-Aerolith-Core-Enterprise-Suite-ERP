@@ -36,6 +36,7 @@ import {
   Signature,
   Handshake,
   Home,
+  ChartPie,
   MailCheck,
   LayoutGrid,
   ClipboardList,
@@ -64,6 +65,7 @@ import { usePermission } from '../session/permissions';
 import type { Inbox } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
 import { useSession } from '../session/session';
+import { usePending } from '../offline';
 import { Badge } from '@aerolith/ui';
 
 function NavItem({
@@ -234,6 +236,9 @@ export function AppShell() {
             </NavItem>
             <NavItem to="/reports" icon={<ChartColumn className="size-4" />}>
               Reports
+            </NavItem>
+            <NavItem to="/reports/builder" icon={<ChartPie className="size-4" />}>
+              Report builder
             </NavItem>
             <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               Construction
@@ -410,6 +415,7 @@ export function AppShell() {
               <Badge>{session.user?.role}</Badge>
             </div>
             <div className="flex items-center gap-1">
+              <OutboxChip />
               <Link
                 to="/account/password"
                 className="rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
@@ -431,5 +437,21 @@ export function AppShell() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Forms waiting on this phone for signal (docs/wave6-plan.md step 4); hidden when there are none. */
+function OutboxChip() {
+  const pending = usePending();
+  if (!pending.length) return null;
+  const refused = pending.some((p) => p.error);
+  return (
+    <Link
+      to="/outbox"
+      className="rounded-md px-2.5 py-1.5 text-sm hover:bg-surface-2"
+      aria-label={`Outbox, ${pending.length} waiting`}
+    >
+      <Badge tone={refused ? 'danger' : 'warning'}>Outbox {pending.length}</Badge>
+    </Link>
   );
 }
