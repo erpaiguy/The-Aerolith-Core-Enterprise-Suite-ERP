@@ -1,6 +1,7 @@
 // Document reviews (docs/wave5-plan.md step 1) in a real tenant database: a three-stage workflow (a named design
 // engineer; the project's lead; the client's two representatives, anyone of them), a drawing returned with C at the
 // second stage, a revised version resubmitted and approved with comments; reminders, "waiting on me", and who may act.
+// Mark-up (step 2): comments on a review's version with boxes and replies, resolved, and the comment sheet.
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
@@ -9,6 +10,7 @@ import { join } from 'node:path';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import postgres, { type Sql } from 'postgres';
+import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap.js';
@@ -330,5 +332,160 @@ describe.skipIf(!controlUrl || !adminUrl)('document reviews (integration)', () =
       ['RV-001', 'returned'],
     ]);
     expect(await ok(get('/tenant/reviews/mine', people.rao!.headers))).toEqual([]);
+  });
+  it('marks up a version in a review: boxes, replies, resolving and the comment sheet', async () => {
+    const projectId = (
+      await ok<{ id: string }>(post('/tenant/projects', { name: 'Clinic, Wardha' }, manager))
+    ).id;
+    await ok(
+      post(
+        `/tenant/projects/${projectId}/team`,
+        { userId: people.priya!.id, role: 'member' },
+        manager,
+      ),
+    );
+    const documentId = (await upload(projectId, 'S-301 Slab.pdf', pdf('rev 0'))).json<{
+      document: { id: string };
+    }>().document.id;
+    const wf = await ok<{ id: string }>(
+      post(
+        `/tenant/review-workflows`,
+        {
+          projectId,
+          name: 'Structural',
+          stages: [{ name: 'Design', reviewers: [{ kind: 'user', id: people.priya!.id }] }],
+        },
+        manager,
+      ),
+    );
+    const r = await ok<{ id: string; tasks: { id: string }[] }>(
+      post(
+        `/tenant/projects/${projectId}/reviews`,
+        { documentId, workflowId: wf.id, title: 'First floor slab' },
+        manager,
+      ),
+    );
+    type Markup = {
+      id: string;
+      number: number;
+      page: number;
+      box: { x: number; y: number; w: number; h: number } | null;
+      status: string;
+      review: string | null;
+      mayResolve: boolean;
+      replies: { author: string; body: string }[];
+    };
+    const url = `/tenant/documents/${documentId}/versions/1/markups`;
+    const add = (body: object, h = people.priya!.headers) => post(url, body, h);
+    const m1 = await ok<Markup>(
+      add({
+        reviewId: r.id,
+        page: 1,
+        box: { x: 0.1, y: 0.2, w: 0.25, h: 0.1 },
+        body: 'Slab S3 top steel missing at the support',
+      }),
+    );
+    expect([m1.number, m1.review, m1.box]).toEqual([
+      1,
+      'RV-001',
+      { x: 0.1, y: 0.2, w: 0.25, h: 0.1 },
+    ]);
+    const m2 = await ok<Markup>(
+      add({
+        reviewId: r.id,
+        page: 2,
+        box: { x: 0.6, y: 0.7, w: 0.3, h: 0.2 },
+        body: 'Cover 25 mm',
+      }),
+    );
+    const m3 = await ok<Markup>(add({ reviewId: r.id, page: 0, body: 'Add the general notes' }));
+    expect([m2.number, m3.number, m3.box]).toEqual([2, 3, null]);
+    // Refused: a box off the page, a box on "the document", someone off the project, a version that is not there.
+    expect(
+      (await add({ page: 1, box: { x: 0.9, y: 0.1, w: 0.2, h: 0.1 }, body: 'x' })).json(),
+    ).toMatchObject({ code: 'box_outside_page' });
+    expect(
+      (await add({ page: 0, box: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 }, body: 'x' })).json(),
+    ).toMatchObject({ code: 'box_outside_page' });
+    expect((await add({ page: 1, body: 'x' }, people.rao!.headers)).statusCode).toBe(404);
+    expect(
+      (
+        await post(
+          `/tenant/documents/${documentId}/versions/9/markups`,
+          { page: 1, body: 'x' },
+          manager,
+        )
+      ).statusCode,
+    ).toBe(404);
+
+    // The author answers; only the comment's author, the review's author or an editor resolves.
+    const answered = await ok<Markup>(
+      post(`/tenant/markups/${m1.id}/replies`, { body: 'Added T12 at 150' }, manager),
+    );
+    expect(answered.replies).toEqual([
+      expect.objectContaining({ author: 'suresh', body: 'Added T12 at 150' }),
+    ]);
+    await ok(
+      post(
+        `/tenant/projects/${projectId}/team`,
+        { userId: people.rao!.id, role: 'member' },
+        manager,
+      ),
+    );
+    expect(
+      (await post(`/tenant/markups/${m1.id}/status`, { status: 'resolved' }, people.rao!.headers))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      (await ok<Markup>(post(`/tenant/markups/${m1.id}/status`, { status: 'resolved' }, manager)))
+        .status,
+    ).toBe('resolved');
+    expect(
+      (
+        await ok<Markup>(
+          post(`/tenant/markups/${m1.id}/status`, { status: 'open' }, people.priya!.headers),
+        )
+      ).status,
+    ).toBe('open');
+    await ok(post(`/tenant/markups/${m1.id}/status`, { status: 'resolved' }, manager));
+
+    // The reviewer answers B; the review closes and its comments are frozen, replies still allowed.
+    await ok(
+      post(
+        `/tenant/review-tasks/${r.tasks[0]!.id}/respond`,
+        { code: 'B', comment: 'See the mark-ups' },
+        people.priya!.headers,
+      ),
+    );
+    expect((await add({ reviewId: r.id, page: 1, body: 'Late' })).json()).toMatchObject({
+      code: 'review_closed',
+    });
+    await ok(post(`/tenant/markups/${m2.id}/replies`, { body: 'Cover noted on drawing' }, manager));
+    const list = await ok<Markup[]>(get(url, manager));
+    expect(list.map((m) => [m.number, m.status, m.replies.length])).toEqual([
+      [1, 'resolved', 1],
+      [2, 'open', 1],
+      [3, 'open', 0],
+    ]);
+
+    // The comment sheet.
+    const res = await get(`/tenant/reviews/${r.id}/comment-sheet`, manager);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toContain('RV-001 comment sheet.xlsx');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.rawPayload as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0]!;
+    expect(String(ws.getCell(1, 1).value)).toBe('Comment sheet RV-001: First floor slab');
+    expect(String(ws.getCell(2, 1).value)).toContain('S-301 Slab.pdf rev 1');
+    expect(String(ws.getCell(3, 1).value)).toBe('Review approved with comments · priya B');
+    const rows: unknown[][] = [];
+    ws.eachRow((row, i) => {
+      if (i > 6) rows.push((row.values as unknown[]).slice(1));
+    });
+    expect(rows.map((x) => [x[0], x[1], x[2], x[5], x[6]])).toEqual([
+      [1, 1, 'priya', 'suresh: Added T12 at 150', 'resolved'],
+      [2, 2, 'priya', 'suresh: Cover noted on drawing', 'open'],
+      [3, 'General', 'priya', '', 'open'],
+    ]);
   });
 });

@@ -144,7 +144,7 @@ version number). Drawings are documents whose versions are revisions. Nothing re
 ## Step 1 delivered
 
 [Certain] As planned, on its own engine (`dms` schema, migration 0060), separate from the purchase approvals:
-- **Codes** A, B, C and D seeded with fixed effects. Codes can be relabelled or added (`documents.edit`). The worst
+- **Codes** A, B, C and D seeded with fixed effects. Codes can be relabelled or added (`projects.edit`). The worst
   effect at a stage wins (`review-rules.ts`, unit-tested).
 - **Workflows** company-wide or for one project. Each stage is "everyone" or "the first answer", has due days, and
   reviewers who are named users, the project lead, project members or a designation's holders. Reviewers are resolved
@@ -157,11 +157,131 @@ version number). Drawings are documents whose versions are revisions. Nothing re
   when the task closes. "Waiting on me" counts in the inbox and on the Reviews menu item.
 - **Screen:** Reviews. It shows what is waiting on me, a project's reviews, starting one, responding with a code and
   comment, withdrawing and resubmitting, and building workflows stage by stage.
+- **Changed while building:** templates and codes need `projects.edit` (a project's own workflows: also its lead), not
+  `documents.edit` as planned. [Certain] `documents.edit` is on for workers by default; it is the right to upload.
+  Editing a workflow keeps its scope (a company workflow cannot be edited as a project's).
 - **Tests:**
   - `review-rules.spec.ts`.
   - `reviews.int.spec.ts`: the three-stage review returned at the lead, resubmitted and approved with comments; the
     "anyone" stage; notices and the inbox; and the refusals.
   - The browser test `reviews.spec.ts`: a workflow, a drawing returned with C, revised, resubmitted and approved.
+
+## Step 2 in detail (planned before building)
+
+**What is there.** [Certain] Step 1's reviews of a document version. Project documents are served as downloads only
+(`documents/:id/file?version=`). The web app already loads pdf.js (Apache-2.0) on demand for thumbnails.
+
+**Mark-ups** (`dms.markup`, on a document version of a project's vault):
+- A comment numbered per document version (1, 2, 3…), with a page and, optionally, a **highlight box**. The box is
+  stored as fractions of the page (0–1), so it lands in the same place at any zoom. A comment without a box is a
+  general comment on the page or the document (page 0).
+- It may belong to a review. While that review is open, the comment is part of it. Once the review closes, its
+  comments are frozen (no new ones; replies and resolving still allowed, since that is the author's response).
+- **Replies** in order (`dms.markup_reply`). The author's reply is the "response" on the comment sheet.
+- **Resolved:** by the comment's author, the review's author, the project's lead or a project editor. Reopening is allowed
+  for the same people.
+- [Likely] Clouds, arrows and freehand are left out. A box and a comment is what the consultants' comment sheets
+  carry.
+
+**The viewer** (web): the PDF drawn page by page with pdf.js in the browser, from the bytes the user is already
+allowed
+to download, so the server renders nothing. Drag on a page to draw a box, then write the comment. Numbered pins mark
+the comments, and the side list shows them with replies, resolve and reopen. Opened from a review and from the project
+vault.
+
+**The comment sheet:** an Excel file per review, laid out the way consultants exchange them: number, page, reviewer,
+comment, date, response, status. It goes with the review's code and the document's name and revision at the top.
+
+**Rights:** read and comment for anyone who can see the project (`projects.access`). Writing needs a write licence,
+as everywhere else.
+
+**Tests:**
+- An integration test:
+  - Two boxed comments and a general one on a review.
+  - A reply, a resolve and a reopen.
+  - Refusals: a box outside the page, a stranger, a new comment on a closed review, and resolving by someone else.
+  - The comment sheet parsed back with ExcelJS.
+- A browser test: open the document from a review, draw a box, comment, reply, resolve, and download the sheet.
+
+## Step 2 delivered
+
+[Certain] As planned, with one change:
+- `dms.markup` and `dms.markup_reply` (migration 0061). Comments are numbered per version under a lock. A box is
+  checked to lie on a page, stored to five places, and allowed only on a real page (not page 0).
+- A comment on a review needs that review's own document version. Once the review closes, new comments are refused
+  (`review_closed`); replies, resolving and reopening go on.
+- **Resolving** is for the comment's author, the review's author, the project's lead or a project editor, as step 1's
+  change.
+- **The viewer** (`MarkupViewer`): pdf.js renders up to 60 pages in the browser. Drag to box, numbered pins, and the
+  list beside with replies and resolve or reopen. A file that is not a PDF takes general comments only.
+- **The comment sheet** (`reviews/:id/comment-sheet`): number, page ("General" for 0), reviewer, comment, date,
+  responses and status. The header carries the review's title, the document and its revision, the outcome and every
+  reviewer's code.
+- **Change:** the viewer opens from a review only, not yet from the project vault. Comments outside a review work in
+  the API. The vault button is left for step 4, which reworks the vault's revision screen.
+- **Tests:**
+  - The second case in `reviews.int.spec.ts`: boxes, a general comment, the refusals, a reply, resolve and reopen,
+    the frozen review, and the sheet read back with ExcelJS.
+  - The browser test `reviews.spec.ts` now drags a box on page 1, comments, replies, resolves and downloads the sheet.
+
+## Step 3 in detail (planned before building)
+
+**What is there.** [Certain] Reviews (step 1) and mark-up (step 2). Parties (`platform.party`, with email). Wave 3's
+material approvals (`qa.material_approval`: submitted, approved or rejected). No page in the app works without
+signing in except sign-in, onboarding and health.
+
+**Transmittals** (TR-001… per project):
+- A recipient: a party, or a name, plus an email and a purpose (for information, review, construction or record).
+  Response is due in so many days for review; none for information.
+- The items: document versions from the project's vault, each with copies and a remark.
+- Drafted, then **issued**. Issuing freezes the items and starts the clock.
+- **Acknowledged** when the recipient (or staff, on their behalf) confirms receipt. **Responded** when a response is
+  recorded: a comment, an optional status code and an optional file. The file goes into the vault, under
+  "Transmittals/TR-001 response". **Closed** by staff.
+- Overdue: issued for review, past its due day, without a response.
+
+**The expiring link** (the owner's answer to question 3):
+- Staff make a link for an issued transmittal: 14 days by default, 1–60 allowed. It can be revoked, and making a new
+  one revokes the old.
+- The token is 32 random bytes. Only its SHA-256 is stored, so a database leak gives no working links. The URL carries
+  the tenant id and the token: `/share/<tenant>/<token>`.
+- Without signing in, the page shows the transmittal and its items, each downloadable. The recipient types their name
+  to **acknowledge**, and for review may **respond** with a comment, a code and one file (25 MB at most).
+- Every open, download, acknowledgement and response is recorded with time and IP. The transmittal's author is
+  notified. Rate limited, refused once expired or revoked, and refused when the tenant's licence is not active.
+- [Likely] There is no email sending from here: staff copy the link into their own email. The app has no outgoing
+  mail for tenants, and adding it is a separate decision.
+
+**RFIs** (RFI-001…):
+- A subject and a question, with references: a document version, a location and a free-text BOQ or drawing reference.
+- Raised by the team and assigned to one person (the designer's coordinator inside the company), due in so many days.
+- The **answer** is recorded with an optional attachment from the vault. Open, then answered, then closed. Overdue
+  shows when past due and unanswered.
+- What came of it: nothing, a **variation** (a link to Wave 4's variation, or "raise one" opening that screen with
+  the RFI in its reason) or a **revised drawing** (a link to the newer document version).
+- The assignee is notified with reminders, as for review tasks.
+
+**Submittals** (SUB-001…):
+- A kind (shop drawing, method statement, material, sample or other), a title, and a document version.
+- **Sent for approval through a review** (step 1). The submittal's status is the review's: in review, approved,
+  approved with comments, returned or rejected. A returned one is resubmitted as the review is.
+- A **material** submittal may name a material approval (Wave 3). When its review closes approved or rejected, the
+  material approval follows.
+
+**Registers:** one screen, "Transmittals, RFIs and submittals", with a tab each, filters by status, and overdue in red.
+The transmittal register is in Excel too.
+
+**Rights:** the project's team creates and issues; everyone on the project reads; the link is the outsider's only right.
+
+**Tests:**
+- An integration test:
+  - A transmittal of two drawings for review issued and given a link. The outsider opens it with no token in the
+    headers, downloads an item, acknowledges, then responds with code B and a file; the file lands in the vault.
+  - Refusals: an expired link, a revoked link, a wrong token, and a draft transmittal.
+  - An RFI raised, assigned, answered and linked to a revised drawing.
+  - A material submittal approved through its review, and its material approval following.
+- A browser test: a transmittal issued and its link opened in a fresh browser context (signed out), acknowledged and
+  answered; the register shows it responded.
 
 ## Risks
 

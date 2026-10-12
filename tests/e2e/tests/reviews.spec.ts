@@ -1,5 +1,5 @@
-// Wave 5 step 1 in a real browser: a project's review workflow; a drawing sent for review, returned with code C,
-// revised, resubmitted and approved.
+// Wave 5 steps 1 and 2 in a real browser: a project's review workflow; a drawing sent for review, marked up with a
+// comment answered and resolved and its comment sheet downloaded, returned with code C, revised, resubmitted, approved.
 import { expect, test, type Page } from '@playwright/test';
 import { logPageOnFailure, signInNewAdmin } from './helpers.js';
 
@@ -81,6 +81,33 @@ test('a drawing reviewed, returned, revised and approved', async ({ page }) => {
   await start.getByRole('button', { name: 'Start review' }).click();
   await expect(page.getByTestId('review-status')).toContainText('in review');
   await expect(page.getByTestId('reviews-mine')).toContainText('RV-001 Footing layout for block A');
+
+  // Mark-up: a box dragged on page 1, commented, answered, resolved; the comment sheet downloaded.
+  await page.getByRole('button', { name: 'Mark up the document' }).click();
+  const page1 = page.getByRole('application', { name: 'Page 1' });
+  await expect(page1).toBeVisible();
+  const area = (await page1.boundingBox())!;
+  await page.mouse.move(area.x + area.width * 0.2, area.y + area.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(area.x + area.width * 0.45, area.y + area.height * 0.4, { steps: 5 });
+  await page.mouse.up();
+  const note = page.getByRole('form', { name: 'New comment' });
+  await note.getByLabel('Comment').fill('Footing F3 under-sized for the column load');
+  await note.getByRole('button', { name: 'Add comment' }).click();
+  await expect(page1.getByRole('button', { name: 'Comment 1' })).toBeVisible();
+  const c1 = page.getByRole('complementary', { name: 'Comments' }).getByRole('listitem', {
+    name: 'Comment 1',
+  });
+  await expect(c1).toContainText('page 1 · RV-001');
+  await c1.getByLabel('Reply').fill('F3 to be 2.4 m square');
+  await c1.getByRole('button', { name: 'Reply' }).click();
+  await expect(c1).toContainText('F3 to be 2.4 m square');
+  await c1.getByRole('button', { name: 'Resolve' }).click();
+  await expect(c1).toContainText('resolved');
+  const sheet = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Comment sheet' }).click();
+  expect((await sheet).suggestedFilename()).toBe('RV-001 comment sheet.xlsx');
+  await shot(page, 'reviews-markup');
 
   // Code C: returned for revision.
   const respond = async (code: string, comment: string) => {

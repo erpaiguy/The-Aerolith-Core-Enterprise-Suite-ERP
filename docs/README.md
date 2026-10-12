@@ -198,7 +198,7 @@ owner's call).
 | Step | What | Status |
 |------|------|--------|
 | 1 | Review workflows: status codes A/B/C/D with fixed effects, company or project workflows of stages (everyone or the first answer, due days, named users, the lead, members or a designation), reviews of a document version, returned on C and resubmitted on a new version, reminders and "waiting on me" | **Done** |
-| 2 | Mark-up and comments on a document version | Next |
-| 3 | Transmittals, RFIs and submittals; outside parties acknowledge through an expiring link | Planned |
+| 2 | Mark-up and comments: a PDF viewer in the browser, comments boxed on a page or general, replies, resolved and reopened, frozen when the review closes; the review's comment sheet in Excel | **Done** |
+| 3 | Transmittals, RFIs and submittals; outside parties acknowledge through an expiring link | Next |
 | 4 | Controlled revisions | Planned |
 | 5 | Internal sign-off with a drawn signature, stamped on the PDF with an audit certificate | Planned |

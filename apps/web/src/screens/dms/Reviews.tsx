@@ -15,9 +15,10 @@ import {
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { api } from '../../api/client';
+import { api, saveFile } from '../../api/client';
 import type { DocVault, ProjectDetail, ProjectSummary } from '../../api/types';
 import { describeError } from '../../lib/format';
+import { MarkupViewer } from './MarkupViewer';
 
 type Effect = 'approve' | 'approve_comments' | 'return' | 'reject';
 interface Code {
@@ -202,6 +203,7 @@ function ReviewDetail({
   });
   const [code, setCode] = useState('');
   const [comment, setComment] = useState('');
+  const [markup, setMarkup] = useState(false);
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const d = q.data;
@@ -280,6 +282,24 @@ function ReviewDetail({
         </form>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={() => setMarkup(!markup)}>
+          {markup ? 'Close the mark-up' : 'Mark up the document'}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={async () => {
+            onError(null);
+            try {
+              const f = await api.download(`/api/tenant/reviews/${d.id}/comment-sheet`);
+              saveFile(f.blob, f.fileName);
+            } catch (err) {
+              onError(describeError(err));
+            }
+          }}
+        >
+          Comment sheet
+        </Button>
         {d.mayWithdraw && (
           <Button
             type="button"
@@ -299,6 +319,16 @@ function ReviewDetail({
           </Button>
         )}
       </div>
+      {markup && (
+        <div className="mt-4">
+          <MarkupViewer
+            documentId={d.document.id}
+            versionNo={d.document.versionNo}
+            reviewId={d.id}
+            mayAdd={d.status === 'in_review'}
+          />
+        </div>
+      )}
     </Card>
   );
 }

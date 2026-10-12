@@ -53,13 +53,19 @@ export class ReviewService {
     private readonly projects: ProjectService,
   ) {}
 
-  private async editor(claims: TenantClaims) {
-    if (!(await this.permissions.can(claims, 'documents.edit')))
-      throw new ForbiddenException({
-        code: 'forbidden',
-        permission: 'documents.edit',
-        message: 'This needs the documents permission.',
-      });
+  /** Codes and company workflows: whoever edits projects. A project's own workflows: also its lead. */
+  private async manager(db: Db, claims: TenantClaims, projectId: string | null) {
+    if (projectId) {
+      const a = await this.projects.access(db, claims, projectId);
+      if (a.canEdit || a.role === 'lead') return;
+    } else if (await this.permissions.can(claims, 'projects.edit')) return;
+    throw new ForbiddenException({
+      code: 'forbidden',
+      permission: 'projects.edit',
+      message: projectId
+        ? "Only the project's lead or a project editor sets its review workflows."
+        : 'This needs the projects permission.',
+    });
   }
 
   private async team(db: Db, claims: TenantClaims, projectId: string) {
@@ -83,8 +89,8 @@ export class ReviewService {
     claims: TenantClaims,
     input: { code: string; label: string; effect: Effect; active: boolean },
   ) {
-    await this.editor(claims);
     const db = await this.tenants.forTenant(claims.ten);
+    await this.manager(db, claims, null);
     await db`
       INSERT INTO dms.status_code (code, label, effect, position, active)
       VALUES (${input.code}, ${input.label}, ${input.effect},
@@ -113,9 +119,15 @@ export class ReviewService {
       active: boolean;
     },
   ) {
-    await this.editor(claims);
     const db = await this.tenants.forTenant(claims.ten);
-    if (input.projectId) await this.projects.access(db, claims, input.projectId);
+    if (input.id) {
+      // A workflow keeps its scope: company-wide stays company-wide.
+      const [old] = await db<{ project_id: string | null }[]>`
+        SELECT project_id FROM dms.workflow WHERE id = ${input.id}`;
+      if (!old || old.project_id !== input.projectId)
+        throw new NotFoundException({ code: 'not_found', message: 'No such workflow.' });
+    }
+    await this.manager(db, claims, input.projectId);
     for (const [i, s] of input.stages.entries()) {
       if (!s.reviewers.length)
         throw new BadRequestException({
@@ -213,6 +225,22 @@ export class ReviewService {
     await tx`UPDATE dms.review SET stage = ${stage} WHERE id = ${r.id}`;
   }
 
+  /** A material submittal's approval (Wave 3) follows its review's decision. */
+  private async decideMaterial(
+    tx: TransactionSql,
+    claims: TenantClaims,
+    reviewId: string,
+    status: 'approved' | 'rejected',
+    comment: string,
+  ) {
+    await tx`
+      UPDATE qa.material_approval m SET status = ${status}, decided_on = ${today()}, decided_by = ${claims.sub},
+        comments = left(concat_ws(' · ', nullif(m.comments, ''),
+          'Submittal ' || s.number || coalesce(': ' || nullif(${comment.trim()}, ''), '')), 1000)
+      FROM dms.submittal s
+      WHERE s.review_id = ${reviewId} AND m.id = s.material_approval_id AND m.status = 'submitted'`;
+  }
+
   private async closeTasks(tx: TransactionSql, reviewId: string) {
     const left = await tx<{ id: string }[]>`
       UPDATE dms.review_task SET status = 'skipped' WHERE review_id = ${reviewId} AND status = 'waiting' RETURNING id`;
@@ -272,6 +300,9 @@ export class ReviewService {
             message: `Nobody to review at "${s.name}".`,
           });
       await this.activate(tx, r!, 0);
+      // A submittal follows its document's resubmission.
+      if (resubmits)
+        await tx`UPDATE dms.submittal SET review_id = ${r!.id} WHERE review_id = ${resubmits}`;
       await audit(tx, claims.sub, 'review.start', 'review', r!.id, { number: r!.number, version });
       return r!.id;
     });
@@ -330,6 +361,8 @@ export class ReviewService {
       if (outcome === 'return' || outcome === 'reject') {
         await tx`UPDATE dms.review SET status = ${outcome === 'return' ? 'returned' : 'rejected'}, closed_at = now(),
             row_version = row_version + 1 WHERE id = ${r!.id}`;
+        if (outcome === 'reject')
+          await this.decideMaterial(tx, claims, r!.id, 'rejected', input.comment);
         await notifyAuthor(
           `${r!.number} ${r!.title}: ${outcome === 'return' ? 'returned for revision' : 'rejected'} at ${stage.name}`,
         );
@@ -338,6 +371,7 @@ export class ReviewService {
         if (r!.stage + 1 >= r!.stages.length) {
           await tx`UPDATE dms.review SET status = 'approved', with_comments = ${comments}, closed_at = now(),
               row_version = row_version + 1 WHERE id = ${r!.id}`;
+          await this.decideMaterial(tx, claims, r!.id, 'approved', input.comment);
           await notifyAuthor(
             `${r!.number} ${r!.title}: approved${comments ? ' with comments' : ''}`,
           );
