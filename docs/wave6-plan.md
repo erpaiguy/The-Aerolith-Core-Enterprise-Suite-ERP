@@ -270,6 +270,113 @@ receipts, and RERA.
   - The vouchers checked in the trial balance, and the quarterly workbook read back.
 - A browser test: units, a booking, a milestone, a demand and a receipt, and the RERA tab's numbers.
 
+## Step 2 delivered
+
+[Certain] As planned (migrations 0066 and 0067, schema `re`, permission `sales.edit`):
+- **Inventory:** towers, units and agreement values (carpet × rate + parking + charges, in paise). Units are shown by
+  floor, coloured by status.
+- **Bookings** BK-001…:
+  - The buyer is recorded, and a **buyer party** opened (`is_buyer`, ledger under debtors, named
+    "<tower>-<unit> <buyer> (BK-…)") so buyers stay out of client lists.
+  - Booking raises the booking stage at once.
+  - Registering the agreement raises the agreement stage and any milestone already reached that RERA §13 held back.
+  - Cancelling frees the unit.
+- **Plan:**
+  - Stages must total 100%. A stage falls due on booking, on the agreement or on a milestone (of one tower or all).
+  - Site marks a milestone reached, which raises a demand for every live booking it applies to.
+  - The plan cannot be replaced once anything has been demanded on it.
+- **Demands** DM-…:
+  - The stage's % of the value, plus GST at the unit's rate (5, 1 or 12%) split into CGST and SGST halves, due in the
+    project's days.
+  - Posted as a sales voucher: buyer Dr; advances from flat buyers (a new role and ledger) Cr; output CGST and SGST
+    Cr.
+- **Receipts** RC-…:
+  - Posted Dr the collection bank, Cr the buyer, and allocated oldest first.
+  - The GST inside each allocation is in proportion.
+  - The RERA share (70% of what is not GST) is recorded on the receipt.
+- **Interest:**
+  - Simple, by day, at the project's rate, on each payment made late and on what is still open.
+  - "Raise interest" posts it to interest income, less whatever was raised before.
+- **The designated account:**
+  - Required against deposited. Deposits and withdrawals are contra vouchers.
+  - A withdrawal needs the completion % and the three certificate references, and is refused above deposits ×
+    completion % less what has been withdrawn.
+- **MahaRERA quarterly update** in JSON and Excel: bookings by tower in the quarter and to date, milestones reached,
+  collections, deposits and withdrawals.
+- **Fixed while testing:** 0066 gave the new ledger the code L4006, which payroll already uses, so it was skipped.
+  0067 adds it as L4020; 0066 was not edited, being committed.
+- **Tests:**
+  - `re-rules.spec.ts`.
+  - `realestate.int.spec.ts`: one flat end to end with every figure worked by hand (the §13 hold, ₹5,139.68 + ₹7,709.52
+    interest, the buyer's ledger at ₹26,30,499.20, advances at ₹49,86,000, the 20%-completion withdrawal limit of
+    ₹3,49,020, the quarterly workbook).
+  - The browser test `sales.spec.ts`.
+- [Guessing] **For a CA to confirm before a tenant relies on it:** demands booked as advances (revenue left to
+  possession or percentage completion, outside this step), and GST charged on each demand.
+
+## Step 3 in detail (planned before building)
+
+**What is there.** [Certain] Fixed reports and dashboards with a KPI picker (Wave 1 step 12), ECharts in the web app,
+ExcelJS on the server, notifications in the inbox, and hourly background loops over tenants (the documents janitor).
+Nothing lets a manager build their own report.
+
+**The reporting model** (code, not tables):
+- A registry of **views**, each a fixed, reviewed SQL source over one module, with its **fields**: a name, a label, a
+  type (text, number, money, date or month), and whether it can be grouped or summed. The first views:
+  - Projects.
+  - Purchase orders.
+  - Goods receipts.
+  - Vendor bills.
+  - Client (RA) bills.
+  - The ledger's lines.
+  - CRM leads.
+  - Flat bookings.
+  - RFIs.
+- **Access as on the screens:**
+  - A view with a project column returns only the projects the person may see (their team, or every project with
+    `projects.all`).
+  - A view may need a permission: the ledger's lines need `accounts.view`.
+- **No SQL from the browser, ever.** A report is a **spec**: the view, the chosen fields, filters (equals, not equal,
+  greater or less, between, contains, in), group-by fields, sums, counts and averages, a sort and a limit.
+  - The server builds the query from the registry's identifiers only. Values are bound as parameters, and every field
+    name is checked against the view.
+  - [Certain] Results are capped at 10,000 rows on screen and 100,000 in Excel.
+
+**Saved reports** (`bi.report`):
+- A name and the spec, shown as a **table or a chart** (bar, line or pie, choosing the label field and the value
+  field).
+- **Shared** with nobody, managers, or everyone. Whoever opens a shared report still sees only their own projects'
+  rows.
+- Copied, renamed, deleted by their owner or an admin.
+
+**Scheduled exports** (`bi.schedule`):
+- Daily, weekly (a day of the week) or monthly (a day of the month), at 07:00 IST.
+- The background loop (hourly, like the documents janitor) runs what is due **as the report's owner**. Their access
+  applies, and an owner who has left gets no export.
+- The Excel file is kept for 30 days (`bi.export`, at most 5 MB). The owner and the people chosen get an inbox notice
+  with a link to download it (staff have no email, docs/03-architecture.md §6).
+
+**Screen:** "Report builder":
+- Saved reports on the left.
+- The builder: the view, then fields, filters, grouping and sums as chips and selects.
+- The result as a table or a chart, with "Save", "Share", "Excel" and "Schedule".
+
+**Rights:** everyone may build and run (within their access); saving and sharing are for anyone; scheduling is for
+managers and admins.
+
+**Tests:**
+- Unit: the query builder.
+  - Spec to SQL fragments, refusing an unknown field, an unknown view, a group-by without a sum, and a filter of the
+    wrong type.
+  - Identifiers are never interpolated from input.
+- An integration test:
+  - Purchase orders grouped by vendor with summed value, checked against the orders made.
+  - A worker on one project sees only that project's rows; the ledger view refused without `accounts.view`.
+  - Saved, shared with managers, opened by a manager.
+  - A schedule run by calling the runner with a clock, the export downloaded and parsed, and a schedule whose owner
+    is deactivated skipped.
+- A browser test: a report built (bookings by tower, value summed), shown as a bar chart, saved, exported to Excel.
+
 ## Risks
 
 1. [Likely] Portals change the security model (outside users in a tenant's database); they need their own

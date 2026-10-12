@@ -57,7 +57,7 @@ test('a flat booked on a payment plan, paid for, and the RERA share due', async 
     .getByRole('button', { name: 'Save the plan' })
     .click();
   await expect(page.getByRole('list', { name: 'Plan' })).toContainText(
-    'On booking: 10% on booking',
+    'On booking: 10.00% on booking',
   );
 
   await page.getByRole('tab', { name: 'Inventory' }).click();

@@ -137,7 +137,7 @@ describe.skipIf(!controlUrl || !adminUrl)('real estate sales and RERA (integrati
     ).id;
 
     const base = `/tenant/projects/${projectId}/sales`;
-    expect((await post(`${base}/towers`, { name: 'A', floors: 12 }, worker)).statusCode).toBe(404);
+    expect((await post(`${base}/towers`, { name: 'A', floors: 12 }, worker)).statusCode).toBe(403);
     await ok(
       post(
         `${base}/setup`,

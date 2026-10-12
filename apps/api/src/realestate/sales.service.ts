@@ -782,9 +782,9 @@ export class SalesService {
     >`
       SELECT
         coalesce((SELECT sum(r.rera_share) FROM re.receipt r JOIN re.booking b ON b.id = r.booking_id
-          JOIN re.unit u ON u.id = b.unit_id JOIN re.tower t ON t.id = u.tower_id WHERE t.project_id = ${projectId}), 0)::text AS required,
-        coalesce((SELECT sum(amount) FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'deposit'), 0)::text AS deposited,
-        coalesce((SELECT sum(amount) FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'withdrawal'), 0)::text AS withdrawn,
+          JOIN re.unit u ON u.id = b.unit_id JOIN re.tower t ON t.id = u.tower_id WHERE t.project_id = ${projectId}), 0)::numeric(16, 2)::text AS required,
+        coalesce((SELECT sum(amount) FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'deposit'), 0)::numeric(16, 2)::text AS deposited,
+        coalesce((SELECT sum(amount) FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'withdrawal'), 0)::numeric(16, 2)::text AS withdrawn,
         (SELECT completion_pct::text FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'withdrawal'
           ORDER BY on_date DESC, created_at DESC LIMIT 1) AS completion`;
     const entries = await db`
@@ -930,11 +930,11 @@ export class SalesService {
       { collected_q: string; collected: string; dep_q: string; wd_q: string }[]
     >`
       SELECT
-        coalesce(sum(r.amount) FILTER (WHERE r.received_on BETWEEN ${qStart} AND ${upto}), 0)::text AS collected_q,
-        coalesce(sum(r.amount) FILTER (WHERE r.received_on <= ${upto}), 0)::text AS collected,
-        (SELECT coalesce(sum(amount), 0)::text FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'deposit'
+        coalesce(sum(r.amount) FILTER (WHERE r.received_on BETWEEN ${qStart} AND ${upto}), 0)::numeric(16, 2)::text AS collected_q,
+        coalesce(sum(r.amount) FILTER (WHERE r.received_on <= ${upto}), 0)::numeric(16, 2)::text AS collected,
+        (SELECT coalesce(sum(amount), 0)::numeric(16, 2)::text FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'deposit'
           AND on_date BETWEEN ${qStart} AND ${upto}) AS dep_q,
-        (SELECT coalesce(sum(amount), 0)::text FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'withdrawal'
+        (SELECT coalesce(sum(amount), 0)::numeric(16, 2)::text FROM re.rera_entry WHERE project_id = ${projectId} AND kind = 'withdrawal'
           AND on_date BETWEEN ${qStart} AND ${upto}) AS wd_q
       FROM re.receipt r JOIN re.booking b ON b.id = r.booking_id JOIN re.unit u ON u.id = b.unit_id
       JOIN re.tower t ON t.id = u.tower_id WHERE t.project_id = ${projectId}`;
