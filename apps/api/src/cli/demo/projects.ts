@@ -35,8 +35,7 @@ const partyName = (key: string) => PARTIES.find((p) => p.key === key)!.name;
 function analysisRate(c: Ctx, code: string, d: Day): number {
   const a = ANALYSES.find((x) => x.code === code)!;
   let cost = 0;
-  for (const l of a.lines)
-    cost += l[0] === 'LS' ? l[1] : l[1] * c.res[l[0]]!.rate(d);
+  for (const l of a.lines) cost += l[0] === 'LS' ? l[1] : l[1] * c.res[l[0]]!.rate(d);
   return (cost / a.outputQty) * 1.2 * 1.15;
 }
 
@@ -51,7 +50,8 @@ export function itemDone(ps: ProjectState, item: { window: [number, number] }, d
 /** Value of the work a project does between two days (at contract rates). */
 export function workValue(ps: ProjectState, from: Day, to: Day): number {
   let v = 0;
-  for (const it of ps.items) v += (itemDone(ps, it, to) - itemDone(ps, it, from)) * it.qty * it.rate;
+  for (const it of ps.items)
+    v += (itemDone(ps, it, to) - itemDone(ps, it, from)) * it.qty * it.rate;
   return v;
 }
 
@@ -61,7 +61,10 @@ export const activeOn = (ps: ProjectState, d: Day) =>
 // --- CRM and tenders ---------------------------------------------------------------------------------------------
 
 async function criteria(c: Ctx, score: (key: string) => number) {
-  const s = await c.s.get<{ criteria: { key: string; weight: number }[] }>('/tenant/tender-settings', c.admin);
+  const s = await c.s.get<{ criteria: { key: string; weight: number }[] }>(
+    '/tenant/tender-settings',
+    c.admin,
+  );
   return s.criteria.map((k) => ({ key: k.key, weight: k.weight, score: score(k.key) }));
 }
 
@@ -77,7 +80,10 @@ interface TenderSpec {
 }
 
 /** A tender from the day it is published to the day it is ready to submit (BOQ priced, scenario chosen). */
-async function openTender(c: Ctx, t: TenderSpec): Promise<{ id: string; boqId: string; bid: number } | undefined> {
+async function openTender(
+  c: Ctx,
+  t: TenderSpec,
+): Promise<{ id: string; boqId: string; bid: number } | undefined> {
   const priya = as(c, 'priya');
   let tenderId: string;
   if (t.lead) {
@@ -99,18 +105,32 @@ async function openTender(c: Ctx, t: TenderSpec): Promise<{ id: string; boqId: s
     );
     await c.s.post(
       `/tenant/crm/leads/${lead.id}/interactions`,
-      { kind: 'meeting', happenedAt: iso(t.lead.on, '10:15'), summary: `Met the client's engineer about ${t.title}; scope and budget discussed.`, followUpOn: null },
+      {
+        kind: 'meeting',
+        happenedAt: iso(t.lead.on, '10:15'),
+        summary: `Met the client's engineer about ${t.title}; scope and budget discussed.`,
+        followUpOn: null,
+      },
       priya,
     );
     on(addDays(t.lead.on, 6));
     await c.s.post(
       `/tenant/crm/leads/${lead.id}/interactions`,
-      { kind: 'site_visit', happenedAt: iso(addDays(t.lead.on, 6), '10:00'), summary: 'Site visit with Suresh: soil looks hard murum, access road fine.', followUpOn: null },
+      {
+        kind: 'site_visit',
+        happenedAt: iso(addDays(t.lead.on, 6), '10:00'),
+        summary: 'Site visit with Suresh: soil looks hard murum, access road fine.',
+        followUpOn: null,
+      },
       priya,
     );
     await c.s.post(`/tenant/crm/leads/${lead.id}/stage`, { stage: 'qualified' }, priya);
     on(t.published);
-    const converted = await c.s.post<{ tenderId: string }>(`/tenant/crm/leads/${lead.id}/convert`, {}, priya);
+    const converted = await c.s.post<{ tenderId: string }>(
+      `/tenant/crm/leads/${lead.id}/convert`,
+      {},
+      priya,
+    );
     tenderId = converted.tenderId;
     const cur = await c.s.get<{ rowVersion: number }>(`/tenant/tenders/${tenderId}`, priya);
     await c.s.post(
@@ -156,7 +176,9 @@ async function openTender(c: Ctx, t: TenderSpec): Promise<{ id: string; boqId: s
   bump(c, 'tenders');
   c.paths.push(`/tenders/${tenderId}`);
   await c.s.post(`/tenant/tenders/${tenderId}/status`, { to: 'evaluating' }, priya);
-  await step(c, 'tender checklist', () => c.s.post(`/tenant/tenders/${tenderId}/checklist/standard`, {}, priya));
+  await step(c, 'tender checklist', () =>
+    c.s.post(`/tenant/tenders/${tenderId}/checklist/standard`, {}, priya),
+  );
   return { id: tenderId, ...(await priceTender(c, tenderId, t)) };
 }
 
@@ -192,7 +214,11 @@ async function priceTender(c: Ctx, tenderId: string, t: TenderSpec) {
     { name: 'Civil and building services' },
     priya,
   );
-  await c.s.post(`/tenant/boqs/${boq.id}`, { rowVersion: boq.rowVersion, rateDate: t.published }, priya);
+  await c.s.post(
+    `/tenant/boqs/${boq.id}`,
+    { rowVersion: boq.rowVersion, rateDate: t.published },
+    priya,
+  );
   // Quantities are scaled so the estimate lands near the tender's value.
   const share = BOQ_ITEMS.reduce((s, i) => s + (i.share ?? 0), 0);
   const base = BOQ_ITEMS.filter((i) => i.analysis).reduce(
@@ -204,14 +230,31 @@ async function priceTender(c: Ctx, tenderId: string, t: TenderSpec) {
   let afterSection: string | null = null;
   for (const [code, name] of BOQ_SECTIONS) {
     const sid = `ts${code}`;
-    ops.push({ op: 'insert', tempId: sid, parentId: null, afterId: afterSection, type: 'section', code, description: name });
+    ops.push({
+      op: 'insert',
+      tempId: sid,
+      parentId: null,
+      afterId: afterSection,
+      type: 'section',
+      code,
+      description: name,
+    });
     afterSection = sid;
     let after: string | null = null;
     for (const it of BOQ_ITEMS.filter((i) => i.section === code)) {
       const tid = `ti${it.code.replace('.', '_')}`;
       ops.push(
         it.analysis
-          ? { op: 'insert', tempId: tid, parentId: sid, afterId: after, type: 'item', code: it.code, rateAnalysisId: c.ana[it.analysis], qty: qty4(Math.round(it.qty * scale * 10) / 10) }
+          ? {
+              op: 'insert',
+              tempId: tid,
+              parentId: sid,
+              afterId: after,
+              type: 'item',
+              code: it.code,
+              rateAnalysisId: c.ana[it.analysis],
+              qty: qty4(Math.round(it.qty * scale * 10) / 10),
+            }
           : {
               op: 'insert',
               tempId: tid,
@@ -243,7 +286,10 @@ async function priceTender(c: Ctx, tenderId: string, t: TenderSpec) {
     },
     priya,
   );
-  const sum = await c.s.get<{ beforeGst: string }>(`/tenant/tenders/${tenderId}/bid-summary`, priya);
+  const sum = await c.s.get<{ beforeGst: string }>(
+    `/tenant/tenders/${tenderId}/bid-summary`,
+    priya,
+  );
   return { boqId: boq.id, bid: Number(sum.beforeGst) };
 }
 
@@ -257,7 +303,11 @@ async function submitTender(c: Ctx, tenderId: string, due: Day, bid: number) {
   for (const item of work.checklist)
     if (item.status === 'pending')
       await step(c, 'checklist ready', () =>
-        c.s.post(`/tenant/checklist/${item.id}`, { status: 'ready', rowVersion: item.rowVersion }, priya),
+        c.s.post(
+          `/tenant/checklist/${item.id}`,
+          { status: 'ready', rowVersion: item.rowVersion },
+          priya,
+        ),
       );
   await c.s.post(
     `/tenant/tenders/${tenderId}/submissions`,
@@ -272,14 +322,26 @@ async function submitTender(c: Ctx, tenderId: string, due: Day, bid: number) {
   );
 }
 
-async function openBids(c: Ctx, tenderId: string, due: Day, ours: number, others: [string, number][]) {
+async function openBids(
+  c: Ctx,
+  tenderId: string,
+  due: Day,
+  ours: number,
+  others: [string, number][],
+) {
   on(addDays(due, 1), 15);
   await c.s.post(
     `/tenant/tenders/${tenderId}/bids`,
     {
       bids: [
         { us: true, quotedValue: money(ours), qualified: true, notes: '' },
-        ...others.map(([k, f]) => ({ us: false, partyId: c.party[k], quotedValue: money(Math.round(ours * f)), qualified: true, notes: '' })),
+        ...others.map(([k, f]) => ({
+          us: false,
+          partyId: c.party[k],
+          quotedValue: money(Math.round(ours * f)),
+          qualified: true,
+          notes: '',
+        })),
       ],
     },
     as(c, 'priya'),
@@ -334,7 +396,9 @@ export function scheduleTenders(c: Ctx) {
         await c.s.post(
           `/tenant/tenders/${made.id}/decision`,
           {
-            criteria: await criteria(c, (k) => (k === 'resources' || k === 'strategic_fit' ? 2 : 3)),
+            criteria: await criteria(c, (k) =>
+              k === 'resources' || k === 'strategic_fit' ? 2 : 3,
+            ),
             decision: 'no_bid',
             reason: 'Beyond our current working capital and bid capacity.',
           },
@@ -362,7 +426,12 @@ export function scheduleTenders(c: Ctx) {
               outcome: 'lost',
               on: t.result,
               category: t.category ?? 'price',
-              reason: t.category === 'technical' ? 'Our similar-work certificate was found short.' : t.category === 'qualification' ? 'Turnover criterion: our turnover was then below the threshold.' : `L2; ${partyName(t.winner!)} quoted ${Math.round(((t.ourFactor ?? 1.03) - 1) * 100)}% below us.`,
+              reason:
+                t.category === 'technical'
+                  ? 'Our similar-work certificate was found short.'
+                  : t.category === 'qualification'
+                    ? 'Turnover criterion: our turnover was then below the threshold.'
+                    : `L2; ${partyName(t.winner!)} quoted ${Math.round(((t.ourFactor ?? 1.03) - 1) * 100)}% below us.`,
               value: money(Math.round(opened.bid / (t.ourFactor ?? 1.03))),
               winnerId: c.party[t.winner!],
             },
@@ -380,7 +449,15 @@ export function scheduleTenders(c: Ctx) {
       on(l.on);
       const lead = await c.s.post<{ id: string }>(
         '/tenant/crm/leads',
-        { title: l.title, organisation: l.organisation, source: l.source, segment: l.segment, location: 'Vidarbha', value: l.value, expectedMonth: l.expected },
+        {
+          title: l.title,
+          organisation: l.organisation,
+          source: l.source,
+          segment: l.segment,
+          location: 'Vidarbha',
+          value: l.value,
+          expectedMonth: l.expected,
+        },
         priya,
       );
       bump(c, 'leads');
@@ -393,7 +470,11 @@ export function scheduleTenders(c: Ctx) {
       for (const [kind, summary] of steps.slice(0, l.end === 'new' ? 1 : 3)) {
         d = minDay(addDays(d, c.r.int(3, 12)), c.today);
         on(d);
-        await c.s.post(`/tenant/crm/leads/${lead.id}/interactions`, { kind, happenedAt: iso(d, '10:00'), summary, followUpOn: null }, priya);
+        await c.s.post(
+          `/tenant/crm/leads/${lead.id}/interactions`,
+          { kind, happenedAt: iso(d, '10:00'), summary, followUpOn: null },
+          priya,
+        );
       }
       const path: Record<string, string[]> = {
         lost: ['qualified', 'proposal', 'lost'],
@@ -406,15 +487,32 @@ export function scheduleTenders(c: Ctx) {
       for (const stage of path[l.end]!)
         await c.s.post(
           `/tenant/crm/leads/${lead.id}/stage`,
-          { stage, reason: stage === 'lost' ? 'Client went with a design-build firm from Nagpur.' : stage === 'dropped' ? 'Client postponed the project indefinitely.' : undefined },
+          {
+            stage,
+            reason:
+              stage === 'lost'
+                ? 'Client went with a design-build firm from Nagpur.'
+                : stage === 'dropped'
+                  ? 'Client postponed the project indefinitely.'
+                  : undefined,
+          },
           priya,
         );
       // Open leads carry a follow-up in the coming days.
-      if (['qualified', 'proposal', 'negotiation', 'new'].includes(l.end) && diffDays(c.today, d) < 40) {
+      if (
+        ['qualified', 'proposal', 'negotiation', 'new'].includes(l.end) &&
+        diffDays(c.today, d) < 40
+      ) {
         c.sched.at(c.today, 5, 'lead follow-up', async () => {
           await c.s.post(
             `/tenant/crm/leads/${lead.id}/interactions`,
-            { kind: 'call', happenedAt: new Date(Date.now() - 3_600_000).toISOString(), summary: 'Called to check the decision timeline.', followUpOn: addDays(c.today, c.r.int(2, 9)), followUp: 'Send the revised offer' },
+            {
+              kind: 'call',
+              happenedAt: new Date(Date.now() - 3_600_000).toISOString(),
+              summary: 'Called to check the decision timeline.',
+              followUpOn: addDays(c.today, c.r.int(2, 9)),
+              followUp: 'Send the revised offer',
+            },
             priya,
           );
         });
@@ -444,7 +542,13 @@ export function scheduleTenders(c: Ctx) {
         on(p.result);
         await c.s.post(
           `/tenant/tenders/${opened.id}/result`,
-          { outcome: 'won', on: p.result, category: null, reason: 'L1; technically qualified.', value: money(opened.bid) },
+          {
+            outcome: 'won',
+            on: p.result,
+            category: null,
+            reason: 'L1; technically qualified.',
+            value: money(opened.bid),
+          },
           as(c, 'priya'),
         );
         await setUpProject(c, p, opened.id, opened.bid);
@@ -461,7 +565,11 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
   on(day);
   const proj = await c.s.post<{ id: string; rowVersion: number }>(
     `/tenant/tenders/${tenderId}/project`,
-    { startOn: p.start, plannedFinishOn: p.plannedFinish, clientRef: `WO/${p.client.toUpperCase()}/${p.result.slice(0, 4)}/${c.r.int(100, 999)}` },
+    {
+      startOn: p.start,
+      plannedFinishOn: p.plannedFinish,
+      clientRef: `WO/${p.client.toUpperCase()}/${p.result.slice(0, 4)}/${c.r.int(100, 999)}`,
+    },
     suresh,
   );
   const total = diffDays(p.plannedFinish, p.start) * (1 + p.slip);
@@ -498,13 +606,21 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
   for (const u of new Set([...siteTeam(p.key), 'priya', 'kavita', 'imran', 'rahul', 'pooja']))
     if (c.users[u]) {
       await step(c, 'team', () =>
-        c.s.post(`/tenant/projects/${proj.id}/team`, { userId: c.users[u]!.id, role: 'member' }, suresh),
+        c.s.post(
+          `/tenant/projects/${proj.id}/team`,
+          { userId: c.users[u]!.id, role: 'member' },
+          suresh,
+        ),
       );
       ps.team.push(u);
     }
 
   // The tender's BOQs come across as the contract and the budget.
-  await c.s.post(`/tenant/projects/${proj.id}/boqs/from-tender`, { matchContractValue: false }, suresh);
+  await c.s.post(
+    `/tenant/projects/${proj.id}/boqs/from-tender`,
+    { matchContractValue: false },
+    suresh,
+  );
   for (let i = 0; i < 300; i++) {
     const st = await c.s.get<{ copy: { status: string; error?: string } | null }>(
       `/tenant/projects/${proj.id}/boqs/from-tender`,
@@ -514,14 +630,23 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
     if (st.copy?.status === 'failed') throw new Error(`BOQ copy failed: ${st.copy.error}`);
     await pause(100);
   }
-  const boqs = await c.s.get<{ id: string; kind: string }[]>(`/tenant/projects/${proj.id}/boqs`, suresh);
+  const boqs = await c.s.get<{ id: string; kind: string }[]>(
+    `/tenant/projects/${proj.id}/boqs`,
+    suresh,
+  );
   ps.contractBoqId = boqs.find((b) => b.kind === 'contract')!.id;
   const budget = boqs.find((b) => b.kind === 'budget');
   if (budget) ps.budgetBoqId = budget.id;
-  const rows = await c.s.get<{ rows: { id: string; type: string; code: string | null; unit: string | null; qty: string | null; rate: string | null }[] }>(
-    `/tenant/boqs/${ps.contractBoqId}/rows?limit=500`,
-    suresh,
-  );
+  const rows = await c.s.get<{
+    rows: {
+      id: string;
+      type: string;
+      code: string | null;
+      unit: string | null;
+      qty: string | null;
+      rate: string | null;
+    }[];
+  }>(`/tenant/boqs/${ps.contractBoqId}/rows?limit=500`, suresh);
   const keys = new Map(
     (
       await c.db<{ id: string; line_key: string }[]>`
@@ -550,24 +675,50 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
 
   // WBS from the BOQ sections, mapped to cost codes; the cost baseline.
   await step(c, 'wbs', async () => {
-    await c.s.post(`/tenant/projects/${proj.id}/wbs/from-boq`, { boqId: ps.contractBoqId, depth: 1 }, suresh);
-    const tree = await c.s.get<{ id: string; code: string }[]>(`/tenant/projects/${proj.id}/wbs`, suresh);
+    await c.s.post(
+      `/tenant/projects/${proj.id}/wbs/from-boq`,
+      { boqId: ps.contractBoqId, depth: 1 },
+      suresh,
+    );
+    const tree = await c.s.get<{ id: string; code: string }[]>(
+      `/tenant/projects/${proj.id}/wbs`,
+      suresh,
+    );
     for (const w of tree) ps.wbs[w.code] = w.code;
   });
   await step(c, 'material budget', async () => {
     await c.s.post(`/tenant/projects/${proj.id}/material-budget/from-tender`, {}, suresh);
-    const mb = await c.s.get<{ revisions: { id: string; status: string }[] }>(`/tenant/projects/${proj.id}/material-budget`, suresh);
+    const mb = await c.s.get<{ revisions: { id: string; status: string }[] }>(
+      `/tenant/projects/${proj.id}/material-budget`,
+      suresh,
+    );
     const draft = mb.revisions.find((r) => r.status === 'draft');
     if (draft) {
-      const b = await c.s.get<{ rowVersion: number }>(`/tenant/material-budgets/${draft.id}`, suresh);
-      await c.s.post(`/tenant/material-budgets/${draft.id}/submit`, { rowVersion: b.rowVersion }, suresh);
+      const b = await c.s.get<{ rowVersion: number }>(
+        `/tenant/material-budgets/${draft.id}`,
+        suresh,
+      );
+      await c.s.post(
+        `/tenant/material-budgets/${draft.id}/submit`,
+        { rowVersion: b.rowVersion },
+        suresh,
+      );
     }
   });
-  await step(c, 'cost baseline', () => c.s.post(`/tenant/projects/${proj.id}/cost-control/baseline`, {}, suresh));
+  await step(c, 'cost baseline', () =>
+    c.s.post(`/tenant/projects/${proj.id}/cost-control/baseline`, {}, suresh),
+  );
   await step(c, 'cash terms', () =>
     c.s.post(
       `/tenant/projects/${proj.id}/cash-terms`,
-      { certifyDays: 15, clientPayDays: 45, supplierDays: 30, costDays: 30, clientTdsPct: '2.00', rowVersion: null },
+      {
+        certifyDays: 15,
+        clientPayDays: 45,
+        supplierDays: 30,
+        costDays: 30,
+        clientTdsPct: '2.00',
+        rowVersion: null,
+      },
       suresh,
     ),
   );
@@ -605,22 +756,39 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
         dlpMonths: 12,
         ldPctPerWeek: '0.5',
         ldCapPct: '10',
-        paymentTerms: 'Monthly RA bills; certification within 15 days; payment within 30 days of certification; 5% retention, released after the defects liability period.',
+        paymentTerms:
+          'Monthly RA bills; certification within 15 days; payment within 30 days of certification; 5% retention, released after the defects liability period.',
       },
       as(c, 'priya'),
     );
     ps.contractId = reg.id;
     await c.s.post(
       `/tenant/contracts/${reg.id}/securities`,
-      { kind: 'performance', issuer: 'HDFC Bank, Washim', number: `BG/${signed.slice(0, 4)}/${c.r.int(1000, 9999)}`, amount: money(Math.round(bid * 0.03)), validUntil: addMonths(p.plannedFinish, 15), claimUntil: addMonths(p.plannedFinish, 16), notes: 'Performance bank guarantee, 3% of the contract value' },
+      {
+        kind: 'performance',
+        issuer: 'HDFC Bank, Washim',
+        number: `BG/${signed.slice(0, 4)}/${c.r.int(1000, 9999)}`,
+        amount: money(Math.round(bid * 0.03)),
+        validUntil: addMonths(p.plannedFinish, 15),
+        claimUntil: addMonths(p.plannedFinish, 16),
+        notes: 'Performance bank guarantee, 3% of the contract value',
+      },
       as(c, 'priya'),
     );
     for (const [title, clause, due] of [
       ['Contractor all-risk insurance policy to be submitted', 'Cl. 21', addDays(p.start, 15)],
-      ['Labour licence and BOCW registration copies to the engineer', 'Cl. 34', addDays(p.start, 20)],
+      [
+        'Labour licence and BOCW registration copies to the engineer',
+        'Cl. 34',
+        addDays(p.start, 20),
+      ],
       ['Quality assurance plan for approval', 'Cl. 12', addDays(p.start, 30)],
     ] as const)
-      await c.s.post(`/tenant/contracts/${reg.id}/obligations`, { title, clause, dueOn: due }, as(c, 'priya'));
+      await c.s.post(
+        `/tenant/contracts/${reg.id}/obligations`,
+        { title, clause, dueOn: due },
+        as(c, 'priya'),
+      );
   });
 
   // The programme: one activity per BOQ section, baselined, linked to the BOQ.
@@ -657,10 +825,18 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
     );
     ps.scheduleId = plan.id;
     for (const [code] of BOQ_SECTIONS) ps.activities[code] = made.idMap[`ta${code}`]!;
-    await c.s.post(`/tenant/programmes/${plan.id}/baselines`, { name: 'Contract baseline' }, suresh);
+    await c.s.post(
+      `/tenant/programmes/${plan.id}/baselines`,
+      { name: 'Contract baseline' },
+      suresh,
+    );
     for (const [code] of BOQ_SECTIONS)
       await step(c, 'activity lines', () =>
-        c.s.post(`/tenant/programmes/${plan.id}/activities/${ps.activities[code]}/lines`, { boqId: ps.contractBoqId, code }, suresh),
+        c.s.post(
+          `/tenant/programmes/${plan.id}/activities/${ps.activities[code]}/lines`,
+          { boqId: ps.contractBoqId, code },
+          suresh,
+        ),
       );
     c.paths.push(`/programmes/${plan.id}`);
   });
@@ -669,10 +845,18 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
   c.sched.at(p.start, 15, `start ${p.key}`, async () => {
     on(p.start);
     const cur = await c.s.get<{ rowVersion: number }>(`/tenant/projects/${proj.id}`, suresh);
-    const r = await c.s.post<{ rowVersion: number }>(`/tenant/projects/${proj.id}/status`, { rowVersion: cur.rowVersion, status: 'active' }, suresh);
+    const r = await c.s.post<{ rowVersion: number }>(
+      `/tenant/projects/${proj.id}/status`,
+      { rowVersion: cur.rowVersion, status: 'active' },
+      suresh,
+    );
     ps.rowVersion = r.rowVersion;
     ps.status = 'active';
-    const store = await c.s.post<{ id: string }>(`/tenant/projects/${proj.id}/stores`, { siteId: ps.siteId, name: `${p.site} store` }, as(c, 'imran'));
+    const store = await c.s.post<{ id: string }>(
+      `/tenant/projects/${proj.id}/stores`,
+      { siteId: ps.siteId, name: `${p.site} store` },
+      as(c, 'imran'),
+    );
     ps.storeId = store.id;
     for (const k of p.labour) await step(c, 'work order', () => workOrder(c, ps, k));
     if (ps.advanceLeft > 0)
@@ -687,7 +871,9 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
             amount: money(ps.advanceLeft),
             reference: `RTGS/${p.client.toUpperCase()}/ADV`,
             narration: `Mobilisation advance against bank guarantee: ${p.name}`,
-            allocations: [{ kind: 'advance', billId: null, projectId: ps.id, amount: money(ps.advanceLeft) }],
+            allocations: [
+              { kind: 'advance', billId: null, projectId: ps.id, amount: money(ps.advanceLeft) },
+            ],
           },
           as(c, 'kavita'),
         ),
@@ -717,12 +903,17 @@ async function workOrder(c: Ctx, ps: ProjectState, k: string) {
       kind: 'work',
       partyId: c.party[k],
       siteId: ps.siteId,
-      paymentTerms: 'Monthly RA bills on joint measurement; 5% retention; TDS and 1% labour cess deducted.',
+      paymentTerms:
+        'Monthly RA bills on joint measurement; 5% retention; TDS and 1% labour cess deducted.',
       lines: lines.map(({ key: _k, ...l }) => ({ ...l, gstPct: '18' })),
     },
     as(c, 'suresh'),
   );
-  const issued = await c.s.post<{ id: string; number: string; inForce: { lines: { lineKey: string; description: string }[] } }>(
+  const issued = await c.s.post<{
+    id: string;
+    number: string;
+    inForce: { lines: { lineKey: string; description: string }[] };
+  }>(
     `/tenant/order-revisions/${o.open.id}/submit`,
     { rowVersion: o.open.rowVersion },
     as(c, 'suresh'),
@@ -732,7 +923,13 @@ async function workOrder(c: Ctx, ps: ProjectState, k: string) {
   ps.wo[k] = { id: issued.id, lines: byCode, number: issued.number };
   await c.s.put(
     `/tenant/work-orders/${issued.id}/subcontract-terms`,
-    { retentionPct: '5', retentionCap: null, advanceRecoveryPct: '0', labourCessPct: '1', tdsSection: '194C' },
+    {
+      retentionPct: '5',
+      retentionCap: null,
+      advanceRecoveryPct: '0',
+      labourCessPct: '1',
+      tdsSection: '194C',
+    },
     as(c, 'suresh'),
   );
   c.paths.push(`/orders/${issued.id}`);
@@ -752,21 +949,32 @@ function scheduleProjectMonths(c: Ctx, ps: ProjectState) {
     let billOn = addDays(d, 1);
     while (!isWorkDay(billOn)) billOn = addDays(billOn, 1);
     // A month still running is billed when it ends.
-    if (billOn <= c.today && (d === m || final)) c.sched.at(billOn, 30, `RA bill ${p.key}`, () => raBill(c, ps, d));
+    if (billOn <= c.today && (d === m || final))
+      c.sched.at(billOn, 30, `RA bill ${p.key}`, () => raBill(c, ps, d));
     let subOn = addDays(d, 3);
-    if (subOn <= c.today) c.sched.at(subOn, 32, `subcontract bills ${p.key}`, () => subcontractBills(c, ps, d));
+    if (subOn <= c.today)
+      c.sched.at(subOn, 32, `subcontract bills ${p.key}`, () => subcontractBills(c, ps, d));
     subOn = addDays(d, 5);
     if (subOn <= c.today)
       c.sched.at(subOn, 60, `cost month ${p.key}`, () =>
-        c.s.post(`/tenant/projects/${ps.id}/cost-control/months/${d.slice(0, 7)}/close`, {}, as(c, 'suresh')),
+        c.s.post(
+          `/tenant/projects/${ps.id}/cost-control/months/${d.slice(0, 7)}/close`,
+          {},
+          as(c, 'suresh'),
+        ),
       );
     if (final || d >= last) break;
   }
-  if (p.finished && p.finished <= c.today) c.sched.at(p.finished, 75, `complete ${p.key}`, () => complete(c, ps));
+  if (p.finished && p.finished <= c.today)
+    c.sched.at(p.finished, 75, `complete ${p.key}`, () => complete(c, ps));
 }
 
 async function measureMonth(c: Ctx, ps: ProjectState, d: Day) {
-  const who = as(c, siteTeam(ps.plan.key).find((u) => c.users[u] && (u !== 'sachin' || d <= '2025-06-30')) ?? 'suresh');
+  const who = as(
+    c,
+    siteTeam(ps.plan.key).find((u) => c.users[u] && (u !== 'sachin' || d <= '2025-06-30')) ??
+      'suresh',
+  );
   for (const it of ps.items) {
     const target = Math.round(itemDone(ps, it, d) * it.qty * 100) / 100;
     const delta = Math.round((target - it.measured) * 100) / 100;
@@ -774,7 +982,11 @@ async function measureMonth(c: Ctx, ps: ProjectState, d: Day) {
     const ok = await step(c, 'measurement', () =>
       c.s.post(
         `/tenant/boqs/${ps.contractBoqId}/lines/${it.nodeId}/progress`,
-        { measuredOn: d, qty: qty4(delta), description: `Joint measurement with the client's engineer, ${d.slice(0, 7)}` },
+        {
+          measuredOn: d,
+          qty: qty4(delta),
+          description: `Joint measurement with the client's engineer, ${d.slice(0, 7)}`,
+        },
         who,
       ),
     );
@@ -791,7 +1003,12 @@ async function measureMonth(c: Ctx, ps: ProjectState, d: Day) {
       const okWo = await step(c, 'work order measurement', () =>
         c.s.post(
           `/tenant/work-orders/${wo.id}/measurements`,
-          { lineKey, measuredOn: d, qty: qty4(woDelta), description: `Measured with ${partyName(k)}'s supervisor` },
+          {
+            lineKey,
+            measuredOn: d,
+            qty: qty4(woDelta),
+            description: `Measured with ${partyName(k)}'s supervisor`,
+          },
           as(c, 'suresh'),
         ),
       );
@@ -804,11 +1021,22 @@ async function updateProgramme(c: Ctx, ps: ProjectState, d: Day) {
   if (!ps.scheduleId) return;
   const suresh = as(c, 'suresh');
   const plan = await c.s.get<{ rowVersion: number }>(`/tenant/programmes/${ps.scheduleId}`, suresh);
-  const moved = await c.s.post<{ rowVersion: number }>(`/tenant/programmes/${ps.scheduleId}`, { rowVersion: plan.rowVersion, dataDate: d }, suresh);
+  const moved = await c.s.post<{ rowVersion: number }>(
+    `/tenant/programmes/${ps.scheduleId}`,
+    { rowVersion: plan.rowVersion, dataDate: d },
+    suresh,
+  );
   const ops: Record<string, unknown>[] = [];
   for (const [code] of BOQ_SECTIONS) {
-    const items = ps.items.filter((i) => BOQ_ITEMS.find((b) => b.code === i.code)?.section === code);
-    const done = items.reduce((s, i) => s + itemDone(ps, i, d) * i.qty * i.rate, 0) / Math.max(1, items.reduce((s, i) => s + i.qty * i.rate, 0));
+    const items = ps.items.filter(
+      (i) => BOQ_ITEMS.find((b) => b.code === i.code)?.section === code,
+    );
+    const done =
+      items.reduce((s, i) => s + itemDone(ps, i, d) * i.qty * i.rate, 0) /
+      Math.max(
+        1,
+        items.reduce((s, i) => s + i.qty * i.rate, 0),
+      );
     if (done <= 0.001) continue;
     const a = Math.min(...items.map((i) => i.window[0]));
     const b = Math.max(...items.map((i) => i.window[1]));
@@ -821,26 +1049,40 @@ async function updateProgramme(c: Ctx, ps: ProjectState, d: Day) {
       progress: {
         actualStart,
         actualFinish: finished ? minDay(addDays(ps.plan.start, Math.round(b * total)), d) : null,
-        remaining: finished ? null : Math.max(1, Math.round((1 - done) * (b - a) * total * (6 / 7))),
+        remaining: finished
+          ? null
+          : Math.max(1, Math.round((1 - done) * (b - a) * total * (6 / 7))),
       },
     });
   }
   if (ops.length)
-    await c.s.post(`/tenant/programmes/${ps.scheduleId}/changes`, { rowVersion: moved.rowVersion, ops }, suresh);
+    await c.s.post(
+      `/tenant/programmes/${ps.scheduleId}/changes`,
+      { rowVersion: moved.rowVersion, ops },
+      suresh,
+    );
 }
 
 async function raBill(c: Ctx, ps: ProjectState, upto: Day) {
   const suresh = as(c, 'suresh');
-  const bill = await c.s.post<{ id: string; rowVersion: number; figures?: { invoiceTotal: string } }>(
-    `/tenant/projects/${ps.id}/client-bills`,
-    { upto, siteId: ps.siteId },
-    suresh,
-  );
+  const bill = await c.s.post<{
+    id: string;
+    rowVersion: number;
+    figures?: { invoiceTotal: string };
+  }>(`/tenant/projects/${ps.id}/client-bills`, { upto, siteId: ps.siteId }, suresh);
   const sub = await step(c, 'RA bill submit', () =>
-    c.s.post<{ rowVersion: number }>(`/tenant/client-bills/${bill.id}/submit`, { rowVersion: bill.rowVersion }, suresh),
+    c.s.post<{ rowVersion: number }>(
+      `/tenant/client-bills/${bill.id}/submit`,
+      { rowVersion: bill.rowVersion },
+      suresh,
+    ),
   );
   if (!sub) {
-    await c.s.post(`/tenant/client-bills/${bill.id}/cancel`, { reason: 'Nothing new to bill this month.' }, suresh);
+    await c.s.post(
+      `/tenant/client-bills/${bill.id}/cancel`,
+      { reason: 'Nothing new to bill this month.' },
+      suresh,
+    );
     return;
   }
   ps.billedUpto = upto;
@@ -851,7 +1093,12 @@ async function raBill(c: Ctx, ps: ProjectState, upto: Day) {
   c.sched.at(certOn, 35, `certify ${ps.plan.key}`, async () => {
     const certified = await c.s.post<{ certified: { net: string; taxable: string }; raNo: number }>(
       `/tenant/client-bills/${bill.id}/certify`,
-      { rowVersion: sub.rowVersion, certifiedOn: certOn, clientRef: `CERT/${ps.plan.client.toUpperCase()}/${certOn.replaceAll('-', '')}`, lines: [] },
+      {
+        rowVersion: sub.rowVersion,
+        certifiedOn: certOn,
+        clientRef: `CERT/${ps.plan.client.toUpperCase()}/${certOn.replaceAll('-', '')}`,
+        lines: [],
+      },
       as(c, 'suresh'),
     );
     const net = Number(certified.certified.net);
@@ -885,16 +1132,31 @@ async function raBill(c: Ctx, ps: ProjectState, upto: Day) {
 async function subcontractBills(c: Ctx, ps: ProjectState, upto: Day) {
   for (const [k, wo] of Object.entries(ps.wo)) {
     const bill = await step(c, 'subcontract bill', () =>
-      c.s.post<{ id: string; rowVersion: number }>(`/tenant/work-orders/${wo.id}/subcontract-bills`, { upto }, as(c, 'suresh')),
+      c.s.post<{ id: string; rowVersion: number }>(
+        `/tenant/work-orders/${wo.id}/subcontract-bills`,
+        { upto },
+        as(c, 'suresh'),
+      ),
     );
     if (!bill) continue;
-    const ok = await step(c, 'subcontract bill submit', () =>
-      c.s.post(`/tenant/subcontract-bills/${bill.id}/submit`, { rowVersion: bill.rowVersion }, as(c, 'suresh')),
+    const ok = await step(
+      c,
+      'subcontract bill submit',
+      () =>
+        c.s.post(
+          `/tenant/subcontract-bills/${bill.id}/submit`,
+          { rowVersion: bill.rowVersion },
+          as(c, 'suresh'),
+        ),
       /nothing_to_bill/,
     );
     if (!ok)
       await step(c, 'subcontract bill cancel', () =>
-        c.s.post(`/tenant/subcontract-bills/${bill.id}/cancel`, { reason: 'Nothing measured this month.' }, as(c, 'suresh')),
+        c.s.post(
+          `/tenant/subcontract-bills/${bill.id}/cancel`,
+          { reason: 'Nothing measured this month.' },
+          as(c, 'suresh'),
+        ),
       );
     else bump(c, `subcontract bills (${k})`);
   }
@@ -905,8 +1167,16 @@ async function complete(c: Ctx, ps: ProjectState) {
   const suresh = as(c, 'suresh');
   on(d, 17);
   const cur = await c.s.get<{ rowVersion: number }>(`/tenant/projects/${ps.id}`, suresh);
-  const r = await c.s.post<{ rowVersion: number }>(`/tenant/projects/${ps.id}`, { actualFinishOn: d, rowVersion: cur.rowVersion }, suresh);
-  const done = await c.s.post<{ rowVersion: number }>(`/tenant/projects/${ps.id}/status`, { rowVersion: r.rowVersion, status: 'completed' }, suresh);
+  const r = await c.s.post<{ rowVersion: number }>(
+    `/tenant/projects/${ps.id}`,
+    { actualFinishOn: d, rowVersion: cur.rowVersion },
+    suresh,
+  );
+  const done = await c.s.post<{ rowVersion: number }>(
+    `/tenant/projects/${ps.id}/status`,
+    { rowVersion: r.rowVersion, status: 'completed' },
+    suresh,
+  );
   ps.rowVersion = done.rowVersion;
   ps.status = 'completed';
   bump(c, 'projects completed');
@@ -916,7 +1186,11 @@ async function complete(c: Ctx, ps: ProjectState) {
     c.sched.at(closeOn, 60, `close work orders ${ps.plan.key}`, async () => {
       for (const wo of Object.values(ps.wo))
         await step(c, 'close work order', () =>
-          c.s.post(`/tenant/orders/${wo.id}/close`, { reason: 'Work complete and finally measured.' }, suresh),
+          c.s.post(
+            `/tenant/orders/${wo.id}/close`,
+            { reason: 'Work complete and finally measured.' },
+            suresh,
+          ),
         );
     });
   const release = addDays(addMonths(d, 12), 20);
@@ -938,21 +1212,34 @@ async function complete(c: Ctx, ps: ProjectState) {
             amount: money(held),
             reference: `RTGS/RET/${release.replaceAll('-', '')}`,
             narration: `Retention released after the defects liability period: ${ps.plan.name}`,
-            allocations: [{ kind: 'retention', billId: null, projectId: ps.id, amount: money(held) }],
+            allocations: [
+              { kind: 'retention', billId: null, projectId: ps.id, amount: money(held) },
+            ],
           },
           as(c, 'kavita'),
         );
       for (const [k, wo] of Object.entries(ps.wo)) {
-        const book = await c.s.get<{ retention: { held: string; released: string } | null }>(`/tenant/work-orders/${wo.id}/subcontract`, suresh);
+        const book = await c.s.get<{ retention: { held: string; released: string } | null }>(
+          `/tenant/work-orders/${wo.id}/subcontract`,
+          suresh,
+        );
         const owed = Number(book.retention?.held ?? 0) - Number(book.retention?.released ?? 0);
         if (owed > 0)
           await step(c, 'subcontract retention', () =>
-            c.s.post(`/tenant/work-orders/${wo.id}/retention-release`, { date: addDays(release, 5), amount: money(owed) }, as(c, 'kavita')),
+            c.s.post(
+              `/tenant/work-orders/${wo.id}/retention-release`,
+              { date: addDays(release, 5), amount: money(owed) },
+              as(c, 'kavita'),
+            ),
           );
         void k;
       }
       const now = await c.s.get<{ rowVersion: number }>(`/tenant/projects/${ps.id}`, suresh);
-      await c.s.post(`/tenant/projects/${ps.id}/status`, { rowVersion: now.rowVersion, status: 'closed' }, suresh);
+      await c.s.post(
+        `/tenant/projects/${ps.id}/status`,
+        { rowVersion: now.rowVersion, status: 'closed' },
+        suresh,
+      );
     });
 }
 

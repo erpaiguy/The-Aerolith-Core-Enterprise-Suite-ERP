@@ -47,10 +47,13 @@ export async function makeUsers(c: Ctx, entitlement: string): Promise<void> {
 
 const rateOn = (base: number, kind: string) => (d: Day) => {
   // Materials rise about 1.5% a quarter, labour 2% each half-year, machines 1% a year, from December 2023.
-  const months =
-    (Number(d.slice(0, 4)) - 2023) * 12 + Number(d.slice(5, 7)) - 12;
+  const months = (Number(d.slice(0, 4)) - 2023) * 12 + Number(d.slice(5, 7)) - 12;
   const steps =
-    kind === 'material' ? Math.floor(months / 3) * 0.015 : kind === 'labour' ? Math.floor(months / 6) * 0.02 : Math.floor(months / 12) * 0.01;
+    kind === 'material'
+      ? Math.floor(months / 3) * 0.015
+      : kind === 'labour'
+        ? Math.floor(months / 6) * 0.02
+        : Math.floor(months / 12) * 0.01;
   return Math.round(base * (1 + Math.max(0, steps)) * 100) / 100;
 };
 
@@ -102,7 +105,12 @@ export async function setupCompany(c: Ctx): Promise<void> {
   // A cash-credit limit of ₹50 lakh with HDFC, against the receivables.
   const cc = await c.s.post<{ accounts: { id: string; code: string }[] }>(
     '/tenant/accounts/chart',
-    { parentId: c.acc.short_term_borrowings, code: 'L2001', name: 'HDFC Bank cash credit (limit ₹50 lakh)', kind: 'ordinary' },
+    {
+      parentId: c.acc.short_term_borrowings,
+      code: 'L2001',
+      name: 'HDFC Bank cash credit (limit ₹50 lakh)',
+      kind: 'ordinary',
+    },
     c.admin,
   );
   c.acc.cash_credit = cc.accounts.find((a) => a.code === 'L2001')!.id;
@@ -255,10 +263,38 @@ export async function setupPeople(c: Ctx): Promise<Record<string, string>> {
     designations[name] = d.id;
   }
   for (const t of [
-    { code: 'CL', name: 'Casual leave', paid: true, daysPerYear: '8', accrual: 'annual', carryForwardMax: '0' },
-    { code: 'SL', name: 'Sick leave', paid: true, daysPerYear: '7', accrual: 'annual', carryForwardMax: '7' },
-    { code: 'EL', name: 'Earned leave', paid: true, daysPerYear: '15', accrual: 'monthly', carryForwardMax: '30' },
-    { code: 'LWP', name: 'Leave without pay', paid: false, daysPerYear: '0', accrual: 'annual', carryForwardMax: '0' },
+    {
+      code: 'CL',
+      name: 'Casual leave',
+      paid: true,
+      daysPerYear: '8',
+      accrual: 'annual',
+      carryForwardMax: '0',
+    },
+    {
+      code: 'SL',
+      name: 'Sick leave',
+      paid: true,
+      daysPerYear: '7',
+      accrual: 'annual',
+      carryForwardMax: '7',
+    },
+    {
+      code: 'EL',
+      name: 'Earned leave',
+      paid: true,
+      daysPerYear: '15',
+      accrual: 'monthly',
+      carryForwardMax: '30',
+    },
+    {
+      code: 'LWP',
+      name: 'Leave without pay',
+      paid: false,
+      daysPerYear: '0',
+      accrual: 'annual',
+      carryForwardMax: '0',
+    },
   ])
     await c.s.post('/tenant/hr/leave-types', t, c.admin);
   await c.s.post(
@@ -283,7 +319,18 @@ export async function setupPeople(c: Ctx): Promise<Record<string, string>> {
       stateCode: null,
       effectiveFrom: '2023-04-01',
       data: {
-        new: TAX(50000, [[300000, 0], [600000, 5], [900000, 10], [1200000, 15], [1500000, 20], [null, 30]], 700000),
+        new: TAX(
+          50000,
+          [
+            [300000, 0],
+            [600000, 5],
+            [900000, 10],
+            [1200000, 15],
+            [1500000, 20],
+            [null, 30],
+          ],
+          700000,
+        ),
         old: OLD_TAX,
       },
       note: 'Salary TDS for FY 2023-24 (new regime the default)',
@@ -297,7 +344,18 @@ export async function setupPeople(c: Ctx): Promise<Record<string, string>> {
       stateCode: null,
       effectiveFrom: '2024-04-01',
       data: {
-        new: TAX(75000, [[300000, 0], [700000, 5], [1000000, 10], [1200000, 15], [1500000, 20], [null, 30]], 700000),
+        new: TAX(
+          75000,
+          [
+            [300000, 0],
+            [700000, 5],
+            [1000000, 10],
+            [1200000, 15],
+            [1500000, 20],
+            [null, 30],
+          ],
+          700000,
+        ),
         old: OLD_TAX,
       },
       note: 'Salary TDS for FY 2024-25 (Finance (No. 2) Act, 2024)',

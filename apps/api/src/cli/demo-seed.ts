@@ -69,7 +69,8 @@ export class Seeder {
     const out = res.json<T>();
     if (method === 'POST') {
       const id = (out as { id?: unknown } | null)?.id;
-      if (typeof id === 'string' && UUID.test(id) && !this.stamps.has(id)) this.stamps.set(id, Date.now());
+      if (typeof id === 'string' && UUID.test(id) && !this.stamps.has(id))
+        this.stamps.set(id, Date.now());
     }
     return out;
   }
@@ -295,7 +296,9 @@ async function main() {
       'Staff (username + password, no authenticator):',
       ...out.staff
         .filter((u) => u.active)
-        .map((u) => `  ${u.username.padEnd(10)} ${DEMO.staffPassword}  ${u.role.padEnd(8)} ${u.what}`),
+        .map(
+          (u) => `  ${u.username.padEnd(10)} ${DEMO.staffPassword}  ${u.role.padEnd(8)} ${u.what}`,
+        ),
       'Former staff (their sign-in is turned off; shows what a deactivated user looks like):',
       ...out.staff.filter((u) => !u.active).map((u) => `  ${u.username.padEnd(10)} ${u.what}`),
       '',
@@ -332,11 +335,13 @@ async function main() {
             licenceKey: trial.licenceKey,
             tenantId: trial.tenantId,
             admin: { email: DEMO.adminEmail, password: DEMO.adminPassword, secret: adMfa.secret },
-            staff: out.staff.filter((u) => u.active).map((u) => ({
-              username: u.username,
-              password: DEMO.staffPassword,
-              role: u.role,
-            })),
+            staff: out.staff
+              .filter((u) => u.active)
+              .map((u) => ({
+                username: u.username,
+                password: DEMO.staffPassword,
+                role: u.role,
+              })),
             portal: out.portal.map((u) => ({
               email: u.email,
               password: DEMO.portalPassword,

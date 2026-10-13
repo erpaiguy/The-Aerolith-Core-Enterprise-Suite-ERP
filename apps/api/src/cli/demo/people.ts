@@ -45,9 +45,15 @@ interface Leave {
 }
 
 export async function schedulePeople(c: Ctx, designations: Record<string, string>) {
-  const comps = await c.s.get<{ id: string; code: string }[]>('/tenant/payroll/components', c.admin);
+  const comps = await c.s.get<{ id: string; code: string }[]>(
+    '/tenant/payroll/components',
+    c.admin,
+  );
   const comp = Object.fromEntries(comps.map((x) => [x.code, x.id]));
-  const leaveTypes = await c.s.get<{ id: string; code: string }[]>('/tenant/hr/leave-types', c.admin);
+  const leaveTypes = await c.s.get<{ id: string; code: string }[]>(
+    '/tenant/hr/leave-types',
+    c.admin,
+  );
   const leaveType = Object.fromEntries(leaveTypes.map((x) => [x.code, x.id]));
   const leaves: Record<string, Leave[]> = {};
   const salaryOf: Record<string, number> = {};
@@ -67,7 +73,11 @@ export async function schedulePeople(c: Ctx, designations: Record<string, string
           { componentId: comp.BASIC, amount: money(basic), percentOfBasic: null },
           { componentId: comp.HRA, amount: null, percentOfBasic: '40' },
           { componentId: comp.CONV, amount: money(conv), percentOfBasic: null },
-          { componentId: comp.SPECIAL, amount: money(gross - basic - hra - conv), percentOfBasic: null },
+          {
+            componentId: comp.SPECIAL,
+            amount: money(gross - basic - hra - conv),
+            percentOfBasic: null,
+          },
         ],
       },
       hr(c, from),
@@ -168,7 +178,13 @@ export async function schedulePeople(c: Ctx, designations: Record<string, string
     if (pp.finished)
       for (const who of SITE_TEAM[pp.key] ?? []) {
         // Back to the office unless already moved to a later project.
-        const later = moves.some((m) => m.who === who && m.on > pp.start && m.key !== pp.key && m.on <= addDays(pp.finished!, 1));
+        const later = moves.some(
+          (m) =>
+            m.who === who &&
+            m.on > pp.start &&
+            m.key !== pp.key &&
+            m.on <= addDays(pp.finished!, 1),
+        );
         if (!later) moves.push({ on: addDays(pp.finished!, 1), who, key: null });
       }
   moves.sort((a, b) => a.on.localeCompare(b.on));
@@ -203,7 +219,9 @@ export async function schedulePeople(c: Ctx, designations: Record<string, string
         const year = m.slice(0, 4);
         const taken = (leaves[p.code] ?? []).filter((l) => l.from.startsWith(year));
         const type = c.r.chance(0.6) ? 'CL' : 'SL';
-        const used = taken.filter((l) => l.type === type).reduce((n, l) => n + diffDays(l.to, l.from) + 1, 0);
+        const used = taken
+          .filter((l) => l.type === type)
+          .reduce((n, l) => n + diffDays(l.to, l.from) + 1, 0);
         if (used >= (type === 'CL' ? 6 : 5)) continue;
         let from = addDays(m, c.r.int(2, 24));
         while (!isWorkDay(from)) from = addDays(from, 1);
@@ -218,7 +236,15 @@ export async function schedulePeople(c: Ctx, designations: Record<string, string
               from,
               to,
               halfDay: false,
-              reason: type === 'CL' ? c.r.pick(['Family function', 'Personal work', 'Travel to native place', 'Bank and documents work']) : c.r.pick(['Fever', 'Viral infection', 'Doctor visit', 'Back pain']),
+              reason:
+                type === 'CL'
+                  ? c.r.pick([
+                      'Family function',
+                      'Personal work',
+                      'Travel to native place',
+                      'Bank and documents work',
+                    ])
+                  : c.r.pick(['Fever', 'Viral infection', 'Doctor visit', 'Back pain']),
             },
             hr(c, until),
           ),
@@ -237,7 +263,8 @@ export async function schedulePeople(c: Ctx, designations: Record<string, string
           if (c.r.chance(0.015)) continue; // absent without leave
           const inM = 9 * 60 - 10 + c.r.int(0, 30);
           const outM = 18 * 60 - 15 + c.r.int(0, 60);
-          const t = (x: number) => `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+          const t = (x: number) =>
+            `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
           rows.push(`${p.code},${d},${t(inM)}`, `${p.code},${d},${t(outM)}`);
         }
       }
@@ -254,7 +281,11 @@ export async function schedulePeople(c: Ctx, designations: Record<string, string
     const runOn = addDays(end, 1);
     c.sched.at(runOn, 20, `payroll ${month}`, async () => {
       const h = hr(c, runOn);
-      const run = await c.s.post<{ id: string }>('/tenant/payroll/runs', { entityId: c.entityId, month }, h);
+      const run = await c.s.post<{ id: string }>(
+        '/tenant/payroll/runs',
+        { entityId: c.entityId, month },
+        h,
+      );
       await c.s.post(`/tenant/payroll/runs/${run.id}/submit`, {}, h);
       await c.s.post(`/tenant/payroll/runs/${run.id}/post`, {}, h);
       await c.s.post(
@@ -270,7 +301,13 @@ export async function schedulePeople(c: Ctx, designations: Record<string, string
       c.sched.at(dueOn, 30, `statutory dues ${month}`, async () => {
         const lines: { accountId: string; debit?: string; credit?: string }[] = [];
         let total = 0;
-        for (const key of ['pf_payable', 'esi_payable', 'pt_payable', 'lwf_payable', 'tds_payable_salary']) {
+        for (const key of [
+          'pf_payable',
+          'esi_payable',
+          'pt_payable',
+          'lwf_payable',
+          'tds_payable_salary',
+        ]) {
           const owed = -(await balance(c, c.acc[key]!, end));
           if (owed > 0.5) {
             lines.push({ accountId: c.acc[key]!, debit: money(owed) });
@@ -372,7 +409,17 @@ export class Labour {
     const w = list.find((x) => x.name === name)!;
     this.hired[k]!++;
     bump(this.c, 'workers hired');
-    const worker: Worker = { id: w.id, name, trade, skill, wage, rowVersion: w.rowVersion, joinedOn: d, on: null, idleSince: d };
+    const worker: Worker = {
+      id: w.id,
+      name,
+      trade,
+      skill,
+      wage,
+      rowVersion: w.rowVersion,
+      joinedOn: d,
+      on: null,
+      idleSince: d,
+    };
     this.workers[k]!.push(worker);
     return worker;
   }
@@ -394,10 +441,12 @@ export class Labour {
       const ws = this.workers[k]!;
       // Some leave on their own every week.
       for (const w of [...ws])
-        if (w.on && this.c.r.chance(0.011)) await step(this.c, 'worker leaves', () => this.leave(k, w, addDays(d, -1)));
+        if (w.on && this.c.r.chance(0.011))
+          await step(this.c, 'worker leaves', () => this.leave(k, w, addDays(d, -1)));
       // Released gangs that waited three weeks for work go home.
       for (const w of [...this.workers[k]!])
-        if (!w.on && w.idleSince && diffDays(d, w.idleSince) > 21) await step(this.c, 'worker leaves', () => this.leave(k, w, addDays(d, -1)));
+        if (!w.on && w.idleSince && diffDays(d, w.idleSince) > 21)
+          await step(this.c, 'worker leaves', () => this.leave(k, w, addDays(d, -1)));
       const byProject = need[k] ?? {};
       // Release those on finished or over-staffed projects.
       for (const w of this.workers[k]!) {
@@ -442,7 +491,8 @@ export class Labour {
         const marks = list.map((w) => {
           const roll = this.c.r.next();
           const status = roll < 0.88 ? 'present' : roll < 0.92 ? 'half_day' : 'absent';
-          const ot = status === 'present' && this.c.r.chance(0.08) ? String(this.c.r.int(1, 3)) : '0';
+          const ot =
+            status === 'present' && this.c.r.chance(0.08) ? String(this.c.r.int(1, 3)) : '0';
           return { workerId: w.id, status, overtimeHours: ot, trade: w.trade };
         });
         const ok = await step(this.c, 'muster', () =>
@@ -456,7 +506,8 @@ export class Labour {
         bump(this.c, 'muster marks', marks.length);
         this.musters.add(`${k}|${pk}|${d.slice(0, 7)}`);
         const byTrade: Record<string, number> = {};
-        for (const m of marks) if (m.status !== 'absent') byTrade[m.trade] = (byTrade[m.trade] ?? 0) + 1;
+        for (const m of marks)
+          if (m.status !== 'absent') byTrade[m.trade] = (byTrade[m.trade] ?? 0) + 1;
         for (const [trade, headcount] of Object.entries(byTrade))
           (this.present[pk] ??= []).push({ trade, partyId: this.c.party[k]!, headcount });
       }
@@ -487,7 +538,11 @@ export class Labour {
         this.c.sched.at(paidOn, 30, 'wage sheet verify', () =>
           this.c.s.post(
             `/tenant/labour/wage-sheets/${sheet.id}/verify`,
-            { paidOn: addDays(paidOn, -1), reference: `${k.toUpperCase()}/WAGES/${month}`, mode: 'bank' },
+            {
+              paidOn: addDays(paidOn, -1),
+              reference: `${k.toUpperCase()}/WAGES/${month}`,
+              mode: 'bank',
+            },
             h,
           ),
         );

@@ -115,7 +115,11 @@ async function crawl(
     // A project's records are hidden from people not on its team: the app says so, and that is not a fault.
     if (await page.getByText('belongs to a project you are not on').count()) {
       for (let i = problems.length - 1; i >= 0; i--)
-        if (problems[i]!.who === who && problems[i]!.path === path && problems[i]!.what.endsWith('-> 404'))
+        if (
+          problems[i]!.who === who &&
+          problems[i]!.path === path &&
+          problems[i]!.what.endsWith('-> 404')
+        )
           problems.splice(i, 1);
       continue;
     }

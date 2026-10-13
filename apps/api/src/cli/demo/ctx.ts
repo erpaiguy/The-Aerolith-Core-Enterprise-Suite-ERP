@@ -64,7 +64,10 @@ export interface Failure {
 }
 
 export class Scheduler {
-  private readonly q = new Map<Day, { order: number; label: string; fn: () => Promise<unknown> }[]>();
+  private readonly q = new Map<
+    Day,
+    { order: number; label: string; fn: () => Promise<unknown> }[]
+  >();
   at(day: Day, order: number, label: string, fn: () => Promise<unknown>): void {
     const list = this.q.get(day) ?? [];
     list.push({ order, label, fn });
