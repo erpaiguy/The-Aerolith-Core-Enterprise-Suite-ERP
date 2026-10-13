@@ -40,7 +40,7 @@ test('an estimator reads the dashboards, adds a tile and drills into the pipelin
   // 1. The three headline numbers, as of now.
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Dashboards' })
+    .getByRole('link', { name: 'Bid dashboard' })
     .click();
   await expect(page.getByRole('heading', { name: 'Tenders and bids' })).toBeVisible();
   await expect(page.getByTestId('tile-deadlines')).toHaveText('1');
@@ -77,7 +77,10 @@ test('an estimator reads the dashboards, adds a tile and drills into the pipelin
   await page.goBack();
 
   // 4. The estimation dashboard: nothing estimated yet, said plainly.
-  await page.getByRole('link', { name: 'Estimation' }).click();
+  await page
+    .getByRole('navigation', { name: 'Dashboards' })
+    .getByRole('link', { name: 'Estimation' })
+    .click();
   await expect(page.getByRole('heading', { name: 'Estimation', exact: true })).toBeVisible();
   await expect(page.getByTestId('tile-boqs_in_progress')).toHaveText('0');
   await expect(page.getByText('Nothing is priced yet.')).toBeVisible();

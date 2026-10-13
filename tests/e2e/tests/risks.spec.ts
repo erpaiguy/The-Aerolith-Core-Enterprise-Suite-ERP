@@ -45,7 +45,7 @@ test('a risk scored and mapped, mitigated, occurred and drawn against', async ({
 
   // Contingency ₹5,00,000; the risk occurs; ₹1,20,000 drawn.
   await page.getByLabel('Contingency held (₹)').fill('500000');
-  await page.getByRole('button', { name: 'Set' }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Set' }).click();
   await expect(page.getByTestId('contingency')).toContainText('Contingency ₹5,00,000');
   await row.getByLabel('Status, R-001').selectOption('occurred');
   await row.getByLabel('Draw contingency, R-001').fill('120000');

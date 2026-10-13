@@ -86,6 +86,7 @@ test('a drawing reviewed, returned, revised and approved', async ({ page }) => {
   await page.getByRole('button', { name: 'Mark up the document' }).click();
   const page1 = page.getByRole('application', { name: 'Page 1' });
   await expect(page1).toBeVisible();
+  await page1.scrollIntoViewIfNeeded();
   const area = (await page1.boundingBox())!;
   await page.mouse.move(area.x + area.width * 0.2, area.y + area.height * 0.3);
   await page.mouse.down();

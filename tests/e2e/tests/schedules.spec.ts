@@ -112,7 +112,7 @@ test('a project schedule on the WBS, with a baseline, progress, resources and th
   await page.getByLabel('Units a day').fill('3');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByRole('list', { name: 'Activity resources' })).toContainText('3 day');
-  await page.getByRole('button', { name: 'Resources' }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Resources' }).click();
   const load = page.getByRole('rowgroup', { name: 'Resources by week' });
   await expect(load.getByRole('row').filter({ hasText: 'Mason' })).toContainText('12');
   await page.screenshot(shot('schedule-01-progress'));

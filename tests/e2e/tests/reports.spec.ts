@@ -63,7 +63,7 @@ test('an estimator prints the cost summary, sends an unpriced BOQ and reviews th
   const boqUrl = page.url();
 
   // 1. The cost summary: by section, and what the value is made of (no rate analysis yet: all "not analysed").
-  await page.getByRole('button', { name: 'Reports' }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Reports' }).click();
   await page.getByRole('menuitem', { name: 'Cost summary' }).click();
   await expect(page.getByRole('heading', { name: 'Cost summary' })).toBeVisible();
   await expect(page.getByTestId('boq-total')).toHaveText('1,80,000.00');
@@ -88,7 +88,7 @@ test('an estimator prints the cost summary, sends an unpriced BOQ and reviews th
 
   // 2. The rate analysis report says plainly when nothing is linked.
   await page.getByRole('link', { name: 'Back to the BOQ' }).click();
-  await page.getByRole('button', { name: 'Reports' }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Reports' }).click();
   await page.getByRole('menuitem', { name: 'Rate analyses' }).click();
   await expect(page.getByText('No item of this BOQ is linked to a rate analysis.')).toBeVisible();
 
