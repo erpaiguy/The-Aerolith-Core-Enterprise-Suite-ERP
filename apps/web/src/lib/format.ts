@@ -73,6 +73,9 @@ export function describeError(err: unknown): string {
       return first.path ? `${labelFor(first.path)}: ${first.message}` : first.message;
   }
   if (!(err instanceof ApiError)) return errorMessage('network_error');
+  // A project's records are seen by its team (and those who see every project): to anyone else they do not exist.
+  if (err.status === 404 && typeof err.body.message !== 'string')
+    return "This isn't here, or it belongs to a project you are not on. Ask the project's lead to add you to its team.";
   // A code without its own sentence here shows the server's message, which says what to do (e.g. "Version 2 is
   // frozen; start revision 3 to price it.").
   return errorMessage(

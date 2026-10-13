@@ -7,6 +7,7 @@ import { Link } from '@tanstack/react-router';
 import { FileJson, FileSpreadsheet, Upload } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { usePermission } from '../../session/permissions';
 import { api, saveFile } from '../../api/client';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
@@ -602,16 +603,18 @@ function IrnBlock({
 export function ClientBillGst({ billId, certified }: { billId: string; certified: boolean }) {
   const qc = useQueryClient();
   const key = ['client-bill-gst', billId];
+  // The GST side is part of the books: people without the accounts see the bill without it.
+  const mayBooks = usePermission('accounts.view');
   const g = useQuery({
     queryKey: key,
     queryFn: () => api.request<BillGst>(`/api/tenant/client-bills/${billId}/gst`),
-    enabled: certified,
+    enabled: certified && mayBooks,
     retry: false,
   });
   const [f, setF] = useState({ date: today(), reason: '', taxable: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!certified || g.isPending || g.isError) return null;
+  if (!certified || !mayBooks || g.isPending || g.isError) return null;
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: key });
     void qc.invalidateQueries({ queryKey: ['client-bill', billId] });

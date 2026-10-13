@@ -112,6 +112,13 @@ async function crawl(
       .waitForURL((u) => u.pathname === path.split('?')[0], { timeout: 5_000 })
       .catch(() => record({ who, path, what: 'did not navigate' }));
     await settle(page);
+    // A project's records are hidden from people not on its team: the app says so, and that is not a fault.
+    if (await page.getByText('belongs to a project you are not on').count()) {
+      for (let i = problems.length - 1; i >= 0; i--)
+        if (problems[i]!.who === who && problems[i]!.path === path && problems[i]!.what.endsWith('-> 404'))
+          problems.splice(i, 1);
+      continue;
+    }
     await banners(page, who, path);
     if (await page.getByText('Something went wrong').count())
       record({ who, path, what: 'error boundary shown' });
