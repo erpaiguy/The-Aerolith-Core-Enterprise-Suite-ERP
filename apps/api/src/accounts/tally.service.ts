@@ -320,7 +320,12 @@ export class TallyService {
   /** For the accounts screens: how far Tally has caught up. */
   async syncStatus(claims: TenantClaims, entityId: string) {
     const db = await this.tenants.forTenant(claims.ten);
-    await this.may(claims, db);
+    if (!(await this.permissions.can(claims, 'accounts.view')))
+      throw new ForbiddenException({
+        code: 'forbidden',
+        message: 'This needs the accounts permission.',
+      });
+    const exportOn = (await this.mode(db)) !== 'native';
     const [s] = await db`
       SELECT count(*) FILTER (WHERE s.status = 'created')::int AS created,
         count(*) FILTER (WHERE s.status = 'failed')::int AS failed,
@@ -331,7 +336,7 @@ export class TallyService {
     const failures = await db`
       SELECT v.number, s.response, s.synced_at AS "at" FROM acc.tally_sync s JOIN acc.voucher v ON v.id = s.voucher_id
       WHERE v.entity_id = ${entityId} AND s.status = 'failed' ORDER BY s.synced_at DESC LIMIT 20`;
-    return { ...s, failures };
+    return { ...s, exportOn, failures };
   }
 }
 

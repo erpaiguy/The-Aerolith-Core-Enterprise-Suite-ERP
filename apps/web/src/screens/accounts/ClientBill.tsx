@@ -70,7 +70,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
   const [clientRef, setClientRef] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const chart = useChart();
+  const chart = useChart({ ifAllowed: true });
   const run = async (k: string, path: string, body: object) => {
     setBusy(k);
     setError(null);

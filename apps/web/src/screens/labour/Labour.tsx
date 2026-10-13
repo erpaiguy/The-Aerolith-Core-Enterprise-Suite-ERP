@@ -601,7 +601,7 @@ function Cess() {
       }>(`/api/tenant/labour/projects/${projectId}/cess`),
     enabled: Boolean(projectId),
   });
-  const chart = useChart();
+  const chart = useChart({ ifAllowed: true });
   const banks = (chart.data?.accounts ?? []).filter((a) => a.kind === 'bank' && !a.closed);
   const [f, setF] = useState({ paidOn: today(), amount: '', reference: '', bankAccountId: '' });
   const [error, setError] = useState<string | null>(null);

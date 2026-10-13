@@ -456,7 +456,7 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
     queryFn: () => api.request<Run>(`/api/tenant/payroll/runs/${runId}`),
   });
   const components = useComponents();
-  const chart = useChart();
+  const chart = useChart({ ifAllowed: true });
   const banks = (chart.data?.accounts ?? []).filter((a) => a.kind === 'bank' && !a.closed);
   const [adj, setAdj] = useState({ employeeId: '', componentId: '', amount: '', note: '' });
   const [pay, setPay] = useState({ bankAccountId: '', date: today() });

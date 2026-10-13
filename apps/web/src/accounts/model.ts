@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { formatAmount } from '../boq/model';
 import { load, save } from '../lib/storage';
+import { usePermission } from '../session/permissions';
 
 export interface Company {
   id: string;
@@ -159,12 +160,19 @@ export function useCompany() {
   };
 }
 
-export const useChart = () =>
-  useQuery({
+/**
+ * The chart of accounts. Screens that only use it for an optional picker (a bill's deductions, a wage payment's bank)
+ * pass `ifAllowed`, so people without the books permission are not sent a refusal; the books' own screens do not.
+ */
+export const useChart = (opts: { ifAllowed?: boolean } = {}) => {
+  const may = usePermission('accounts.view');
+  return useQuery({
     queryKey: ['chart'],
     queryFn: () =>
       api.request<{ accounts: Account[]; mayEdit: boolean }>('/api/tenant/accounts/chart'),
+    enabled: !opts.ifAllowed || may,
   });
+};
 
 /** "A4002 HDFC Bank 0012", with the group path for the picker. */
 export function ledgerOptions(accounts: Account[]) {

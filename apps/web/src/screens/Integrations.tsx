@@ -74,6 +74,7 @@ export function IntegrationsScreen() {
     queryKey: ['tally-sync', company],
     queryFn: () =>
       api.request<{
+        exportOn: boolean;
         created: number;
         failed: number;
         waiting: number;
@@ -352,6 +353,11 @@ export function IntegrationsScreen() {
         )}
         {tally.error ? (
           <p className="text-sm text-fg-muted">{describeError(tally.error)}</p>
+        ) : tally.data && !tally.data.exportOn ? (
+          <p className="text-sm text-fg-muted" data-testid="tally-off">
+            The Tally export is off: the accounts mode is &ldquo;native&rdquo;. Turn it on under
+            Accounts &rsaquo; Statements to use the agent.
+          </p>
         ) : tally.data ? (
           <div className="space-y-2 text-sm">
             <p>

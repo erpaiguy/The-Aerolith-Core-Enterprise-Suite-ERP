@@ -23,3 +23,8 @@ tests/e2e/.mail/
 
 # Generated third-party notices for the desktop installer (tools/notices.mjs)
 apps/desktop/notices/
+
+# Demo seeder output (known passwords; never commit)
+demo-credentials.txt
+demo-credentials.json
+demo-problems.jsonl

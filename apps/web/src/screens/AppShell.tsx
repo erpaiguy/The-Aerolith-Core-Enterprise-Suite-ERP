@@ -135,10 +135,12 @@ export function AppShell() {
   const mayMark = usePermission('attendance.mark');
   const mayPayroll = usePermission('payroll.run');
   const mayLabour = usePermission('labour.manage');
+  const signedIn = session.status === 'signed_in';
   const inbox = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.request<Inbox>('/api/tenant/inbox'),
     refetchInterval: 60_000,
+    enabled: signedIn,
   });
   // On a phone the menu is folded away behind a button, and folds again on every page change.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -274,9 +276,11 @@ export function AppShell() {
             <NavItem to="/cost-control" icon={<Gauge className="size-4" />}>
               Cost control
             </NavItem>
-            <NavItem to="/cash-flow" icon={<ArrowLeftRight className="size-4" />}>
-              Cash flow
-            </NavItem>
+            {mayBooks && (
+              <NavItem to="/cash-flow" icon={<ArrowLeftRight className="size-4" />}>
+                Cash flow
+              </NavItem>
+            )}
             <NavItem to="/earned-value" icon={<TrendingUp className="size-4" />}>
               Earned value
             </NavItem>

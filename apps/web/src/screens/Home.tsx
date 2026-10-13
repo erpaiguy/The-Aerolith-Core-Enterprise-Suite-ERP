@@ -120,6 +120,7 @@ export function HomeScreen() {
   const inbox = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.request<Inbox>('/api/tenant/inbox'),
+    enabled: session.status === 'signed_in',
   });
   const notices = useQuery({
     queryKey: ['owner-notices'],
