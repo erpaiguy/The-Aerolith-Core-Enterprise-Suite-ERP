@@ -2,6 +2,7 @@ import { Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   BadgeCheck,
+  ChevronRight,
   Banknote,
   Bell,
   ClipboardCheck,
@@ -69,29 +70,109 @@ import { daysUntil, formatDate } from '../lib/format';
 import { useSession } from '../session/session';
 import { usePending } from '../offline';
 import { Badge } from '@aerolith/ui';
+import { load, save } from '../lib/storage';
 
 function NavItem({
   to,
   icon,
   children,
   badge,
+  depth = 0,
 }: {
   to: string;
   icon: ReactNode;
   children: ReactNode;
   badge?: number | undefined;
+  depth?: number;
 }) {
   return (
     <Link
       to={to}
-      className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg"
+      className={`flex items-center gap-2.5 rounded-md py-1.5 pr-2.5 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg ${depth ? 'pl-8' : 'pl-2.5'}`}
       activeProps={{ className: 'bg-surface-2 text-fg font-medium' }}
-      activeOptions={{ exact: to === '/' }}
+      activeOptions={{ exact: to === '/' || to.startsWith('/dashboards/') }}
     >
       {icon}
       <span className="flex-1">{children}</span>
       {badge ? <Badge tone="accent">{badge}</Badge> : null}
     </Link>
+  );
+}
+
+// The menu is a tree: groups (folded unless opened or holding the current page), some with sub-groups, then pages.
+interface Page {
+  to: string;
+  label: string;
+  icon: ReactNode;
+  badge?: number | undefined;
+  show?: boolean;
+}
+interface Group {
+  group: string;
+  icon: ReactNode;
+  items: (Page | Group)[];
+  /** Other paths that belong here (detail pages reached from a list). */
+  also?: string[];
+  show?: boolean;
+}
+const isGroup = (e: Page | Group): e is Group => 'group' in e;
+const visible = <T extends Page | Group>(e: T) => e.show !== false;
+const OPEN_KEY = 'aerolith.nav.open';
+
+function holds(e: Page | Group, path: string): boolean {
+  if (!isGroup(e))
+    return e.to === '/' ? path === '/' : path === e.to || path.startsWith(`${e.to}/`);
+  return (
+    (e.also ?? []).some((p) => path === p || path.startsWith(`${p}/`)) ||
+    e.items.some((i) => visible(i) && holds(i, path))
+  );
+}
+
+function NavGroup({
+  g,
+  depth,
+  open,
+  toggle,
+}: {
+  g: Group;
+  depth: number;
+  open: Set<string>;
+  toggle: (key: string) => void;
+}) {
+  const items = g.items.filter(visible);
+  if (!items.length) return null;
+  const isOpen = open.has(g.group);
+  const badge = items.reduce((n, i) => n + (!isGroup(i) && i.badge ? i.badge : 0), 0);
+  return (
+    <div data-nav-group={g.group}>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        onClick={() => toggle(g.group)}
+        className={`flex w-full items-center gap-2.5 rounded-md py-1.5 pr-2.5 text-left text-sm hover:bg-surface-2 ${
+          depth ? 'pl-8 text-fg-muted' : 'pl-2.5 font-medium text-fg'
+        }`}
+      >
+        {g.icon}
+        <span className="flex-1">{g.group}</span>
+        {!isOpen && badge ? <Badge tone="accent">{badge}</Badge> : null}
+        <ChevronRight
+          className={`size-3.5 text-fg-subtle transition-transform ${isOpen ? 'rotate-90' : ''}`}
+          aria-hidden
+        />
+      </button>
+      <div hidden={!isOpen} className={depth ? 'ml-4 border-l border-line pl-1' : 'space-y-0.5'}>
+        {items.map((i) =>
+          isGroup(i) ? (
+            <NavGroup key={i.group} g={i} depth={depth + 1} open={open} toggle={toggle} />
+          ) : (
+            <NavItem key={i.to} to={i.to} icon={i.icon} badge={i.badge} depth={depth + 1}>
+              {i.label}
+            </NavItem>
+          ),
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -146,6 +227,337 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const path = useRouterState({ select: (r) => r.location.pathname });
   useEffect(() => setMenuOpen(false), [path]);
+  const pending = inbox.data?.pending;
+
+  const menu: Group[] = [
+    {
+      group: 'Business development',
+      icon: <Handshake className="size-4" />,
+      items: [
+        {
+          to: '/dashboards/tender',
+          label: 'Bid dashboard',
+          icon: <LayoutDashboard className="size-4" />,
+        },
+        { to: '/crm', label: 'CRM', icon: <Handshake className="size-4" /> },
+        { to: '/clients', label: 'Clients', icon: <Contact className="size-4" /> },
+        { to: '/sales', label: 'Sales and RERA', icon: <Home className="size-4" /> },
+        {
+          to: '/portal-users',
+          label: 'Portal users',
+          icon: <UsersRound className="size-4" />,
+          show: mayPortals,
+        },
+        {
+          to: '/portal-submissions',
+          label: 'Portal submissions',
+          icon: <InboxIcon className="size-4" />,
+          show: mayPortals,
+        },
+      ],
+    },
+    {
+      group: 'Estimation',
+      icon: <Calculator className="size-4" />,
+      also: ['/boqs', '/rfqs'],
+      items: [
+        {
+          group: 'Tenders and BOQ',
+          icon: <ScrollText className="size-4" />,
+          items: [
+            { to: '/tenders', label: 'Tenders', icon: <ScrollText className="size-4" /> },
+            {
+              to: '/boq-templates',
+              label: 'BOQ templates',
+              icon: <LayoutTemplate className="size-4" />,
+            },
+          ],
+        },
+        {
+          group: 'Rates and resources',
+          icon: <Boxes className="size-4" />,
+          items: [
+            { to: '/resources', label: 'Resources', icon: <Boxes className="size-4" /> },
+            {
+              to: '/rate-analyses',
+              label: 'Rate analyses',
+              icon: <Calculator className="size-4" />,
+            },
+            { to: '/cost-codes', label: 'Cost codes', icon: <Tags className="size-4" /> },
+          ],
+        },
+        {
+          group: 'Estimation reports',
+          icon: <ChartColumn className="size-4" />,
+          items: [
+            {
+              to: '/dashboards/estimation',
+              label: 'Estimation dashboard',
+              icon: <ChartPie className="size-4" />,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      group: 'Projects',
+      icon: <Building2 className="size-4" />,
+      also: ['/programmes', '/daily-reports', '/material-budgets', '/issues'],
+      items: [
+        { to: '/projects', label: 'Projects', icon: <Building2 className="size-4" /> },
+        { to: '/portfolio', label: 'Portfolio', icon: <LayoutGrid className="size-4" /> },
+        {
+          to: '/monthly-review',
+          label: 'Monthly review',
+          icon: <CalendarCheck className="size-4" />,
+        },
+        {
+          group: 'Cost and cash',
+          icon: <Gauge className="size-4" />,
+          also: ['/client-bills', '/subcontract-bills'],
+          items: [
+            { to: '/cost-control', label: 'Cost control', icon: <Gauge className="size-4" /> },
+            {
+              to: '/cash-flow',
+              label: 'Cash flow',
+              icon: <ArrowLeftRight className="size-4" />,
+              show: mayBooks,
+            },
+            { to: '/earned-value', label: 'Earned value', icon: <TrendingUp className="size-4" /> },
+          ],
+        },
+        {
+          group: 'Contract',
+          icon: <Scale className="size-4" />,
+          items: [
+            { to: '/variations', label: 'Variations', icon: <FilePlus2 className="size-4" /> },
+            { to: '/contracts', label: 'Contracts and claims', icon: <Scale className="size-4" /> },
+            { to: '/risks', label: 'Risk register', icon: <TriangleAlert className="size-4" /> },
+          ],
+        },
+        {
+          group: 'Site',
+          icon: <HardHat className="size-4" />,
+          items: [
+            { to: '/quality', label: 'Quality', icon: <BadgeCheck className="size-4" /> },
+            { to: '/safety', label: 'Safety', icon: <ShieldCheck className="size-4" /> },
+            { to: '/mep', label: 'MEP', icon: <Fan className="size-4" /> },
+          ],
+        },
+      ],
+    },
+    {
+      group: 'Documents and design',
+      icon: <FileStack className="size-4" />,
+      items: [
+        { to: '/documents', label: 'Documents', icon: <FileStack className="size-4" /> },
+        {
+          to: '/reviews',
+          label: 'Reviews',
+          icon: <FileCheck2 className="size-4" />,
+          badge: pending?.reviews,
+        },
+        { to: '/transmittals', label: 'Transmittals and RFIs', icon: <Send className="size-4" /> },
+        {
+          to: '/sign-offs',
+          label: 'Sign-offs',
+          icon: <Signature className="size-4" />,
+          badge: pending?.signoffs,
+        },
+        {
+          to: '/drawing-receipts',
+          label: 'Drawing receipts',
+          icon: <MailCheck className="size-4" />,
+          badge: pending?.receipts,
+        },
+      ],
+    },
+    {
+      group: 'Procurement and stores',
+      icon: <ShoppingCart className="size-4" />,
+      also: ['/transfers', '/stock-counts'],
+      items: [
+        { to: '/requisitions', label: 'Requisitions', icon: <ShoppingCart className="size-4" /> },
+        { to: '/orders', label: 'Orders', icon: <BriefcaseBusiness className="size-4" /> },
+        { to: '/receipts', label: 'Goods receipts', icon: <PackageCheck className="size-4" /> },
+        { to: '/stores', label: 'Stores', icon: <Warehouse className="size-4" /> },
+        {
+          to: '/procurement-reports',
+          label: 'Procurement reports',
+          icon: <ClipboardList className="size-4" />,
+        },
+      ],
+    },
+    {
+      group: 'People',
+      icon: <UsersRound className="size-4" />,
+      items: [
+        { to: '/hr/me', label: 'My attendance', icon: <Fingerprint className="size-4" /> },
+        {
+          to: '/hr/register',
+          label: 'Site attendance',
+          icon: <ClipboardCheck className="size-4" />,
+          show: mayMark,
+        },
+        { to: '/hr', label: 'Employees', icon: <IdCard className="size-4" />, show: mayPeople },
+        {
+          to: '/payroll',
+          label: 'Payroll',
+          icon: <Banknote className="size-4" />,
+          show: mayPayroll,
+        },
+        {
+          to: '/labour',
+          label: 'Contract labour',
+          icon: <HardHat className="size-4" />,
+          show: mayLabour,
+        },
+        {
+          to: '/labour/muster',
+          label: 'Labour muster',
+          icon: <UsersRound className="size-4" />,
+          show: mayLabour || mayMark,
+        },
+      ],
+    },
+    {
+      group: 'Accounts',
+      icon: <Landmark className="size-4" />,
+      show: mayBooks,
+      items: [
+        {
+          group: 'Transactions',
+          icon: <ReceiptText className="size-4" />,
+          also: [
+            '/accounts/vendor-bills',
+            '/accounts/client-receipts',
+            '/accounts/payment-runs',
+            '/accounts/ledgers',
+          ],
+          items: [
+            {
+              to: '/accounts/vouchers',
+              label: 'Vouchers',
+              icon: <ReceiptText className="size-4" />,
+            },
+            {
+              to: '/accounts/receivables',
+              label: 'Receivables',
+              icon: <HandCoins className="size-4" />,
+            },
+            { to: '/accounts/payables', label: 'Payables', icon: <Wallet className="size-4" /> },
+            { to: '/accounts/bank', label: 'Bank', icon: <Building2 className="size-4" /> },
+          ],
+        },
+        {
+          group: 'Tax',
+          icon: <Percent className="size-4" />,
+          items: [
+            { to: '/accounts/gst', label: 'GST', icon: <Landmark className="size-4" /> },
+            { to: '/accounts/tds', label: 'TDS', icon: <Percent className="size-4" /> },
+          ],
+        },
+        {
+          group: 'Assets',
+          icon: <Truck className="size-4" />,
+          items: [
+            { to: '/equipment', label: 'Equipment', icon: <Construction className="size-4" /> },
+            { to: '/accounts/assets', label: 'Fixed assets', icon: <Truck className="size-4" /> },
+          ],
+        },
+        {
+          group: 'Books and statements',
+          icon: <FileBarChart className="size-4" />,
+          items: [
+            {
+              to: '/accounts/statements',
+              label: 'Statements',
+              icon: <FileBarChart className="size-4" />,
+            },
+            {
+              to: '/accounts/trial-balance',
+              label: 'Trial balance',
+              icon: <Scale className="size-4" />,
+            },
+            { to: '/accounts/day-book', label: 'Day book', icon: <BookOpen className="size-4" /> },
+            {
+              to: '/accounts/chart',
+              label: 'Chart of accounts',
+              icon: <ListTree className="size-4" />,
+            },
+            {
+              to: '/accounts/setup',
+              label: 'Books setup',
+              icon: <CalendarCheck className="size-4" />,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      group: 'Reports',
+      icon: <ChartColumn className="size-4" />,
+      items: [
+        { to: '/reports', label: 'Reports', icon: <ChartColumn className="size-4" /> },
+        { to: '/reports/builder', label: 'Report builder', icon: <ChartPie className="size-4" /> },
+      ],
+    },
+    {
+      group: 'Administration',
+      icon: <Settings2 className="size-4" />,
+      show: isAdmin,
+      items: [
+        { to: '/users', label: 'Users', icon: <Users className="size-4" /> },
+        {
+          to: '/password-resets',
+          label: 'Reset requests',
+          icon: <KeyRound className="size-4" />,
+          badge: pending?.passwordResets,
+        },
+        {
+          to: '/settings/tenders',
+          label: 'Tender settings',
+          icon: <Settings2 className="size-4" />,
+        },
+        {
+          to: '/settings/approvals',
+          label: 'Approval rules',
+          icon: <ListChecks className="size-4" />,
+        },
+        { to: '/settings/companies', label: 'Companies', icon: <Landmark className="size-4" /> },
+        { to: '/settings/integrations', label: 'Integrations', icon: <Plug className="size-4" /> },
+      ],
+    },
+  ];
+
+  // Groups the person opened stay open on this device; the group holding the current page always opens.
+  const [open, setOpen] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(load(OPEN_KEY) ?? '[]') as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggle = (key: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      save(OPEN_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  useEffect(() => {
+    const here: string[] = [];
+    const walk = (gs: (Page | Group)[]) => {
+      for (const g of gs)
+        if (isGroup(g) && visible(g) && holds(g, path)) {
+          here.push(g.group);
+          walk(g.items);
+        }
+    };
+    walk(menu);
+    if (here.some((k) => !open.has(k))) setOpen((prev) => new Set([...prev, ...here]));
+  }, [path]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
@@ -153,7 +565,8 @@ export function AppShell() {
         <LicenceBanner />
       </div>
       <div className="flex flex-1 flex-col md:flex-row">
-        <aside className="print:hidden border-b border-line bg-surface md:w-60 md:shrink-0 md:border-b-0 md:border-r">
+        {/* On a wide screen the menu stays put and scrolls on its own; the page scrolls beside it. */}
+        <aside className="print:hidden flex flex-col border-b border-line bg-surface md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 md:border-b-0 md:border-r">
           <div className="flex items-center gap-2.5 px-4 py-4">
             <div className="flex size-8 items-center justify-center rounded-md bg-accent text-sm font-bold text-accent-fg">
               A
@@ -175,7 +588,7 @@ export function AppShell() {
             </button>
           </div>
           <nav
-            className={`${menuOpen ? 'block' : 'hidden'} space-y-0.5 px-2 pb-3 md:block`}
+            className={`${menuOpen ? 'block' : 'hidden'} min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2 pb-3 md:block`}
             aria-label="Main"
             id="main-menu"
           >
@@ -185,248 +598,20 @@ export function AppShell() {
             <NavItem
               to="/approvals"
               icon={<CheckCheck className="size-4" />}
-              badge={inbox.data?.pending.approvals}
+              badge={pending?.approvals}
             >
               Approvals
             </NavItem>
-            {isAdmin && (
-              <>
-                <NavItem to="/users" icon={<Users className="size-4" />}>
-                  Users
-                </NavItem>
-                <NavItem
-                  to="/password-resets"
-                  icon={<KeyRound className="size-4" />}
-                  badge={inbox.data?.pending.passwordResets}
-                >
-                  Reset requests
-                </NavItem>
-                <NavItem to="/settings/tenders" icon={<Settings2 className="size-4" />}>
-                  Tender settings
-                </NavItem>
-                <NavItem to="/settings/approvals" icon={<ListChecks className="size-4" />}>
-                  Approval rules
-                </NavItem>
-                <NavItem to="/settings/companies" icon={<Landmark className="size-4" />}>
-                  Companies
-                </NavItem>
-                <NavItem to="/settings/integrations" icon={<Plug className="size-4" />}>
-                  Integrations
-                </NavItem>
-              </>
-            )}
-            <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-              Pre-construction
+            <div className="my-2 border-t border-line" />
+            {menu.filter(visible).map((g) => (
+              <NavGroup key={g.group} g={g} depth={0} open={open} toggle={toggle} />
+            ))}
+            <div className="px-2.5 pt-4">
+              <Link to="/licences" className="text-xs text-fg-subtle hover:underline">
+                Third-party licences
+              </Link>
             </div>
-            <NavItem to="/dashboards/tender" icon={<LayoutDashboard className="size-4" />}>
-              Dashboards
-            </NavItem>
-            <NavItem to="/crm" icon={<Handshake className="size-4" />}>
-              CRM
-            </NavItem>
-            {mayPortals && (
-              <>
-                <NavItem to="/portal-users" icon={<UsersRound className="size-4" />}>
-                  Portal users
-                </NavItem>
-                <NavItem to="/portal-submissions" icon={<InboxIcon className="size-4" />}>
-                  Portal submissions
-                </NavItem>
-              </>
-            )}
-            <NavItem to="/tenders" icon={<ScrollText className="size-4" />}>
-              Tenders
-            </NavItem>
-            <NavItem to="/clients" icon={<Contact className="size-4" />}>
-              Clients
-            </NavItem>
-            <NavItem to="/resources" icon={<Boxes className="size-4" />}>
-              Resources
-            </NavItem>
-            <NavItem to="/rate-analyses" icon={<Calculator className="size-4" />}>
-              Rate analyses
-            </NavItem>
-            <NavItem to="/boq-templates" icon={<LayoutTemplate className="size-4" />}>
-              BOQ templates
-            </NavItem>
-            <NavItem to="/documents" icon={<FileStack className="size-4" />}>
-              Documents
-            </NavItem>
-            <NavItem to="/reports" icon={<ChartColumn className="size-4" />}>
-              Reports
-            </NavItem>
-            <NavItem to="/reports/builder" icon={<ChartPie className="size-4" />}>
-              Report builder
-            </NavItem>
-            <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-              Construction
-            </div>
-            <NavItem to="/sales" icon={<Home className="size-4" />}>
-              Sales and RERA
-            </NavItem>
-            <NavItem to="/projects" icon={<Building2 className="size-4" />}>
-              Projects
-            </NavItem>
-            <NavItem to="/portfolio" icon={<LayoutGrid className="size-4" />}>
-              Portfolio
-            </NavItem>
-            <NavItem to="/monthly-review" icon={<CalendarCheck className="size-4" />}>
-              Monthly review
-            </NavItem>
-            <NavItem to="/cost-control" icon={<Gauge className="size-4" />}>
-              Cost control
-            </NavItem>
-            {mayBooks && (
-              <NavItem to="/cash-flow" icon={<ArrowLeftRight className="size-4" />}>
-                Cash flow
-              </NavItem>
-            )}
-            <NavItem to="/earned-value" icon={<TrendingUp className="size-4" />}>
-              Earned value
-            </NavItem>
-            <NavItem to="/variations" icon={<FilePlus2 className="size-4" />}>
-              Variations
-            </NavItem>
-            <NavItem to="/contracts" icon={<Scale className="size-4" />}>
-              Contracts and claims
-            </NavItem>
-            <NavItem to="/risks" icon={<TriangleAlert className="size-4" />}>
-              Risk register
-            </NavItem>
-            <NavItem to="/mep" icon={<Fan className="size-4" />}>
-              MEP
-            </NavItem>
-            <NavItem
-              to="/reviews"
-              icon={<FileCheck2 className="size-4" />}
-              badge={inbox.data?.pending.reviews}
-            >
-              Reviews
-            </NavItem>
-            <NavItem to="/transmittals" icon={<Send className="size-4" />}>
-              Transmittals and RFIs
-            </NavItem>
-            <NavItem
-              to="/sign-offs"
-              icon={<Signature className="size-4" />}
-              badge={inbox.data?.pending.signoffs}
-            >
-              Sign-offs
-            </NavItem>
-            <NavItem
-              to="/drawing-receipts"
-              icon={<MailCheck className="size-4" />}
-              badge={inbox.data?.pending.receipts}
-            >
-              Drawing receipts
-            </NavItem>
-            <NavItem to="/cost-codes" icon={<Tags className="size-4" />}>
-              Cost codes
-            </NavItem>
-            <NavItem to="/requisitions" icon={<ShoppingCart className="size-4" />}>
-              Requisitions
-            </NavItem>
-            <NavItem to="/orders" icon={<BriefcaseBusiness className="size-4" />}>
-              Orders
-            </NavItem>
-            <NavItem to="/receipts" icon={<PackageCheck className="size-4" />}>
-              Goods receipts
-            </NavItem>
-            <NavItem to="/stores" icon={<Warehouse className="size-4" />}>
-              Stores
-            </NavItem>
-            <NavItem to="/procurement-reports" icon={<ClipboardList className="size-4" />}>
-              Procurement reports
-            </NavItem>
-            <NavItem to="/quality" icon={<BadgeCheck className="size-4" />}>
-              Quality
-            </NavItem>
-            <NavItem to="/safety" icon={<ShieldCheck className="size-4" />}>
-              Safety
-            </NavItem>
-            <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-              People
-            </div>
-            <NavItem to="/hr/me" icon={<Fingerprint className="size-4" />}>
-              My attendance
-            </NavItem>
-            {mayMark && (
-              <NavItem to="/hr/register" icon={<ClipboardCheck className="size-4" />}>
-                Site attendance
-              </NavItem>
-            )}
-            {mayPeople && (
-              <NavItem to="/hr" icon={<IdCard className="size-4" />}>
-                Employees
-              </NavItem>
-            )}
-            {mayPayroll && (
-              <NavItem to="/payroll" icon={<Banknote className="size-4" />}>
-                Payroll
-              </NavItem>
-            )}
-            {mayLabour && (
-              <NavItem to="/labour" icon={<HardHat className="size-4" />}>
-                Contract labour
-              </NavItem>
-            )}
-            {(mayLabour || mayMark) && (
-              <NavItem to="/labour/muster" icon={<UsersRound className="size-4" />}>
-                Labour muster
-              </NavItem>
-            )}
-            {mayBooks && (
-              <>
-                <div className="px-2.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-                  Accounts
-                </div>
-                <NavItem to="/accounts/vouchers" icon={<ReceiptText className="size-4" />}>
-                  Vouchers
-                </NavItem>
-                <NavItem to="/accounts/receivables" icon={<HandCoins className="size-4" />}>
-                  Receivables
-                </NavItem>
-                <NavItem to="/accounts/payables" icon={<Wallet className="size-4" />}>
-                  Payables
-                </NavItem>
-                <NavItem to="/accounts/gst" icon={<Landmark className="size-4" />}>
-                  GST
-                </NavItem>
-                <NavItem to="/accounts/tds" icon={<Percent className="size-4" />}>
-                  TDS
-                </NavItem>
-                <NavItem to="/accounts/bank" icon={<Building2 className="size-4" />}>
-                  Bank
-                </NavItem>
-                <NavItem to="/equipment" icon={<Construction className="size-4" />}>
-                  Equipment
-                </NavItem>
-                <NavItem to="/accounts/assets" icon={<Truck className="size-4" />}>
-                  Fixed assets
-                </NavItem>
-                <NavItem to="/accounts/statements" icon={<FileBarChart className="size-4" />}>
-                  Statements
-                </NavItem>
-                <NavItem to="/accounts/trial-balance" icon={<Scale className="size-4" />}>
-                  Trial balance
-                </NavItem>
-                <NavItem to="/accounts/day-book" icon={<BookOpen className="size-4" />}>
-                  Day book
-                </NavItem>
-                <NavItem to="/accounts/chart" icon={<ListTree className="size-4" />}>
-                  Chart of accounts
-                </NavItem>
-                <NavItem to="/accounts/setup" icon={<CalendarCheck className="size-4" />}>
-                  Books setup
-                </NavItem>
-              </>
-            )}
           </nav>
-          <div className={`${menuOpen ? 'block' : 'hidden'} px-4 pb-4 md:block`}>
-            <Link to="/licences" className="text-xs text-fg-subtle hover:underline">
-              Third-party licences
-            </Link>
-          </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">

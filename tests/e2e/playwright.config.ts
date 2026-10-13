@@ -12,6 +12,7 @@ import {
   OWNER_PORT,
   WEB_PORT,
 } from './env.js';
+import { menuOpen } from './menu.js';
 
 const api = `../../apps/api/dist`;
 const apiEnv = [
@@ -38,6 +39,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: BASE_URL,
+    storageState: menuOpen(),
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
     // Use a pre-installed Chromium when one is provided (sandboxed environments); CI installs its own.

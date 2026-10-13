@@ -2,6 +2,9 @@
 // opens every screen they can reach, recording crashes, failed requests and error banners.
 //   DEMO_BASE_URL=http://127.0.0.1:8080 DEMO_JSON=../../demo-credentials.json pnpm exec playwright test -c playwright.demo.config.ts
 import { defineConfig } from '@playwright/test';
+import { menuOpen } from './menu.js';
+
+const baseURL = process.env.DEMO_BASE_URL ?? 'http://127.0.0.1:8080';
 
 export default defineConfig({
   testDir: './demo',
@@ -9,7 +12,8 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: process.env.DEMO_BASE_URL ?? 'http://127.0.0.1:8080',
+    baseURL,
+    storageState: menuOpen(baseURL),
     screenshot: 'only-on-failure',
     actionTimeout: 15_000,
     launchOptions: process.env.PW_CHROMIUM_PATH
