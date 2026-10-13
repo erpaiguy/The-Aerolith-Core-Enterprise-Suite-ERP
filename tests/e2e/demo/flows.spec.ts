@@ -1,18 +1,10 @@
 // The demo guide's "things worth trying" (docs/demo.md), done by the demo people on the seeded data, in order: the
 // vendor quotes and acknowledges, the subcontractor sends an invoice, the manager accepts what came from the portals,
 // the client answers the transmittal, the sales manager raises a milestone. Run after crawl.spec.ts: it changes data.
-import { readFileSync } from 'node:fs';
+import { loadDemo } from './load.js';
 import { expect, test, type Browser } from '@playwright/test';
 
-interface Demo {
-  licenceKey: string;
-  tenantId: string;
-  staff: { username: string; password: string }[];
-  portal: { email: string; password: string; kind: string }[];
-}
-const demo = JSON.parse(
-  readFileSync(process.env.DEMO_JSON ?? '../../demo-credentials.json', 'utf8'),
-) as Demo;
+const demo = loadDemo();
 const portalUser = (kind: string) => demo.portal.find((p) => p.kind === kind)!;
 const staffUser = (name: string) => demo.staff.find((s) => s.username === name)!;
 

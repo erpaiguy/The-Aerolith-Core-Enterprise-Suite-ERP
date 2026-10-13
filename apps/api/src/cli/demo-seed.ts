@@ -1,7 +1,8 @@
 // Fills a fresh Aerolith Core install with a demo company and prints every sign-in. For trying the app by hand only;
 // never on a production install. Everything goes through the API's own routes (in-process, no network), so the data
 // is exactly what the screens would have made.
-//   node dist/cli/demo-seed.js --demo       (inside the API container: docker compose exec api node dist/cli/demo-seed.js --demo)
+//   docker compose ... exec -T api node dist/cli/demo-seed.js --demo > demo-credentials.txt
+// DEMO_OUT=<path> also writes the sign-ins there, with a .json beside it for the walkthrough tests.
 // Refuses to run twice on the same install: the demo admin's email is the marker.
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
@@ -292,37 +293,44 @@ async function main() {
       `Public API key (reports:read, tally), acts as the admin: ${out.apiKey}`,
       `  try: curl -s -H "Authorization: Bearer <key>" ${web}/api/v1/views`,
       '',
+      `Detail pages (for the walkthrough tests): ${out.paths.join(' ')}`,
+      '',
       'What is in it:',
       ...s.log.map((l) => `  - ${l}`),
       '',
     ];
-    const file = process.env.DEMO_OUT ?? 'demo-credentials.txt';
-    writeFileSync(file, lines.join('\n'));
-    // The same, for the walkthrough test (tests/e2e/demo).
-    writeFileSync(
-      file.replace(/\.txt$/, '') + '.json',
-      JSON.stringify(
-        {
-          licenceKey: trial.licenceKey,
-          tenantId: trial.tenantId,
-          admin: { email: DEMO.adminEmail, password: DEMO.adminPassword, secret: adMfa.secret },
-          staff: out.staff.map((u) => ({
-            username: u.username,
-            password: DEMO.staffPassword,
-            role: u.role,
-          })),
-          portal: out.portal.map((u) => ({
-            email: u.email,
-            password: DEMO.portalPassword,
-            kind: u.kind,
-          })),
-          paths: out.paths,
-        },
-        null,
-        2,
-      ),
-    );
-    process.stdout.write(`\n${lines.join('\n')}\nWritten to ${file}.\n`);
+    // Printed first: the sign-ins must never be lost to a file that cannot be written (the API container's folder is
+    // read-only to it). Save them with: ... demo-seed.js --demo > demo-credentials.txt
+    process.stdout.write(`\n${lines.join('\n')}\n`);
+    const file = process.env.DEMO_OUT;
+    if (file) {
+      writeFileSync(file, lines.join('\n'));
+      // The same, for the walkthrough test (tests/e2e/demo).
+      writeFileSync(
+        file.replace(/\.txt$/, '') + '.json',
+        JSON.stringify(
+          {
+            licenceKey: trial.licenceKey,
+            tenantId: trial.tenantId,
+            admin: { email: DEMO.adminEmail, password: DEMO.adminPassword, secret: adMfa.secret },
+            staff: out.staff.map((u) => ({
+              username: u.username,
+              password: DEMO.staffPassword,
+              role: u.role,
+            })),
+            portal: out.portal.map((u) => ({
+              email: u.email,
+              password: DEMO.portalPassword,
+              kind: u.kind,
+            })),
+            paths: out.paths,
+          },
+          null,
+          2,
+        ),
+      );
+      process.stdout.write(`Also written to ${file}.\n`);
+    }
   } finally {
     await app.close();
   }

@@ -1,21 +1,12 @@
 // Opens every screen each demo person can reach (the side menu, plus the detail pages of the seeded records) and
 // fails on anything broken: an uncaught error in the page, a request the server answered with 4xx or 5xx, or a red
-// error banner. Read the seeded sign-ins from DEMO_JSON (written by the API's demo-seed CLI).
-import { appendFileSync, readFileSync } from 'node:fs';
+// error banner. Reads the seeded sign-ins with load.ts.
+import { appendFileSync } from 'node:fs';
+import { loadDemo } from './load.js';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { timeStep, totp } from '../tests/helpers.js';
 
-interface Demo {
-  licenceKey: string;
-  tenantId: string;
-  admin: { email: string; password: string; secret: string };
-  staff: { username: string; password: string; role: string }[];
-  portal: { email: string; password: string; kind: string }[];
-  paths: string[];
-}
-const demo = JSON.parse(
-  readFileSync(process.env.DEMO_JSON ?? '../../demo-credentials.json', 'utf8'),
-) as Demo;
+const demo = loadDemo();
 
 interface Problem {
   who: string;

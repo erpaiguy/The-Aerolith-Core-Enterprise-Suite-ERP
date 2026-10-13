@@ -5,30 +5,50 @@ app by hand only: the passwords are known, so never run this on an install with 
 
 ## What you need
 
-- **Docker Desktop**, on Windows or macOS, or Docker Engine with Compose on Linux.
+- **Docker Desktop**, running. On Windows, use the default WSL 2 backend. Nothing else needs to be installed: no
+  Node, Python or OpenSSL.
+- **The code from the `claude/vibrant-allen-0cxizs` branch.** Either:
+  - clone it: `git clone -b claude/vibrant-allen-0cxizs https://github.com/erpaiguy/The-Aerolith-Core-Enterprise-Suite-ERP.git`;
+  - or on GitHub, switch to that branch, then Code › Download ZIP, and unzip.
 - An **authenticator app** on your phone: Google Authenticator, Microsoft Authenticator or similar. The tenant admin
   and the owner console require one.
-- About 10 minutes for the first build.
+- About **15 minutes** for the first build, and roughly 3 GB of disk for the images.
 
 ## Run it
 
-From the repository folder:
+Open **PowerShell** (Windows) or **Terminal** (macOS or Linux) in the repository folder. The commands are the same in
+both.
+
+**1. Make the secrets file, once.** This creates `deploy/.env`; keep that file private.
 
 ```sh
-bash deploy/scripts/init-env.sh                       # once: makes deploy/.env with fresh secrets
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml exec api node dist/cli/demo-seed.js --demo
+docker run --rm -v "${PWD}/deploy:/deploy" node:22-bookworm-slim node /deploy/scripts/init-env.mjs
 ```
 
-The last command:
+**2. Build and start.** The first time takes 10 to 15 minutes; later starts take seconds.
 
-- takes about a minute;
-- prints every sign-in;
-- writes them to `demo-credentials.txt` inside the API container. To copy that file out, run
-  `docker compose ... cp api:/app/demo-credentials.txt .`.
+```sh
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
+```
 
-It refuses to run a second time on the same database. To start over, run `docker compose ... down -v`, which deletes
-the demo data.
+**3. Fill in the demo company.** This takes about two minutes. It saves every sign-in to `demo-credentials.txt` in the
+repository folder; open that file with any text editor.
+
+```sh
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml exec -T api node dist/cli/demo-seed.js --demo > demo-credentials.txt
+```
+
+Keep that file: the licence key and the authenticator secrets in it are made once, and cannot be shown again. If you
+lose it, start over as described under "Throw everything away" below. The file is ignored by Git.
+
+**Day to day:**
+
+- **Stop:** `docker compose --env-file deploy/.env -f deploy/docker-compose.yml stop`. The data is kept.
+- **Start again:** the same command with `start`.
+- **Throw everything away and seed again:** run `down -v` instead of `stop`, then steps 2 and 3. `down -v` deletes all
+  data.
+
+If a port is busy (8080 or 8081), change `WEB_PORT` or `OWNER_PORT` in `deploy/.env` and run step 2 again.
 
 ## Where to sign in
 
@@ -44,8 +64,8 @@ browser.
 
 ## The sign-ins
 
-The seeder prints the licence key, the authenticator secrets, the recovery codes and the API key, because they are
-new on every install. The fixed passwords are these.
+`demo-credentials.txt` holds the licence key, the authenticator secrets, the recovery codes and the API key, because
+they are new on every install. The fixed passwords are these.
 
 | Who | Sign in with | Password | Authenticator |
 |---|---|---|---|
@@ -126,6 +146,6 @@ page of every seeded record, and fails on:
 To run it against your stack:
 
 ```sh
-cd tests/e2e && DEMO_BASE_URL=http://localhost:8080 DEMO_JSON=<path to demo-credentials.json> \
+cd tests/e2e && DEMO_BASE_URL=http://localhost:8080 DEMO_CREDENTIALS=../../demo-credentials.txt \
   pnpm exec playwright test -c playwright.demo.config.ts
 ```
