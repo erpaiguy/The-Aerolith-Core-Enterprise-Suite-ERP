@@ -362,7 +362,7 @@ export class Site {
               partyId: c.party[v],
               orderId: po.id,
               projectId: ps.id,
-              billNo: `${v.toUpperCase().slice(0, 3)}/${billOn.slice(2, 4)}-${c.r.int(10000, 99999)}`,
+              billNo: `${v.toUpperCase().slice(0, 3)}/${billOn.slice(2, 4)}-${10000 + (c.counts['supplier bills'] ?? 0)}`,
               billDate: billOn,
               dueDate: addDays(billOn, 30),
               tdsSection: null,
