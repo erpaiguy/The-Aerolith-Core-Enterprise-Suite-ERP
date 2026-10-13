@@ -19,6 +19,7 @@ import { loadConfig } from '../config/config.js';
 import { open } from '../crypto/secretbox.js';
 import { CONTROL_DB } from '../db/db.module.js';
 import { ProvisioningService } from '../provisioning/provisioning.service.js';
+import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { seedCompany } from './demo-data.js';
 
 export const DEMO = {
@@ -38,9 +39,13 @@ interface Res {
   json: <T>() => T;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export class Seeder {
   readonly log: string[] = [];
   readonly failures: string[] = [];
+  /** When each record the seeder made was made (on the simulated clock): fixups.ts moves created_at there. */
+  readonly stamps = new Map<string, number>();
   constructor(
     readonly app: NestFastifyApplication,
     readonly control: Sql,
@@ -60,13 +65,22 @@ export class Seeder {
     })) as unknown as Res;
     if (res.statusCode >= 300)
       throw new Error(`${method} ${url} -> ${res.statusCode} ${res.body.slice(0, 500)}`);
-    return res.body ? res.json<T>() : (undefined as T);
+    if (!res.body) return undefined as T;
+    const out = res.json<T>();
+    if (method === 'POST') {
+      const id = (out as { id?: unknown } | null)?.id;
+      if (typeof id === 'string' && UUID.test(id) && !this.stamps.has(id)) this.stamps.set(id, Date.now());
+    }
+    return out;
   }
   post<T = unknown>(url: string, payload: unknown, headers: H) {
     return this.call<T>('POST', url, headers, payload ?? {});
   }
   get<T = unknown>(url: string, headers: H) {
     return this.call<T>('GET', url, headers);
+  }
+  put<T = unknown>(url: string, payload: unknown, headers: H) {
+    return this.call<T>('PUT', url, headers, payload ?? {});
   }
   /** multipart/form-data with one file field. */
   async upload<T = unknown>(
@@ -119,6 +133,8 @@ async function main() {
   // The in-process app must not start the background loops that the running server already has.
   for (const k of ['PROVISIONING_WORKER', 'REPORTS_WORKER', 'WEBHOOK_WORKER', 'EMAIL_WORKER'])
     process.env[k] ??= 'off';
+  // Thousands of sign-in-free calls in a few minutes: the per-route limits are for people, not for this.
+  process.env.RATE_LIMIT_SCALE ??= '1000';
   const config = loadConfig();
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
     logger: ['error'],
@@ -255,7 +271,8 @@ async function main() {
     };
     await waitForStep(adStep + 2);
 
-    const out = await seedCompany(s, {
+    const tenantDb = await app.get(TenantConnections).forTenant(trial.tenantId);
+    const out = await seedCompany(s, tenantDb, {
       admin,
       entitlement,
       tenantId: trial.tenantId,
@@ -276,9 +293,11 @@ async function main() {
       `  recovery codes ${adRecovery.recoveryCodes.join(' ')}`,
       '',
       'Staff (username + password, no authenticator):',
-      ...out.staff.map(
-        (u) => `  ${u.username.padEnd(10)} ${DEMO.staffPassword}  ${u.role.padEnd(8)} ${u.what}`,
-      ),
+      ...out.staff
+        .filter((u) => u.active)
+        .map((u) => `  ${u.username.padEnd(10)} ${DEMO.staffPassword}  ${u.role.padEnd(8)} ${u.what}`),
+      'Former staff (their sign-in is turned off; shows what a deactivated user looks like):',
+      ...out.staff.filter((u) => !u.active).map((u) => `  ${u.username.padEnd(10)} ${u.what}`),
       '',
       `Portal (vendors, subcontractors, clients): ${web}/portal/${trial.tenantId}`,
       ...out.portal.map(
@@ -313,7 +332,7 @@ async function main() {
             licenceKey: trial.licenceKey,
             tenantId: trial.tenantId,
             admin: { email: DEMO.adminEmail, password: DEMO.adminPassword, secret: adMfa.secret },
-            staff: out.staff.map((u) => ({
+            staff: out.staff.filter((u) => u.active).map((u) => ({
               username: u.username,
               password: DEMO.staffPassword,
               role: u.role,

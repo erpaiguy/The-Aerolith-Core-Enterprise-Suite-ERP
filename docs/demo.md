@@ -31,7 +31,8 @@ docker run --rm -v "${PWD}/deploy:/deploy" node:22-bookworm-slim node /deploy/sc
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 ```
 
-**3. Fill in the demo company.** This takes about two minutes. It saves every sign-in to `demo-credentials.txt` in the
+**3. Fill in the demo company.** This replays the company's history from January 2024 to today and takes 15 to 30
+minutes; it prints its progress month by month. It saves every sign-in to `demo-credentials.txt` in the
 repository folder; open that file with any text editor.
 
 ```sh
@@ -70,10 +71,16 @@ they are new on every install. The fixed passwords are these.
 | Who | Sign in with | Password | Authenticator |
 |---|---|---|---|
 | Tenant admin | `admin@deshmukh-infra.demo` | `Deshmukh-Infra-Demo-26` | Yes: add the printed secret to your app |
-| Suresh, manager (projects, purchase, site) | `suresh` | `Site-Office-Demo-26` | No |
-| Priya, manager (estimation, CRM, sales, accounts) | `priya` | `Site-Office-Demo-26` | No |
+| Suresh, projects manager (manager) | `suresh` | `Site-Office-Demo-26` | No |
+| Priya, estimation and contracts manager (manager) | `priya` | `Site-Office-Demo-26` | No |
+| Kavita, accounts executive (manager) | `kavita` | `Site-Office-Demo-26` | No |
+| Imran, purchase and stores officer (manager) | `imran` | `Site-Office-Demo-26` | No |
+| Pooja, HR and admin executive (manager, with HR and payroll rights) | `pooja` | `Site-Office-Demo-26` | No |
+| Rahul, QA/QC and safety officer (manager) | `rahul` | `Site-Office-Demo-26` | No |
 | Raju, site engineer (worker) | `raju` | `Site-Office-Demo-26` | No |
 | Meena, site supervisor (worker) | `meena` | `Site-Office-Demo-26` | No |
+| Nikhil, site engineer (worker) | `nikhil` | `Site-Office-Demo-26` | No |
+| Snehal, junior site engineer (worker) | `snehal` | `Site-Office-Demo-26` | No |
 | Shinde Steel Traders, vendor portal | `sales@shinde-steel.demo` | `Portal-Demo-2026` | No |
 | Kale Constructions, subcontractor portal | `site@kale.demo` | `Portal-Demo-2026` | No |
 | Zilla Parishad Washim, client portal | `ee.works@zpwashim.demo` | `Portal-Demo-2026` | No |
@@ -84,25 +91,40 @@ and pick "Time based". Each code works once, so wait for the next code if one is
 
 ## What is in the demo company
 
-Deshmukh Infra Pvt Ltd, a Vidarbha contractor that also builds one residential project:
+Deshmukh Infra Pvt Ltd, a building contractor in Washim (Maharashtra), founded in January 2024 with ₹1 crore of
+share capital. The seeder replays its life day by day up to today, through the app's own screens' API, so every
+register, ledger and dashboard holds two and a half years of consistent history. All figures are illustrative.
 
-- **CRM:** three leads.
-- **Tenders:** two.
-  - "Hostel block, Amravati", with a priced BOQ of five items.
-  - "Primary health centre, Risod", with a steel RFQ sent to Shinde Steel.
-- **Project "Zilla Parishad School, Washim"**, with one site and a team of four:
-  - A cement and sand order, part received.
-  - A steel order to Shinde Steel, waiting for their acknowledgement.
-  - A brickwork and plaster work order to Kale Constructions, with a measurement.
-  - A contract BOQ with measured work, and RA bill 1 submitted to ZP.
-  - Today's daily report, with a photo.
-  - A main store holding cement: 300 bags received, 120 issued.
-  - Two drawings, and transmittal TR-001 sent to ZP for review.
-  - Two employees with yesterday's attendance.
-- **Real estate:** "Sai Residency, Akola", registered under MahaRERA. Tower A has four flats; flat 101 is booked,
-  with its agreement made and a payment received.
-- **Report builder:** a shared report, "Purchase orders by vendor".
-- **Portals:** one user of each kind. Kale's plaster measurement is waiting for a manager to accept it.
+- **Size:** about ₹2.1 crore of work in FY 2024-25, ₹2.7 crore in FY 2025-26, and on the same pace in 2026-27. A
+  ₹50 lakh cash-credit limit carries the working capital.
+- **People:**
+  - 13 staff have been engaged and 10 are on the rolls today, across projects, estimation, accounts, purchase, HR,
+    quality and safety, and site. One resigned in 2025, one was terminated in 2025, one resigned in 2026; each has a
+    full-and-final settlement. Their sign-ins are turned off.
+  - Raises every April, leave, monthly biometric punches, 33 payroll runs with PF, ESI, PT and TDS paid on time.
+  - About 250 labourers engaged over the years through three labour contractors, hired as the sites needed them and
+    leaving as jobs ended, with a daily muster at every site and monthly wage sheets.
+- **Estimation:** a priced rate library with quarterly price history, eleven rate analyses (overheads and profit),
+  and about 25 tenders priced from them, with bid decisions, EMDs, checklists, submissions, competitors' bids and
+  results (won, lost on price, no-bid). Leads in the CRM, some converted to tenders, some open in the pipeline.
+- **Ten projects won by tender:**
+  - Two finished in 2024 and two in 2025, with retention released after the defects period, then closed.
+  - Two finished in August and September 2026.
+  - Two nearing completion (Zilla Parishad School, Washim; Community Hall, Akola).
+  - Two running into 2027 (Hospital OPD block, Malkapur; Police staff quarters, Washim).
+  - Each has its contract and budget BOQs from the tender, a WBS, a baselined programme updated monthly, a contract
+    register, monthly measurements, RA bills certified and paid, work orders to the labour contractors with their
+    measurements and bills, daily reports for every working day (manpower, machines, weather, hindrances),
+    fortnightly requisitions and purchase orders, deliveries into the site store, weekly issues, concrete tests,
+    inspections, toolbox talks, incidents, drawings, RFIs, variations, risks and monthly cost-control closes.
+- **Accounts:** every bill, receipt, payment, payroll, GST return payment, TDS challan, depreciation run and machine
+  costing posted; FY 2023-24, 2024-25 and 2025-26 closed. Statements, trial balance, receivables, payables and cash
+  flow all read from them.
+- **Real estate:** Sai Residency, Akola, registered under MahaRERA in March 2026: 32 flats, 14 booked with their
+  agreements and payments, and collections moved to the RERA account.
+- **Today:** a steel order waiting for Shinde's acknowledgement, Kale's measurement waiting under Portal submissions,
+  a steel RFQ on the open tender, a transmittal to ZP, approval rules with an order and a leave request waiting, and
+  a permit to work issued for today.
 
 ## Things worth trying
 
