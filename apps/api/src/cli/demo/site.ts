@@ -817,15 +817,13 @@ export async function payBills(
         entityId: c.entityId,
         bankAccountId: c.bank,
         payOn: d,
-        lines: real
-          .slice(i, i + 400)
-          .map((l) => ({
-            partyId: l.partyId,
-            kind: 'bill',
-            billId: l.billId,
-            projectId: null,
-            amount: money(l.amount),
-          })),
+        lines: real.slice(i, i + 400).map((l) => ({
+          partyId: l.partyId,
+          kind: 'bill',
+          billId: l.billId,
+          projectId: null,
+          amount: money(l.amount),
+        })),
       },
       h,
     );
