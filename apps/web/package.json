@@ -18,7 +18,7 @@
     "@tanstack/react-router": "^1.170.41",
     "echarts": "6.0.0",
     "lucide-react": "^1.52.0",
-    "pdfjs-dist": "5.4.624",
+    "pdfjs-dist": "6.4.299",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
