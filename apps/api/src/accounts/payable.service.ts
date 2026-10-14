@@ -129,6 +129,13 @@ export class PayableService implements OnModuleInit {
     >`SELECT value FROM platform.setting WHERE key = ${TOLERANCE_KEY}`;
     return s ? String(s.value) : '0';
   }
+  /** How far a bill's rate may exceed the order's before the bill is held; the admin changes it. */
+  async settings(claims: TenantClaims) {
+    await this.may(claims, 'accounts.view');
+    const db = await this.tenants.forTenant(claims.ten);
+    return { rateTolerancePct: await this.tolerance(db), mayEdit: claims.role === 'admin' };
+  }
+
   async setTolerance(claims: TenantClaims, pctValue: string) {
     if (claims.role !== 'admin')
       throw new ForbiddenException({

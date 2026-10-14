@@ -77,6 +77,12 @@ test('an employee deployed, marked present, on leave and counted for the month',
   await leave.getByRole('button', { name: 'Apply' }).click();
   await expect(page.getByRole('cell', { name: 'approved' })).toBeVisible();
   await expect(page.getByTestId('balance-CL')).toContainText('11.0');
+  // Two days carried from before the books, entered as the year's opening balance (Wave 7a step 1).
+  const opening = page.getByRole('form', { name: 'Opening balance' });
+  await opening.getByLabel('Opening for 2026').selectOption({ label: 'Casual leave' });
+  await opening.getByLabel('Days').fill('2');
+  await opening.getByRole('button', { name: 'Set opening' }).click();
+  await expect(page.getByTestId('balance-CL')).toContainText('13.0');
 
   // 5. Present on Monday 7 September, on the site's register.
   await nav('Site attendance');

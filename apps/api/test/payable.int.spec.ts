@@ -594,4 +594,21 @@ describe.skipIf(!controlUrl || !adminUrl)('payables (integration)', () => {
     expect(tb.rows.find((x) => x.name === 'Vidarbha Cement Traders')?.credit).toBe('15168.00');
     expect(tb.rows.find((x) => x.name === 'TDS payable 194C')?.credit).toBe('1080.00');
   });
+
+  it('shows the rate tolerance to the books and lets only the admin change it', async () => {
+    const before = await ok<{ rateTolerancePct: string; mayEdit: boolean }>(
+      get('/tenant/accounts/payables-settings', manager),
+    );
+    expect(before.mayEdit).toBe(false);
+    expect(
+      (await post('/tenant/accounts/payables-settings', { rateTolerancePct: '3' }, manager))
+        .statusCode,
+    ).toBe(403);
+    await ok(post('/tenant/accounts/payables-settings', { rateTolerancePct: '2.5' }));
+    const after = await ok<{ rateTolerancePct: string; mayEdit: boolean }>(
+      get('/tenant/accounts/payables-settings'),
+    );
+    expect(after).toEqual({ rateTolerancePct: '2.5', mayEdit: true });
+    expect((await get('/tenant/accounts/payables-settings', worker)).statusCode).toBe(403);
+  });
 });

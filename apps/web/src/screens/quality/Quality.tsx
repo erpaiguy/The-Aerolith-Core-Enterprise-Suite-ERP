@@ -121,7 +121,14 @@ export function QualityScreen() {
           </Select>
         }
       />
-      {projectId ? <ProjectQuality key={projectId} projectId={projectId} /> : <Templates />}
+      {projectId ? (
+        <ProjectQuality key={projectId} projectId={projectId} />
+      ) : (
+        <>
+          <Templates />
+          <TestCriteria />
+        </>
+      )}
     </div>
   );
 }
@@ -754,6 +761,158 @@ function Templates() {
         <Button type="submit">Add the template</Button>
       </form>
       {error && <Alert tone="danger">{error}</Alert>}
+    </Card>
+  );
+}
+
+interface Criteria {
+  kind: string;
+  effectiveFrom: string;
+  data: Record<string, unknown>;
+  note: string;
+}
+const KINDS = ['cube', 'slump', 'steel', 'soil', 'brick'] as const;
+const KIND_NAME: Record<string, string> = {
+  cube: 'Concrete cubes',
+  slump: 'Slump',
+  steel: 'Reinforcement steel',
+  soil: 'Soil compaction',
+  brick: 'Bricks',
+};
+
+/** Numbers in a criteria record as "a.b" paths, and back. */
+function flatten(o: Record<string, unknown>, prefix = ''): [string, string][] {
+  return Object.entries(o).flatMap(([k, v]) =>
+    v && typeof v === 'object'
+      ? flatten(v as Record<string, unknown>, `${prefix}${k}.`)
+      : [[`${prefix}${k}`, String(v)] as [string, string]],
+  );
+}
+function unflatten(rows: [string, string][]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [path, v] of rows) {
+    const keys = path.split('.');
+    let at = out;
+    for (const k of keys.slice(0, -1)) at = (at[k] ??= {}) as Record<string, unknown>;
+    const n = Number(v);
+    at[keys[keys.length - 1]!] = v.trim() !== '' && Number.isFinite(n) ? n : v;
+  }
+  return out;
+}
+
+/** The acceptance values tests are judged against: one version per kind from a date (Quality, for managers). */
+function TestCriteria() {
+  const qc = useQueryClient();
+  const list = useQuery({
+    queryKey: ['test-criteria'],
+    queryFn: () => api.request<Criteria[]>('/api/tenant/quality/test-criteria'),
+  });
+  const [kind, setKind] = useState<string>('cube');
+  const [from, setFrom] = useState(today());
+  const [note, setNote] = useState('');
+  const [rows, setRows] = useState<[string, string][] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const latest = (k: string) => list.data?.find((c) => c.kind === k);
+  const current = rows ?? flatten(latest(kind)?.data ?? {});
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSaved(false);
+    try {
+      await api.request('/api/tenant/quality/test-criteria', {
+        method: 'POST',
+        body: { kind, effectiveFrom: from, data: unflatten(current), note },
+      });
+      setRows(null);
+      setNote('');
+      setSaved(true);
+      void qc.invalidateQueries({ queryKey: ['test-criteria'] });
+    } catch (err) {
+      setError(describeError(err));
+    }
+  };
+  return (
+    <Card title="Test acceptance criteria">
+      <p className="mb-3 text-sm text-fg-muted">
+        Tests are judged against the criteria in force on the day they were tested. A change takes
+        effect from its date; earlier tests keep the old values.
+      </p>
+      {list.data && (
+        <Table minWidth="36rem">
+          <thead>
+            <tr>
+              <th>Test</th>
+              <th>From</th>
+              <th>Values</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody aria-label="Test criteria">
+            {list.data.map((c) => (
+              <tr key={`${c.kind}-${c.effectiveFrom}`}>
+                <td>{KIND_NAME[c.kind] ?? c.kind}</td>
+                <td>{c.effectiveFrom}</td>
+                <td className="text-xs">
+                  {flatten(c.data)
+                    .map(([k, v]) => `${k} ${v}`)
+                    .join('; ')}
+                </td>
+                <td className="text-xs text-fg-muted">{c.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      <form aria-label="New criteria" className="mt-4 space-y-3" onSubmit={(e) => void save(e)}>
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Test">
+            <Select
+              value={kind}
+              onChange={(e) => {
+                setKind(e.target.value);
+                setRows(null);
+              }}
+            >
+              {KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {KIND_NAME[k]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="In force from">
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} required />
+          </Field>
+          <Field label="Note">
+            <Input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. IS 456"
+            />
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {current.map(([k, v], i) => (
+            <Field key={k} label={k}>
+              <Input
+                inputMode="decimal"
+                value={v}
+                onChange={(e) => {
+                  const next = [...current];
+                  next[i] = [k, e.target.value];
+                  setRows(next);
+                }}
+              />
+            </Field>
+          ))}
+        </div>
+        <Button type="submit" disabled={!current.length}>
+          Save criteria
+        </Button>
+        {saved && <Alert tone="success">Saved; tests from that date are judged against it.</Alert>}
+        {error && <Alert tone="danger">{error}</Alert>}
+      </form>
     </Card>
   );
 }

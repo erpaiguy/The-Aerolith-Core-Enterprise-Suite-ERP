@@ -97,6 +97,7 @@ export function PayablesScreen() {
           <Ageing entityId={entityId} asOf={asOf} />
           <BillList entityId={entityId} />
           <RunList entityId={entityId} />
+          <Tolerance />
         </>
       )}
     </Books>
@@ -1359,5 +1360,62 @@ export function PaymentRunScreen({ runId }: { runId: string }) {
         );
       })}
     </div>
+  );
+}
+
+/** The rate tolerance: a bill priced above its order by more than this is held for someone to pass. */
+function Tolerance() {
+  const qc = useQueryClient();
+  const s = useQuery({
+    queryKey: ['payables-settings'],
+    queryFn: () =>
+      api.request<{ rateTolerancePct: string; mayEdit: boolean }>(
+        '/api/tenant/accounts/payables-settings',
+      ),
+  });
+  const [pct, setPct] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!s.data) return null;
+  const value = pct ?? s.data.rateTolerancePct;
+  return (
+    <Card title="Rate tolerance">
+      <form
+        aria-label="Rate tolerance"
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          void api
+            .request('/api/tenant/accounts/payables-settings', {
+              method: 'POST',
+              body: { rateTolerancePct: value },
+            })
+            .then(() => {
+              setPct(null);
+              void qc.invalidateQueries({ queryKey: ['payables-settings'] });
+            })
+            .catch((err: unknown) => setError(describeError(err)));
+        }}
+      >
+        <Field label="Bills may exceed the order rate by (%)">
+          <Input
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => setPct(e.target.value)}
+            disabled={!s.data.mayEdit}
+            className="w-32"
+          />
+        </Field>
+        {s.data.mayEdit && (
+          <Button type="submit" variant="secondary" disabled={pct === null}>
+            Save
+          </Button>
+        )}
+      </form>
+      <p className="mt-2 text-xs text-fg-muted">
+        Above it, a supplier&rsquo;s bill is held, with no voucher, until someone passes it.
+      </p>
+      {error && <Alert tone="danger">{error}</Alert>}
+    </Card>
   );
 }

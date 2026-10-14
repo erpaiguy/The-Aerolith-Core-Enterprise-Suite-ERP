@@ -73,7 +73,7 @@ unticked step.
 
 ## Progress
 
-- [ ] 7a.1 Missing screens
+- [x] 7a.1 Missing screens
 - [ ] 7a.2 Parties and enquiries
 - [ ] 7a.3 Company-wide registers
 - [ ] 7a.4 Project workspace

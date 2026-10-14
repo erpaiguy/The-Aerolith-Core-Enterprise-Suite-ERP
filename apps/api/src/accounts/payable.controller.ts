@@ -88,6 +88,11 @@ export class PayableController {
     return this.payables.sections(c);
   }
 
+  @Get('accounts/payables-settings')
+  settings(@Auth() c: TenantClaims) {
+    return this.payables.settings(c);
+  }
+
   @Post('accounts/payables-settings')
   @HttpCode(200)
   setTolerance(

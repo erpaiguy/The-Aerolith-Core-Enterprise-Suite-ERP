@@ -20,6 +20,7 @@ import { api } from '../../api/client';
 import { ApprovalSteps } from '../../approvals/ApprovalTrail';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { usePermission } from '../../session/permissions';
 import { shortDate } from '../../schedule/model';
 import { MyPayslips } from '../payroll/Payroll';
 import {
@@ -190,6 +191,23 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
       setError(describeError(err));
     }
   };
+  // HR sets each year's opening balance (carried from before the books, or corrected) for someone else's leave.
+  const mayEdit = usePermission('hr.edit') && !self;
+  const [o, setO] = useState({ leaveTypeId: '', days: '' });
+  const setOpening = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.request(`/api/tenant/hr/employees/${employeeId}/leave-openings`, {
+        method: 'PUT',
+        body: { year, leaveTypeId: o.leaveTypeId, days: o.days },
+      });
+      setO({ leaveTypeId: '', days: '' });
+      void qc.invalidateQueries({ queryKey: ['hr-leave', employeeId] });
+    } catch (err) {
+      setError(describeError(err));
+    }
+  };
   const withdraw = async (id: string) => {
     setError(null);
     try {
@@ -247,6 +265,42 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
             </tbody>
           </Table>
           <p className="mt-1 text-xs text-fg-muted">Accrued up to {shortDate(leave.data.asOf)}.</p>
+          {mayEdit && (
+            <form
+              aria-label="Opening balance"
+              className="mt-3 flex flex-wrap items-end gap-3"
+              onSubmit={(e) => void setOpening(e)}
+            >
+              <Field label={`Opening for ${year}`}>
+                <Select
+                  value={o.leaveTypeId}
+                  onChange={(e) => setO({ ...o, leaveTypeId: e.target.value })}
+                  required
+                >
+                  <option value="">Leave…</option>
+                  {leave.data.balances
+                    .filter((b) => b.paid)
+                    .map((b) => (
+                      <option key={b.leaveTypeId} value={b.leaveTypeId}>
+                        {b.name}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
+              <Field label="Days">
+                <Input
+                  inputMode="decimal"
+                  value={o.days}
+                  onChange={(e) => setO({ ...o, days: e.target.value })}
+                  placeholder="e.g. 4.5"
+                  required
+                />
+              </Field>
+              <Button type="submit" variant="secondary">
+                Set opening
+              </Button>
+            </form>
+          )}
           {leave.data.applications.length > 0 && (
             <Table minWidth="32rem">
               <thead>
