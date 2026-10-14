@@ -5,10 +5,12 @@ import { useRouterState } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
 export function useProjectParam(fallback = ''): [string, (id: string) => void] {
-  const opened = useRouterState({
-    select: (r) => (r.location.search as { project?: unknown }).project,
+  const fromUrl = useRouterState({
+    select: (r) => {
+      const v = (r.location.search as { project?: unknown }).project;
+      return typeof v === 'string' && v ? v : undefined;
+    },
   });
-  const fromUrl = typeof opened === 'string' && opened ? opened : undefined;
   const [value, setValue] = useState(fromUrl ?? fallback);
   useEffect(() => {
     if (fromUrl) setValue(fromUrl);

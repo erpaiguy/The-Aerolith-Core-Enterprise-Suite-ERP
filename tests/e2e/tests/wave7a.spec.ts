@@ -147,3 +147,44 @@ test("a project's pages lead the menu with its sections and a picker", async ({ 
   await main.getByRole('link', { name: 'Projects', exact: true }).click();
   await expect(work).toHaveCount(0);
 });
+
+test('the New menu opens create forms, on the current project', async ({ page }) => {
+  test.setTimeout(150_000);
+  await signInNewAdmin(
+    page,
+    `w7a5-${Date.now()}@jalna-works.in`,
+    'New-Menu-Jalna-75',
+    'Jalna Works',
+  );
+  const create = async (label: string) => {
+    await page.getByRole('button', { name: 'New', exact: true }).click();
+    await page
+      .getByRole('list', { name: 'Create' })
+      .getByRole('link', { name: label, exact: true })
+      .click();
+  };
+  // A project from anywhere: its form opens with the cursor in it.
+  await create('Project');
+  await expect(
+    page.getByRole('form', { name: 'New project' }).getByLabel('Project name'),
+  ).toBeFocused();
+  await page.getByLabel('Project name').fill('Hostel, Washim');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  const project = page.url().split('/').pop()!;
+
+  // On the project: a requisition there, and an RFI with the project already chosen.
+  await create('Requisition');
+  await expect(page).toHaveURL(new RegExp(`/projects/${project}\\?new=requisition#requisitions$`));
+  await expect(page.getByRole('form', { name: 'New requisition' })).toBeVisible();
+  await create('RFI');
+  await expect(page).toHaveURL(/\/transmittals\?/);
+  await expect(page.getByRole('main').getByLabel('Project')).toHaveValue(project);
+  await expect(page.getByRole('form', { name: 'New RFI' })).toBeVisible();
+
+  // A party.
+  await create('Party');
+  await expect(
+    page.getByRole('form', { name: 'New party' }).getByLabel('Name', { exact: true }),
+  ).toBeFocused();
+});

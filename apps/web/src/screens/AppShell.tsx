@@ -38,6 +38,7 @@ import {
   Handshake,
   Inbox as InboxIcon,
   Plug,
+  Plus,
   Home,
   ChartPie,
   MailCheck,
@@ -418,6 +419,88 @@ function ProjectWorkspace({
         <NavGroup key={g.group} g={g} depth={0} open={open} toggle={toggle} />
       ))}
     </nav>
+  );
+}
+
+/** The header's "New" menu (docs/wave7-plan.md step 7a.5): the common create forms, on the current project. */
+function NewMenu({ projectId }: { projectId: string | null }) {
+  const [open, setOpen] = useState(false);
+  const mayBooks = usePermission('accounts.view');
+  const mayPeople = usePermission('hr.edit');
+  const path = useRouterState({ select: (r) => r.location.href });
+  useEffect(() => setOpen(false), [path]);
+  const on = (key: string) => (projectId ? { new: key, project: projectId } : { new: key });
+  const items: {
+    label: string;
+    to: string;
+    search?: Record<string, string>;
+    hash?: string;
+    show?: boolean;
+  }[] = [
+    { label: 'Tender', to: '/tenders/new' },
+    { label: 'Project', to: '/projects', search: { new: 'project' } },
+    { label: 'Party', to: '/clients', search: { new: 'party' } },
+    { label: 'Lead', to: '/crm', search: { new: 'lead' } },
+    ...(projectId
+      ? [
+          {
+            label: 'Requisition',
+            to: `/projects/${projectId}`,
+            search: { new: 'requisition' },
+            hash: 'requisitions',
+          },
+        ]
+      : []),
+    { label: 'RFI', to: '/transmittals', search: on('rfi') },
+    { label: 'Variation', to: '/variations', search: on('variation') },
+    { label: 'Risk', to: '/risks', search: on('risk') },
+    { label: 'Voucher', to: '/accounts/vouchers/new', show: mayBooks },
+    { label: 'Supplier bill', to: '/accounts/vendor-bills/new', show: mayBooks },
+    { label: 'Client receipt', to: '/accounts/client-receipts/new', show: mayBooks },
+    { label: 'Employee', to: '/hr', search: { new: 'employee' }, show: mayPeople },
+  ];
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="new-menu"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90"
+      >
+        <Plus className="size-4" aria-hidden /> New
+      </button>
+      {open ? (
+        <>
+          <div className="fixed inset-0 z-10" aria-hidden onClick={() => setOpen(false)} />
+          <ul
+            id="new-menu"
+            aria-label="Create"
+            className="absolute right-0 z-20 mt-1 w-56 rounded-md border border-line bg-surface p-1 shadow-lg"
+          >
+            {items
+              .filter((i) => i.show !== false)
+              .map((i) => (
+                <li key={i.label}>
+                  <Link
+                    to={i.to}
+                    {...(i.search ? { search: i.search } : {})}
+                    {...(i.hash ? { hash: i.hash } : {})}
+                    className="block rounded px-3 py-1.5 text-sm hover:bg-surface-2"
+                  >
+                    {i.label}
+                  </Link>
+                </li>
+              ))}
+            {projectId ? null : (
+              <li className="px-3 py-1.5 text-xs text-fg-subtle">
+                Open a project to raise a requisition there.
+              </li>
+            )}
+          </ul>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -892,6 +975,7 @@ export function AppShell() {
               <Badge>{session.user?.role}</Badge>
             </div>
             <div className="flex items-center gap-1">
+              <NewMenu projectId={projectId} />
               <OutboxChip />
               <Link
                 to="/account/password"

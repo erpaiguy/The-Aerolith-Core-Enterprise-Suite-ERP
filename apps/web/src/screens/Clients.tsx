@@ -16,11 +16,12 @@ import {
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { Plus, Search } from 'lucide-react';
-import { useDeferredValue, useState, type FormEvent } from 'react';
+import { useDeferredValue, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
 import type { Party } from '../api/types';
 import { describeError } from '../lib/format';
 import { useCanEditTenders } from './Tenders';
+import { useFocusForm, useNewParam } from '../lib/new-param';
 
 type Values = Omit<Party, 'id' | 'rowVersion'>;
 
@@ -104,7 +105,11 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
 
   return (
     <Card title={party ? `Edit ${party.name}` : 'New party'}>
-      <form onSubmit={(e) => void submit(e)} className="space-y-4">
+      <form
+        aria-label={party ? 'Edit party' : 'New party'}
+        onSubmit={(e) => void submit(e)}
+        className="space-y-4"
+      >
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Name">
             <Input name="partyName" value={v.name} onChange={set('name')} required minLength={2} />
@@ -234,7 +239,12 @@ export function ClientsScreen() {
     select: (r) => (r.location.search as { kind?: string }).kind ?? '',
   });
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<Party | 'new' | null>(null);
+  const asked = useNewParam('party');
+  const [editing, setEditing] = useState<Party | 'new' | null>(asked ? 'new' : null);
+  useEffect(() => {
+    if (asked) setEditing('new');
+  }, [asked]);
+  useFocusForm('New party', editing === 'new' && asked);
   const q = useDeferredValue(search.trim());
   const parties = useQuery({
     queryKey: ['parties', kind || 'all', q],

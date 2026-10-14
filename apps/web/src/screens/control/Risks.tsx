@@ -19,6 +19,7 @@ import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
 import { useProjectParam } from '../../lib/project-param';
+import { useFocusForm, useNewParam } from '../../lib/new-param';
 
 interface Reg {
   scales: {
@@ -72,6 +73,7 @@ const CELL = (s: number) =>
 const CATEGORIES = ['commercial', 'design', 'site', 'safety', 'regulatory', 'schedule', 'other'];
 
 export function RisksScreen() {
+  useFocusForm('Raise a risk', useNewParam('risk'));
   const projects = useQuery({
     queryKey: ['projects', 'all-items'],
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),

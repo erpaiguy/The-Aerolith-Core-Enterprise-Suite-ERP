@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/client';
 import { describeError, formatInr } from '../../lib/format';
+import { useFocusForm, useNewParam } from '../../lib/new-param';
 
 const STAGES = [
   'new',
@@ -103,6 +104,7 @@ interface Pipeline {
 type Tab = 'pipeline' | 'leads' | 'contacts';
 
 export function CrmScreen() {
+  useFocusForm('New lead', useNewParam('lead'));
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('pipeline');
   const [open, setOpen] = useState<string | null>(() =>

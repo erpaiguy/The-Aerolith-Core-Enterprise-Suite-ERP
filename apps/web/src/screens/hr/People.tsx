@@ -3,7 +3,7 @@
 import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
@@ -20,6 +20,7 @@ import {
   type LeaveType,
   type MonthRow,
 } from './model';
+import { useFocusForm, useNewParam } from '../../lib/new-param';
 
 const TABS = ['Employees', 'Month', 'Leave', 'Import', 'Setup'] as const;
 type Tab = (typeof TABS)[number];
@@ -84,7 +85,12 @@ function Employees({ entityId }: { entityId: string }) {
     queryFn: () => api.request<EmployeeRow[]>(`/api/tenant/hr/employees?entityId=${entityId}`),
   });
   const designations = useDesignations();
-  const [adding, setAdding] = useState(false);
+  const asked = useNewParam('employee');
+  const [adding, setAdding] = useState(asked);
+  useEffect(() => {
+    if (asked) setAdding(true);
+  }, [asked]);
+  useFocusForm('New employee', asked && adding);
   const [f, setF] = useState({
     code: '',
     name: '',

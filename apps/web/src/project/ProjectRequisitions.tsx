@@ -4,13 +4,14 @@ import { Alert, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import type { ProjectDetail } from '../api/types';
 import { useRun } from '../approvals/model';
 import { describeError } from '../lib/format';
 import type { Requisition, RequisitionRow } from '../procurement/model';
 import { RequisitionTable } from '../screens/Requisitions';
+import { useFocusForm, useNewParam } from '../lib/new-param';
 
 export function ProjectRequisitions({ project: p }: { project: ProjectDetail }) {
   const navigate = useNavigate();
@@ -19,7 +20,12 @@ export function ProjectRequisitions({ project: p }: { project: ProjectDetail }) 
     queryFn: () => api.request<RequisitionRow[]>(`/api/tenant/requisitions?projectId=${p.id}`),
   });
   const mayRaise = p.canEdit || p.myRole === 'lead' || p.myRole === 'member';
-  const [title, setTitle] = useState<string | null>(null);
+  const asked = useNewParam('requisition') && mayRaise;
+  const [title, setTitle] = useState<string | null>(asked ? '' : null);
+  useEffect(() => {
+    if (asked) setTitle((t) => t ?? '');
+  }, [asked]);
+  useFocusForm('New requisition', asked && title !== null);
   const { run, busy, error } = useRun(() => undefined);
   return (
     <Card

@@ -52,6 +52,7 @@ import {
   formatInr,
   formatInrShort,
 } from '../lib/format';
+import { useFocusForm, useNewParam } from '../lib/new-param';
 
 export const PROJECT_STATUS: Record<ProjectStatus, string> = {
   planned: 'Planned',
@@ -105,7 +106,12 @@ export function ProjectsScreen() {
   const [filter, setFilter] = useState('live');
   const [mine, setMine] = useState(false);
   const [search, setSearch] = useState('');
-  const [creating, setCreating] = useState(false);
+  const asked = useNewParam('project');
+  const [creating, setCreating] = useState(asked);
+  useEffect(() => {
+    if (asked) setCreating(true);
+  }, [asked]);
+  useFocusForm('New project', creating && asked);
   const q = useDeferredValue(search.trim());
   const projects = useQuery({
     queryKey: ['projects', filter, q, mine],
@@ -303,7 +309,11 @@ function ProjectForm({
     }
   };
   return (
-    <form onSubmit={(e) => void submit(e)} className="space-y-4">
+    <form
+      aria-label={submitLabel === 'Save changes' ? 'Edit project' : 'New project'}
+      onSubmit={(e) => void submit(e)}
+      className="space-y-4"
+    >
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
           <Field label="Project name">

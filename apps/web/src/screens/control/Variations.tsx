@@ -19,6 +19,7 @@ import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
 import { useProjectParam } from '../../lib/project-param';
+import { useFocusForm, useNewParam } from '../../lib/new-param';
 
 interface Register {
   variations: {
@@ -95,6 +96,7 @@ const blank = () => ({
 });
 
 export function VariationsScreen() {
+  useFocusForm('Raise a variation', useNewParam('variation'));
   const projects = useQuery({
     queryKey: ['projects', 'all-items'],
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
