@@ -32,7 +32,7 @@ test('a subcontractor measured, billed with deductions and certified into payabl
   await company.getByLabel('Books start on').fill('2026-04-01');
   await company.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('rowgroup', { name: 'Companies' })).toContainText('27AAACA1234K1Z2');
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Kale Constructions');
   await page.getByLabel('Client', { exact: true }).uncheck();

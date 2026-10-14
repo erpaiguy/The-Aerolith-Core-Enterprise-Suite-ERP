@@ -142,6 +142,22 @@ export class RfqController {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
+  @Get('rfqs')
+  listAll(
+    @Auth() c: Claims,
+    @Query(
+      new ZodPipe(
+        z.object({
+          status: z.enum(['open', 'all', 'draft', 'sent', 'closed', 'cancelled']).default('open'),
+          source: z.enum(['all', 'tender', 'project']).default('all'),
+        }),
+      ),
+    )
+    q: { status: string; source: 'all' | 'tender' | 'project' },
+  ) {
+    return this.rfqs.listAll(c, q);
+  }
+
   @Get('tenders/:id/rfqs')
   list(@Auth() c: Claims, @Param('id', ParseUUIDPipe) id: string) {
     return this.rfqs.list(c, id);

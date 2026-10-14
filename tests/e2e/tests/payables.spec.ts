@@ -38,7 +38,7 @@ test("a supplier's bill entered, paid in an approved run with a bank file", asyn
   await expect(page.getByRole('rowgroup', { name: 'Chart of accounts' })).toContainText(
     'SBI Current 1188',
   );
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Patil Estates');
   await page.getByLabel('Client', { exact: true }).uncheck();

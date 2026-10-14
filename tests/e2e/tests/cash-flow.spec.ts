@@ -35,7 +35,7 @@ test("a project's forecast moved by its cash terms; the company's overheads", as
   await page.getByLabel('Project name').fill('Hostel, Akola');
   await page.getByRole('button', { name: 'Create project' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Shinde Labour Supply');
   await page.getByLabel('Client', { exact: true }).uncheck();

@@ -23,7 +23,7 @@ test('a purchase order with GST on top is issued, acknowledged and amended', asy
     page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }).click();
 
   // 1. A supplier registered in Maharashtra (GSTIN 27…).
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Vidarbha Cement Traders');
   await page.getByLabel('Client', { exact: true }).uncheck();

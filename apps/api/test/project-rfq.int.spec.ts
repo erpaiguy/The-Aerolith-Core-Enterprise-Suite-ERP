@@ -289,6 +289,23 @@ describe.skipIf(!controlUrl || !adminUrl)('project enquiries (integration)', () 
     expect((await get(`/tenant/projects/${projectId}/rfqs`, worker)).statusCode).toBe(404);
     // The manager leads it.
     expect((await get(`/tenant/rfqs/${rfq.id}`, manager)).statusCode).toBe(200);
+    // The company-wide list (Wave 7a step 2): the manager sees it with its project; the worker off the team does not.
+    const all = await ok<{ id: string; project: { id: string } | null; tender: unknown }[]>(
+      get('/tenant/rfqs?status=all', manager),
+    );
+    expect(all.find((r) => r.id === rfq.id)).toMatchObject({
+      project: { id: projectId },
+      tender: null,
+    });
+    const fromProjects = await ok<{ id: string }[]>(
+      get('/tenant/rfqs?status=all&source=project', manager),
+    );
+    expect(fromProjects.map((r) => r.id)).toContain(rfq.id);
+    expect(
+      await ok<{ id: string }[]>(get('/tenant/rfqs?status=all&source=tender', manager)),
+    ).not.toContainEqual(expect.objectContaining({ id: rfq.id }));
+    const theirs = await ok<{ id: string }[]>(get('/tenant/rfqs?status=all', worker));
+    expect(theirs.map((r) => r.id)).not.toContain(rfq.id);
     // The project's activity says what happened.
     const ev = await db<
       { kind: string }[]

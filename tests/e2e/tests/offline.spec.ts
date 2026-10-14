@@ -26,7 +26,7 @@ test('a receipt saved with no signal is sent once when the signal returns', asyn
     page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }).click();
 
   // 1. A supplier, a project with a site, an issued order: 100 bags of cement and 1.235 t of steel.
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Vidarbha Cement Traders');
   await page.getByLabel('Client', { exact: true }).uncheck();

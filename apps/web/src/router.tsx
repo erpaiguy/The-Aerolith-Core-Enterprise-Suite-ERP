@@ -113,6 +113,7 @@ import { NewVoucherScreen, VoucherScreen, VouchersScreen } from './screens/accou
 import { RequisitionsScreen } from './screens/Requisitions';
 import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
+import { RfqsScreen } from './screens/Rfqs';
 import { TemplatesScreen } from './screens/Templates';
 import { TenderSettingsScreen } from './screens/TenderSettings';
 import { TenderDetailScreen } from './screens/TenderDetail';
@@ -900,7 +901,15 @@ const routeTree = rootRoute.addChildren([
       path: '/cost-codes',
       component: CostCodesScreen,
     }),
-    createRoute({ getParentRoute: () => appLayout, path: '/clients', component: ClientsScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/clients',
+      component: ClientsScreen,
+      validateSearch: (s: Record<string, unknown>): { kind?: string | undefined } => ({
+        kind: typeof s.kind === 'string' ? s.kind : undefined,
+      }),
+    }),
+    createRoute({ getParentRoute: () => appLayout, path: '/rfqs', component: RfqsScreen }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/resources',

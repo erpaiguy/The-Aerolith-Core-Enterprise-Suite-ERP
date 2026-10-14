@@ -39,7 +39,7 @@ test("input tax blocked by ledger, the month's GST and the 2B matched", async ({
   await expect(page.getByRole('rowgroup', { name: 'Chart of accounts' })).toContainText(
     'Staff food',
   );
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Hotel Sai');
   await page.getByLabel('Client', { exact: true }).uncheck();

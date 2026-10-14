@@ -20,7 +20,7 @@ test('a contractor’s worker mustered and the wage sheet held below the minimum
   );
   const nav = (name: string) =>
     page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }).click();
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Shree Labour Supply');
   await page.getByLabel('Client', { exact: true }).uncheck();

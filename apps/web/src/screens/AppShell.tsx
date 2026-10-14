@@ -78,16 +78,19 @@ function NavItem({
   children,
   badge,
   depth = 0,
+  search,
 }: {
   to: string;
   icon: ReactNode;
   children: ReactNode;
   badge?: number | undefined;
   depth?: number;
+  search?: Record<string, string> | undefined;
 }) {
   return (
     <Link
       to={to}
+      {...(search ? { search, activeOptions: { includeSearch: true } } : {})}
       className={`flex items-center gap-2.5 rounded-md py-1.5 pr-2.5 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg ${depth ? 'pl-8' : 'pl-2.5'}`}
       activeProps={{ className: 'bg-surface-2 text-fg font-medium' }}
       activeOptions={{ exact: to === '/' || to.startsWith('/dashboards/') }}
@@ -102,6 +105,8 @@ function NavItem({
 // The menu is a tree: groups (folded unless opened or holding the current page), some with sub-groups, then pages.
 interface Page {
   to: string;
+  /** Query string for a filtered list (Suppliers: parties of kind vendor). */
+  search?: Record<string, string>;
   label: string;
   icon: ReactNode;
   badge?: number | undefined;
@@ -166,7 +171,14 @@ function NavGroup({
           isGroup(i) ? (
             <NavGroup key={i.group} g={i} depth={depth + 1} open={open} toggle={toggle} />
           ) : (
-            <NavItem key={i.to} to={i.to} icon={i.icon} badge={i.badge} depth={depth + 1}>
+            <NavItem
+              key={i.to + JSON.stringify(i.search ?? {})}
+              to={i.to}
+              search={i.search}
+              icon={i.icon}
+              badge={i.badge}
+              depth={depth + 1}
+            >
               {i.label}
             </NavItem>
           ),
@@ -240,7 +252,7 @@ export function AppShell() {
           icon: <LayoutDashboard className="size-4" />,
         },
         { to: '/crm', label: 'CRM', icon: <Handshake className="size-4" /> },
-        { to: '/clients', label: 'Clients', icon: <Contact className="size-4" /> },
+        { to: '/clients', label: 'Parties', icon: <Contact className="size-4" /> },
         { to: '/sales', label: 'Sales and RERA', icon: <Home className="size-4" /> },
         {
           to: '/portal-users',
@@ -266,6 +278,7 @@ export function AppShell() {
           icon: <ScrollText className="size-4" />,
           items: [
             { to: '/tenders', label: 'Tenders', icon: <ScrollText className="size-4" /> },
+            { to: '/rfqs', label: 'Enquiries (RFQs)', icon: <Send className="size-4" /> },
             {
               to: '/boq-templates',
               label: 'BOQ templates',
@@ -378,6 +391,19 @@ export function AppShell() {
       also: ['/transfers', '/stock-counts'],
       items: [
         { to: '/requisitions', label: 'Requisitions', icon: <ShoppingCart className="size-4" /> },
+        { to: '/rfqs', label: 'Enquiries (RFQs)', icon: <Send className="size-4" /> },
+        {
+          to: '/clients',
+          search: { kind: 'vendor' },
+          label: 'Suppliers',
+          icon: <Truck className="size-4" />,
+        },
+        {
+          to: '/clients',
+          search: { kind: 'subcontractor' },
+          label: 'Subcontractors',
+          icon: <HardHat className="size-4" />,
+        },
         { to: '/orders', label: 'Orders', icon: <BriefcaseBusiness className="size-4" /> },
         { to: '/receipts', label: 'Goods receipts', icon: <PackageCheck className="size-4" /> },
         { to: '/stores', label: 'Stores', icon: <Warehouse className="size-4" /> },

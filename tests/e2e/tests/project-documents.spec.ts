@@ -52,7 +52,7 @@ test("a receipt's challan, the drawings register and the procurement reports", a
     page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true }).click();
 
   // 1. A supplier, a project with a site, an issued order for 100 bags at ₹390.
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Vidarbha Cement Traders');
   await page.getByLabel('Client', { exact: true }).uncheck();

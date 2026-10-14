@@ -1,4 +1,5 @@
-// Party master (docs/04-features.md P10): clients now; vendors and subcontractors join for RFQs (Wave 1 step 9).
+// Party master (docs/04-features.md P10): clients, suppliers, subcontractors and competitors in one list, filtered by
+// kind from the menu (docs/wave7-plan.md step 7a.2).
 import {
   Alert,
   Badge,
@@ -13,6 +14,7 @@ import {
   Textarea,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { Plus, Search } from 'lucide-react';
 import { useDeferredValue, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
@@ -217,22 +219,40 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
   );
 }
 
+const KINDS: [string, string][] = [
+  ['', 'All'],
+  ['client', 'Clients'],
+  ['vendor', 'Suppliers'],
+  ['subcontractor', 'Subcontractors'],
+  ['competitor', 'Competitors'],
+];
+
 export function ClientsScreen() {
   const canEdit = useCanEditTenders();
+  const navigate = useNavigate();
+  const kind = useRouterState({
+    select: (r) => (r.location.search as { kind?: string }).kind ?? '',
+  });
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Party | 'new' | null>(null);
   const q = useDeferredValue(search.trim());
   const parties = useQuery({
-    queryKey: ['parties', 'all', q],
-    queryFn: () =>
-      api.request<Party[]>(`/api/tenant/parties${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    queryKey: ['parties', kind || 'all', q],
+    queryFn: () => {
+      const qs = new URLSearchParams();
+      if (q) qs.set('q', q);
+      if (kind) qs.set('kind', kind);
+      const s = qs.toString();
+      return api.request<Party[]>(`/api/tenant/parties${s ? `?${s}` : ''}`);
+    },
     placeholderData: keepPreviousData,
   });
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Clients and vendors"
+        title="Parties"
+        subtitle="Clients, suppliers, subcontractors and competitors: one record each, used across tenders, projects and the books."
         actions={
           canEdit &&
           editing === null && (
@@ -250,6 +270,19 @@ export function ClientsScreen() {
         />
       )}
       <Card>
+        <div className="mb-3 flex flex-wrap gap-1" role="group" aria-label="Kind of party">
+          {KINDS.map(([k, label]) => (
+            <Button
+              key={k}
+              type="button"
+              variant={kind === k ? 'secondary' : 'ghost'}
+              aria-pressed={kind === k}
+              onClick={() => void navigate({ to: '/clients', search: k ? { kind: k } : {} })}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
         <div className="relative mb-4 max-w-sm">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
@@ -269,7 +302,7 @@ export function ClientsScreen() {
           <Alert tone="danger">{describeError(parties.error)}</Alert>
         ) : parties.data.length === 0 ? (
           <p className="py-6 text-center text-sm text-fg-muted">
-            {q ? 'Nothing matches.' : 'No clients or vendors yet.'}
+            {q ? 'Nothing matches.' : 'No parties of this kind yet.'}
           </p>
         ) : (
           <Table>

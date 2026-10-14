@@ -63,6 +63,43 @@ export class RfqService {
       FROM tender.rfq r WHERE r.tender_id = ${tenderId} ORDER BY r.created_at`;
   }
 
+  /**
+   * Every RFQ the person may see, tenders' and projects' alike (docs/wave7-plan.md step 7a.2). A project's RFQs are
+   * seen by its team and by those who see every project.
+   */
+  async listAll(claims: TenantClaims, q: { status: string; source: 'all' | 'tender' | 'project' }) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const seesAll = await this.permissions.can(claims, 'projects.all');
+    const status =
+      q.status === 'open'
+        ? db`AND r.status IN ('draft', 'sent')`
+        : q.status === 'all'
+          ? db``
+          : db`AND r.status = ${q.status}`;
+    const source =
+      q.source === 'tender'
+        ? db`AND r.tender_id IS NOT NULL`
+        : q.source === 'project'
+          ? db`AND r.project_id IS NOT NULL`
+          : db``;
+    return db`
+      SELECT r.id, r.number, r.title, r.kind, to_char(r.due_on, 'YYYY-MM-DD') AS "dueOn", r.status,
+        (SELECT count(*)::int FROM tender.rfq_line l WHERE l.rfq_id = r.id) AS lines,
+        (SELECT count(*)::int FROM tender.rfq_vendor v WHERE v.rfq_id = r.id) AS vendors,
+        (SELECT count(*)::int FROM tender.rfq_quote x WHERE x.rfq_id = r.id) AS quotes,
+        CASE WHEN t.id IS NULL THEN NULL ELSE json_build_object('id', t.id, 'number', t.number, 'title', t.title) END
+          AS tender,
+        CASE WHEN p.id IS NULL THEN NULL ELSE json_build_object('id', p.id, 'number', p.number, 'name', p.name) END
+          AS project
+      FROM tender.rfq r
+      LEFT JOIN tender.tender t ON t.id = r.tender_id
+      LEFT JOIN proj.project p ON p.id = r.project_id
+      WHERE (r.project_id IS NULL OR ${seesAll}
+          OR EXISTS (SELECT 1 FROM proj.member m WHERE m.project_id = r.project_id AND m.user_id = ${claims.sub}))
+        ${status} ${source}
+      ORDER BY r.created_at DESC LIMIT 500`;
+  }
+
   /** The RFQ with its lines, vendors, quotes and comparative statement. */
   async get(claims: TenantClaims, rfqId: string) {
     const db = await this.tenants.forTenant(claims.ten);

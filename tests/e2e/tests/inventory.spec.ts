@@ -35,7 +35,7 @@ test('received cement is stocked, issued to work, returned, reordered and counte
   await form.getByLabel('Rate (₹)').fill('400');
   await page.getByRole('button', { name: 'Add resource' }).click();
   await expect(page.getByText('CEM-OPC53').first()).toBeVisible();
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Vidarbha Cement Traders');
   await page.getByLabel('Client', { exact: true }).uncheck();

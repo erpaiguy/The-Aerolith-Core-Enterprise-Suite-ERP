@@ -39,7 +39,7 @@ test('TDS deducted on rent, deposited by challan, and the 26Q workbook', async (
   await expect(page.getByRole('rowgroup', { name: 'Chart of accounts' })).toContainText(
     'SBI Current 7788',
   );
-  await nav('Clients');
+  await nav('Parties');
   await page.getByRole('button', { name: 'New party' }).click();
   await page.getByLabel('Name', { exact: true }).fill('Patil Estates');
   await page.getByLabel('Client', { exact: true }).uncheck();
