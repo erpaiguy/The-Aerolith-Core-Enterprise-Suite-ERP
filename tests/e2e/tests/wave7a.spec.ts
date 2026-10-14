@@ -231,3 +231,38 @@ test('Ctrl+K searches screens and records', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(box).toHaveCount(0);
 });
+
+test('the audit trail shows who created and changed a project', async ({ page }) => {
+  test.setTimeout(150_000);
+  await signInNewAdmin(
+    page,
+    `w7a8-${Date.now()}@yavatmal-infra.in`,
+    'Audit-Yavatmal-78',
+    'Yavatmal Infra',
+  );
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await page
+    .getByRole('list', { name: 'Create' })
+    .getByRole('link', { name: 'Project', exact: true })
+    .click();
+  await page.getByLabel('Project name').fill('Hostel, Washim');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  await page.getByRole('main').getByRole('button', { name: 'Edit' }).click();
+  await page.getByLabel('Project name').fill('Boys Hostel, Washim');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('heading', { name: 'Boys Hostel, Washim' })).toBeVisible();
+
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Audit trail' })
+    .click();
+  await page.getByLabel('Record', { exact: true }).selectOption('proj.project');
+  const trail = page.getByRole('rowgroup', { name: 'Audit trail' });
+  await expect(trail.getByRole('row')).toHaveCount(2);
+  await expect(trail.getByRole('row').first()).toContainText('Changed');
+  await expect(trail.getByRole('row').first()).toContainText(
+    'name: Hostel, Washim → Boys Hostel, Washim',
+  );
+  await expect(trail.getByRole('row').nth(1)).toContainText('Created');
+});

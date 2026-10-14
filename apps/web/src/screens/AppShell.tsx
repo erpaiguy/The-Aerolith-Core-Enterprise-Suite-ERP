@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Fingerprint,
   HardHat,
+  History,
   IdCard,
   ChartColumn,
   LayoutDashboard,
@@ -879,6 +880,7 @@ export function AppShell() {
         },
         { to: '/settings/companies', label: 'Companies', icon: <Landmark className="size-4" /> },
         { to: '/settings/integrations', label: 'Integrations', icon: <Plug className="size-4" /> },
+        { to: '/settings/audit', label: 'Audit trail', icon: <History className="size-4" /> },
       ],
     },
   ];

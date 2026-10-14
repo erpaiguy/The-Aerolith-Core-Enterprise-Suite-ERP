@@ -115,6 +115,7 @@ import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
 import { REGISTER_KINDS, type RegisterKind, RegisterScreen } from './screens/Registers';
 import { RfqsScreen } from './screens/Rfqs';
+import { AuditScreen } from './screens/Audit';
 import { TemplatesScreen } from './screens/Templates';
 import { TenderSettingsScreen } from './screens/TenderSettings';
 import { TenderDetailScreen } from './screens/TenderDetail';
@@ -962,6 +963,15 @@ const routeTree = rootRoute.addChildren([
       component: () => (
         <AdminOnly>
           <UsersScreen />
+        </AdminOnly>
+      ),
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/settings/audit',
+      component: () => (
+        <AdminOnly>
+          <AuditScreen />
         </AdminOnly>
       ),
     }),
