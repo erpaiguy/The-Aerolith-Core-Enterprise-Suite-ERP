@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@aerolith/shared": "workspace:*",
-    "@fastify/cors": "^11.3.0",
+    "@fastify/cors": "^11.3.1",
     "@fastify/multipart": "^9.4.0",
     "@nestjs/common": "^12.1.0",
     "@nestjs/core": "^12.1.0",
@@ -29,7 +29,7 @@
     "csv-parse": "^6.2.1",
     "exceljs": "4.4.0",
     "fastify": "5.12.5",
-    "nodemailer": "^10.0.16",
+    "nodemailer": "^10.1.0",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "5.4.624",
     "postgres": "^3.4.9",
@@ -37,18 +37,18 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "saxes": "5.0.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.1.0",
-    "@swc/core": "^1.16.0",
+    "@swc/core": "^1.16.18",
     "@types/mailparser": "^3.9.0",
     "@types/node": "^22.20.0",
     "@types/nodemailer": "^8.0.2",
     "@types/qrcode": "^1.5.6",
     "@types/smtp-server": "^3.5.13",
-    "mailparser": "^3.9.36",
-    "smtp-server": "^3.19.17",
+    "mailparser": "^3.9.38",
+    "smtp-server": "^3.19.21",
     "unplugin-swc": "^2.0.0",
     "vitest": "^5.0.0"
   }
