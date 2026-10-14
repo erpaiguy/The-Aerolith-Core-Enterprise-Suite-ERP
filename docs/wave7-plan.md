@@ -78,7 +78,7 @@ unticked step.
 - [x] 7a.3 Company-wide registers
 - [x] 7a.4 Project workspace
 - [x] 7a.5 "New" menu
-- [ ] 7a.6 Search everything
+- [x] 7a.6 Search everything
 - [ ] 7a.7 My work
 - [ ] 7a.8 Audit trail
 - [ ] 7a exit: full check and browser suite

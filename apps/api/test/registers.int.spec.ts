@@ -1,5 +1,5 @@
-// Company-wide registers in a real tenant database (docs/wave7-plan.md step 7a.3): every register answers; rows from
-// every project a person can see, none from the others; project, status, date and text filters.
+// Company-wide registers and search in a real tenant database (docs/wave7-plan.md steps 7a.3 and 7a.6): every
+// register answers; rows from every project a person can see, none from the others; filters; search kept the same way.
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
@@ -160,7 +160,7 @@ describe.skipIf(!controlUrl || !adminUrl)('company-wide registers (integration)'
     interface Rows {
       rows: { number: string; status: string; project: { id: string; name: string } }[];
     }
-    const ncrs = (url: string, h = t.admin) =>
+    const ncrs = (url: string, h: Record<string, string> = t.admin) =>
       ok<Rows>(get(`/tenant/registers/ncrs${url}`, h)).then((r) =>
         r.rows.map((n) => n.project.name).sort(),
       );
@@ -178,5 +178,32 @@ describe.skipIf(!controlUrl || !adminUrl)('company-wide registers (integration)'
       ['RFI-001', 'open', projectId],
     ]);
     expect((await ok<Rows>(get('/tenant/registers/rfis', lata.headers))).rows).toEqual([]);
+  });
+
+  it('searches projects, tenders, parties, employees and numbers, kept to what each may see', async () => {
+    interface Hit {
+      kind: string;
+      label: string;
+      projectId: string | null;
+    }
+    const find = (q: string, h: Record<string, string> = t.admin) =>
+      ok<{ hits: Hit[] }>(get(`/tenant/search?q=${encodeURIComponent(q)}`, h)).then((r) =>
+        r.hits.map((x) => `${x.kind}: ${x.label}`).sort(),
+      );
+    expect((await get('/tenant/search?q=a')).statusCode).toBe(400);
+    expect(await find('washim')).toEqual([expect.stringMatching(/^project: .* Hostel, Washim$/)]);
+    expect(await find('honeycomb')).toEqual([
+      expect.stringMatching(/^ncr: NCR-\d+ Honeycombing at column C4$/),
+    ]);
+    expect(await find('RFI-001')).toEqual(['rfi: RFI-001 Column C4 size']);
+    // The worker sees their own project's records, nothing of the other; someone off every team, neither.
+    expect(await find('ncr', worker)).toEqual([expect.stringMatching(/^ncr: .*Honeycombing/)]);
+    expect(await find('akola', worker)).toEqual([]);
+    expect(await find('washim', lata.headers)).toEqual([]);
+    // Parties for everyone; employees only with HR rights.
+    await ok(
+      post('/tenant/parties', { name: 'Vidarbha Cement Traders', isClient: false, isVendor: true }),
+    );
+    expect(await find('vidarbha', worker)).toEqual(['party: Vidarbha Cement Traders']);
   });
 });

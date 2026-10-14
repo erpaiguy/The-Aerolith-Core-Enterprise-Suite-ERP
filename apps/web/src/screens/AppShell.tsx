@@ -72,6 +72,7 @@ import { useSession } from '../session/session';
 import { usePending } from '../offline';
 import { Badge, Select } from '@aerolith/ui';
 import { load, save } from '../lib/storage';
+import { SearchPalette, type ScreenEntry } from './SearchPalette';
 
 function NavItem({
   to,
@@ -880,6 +881,15 @@ export function AppShell() {
     },
   ];
 
+  // Every page in the menu, for search.
+  const screens: ScreenEntry[] = [];
+  const list = (items: (Page | Group)[], where: string) => {
+    for (const i of items.filter(visible))
+      if (isGroup(i)) list(i.items, i.group);
+      else screens.push({ label: i.label, to: i.to, search: i.search, where });
+  };
+  list(menu, '');
+
   // Groups the person opened stay open on this device; the group holding the current page always opens.
   const [open, setOpen] = useState<Set<string>>(() => {
     try {
@@ -975,6 +985,7 @@ export function AppShell() {
               <Badge>{session.user?.role}</Badge>
             </div>
             <div className="flex items-center gap-1">
+              <SearchPalette screens={screens} />
               <NewMenu projectId={projectId} />
               <OutboxChip />
               <Link

@@ -28,6 +28,7 @@ import { ProcurementModule } from './procurement/procurement.module.js';
 import { ProjectModule } from './project/project.module.js';
 import { ProvisioningModule } from './provisioning/provisioning.module.js';
 import { RegistersModule } from './registers/registers.module.js';
+import { SearchModule } from './search/search.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { ScheduleModule } from './schedule/schedule.module.js';
 import { TenderModule } from './tender/tender.module.js';
@@ -62,6 +63,7 @@ import { TenderModule } from './tender/tender.module.js';
     IntegrationsModule,
     ProcurementModule,
     RegistersModule,
+    SearchModule,
   ],
   controllers: [HealthController],
   // Runs before route guards; only acts on routes marked with @RateLimit.

@@ -188,3 +188,46 @@ test('the New menu opens create forms, on the current project', async ({ page })
     page.getByRole('form', { name: 'New party' }).getByLabel('Name', { exact: true }),
   ).toBeFocused();
 });
+
+test('Ctrl+K searches screens and records', async ({ page }) => {
+  test.setTimeout(150_000);
+  await signInNewAdmin(
+    page,
+    `w7a6-${Date.now()}@wardha-civil.in`,
+    'Search-Wardha-76',
+    'Wardha Civil',
+  );
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await page
+    .getByRole('list', { name: 'Create' })
+    .getByRole('link', { name: 'Project', exact: true })
+    .click();
+  await page.getByLabel('Project name').fill('Hostel, Washim');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  const project = page.url();
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Home', exact: true })
+    .click();
+
+  // A screen by its name, opened with the keyboard.
+  await page.keyboard.press('Control+k');
+  const box = page.getByRole('dialog', { name: 'Search' });
+  await box.getByLabel('Search everything').fill('trial bal');
+  await expect(box.getByRole('list', { name: 'Results' })).toContainText('Trial balance');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/accounts\/trial-balance$/);
+  await expect(box).toHaveCount(0);
+
+  // A project by part of its name, opened with a click.
+  await page.getByRole('button', { name: /^Search/ }).click();
+  await box.getByLabel('Search everything').fill('washim');
+  await box.getByRole('button', { name: /Hostel, Washim/ }).click();
+  await expect(page).toHaveURL(project);
+  await page.keyboard.press('Control+k');
+  await box.getByLabel('Search everything').fill('zzqx');
+  await expect(box.getByText('Nothing found.')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(box).toHaveCount(0);
+});
