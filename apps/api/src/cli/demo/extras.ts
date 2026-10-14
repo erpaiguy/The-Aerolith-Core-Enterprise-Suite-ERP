@@ -428,6 +428,18 @@ export function scheduleRealEstate(c: Ctx) {
       { name: 'Sai Residency site', stateCode: '27', address: 'Gorakshan Road, Akola' },
       priya,
     );
+    // Construction began on 1 April 2026.
+    if ('2026-04-01' <= c.today)
+      c.sched.at('2026-04-01', 16, 'Sai Residency starts', () =>
+        step(c, 'Sai Residency starts', async () => {
+          const cur = await c.s.get<{ rowVersion: number }>(`/tenant/projects/${p.id}`, priya);
+          await c.s.post(
+            `/tenant/projects/${p.id}/status`,
+            { rowVersion: cur.rowVersion, status: 'active' },
+            priya,
+          );
+        }),
+      );
     const base = `/tenant/projects/${p.id}/sales`;
     await c.s.post(
       `${base}/setup`,
