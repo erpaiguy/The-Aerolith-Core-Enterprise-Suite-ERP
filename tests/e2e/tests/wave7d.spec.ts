@@ -1,10 +1,13 @@
-// Wave 7d in a real browser (docs/wave7-plan.md): the new project registers.
+// Wave 7d in a real browser (docs/wave7-plan.md): the new registers, the site imprest, recurring entries and the
+// company dashboard. Joining checklists are in hr.spec.ts.
 import { expect, test } from '@playwright/test';
 import { logPageOnFailure, signInNewAdmin } from './helpers.js';
 
 test.afterEach(async ({ page }, info) => logPageOnFailure(page, info));
 
-test('minutes with an action, and letters in and out', async ({ page }) => {
+test('project registers, a site imprest, a recurring voucher and the company dashboard', async ({
+  page,
+}) => {
   test.setTimeout(150_000);
   await signInNewAdmin(
     page,
@@ -65,10 +68,10 @@ test('minutes with an action, and letters in and out', async ({ page }) => {
   await work.getByRole('link', { name: 'Document list', exact: true }).click();
   await page.getByRole('button', { name: 'Expect documents' }).click();
   const expected = page.getByRole('form', { name: 'Expected document' });
-  await expected.getByLabel('Code').fill('STR-101');
-  await expected.getByLabel('Title').fill('Footing layout');
+  await expected.getByLabel('Code', { exact: true }).fill('STR-101');
+  await expected.getByLabel('Title', { exact: true }).fill('Footing layout');
   await expected.getByLabel('Due by').fill('2026-01-10');
-  await expected.getByLabel('From').fill('Structural consultant');
+  await expected.getByLabel('From', { exact: true }).fill('Structural consultant');
   await expected.getByRole('button', { name: 'Add to the list' }).click();
   const docs = page.getByRole('rowgroup', { name: 'Expected documents' });
   await expect(docs).toContainText('STR-101');
@@ -120,7 +123,7 @@ test('minutes with an action, and letters in and out', async ({ page }) => {
   await work.getByRole('link', { name: 'Site imprest', exact: true }).click();
   await page.getByRole('button', { name: 'Open an imprest' }).click();
   const opening = page.getByRole('form', { name: 'Open an imprest' });
-  await opening.getByLabel('For').fill('Site petty cash');
+  await opening.getByLabel('For', { exact: true }).fill('Site petty cash');
   await opening.getByRole('button', { name: 'Open it' }).click();
   await page.getByRole('button', { name: 'Pay an advance' }).click();
   const advance = page.getByRole('form', { name: 'Advance' });
@@ -130,7 +133,7 @@ test('minutes with an action, and letters in and out', async ({ page }) => {
   await page.getByRole('button', { name: 'Enter a spend' }).click();
   const spend = page.getByRole('form', { name: 'Spend' });
   await spend.getByLabel('Amount (₹)').fill('1200');
-  await spend.getByLabel('Expense').selectOption({ label: 'Site overheads' });
+  await spend.getByLabel('Expense', { exact: true }).selectOption({ label: 'Site overheads' });
   await spend.getByLabel('What for').fill('Tea and water');
   await spend.getByRole('button', { name: 'Save' }).click();
   const entries = page.getByRole('rowgroup', { name: 'Imprest entries' });
@@ -151,8 +154,8 @@ test('minutes with an action, and letters in and out', async ({ page }) => {
   const lastMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1))
     .toISOString()
     .slice(0, 10);
-  await rec.getByLabel('Name').fill('Site security');
-  await rec.getByLabel('From').fill(lastMonth);
+  await rec.getByLabel('Name', { exact: true }).fill('Site security');
+  await rec.getByLabel('From', { exact: true }).fill(lastMonth);
   await rec.getByLabel('Amount (₹)').fill('18000');
   await rec.getByLabel('Debit').selectOption({ label: 'X3004 Site overheads' });
   await rec.getByLabel('Credit').selectOption({ label: 'A4001 Cash in hand' });

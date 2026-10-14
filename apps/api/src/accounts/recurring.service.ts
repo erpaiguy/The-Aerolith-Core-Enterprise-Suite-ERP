@@ -262,7 +262,11 @@ export class RecurringService {
         dueDate: addDays(d.due_on, d.body.dueDays),
         tdsSection: d.body.tdsSection,
         narration: `${d.body.narration || d.name} (${month})`,
-        lines: d.body.lines,
+        // A bill line needs a description; a blank one takes the entry's name.
+        lines: (d.body as BillBody).lines.map((l) => ({
+          ...l,
+          description: l.description.trim() || d.name,
+        })),
       });
       await db`
         UPDATE acc.recurring_draft SET status = 'posted', bill_id = ${(bill as unknown as { id: string }).id},

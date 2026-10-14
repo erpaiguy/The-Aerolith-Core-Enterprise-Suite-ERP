@@ -96,14 +96,14 @@ unticked step.
 - [x] 7c.6 Month-end close checklist
 - [x] 7c.7 Salary revisions in bulk
 - [x] 7c.8 Bulk imports
-- [ ] 7c exit: full check and browser suite
+- [x] 7c exit: full check and browser suite
 - [x] 7d.1 Meetings and actions
 - [x] 7d.2 Correspondence register
-- [ ] 7d.3 Master document list
-- [ ] 7d.4 Inspection and test plans
-- [ ] 7d.5 Safety inspections
-- [ ] 7d.6 Site imprest
-- [ ] 7d.7 Recurring entries
-- [ ] 7d.8 Joining and exit checklists
-- [ ] 7d.9 Company dashboard
+- [x] 7d.3 Master document list
+- [x] 7d.4 Inspection and test plans
+- [x] 7d.5 Safety inspections
+- [x] 7d.6 Site imprest
+- [x] 7d.7 Recurring entries
+- [x] 7d.8 Joining and exit checklists
+- [x] 7d.9 Company dashboard
 - [ ] 7d exit: full check, browser suite, demo seed and crawl; report

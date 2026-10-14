@@ -66,12 +66,12 @@ export class ImprestService {
     const [s] = await db<
       { advanced: string; spent: string; unsettled: string; returned: string; balance: string }[]
     >`
-      SELECT coalesce(sum(amount) FILTER (WHERE kind = 'advance'), 0)::text AS advanced,
-        coalesce(sum(amount) FILTER (WHERE kind = 'expense'), 0)::text AS spent,
-        coalesce(sum(amount) FILTER (WHERE kind = 'expense' AND settlement_id IS NULL), 0)::text AS unsettled,
-        coalesce(sum(amount) FILTER (WHERE kind = 'return'), 0)::text AS returned,
+      SELECT coalesce(sum(amount) FILTER (WHERE kind = 'advance'), 0)::numeric(14,2)::text AS advanced,
+        coalesce(sum(amount) FILTER (WHERE kind = 'expense'), 0)::numeric(14,2)::text AS spent,
+        coalesce(sum(amount) FILTER (WHERE kind = 'expense' AND settlement_id IS NULL), 0)::numeric(14,2)::text AS unsettled,
+        coalesce(sum(amount) FILTER (WHERE kind = 'return'), 0)::numeric(14,2)::text AS returned,
         (coalesce(sum(amount) FILTER (WHERE kind = 'advance'), 0)
-          - coalesce(sum(amount) FILTER (WHERE kind <> 'advance'), 0))::text AS balance
+          - coalesce(sum(amount) FILTER (WHERE kind <> 'advance'), 0))::numeric(14,2)::text AS balance
       FROM acc.imprest_entry WHERE imprest_id = ${id}`;
     return s!;
   }
