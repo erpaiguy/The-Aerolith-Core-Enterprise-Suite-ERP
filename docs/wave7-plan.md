@@ -81,7 +81,7 @@ unticked step.
 - [x] 7a.6 Search everything
 - [x] 7a.7 My work
 - [x] 7a.8 Audit trail
-- [ ] 7a exit: full check and browser suite
+- [x] 7a exit: full check and browser suite
 - [ ] 7b.1 Letterhead
 - [ ] 7b.2 Purchase documents
 - [ ] 7b.3 Money documents
