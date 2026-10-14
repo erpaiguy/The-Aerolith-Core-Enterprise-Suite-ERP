@@ -67,6 +67,15 @@ test('an employee deployed, marked present, on leave and counted for the month',
   await deploy.getByLabel('Site').selectOption({ label: 'Ring road' });
   await deploy.getByRole('button', { name: 'Deploy' }).click();
   await expect(page.getByRole('cell', { name: 'Ring road', exact: true })).toBeVisible();
+  // Her joining checklist (docs/wave7-plan.md step 7d.8): the deployment ticks itself; HR ticks the induction.
+  await page.getByRole('button', { name: 'Start the joining checklist' }).click();
+  const joining = page.getByRole('list', { name: 'Joining steps' });
+  await expect(
+    joining.getByRole('listitem').filter({ hasText: 'Deployed to a project' }).getByLabel('done'),
+  ).toBeVisible();
+  await joining.getByLabel('Note for Induction and safety briefing').fill('Safety film');
+  await joining.getByRole('button', { name: 'Done: Induction and safety briefing' }).click();
+  await expect(joining).toContainText('Safety film');
   // Her experience certificate, with a reference typed before printing (docs/wave7-plan.md step 7b.4).
   await page.getByRole('link', { name: 'Experience certificate' }).click();
   await page

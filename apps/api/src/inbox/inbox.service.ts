@@ -82,7 +82,7 @@ export class InboxService {
       const [items, [c]] = await Promise.all([rows, count]);
       return { count: c?.n ?? 0, items };
     };
-    const [approvals, rfis, bills, orders, ncrs, followUps, actions] = await Promise.all([
+    const [approvals, rfis, bills, orders, ncrs, followUps, actions, findings] = await Promise.all([
       section(
         db`SELECT r.id, r.doc_type AS "docType", r.title, r.amount::text AS amount,
             r.submitted_at AS "submittedAt", u.display_name AS "submittedBy"
@@ -145,8 +145,17 @@ export class InboxService {
           WHERE x.owner_id = ${claims.sub} AND x.status = 'open' ORDER BY x.due_on LIMIT 20`,
         db`SELECT count(*)::int AS n FROM proj.meeting_action WHERE owner_id = ${claims.sub} AND status = 'open'`,
       ),
+      // Safety findings on them, open (docs/wave7-plan.md step 7d.5).
+      section(
+        db`SELECT f.id, f.observation, f.severity, to_char(f.due_on, 'YYYY-MM-DD') AS "dueOn", f.due_on < ${today} AS overdue,
+            w.id AS "walkId", w.number AS walk, ${proj}
+          FROM hse.walk_finding f JOIN hse.site_walk w ON w.id = f.walk_id
+          JOIN proj.project p ON p.id = w.project_id
+          WHERE f.owner_id = ${claims.sub} AND f.status = 'open' ORDER BY f.due_on LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM hse.walk_finding WHERE owner_id = ${claims.sub} AND status = 'open'`,
+      ),
     ]);
-    return { approvals, rfis, bills, orders, ncrs, followUps, actions };
+    return { approvals, rfis, bills, orders, ncrs, followUps, actions, findings };
   }
 
   async markRead(claims: TenantClaims, id: string) {

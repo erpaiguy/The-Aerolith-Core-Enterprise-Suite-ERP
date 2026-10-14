@@ -14,7 +14,11 @@ import { EquipmentService } from './equipment.service.js';
 import { GstController } from './gst.controller.js';
 import { GstService } from './gst.service.js';
 import { LedgerController } from './ledger.controller.js';
+import { ImprestController } from './imprest.controller.js';
+import { ImprestService } from './imprest.service.js';
 import { LedgerService } from './ledger.service.js';
+import { RecurringController } from './recurring.controller.js';
+import { RecurringService } from './recurring.service.js';
 import { CloseService } from './close.service.js';
 import { PayableController } from './payable.controller.js';
 import { PayableService } from './payable.service.js';
@@ -33,6 +37,8 @@ import { SubcontractService } from './subcontract.service.js';
 @Module({
   imports: [ProvisioningModule, AuthModule, ProjectModule, ApprovalModule],
   controllers: [
+    ImprestController,
+    RecurringController,
     LedgerController,
     ClientBillController,
     ReceivableController,
@@ -48,6 +54,8 @@ import { SubcontractService } from './subcontract.service.js';
   ],
   providers: [
     LedgerService,
+    ImprestService,
+    RecurringService,
     CloseService,
     ClientBillService,
     ReceivableService,
@@ -61,6 +69,6 @@ import { SubcontractService } from './subcontract.service.js';
     AssetService,
     EquipmentService,
   ],
-  exports: [LedgerService, SubcontractService, TallyService],
+  exports: [LedgerService, SubcontractService, TallyService, ReceivableService],
 })
 export class AccountsModule {}

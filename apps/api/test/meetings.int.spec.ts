@@ -1,5 +1,8 @@
-// Meetings and correspondence in a real tenant database (docs/wave7-plan.md steps 7d.1 and 7d.2): minutes with
-// actions owned by the team and closed by them; letters in and out, numbered, answered and closed; kept to the team.
+// Project registers in a real tenant database (docs/wave7-plan.md steps 7d.1–7d.4): minutes with actions owned by
+// the team and closed by them; letters in and out, numbered, answered and closed; the master document list with its
+// late flags; the inspection and test plan against the quality records; safety walks with findings owned and closed;
+// a site imprest advanced, spent, settled in the books and squared; recurring vouchers and bills drafted when due;
+// joining and exit checklists, partly answered by the records; the company dashboard over them. All kept to the team.
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
@@ -21,7 +24,7 @@ if (process.env.CI && (!controlUrl || !adminUrl))
 
 const ENC = randomBytes(32);
 
-describe.skipIf(!controlUrl || !adminUrl)('meetings and correspondence (integration)', () => {
+describe.skipIf(!controlUrl || !adminUrl)('project registers (integration)', () => {
   let app: NestFastifyApplication;
   let control: Sql;
   let server: Sql;
@@ -218,5 +221,439 @@ describe.skipIf(!controlUrl || !adminUrl)('meetings and correspondence (integrat
     );
     expect(ins.letters.map((l) => l.number)).toEqual(['IN-001']);
     expect((await get(`/tenant/projects/${projectId}/letters`, lata.headers)).statusCode).toBe(404);
+  });
+
+  it('lists the documents a project expects, flags the late ones and marks them received', async () => {
+    interface Mdl {
+      rows: {
+        id: string;
+        code: string;
+        late: boolean;
+        receivedOn: string | null;
+        daysLate: number;
+      }[];
+      totals: { expected: number; received: number; late: number; receivedLate: number };
+    }
+    const url = `/tenant/projects/${projectId}/expected-documents`;
+    const items = [
+      {
+        code: 'STR-101',
+        title: 'Footing layout',
+        fromParty: 'Structural consultant',
+        plannedOn: '2026-01-10',
+      },
+      {
+        code: 'ARC-201',
+        title: 'Ground floor plan',
+        category: 'drawing',
+        fromParty: 'Architect',
+        plannedOn: '2099-01-10',
+      },
+    ];
+    expect((await post(url, { items }, lata.headers)).statusCode).toBe(404);
+    expect((await post(url, { items: [items[0], items[0]] }, worker)).json()).toMatchObject({
+      code: 'duplicate_code',
+    });
+    let mdl = await ok<Mdl>(post(url, { items }, worker));
+    expect(mdl.totals).toEqual({ expected: 2, received: 0, late: 1, receivedLate: 0 });
+    expect((await post(url, { items: [items[0]] }, manager)).statusCode).toBe(409);
+    const late = mdl.rows.find((r) => r.code === 'STR-101')!;
+    expect(late.late).toBe(true);
+    mdl = await ok<Mdl>(
+      post(`/tenant/expected-documents/${late.id}/received`, { receivedOn: '2026-01-15' }, worker),
+    );
+    expect(mdl.rows.find((r) => r.code === 'STR-101')).toMatchObject({
+      receivedOn: '2026-01-15',
+      late: false,
+      daysLate: 5,
+    });
+    expect(mdl.totals).toEqual({ expected: 2, received: 1, late: 0, receivedLate: 1 });
+    expect((await get(url, lata.headers)).statusCode).toBe(404);
+  });
+
+  it('sets an inspection and test plan and counts what the quality records show done', async () => {
+    const tpl = await ok<{ id: string; name: string }[]>(
+      post(
+        '/tenant/quality/checklist-templates',
+        {
+          name: 'Pour card',
+          workType: 'RCC',
+          items: [{ text: 'Shuttering checked', kind: 'yes_no' }],
+        },
+        manager,
+      ),
+    );
+    const templateId = tpl.find((x) => x.name === 'Pour card')!.id;
+    interface Itp {
+      lines: {
+        id: string;
+        activity: string;
+        checklistsDone: number;
+        checklistsFailed: number;
+        testsDone: number;
+      }[];
+      mayEdit: boolean;
+    }
+    const url = `/tenant/projects/${projectId}/itp`;
+    const line = {
+      activity: 'Slab concreting',
+      checklistTemplateId: templateId,
+      testKind: 'cube',
+      frequency: 'Each pour',
+      holdPoint: true,
+      responsible: 'QA engineer',
+    };
+    // The lead sets the plan; a member reads it.
+    expect((await post(url, line, worker)).statusCode).toBe(403);
+    expect((await post(url, { activity: 'Nothing' }, manager)).json()).toMatchObject({
+      code: 'nothing_to_check',
+    });
+    await ok(post(url, line, manager));
+    await ok(
+      post(
+        `/tenant/projects/${projectId}/checklists`,
+        { templateId, doneOn: '2026-10-07', location: 'Slab 2', answers: [{ answer: 'no' }] },
+        worker,
+      ),
+    );
+    const plan = await ok<Itp>(get(url, worker));
+    expect(plan.mayEdit).toBe(false);
+    expect(plan.lines).toEqual([
+      expect.objectContaining({
+        activity: 'Slab concreting',
+        checklistsDone: 1,
+        checklistsFailed: 1,
+        testsDone: 0,
+      }),
+    ]);
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/api/tenant/itp-lines/${plan.lines[0]!.id}`,
+          headers: worker,
+        })
+      ).statusCode,
+    ).toBe(403);
+    const gone = await ok<Itp>(
+      app.inject({
+        method: 'DELETE',
+        url: `/api/tenant/itp-lines/${plan.lines[0]!.id}`,
+        headers: manager,
+      }),
+    );
+    expect(gone.lines).toEqual([]);
+  });
+
+  it("records a site walk whose findings wait in their owners' work until closed", async () => {
+    interface Walk {
+      id: string;
+      number: string;
+      status: string;
+      findings: { id: string; severity: string; owner: string; status: string; closure: string }[];
+    }
+    const url = `/tenant/projects/${projectId}/site-walks`;
+    const body = {
+      walkedOn: '2026-10-09',
+      area: 'Slab 2 and scaffolds',
+      walkedBy: 'Safety officer',
+      findings: [
+        {
+          observation: 'Edge protection missing at slab 2',
+          severity: 'high',
+          action: 'Fix guard rails',
+          ownerId: workerId,
+          dueOn: '2026-10-10',
+        },
+        { observation: 'Debris on stair', severity: 'low', ownerId: workerId, dueOn: '2026-10-12' },
+      ],
+    };
+    expect((await post(url, body, lata.headers)).statusCode).toBe(404);
+    expect(
+      (
+        await post(url, { ...body, findings: [{ ...body.findings[0], ownerId: lata.id }] }, manager)
+      ).json(),
+    ).toMatchObject({ code: 'not_on_project' });
+    const w = await ok<Walk>(post(url, body, manager));
+    expect([w.number, w.status]).toEqual(['SW-001', 'open']);
+    expect(w.findings.map((f) => [f.severity, f.owner, f.status])).toEqual([
+      ['high', 'raju', 'open'],
+      ['low', 'raju', 'open'],
+    ]);
+    let work = await ok<{ findings: { count: number } }>(get('/tenant/my-work', worker));
+    expect(work.findings.count).toBe(2);
+    const close = (id: string, h: Record<string, string>) =>
+      post(
+        `/tenant/walk-findings/${id}/close`,
+        { closedOn: '2026-10-10', closure: 'Rails fixed' },
+        h,
+      );
+    expect((await close(w.findings[0]!.id, lata.headers)).statusCode).toBe(404);
+    await ok(close(w.findings[0]!.id, worker));
+    const last = await ok<Walk>(close(w.findings[1]!.id, manager));
+    expect(last.status).toBe('closed');
+    expect(last.findings[0]).toMatchObject({ status: 'closed', closure: 'Rails fixed' });
+    work = await ok<{ findings: { count: number } }>(get('/tenant/my-work', worker));
+    expect(work.findings.count).toBe(0);
+    expect(
+      (await ok<{ walks: { open: number; findings: number }[] }>(get(url, worker))).walks,
+    ).toEqual([expect.objectContaining({ open: 0, findings: 2 })]);
+  });
+
+  it('advances a site imprest, takes its spends into the books and squares it', async () => {
+    interface Imprest {
+      id: string;
+      status: string;
+      totals: { advanced: string; spent: string; unsettled: string; balance: string };
+      entries: { kind: string; amount: string; voucher: string | null; settled: boolean }[];
+      moneyLedgers: { id: string; name: string }[];
+      expenseLedgers: { id: string; name: string }[];
+      maySpend: boolean;
+    }
+    // Accounts opens it for Raju, on the team; Lata (off the team) cannot hold one.
+    const url = `/tenant/projects/${projectId}/imprests`;
+    expect((await post(url, { custodianId: lata.id }, t.admin)).json()).toMatchObject({
+      code: 'not_on_project',
+    });
+    expect((await post(url, { custodianId: workerId }, worker)).statusCode).toBe(403);
+    let imp = await ok<Imprest>(post(url, { custodianId: workerId, floatLimit: '20000' }, t.admin));
+    const cash = imp.moneyLedgers.find((l) => l.name === 'Cash in hand')!.id;
+    const overheads = imp.expenseLedgers.find((l) => l.name === 'Site overheads')!.id;
+    const at = (path: string, body: object, h: Record<string, string> = t.admin) =>
+      post(`/tenant/imprests/${imp.id}/${path}`, body, h);
+    expect(
+      (await at('advances', { date: '2026-10-01', amount: '25000', accountId: cash })).json(),
+    ).toMatchObject({ code: 'over_limit' });
+    imp = await ok<Imprest>(
+      at('advances', { date: '2026-10-01', amount: '15000', accountId: cash }),
+    );
+    expect(imp.entries[0]).toMatchObject({ kind: 'advance', voucher: expect.any(String) });
+    // Raju spends; not more than he holds; not into a bank ledger.
+    const spend = { date: '2026-10-03', accountId: overheads, description: 'Tea and water' };
+    expect((await at('expenses', { ...spend, amount: '16000' }, worker)).json()).toMatchObject({
+      code: 'over_balance',
+    });
+    expect(
+      (await at('expenses', { ...spend, amount: '100', accountId: cash }, worker)).json(),
+    ).toMatchObject({ code: 'not_expense' });
+    await ok(at('expenses', { ...spend, amount: '1200.50', reference: 'Bill 14' }, worker));
+    imp = await ok<Imprest>(
+      at('expenses', { ...spend, amount: '800', description: 'Nails' }, worker),
+    );
+    expect(imp.totals).toMatchObject({
+      spent: '2000.50',
+      unsettled: '2000.50',
+      balance: '12999.50',
+    });
+    // Only accounts settles; the settlement is one journal for both spends.
+    expect((await at('settle', { date: '2026-10-05' }, worker)).statusCode).toBe(403);
+    imp = await ok<Imprest>(at('settle', { date: '2026-10-05' }));
+    const spent = imp.entries.filter((e) => e.kind === 'expense');
+    expect(spent.every((e) => e.settled && e.voucher === spent[0]!.voucher)).toBe(true);
+    expect(imp.totals.unsettled).toBe('0.00');
+    // Not closed while money is in hand; taking the rest back closes it.
+    expect((await at('take-back', { date: '2026-10-06', close: true })).json()).toMatchObject({
+      code: 'not_squared',
+    });
+    imp = await ok<Imprest>(
+      at('take-back', { date: '2026-10-06', amount: '12999.50', accountId: cash, close: true }),
+    );
+    expect([imp.status, imp.totals.balance]).toEqual(['closed', '0.00']);
+    expect((await get(url, lata.headers)).statusCode).toBe(404);
+  });
+
+  it('drafts recurring vouchers and bills on their due days, for accounts to post or skip', async () => {
+    const entityId = (await ok<{ companies: { id: string }[] }>(get('/tenant/companies')))
+      .companies[0]!.id;
+    const chart = await ok<{ accounts: { id: string; systemKey: string | null }[] }>(
+      get('/tenant/accounts/chart'),
+    );
+    const acct = (k: string) => chart.accounts.find((a) => a.systemKey === k)!.id;
+    const supplier = (
+      await ok<{ id: string }>(
+        post('/tenant/parties', {
+          name: 'Shree Gurudatta Estates',
+          isClient: false,
+          isVendor: true,
+        }),
+      )
+    ).id;
+    const firstOf = (back: number) => {
+      const d = new Date(Date.now() + 330 * 60_000);
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - back, 1))
+        .toISOString()
+        .slice(0, 10);
+    };
+    const url = '/tenant/accounts/recurring';
+    expect(
+      (
+        await post(url, {
+          entityId,
+          kind: 'voucher',
+          name: 'Bad',
+          startsOn: firstOf(0),
+          voucher: {
+            type: 'payment',
+            lines: [
+              { accountId: acct('site_overheads'), debit: '100', projectId },
+              { accountId: acct('cash'), credit: '90' },
+            ],
+          },
+        })
+      ).json(),
+    ).toMatchObject({ code: 'unbalanced' });
+    await ok(
+      post(url, {
+        entityId,
+        kind: 'voucher',
+        name: 'Site security',
+        startsOn: firstOf(2),
+        voucher: {
+          type: 'payment',
+          narration: 'Security agency',
+          lines: [
+            { accountId: acct('site_overheads'), debit: '18000', projectId },
+            { accountId: acct('cash'), credit: '18000' },
+          ],
+        },
+      }),
+    );
+    interface Recurring {
+      templates: { name: string; due: number; amount: string; next: string | null }[];
+      drafts: {
+        id: string;
+        name: string;
+        dueOn: string;
+        status: string;
+        voucher: string | null;
+        bill: string | null;
+      }[];
+    }
+    let r = await ok<Recurring>(
+      post(url, {
+        entityId,
+        kind: 'bill',
+        name: 'Site office rent',
+        frequency: 'yearly',
+        startsOn: firstOf(0),
+        bill: {
+          partyId: supplier,
+          projectId,
+          lines: [
+            { accountId: acct('site_overheads'), projectId, qty: '1', rate: '50000', gstPct: '18' },
+          ],
+        },
+      }),
+    );
+    expect(r.templates.map((t) => [t.name, t.due, t.amount])).toEqual([
+      ['Site office rent', 1, '50000.00'],
+      ['Site security', 3, '18000.00'],
+    ]);
+    // Workers do not see the books; listing again drafts nothing twice.
+    expect((await get(`${url}?entityId=${entityId}`, worker)).statusCode).toBe(403);
+    r = await ok<Recurring>(get(`${url}?entityId=${entityId}`));
+    expect(r.drafts.filter((d) => d.status === 'due')).toHaveLength(4);
+    const security = r.drafts
+      .filter((d) => d.name === 'Site security')
+      .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
+    const rent = r.drafts.find((d) => d.name === 'Site office rent')!;
+    r = await ok<Recurring>(post(`/tenant/accounts/recurring-drafts/${security[0]!.id}/post`, {}));
+    expect(r.drafts.find((d) => d.id === security[0]!.id)).toMatchObject({
+      status: 'posted',
+      voucher: expect.any(String),
+    });
+    expect(
+      (await post(`/tenant/accounts/recurring-drafts/${security[0]!.id}/post`, {})).statusCode,
+    ).toBe(409);
+    await ok(
+      post(`/tenant/accounts/recurring-drafts/${security[1]!.id}/skip`, { note: 'Paid by client' }),
+    );
+    expect(
+      (await post(`/tenant/accounts/recurring-drafts/${rent.id}/post`, {})).json(),
+    ).toMatchObject({
+      code: 'bill_no',
+    });
+    r = await ok<Recurring>(
+      post(`/tenant/accounts/recurring-drafts/${rent.id}/post`, { billNo: 'GE/RENT/1' }),
+    );
+    expect(r.drafts.find((d) => d.id === rent.id)).toMatchObject({
+      status: 'posted',
+      bill: 'GE/RENT/1',
+    });
+    expect(r.templates.find((t) => t.name === 'Site security')!.due).toBe(1);
+  });
+
+  it('keeps joining and exit checklists, the records answering their own steps', async () => {
+    const entityId = (await ok<{ companies: { id: string }[] }>(get('/tenant/companies')))
+      .companies[0]!.id;
+    const emp = await ok<{ id: string }>(
+      post('/tenant/hr/employees', {
+        entityId,
+        kind: 'staff',
+        joinedOn: '2026-09-01',
+        code: 'E901',
+        name: 'Raju Wankhede',
+        pan: 'ABCPW1234K',
+        userId: workerId,
+      }),
+    );
+    interface Lists {
+      joining: {
+        done: number;
+        complete: boolean;
+        steps: { id: string; key: string; auto: boolean; done: boolean }[];
+      } | null;
+      exit: { done: number; steps: { id: string; key: string; done: boolean }[] } | null;
+    }
+    const url = `/tenant/hr/employees/${emp.id}/checklists`;
+    expect((await post(url, { kind: 'joining' }, worker)).statusCode).toBe(403);
+    let c = await ok<Lists>(post(url, { kind: 'joining' }));
+    expect((await post(url, { kind: 'joining' })).statusCode).toBe(409);
+    const step = (k: string) => c.joining!.steps.find((s) => s.key === k)!;
+    // PAN and the sign-in are on the record; the bank and UAN are not.
+    expect([step('pan').done, step('sign_in').done, step('bank').done]).toEqual([
+      true,
+      true,
+      false,
+    ]);
+    expect(c.joining!.done).toBe(2);
+    expect(
+      (await post(`/tenant/hr/checklist-steps/${step('pan').id}`, { done: false })).json(),
+    ).toMatchObject({
+      code: 'from_the_records',
+    });
+    c = await ok<Lists>(
+      post(`/tenant/hr/checklist-steps/${step('induction').id}`, {
+        done: true,
+        note: 'Safety film shown',
+      }),
+    );
+    expect(step('induction').done).toBe(true);
+    expect(c.exit).toBeNull();
+    c = await ok<Lists>(post(url, { kind: 'exit' }));
+    expect(c.exit!.steps.find((s) => s.key === 'sign_in_closed')!.done).toBe(false);
+    expect(c.exit!.steps.find((s) => s.key === 'settlement')!.done).toBe(false);
+  });
+
+  it("puts the company's order book, margin, cash, receivables, tenders and incidents on one page", async () => {
+    const entityId = (await ok<{ companies: { id: string }[] }>(get('/tenant/companies')))
+      .companies[0]!.id;
+    const url = `/tenant/company-dashboard?entityId=${entityId}`;
+    expect((await get(url, worker)).statusCode).toBe(403);
+    const d = await ok<{
+      fy: string;
+      margin: { project: { id: string }; cost: string; revenue: string }[];
+      cash: { ledgers: { name: string; balance: string }[]; total: string; guarantees: string };
+      revenue: { months: { month: string; plan: string; actual: string | null }[] };
+      receivablesOver90: { total: string };
+      tendersDue: unknown[];
+      incidents: { total: number };
+    }>(get(url));
+    expect(d.revenue.months).toHaveLength(12);
+    // The imprest's spends and the security voucher are costs booked to the project.
+    expect(Number(d.margin.find((m) => m.project.id === projectId)!.cost)).toBeGreaterThan(0);
+    // Cash: 15,000 out to the imprest, 12,999.50 back, 18,000 paid for security.
+    expect(d.cash.ledgers.find((l) => l.name === 'Cash in hand')!.balance).toBe('-20000.50');
+    expect([d.receivablesOver90.total, d.tendersDue, d.incidents.total]).toEqual(['0.00', [], 0]);
   });
 });

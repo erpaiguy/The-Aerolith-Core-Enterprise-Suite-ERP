@@ -117,11 +117,17 @@ import { REGISTER_KINDS, type RegisterKind, RegisterScreen } from './screens/Reg
 import { RfqsScreen } from './screens/Rfqs';
 import { RateContractsScreen } from './screens/RateContracts';
 import { CloseScreen } from './screens/accounts/Close';
+import { RecurringScreen } from './screens/accounts/Recurring';
+import { CompanyDashboardScreen } from './screens/CompanyDashboard';
 import { IncrementsScreen } from './screens/payroll/Increments';
 import { AuditScreen } from './screens/Audit';
 import { ImportsScreen } from './screens/Imports';
 import { MeetingsScreen } from './registers/Meetings';
 import { LettersScreen } from './registers/Letters';
+import { DocumentListScreen } from './registers/DocumentList';
+import { ItpScreen } from './registers/Itp';
+import { SiteWalksScreen } from './registers/SiteWalks';
+import { ImprestScreen } from './registers/Imprest';
 import { LetterheadSample } from './print/Letterhead';
 import { IssuePrint, OrderPrint, ReceiptPrint } from './print/PurchaseDocs';
 import {
@@ -335,6 +341,42 @@ const lettersRoute = createRoute({
   component: function LettersPage() {
     const { projectId } = lettersRoute.useParams();
     return <LettersScreen key={projectId} projectId={projectId} />;
+  },
+});
+
+const documentListRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/document-list',
+  component: function DocumentListPage() {
+    const { projectId } = documentListRoute.useParams();
+    return <DocumentListScreen key={projectId} projectId={projectId} />;
+  },
+});
+
+const itpRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/itp',
+  component: function ItpPage() {
+    const { projectId } = itpRoute.useParams();
+    return <ItpScreen key={projectId} projectId={projectId} />;
+  },
+});
+
+const siteWalksRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/site-walks',
+  component: function SiteWalksPage() {
+    const { projectId } = siteWalksRoute.useParams();
+    return <SiteWalksScreen key={projectId} projectId={projectId} />;
+  },
+});
+
+const imprestRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/imprest',
+  component: function ImprestPage() {
+    const { projectId } = imprestRoute.useParams();
+    return <ImprestScreen key={projectId} projectId={projectId} />;
   },
 });
 
@@ -1026,6 +1068,16 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/accounts/recurring',
+      component: RecurringScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/company-dashboard',
+      component: CompanyDashboardScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/accounts/chart',
       component: ChartScreen,
     }),
@@ -1105,6 +1157,10 @@ const routeTree = rootRoute.addChildren([
     registerRoute,
     meetingsRoute,
     lettersRoute,
+    documentListRoute,
+    itpRoute,
+    siteWalksRoute,
+    imprestRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/resources',

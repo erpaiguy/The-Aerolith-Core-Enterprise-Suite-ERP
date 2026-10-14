@@ -66,6 +66,16 @@ export interface MyWork {
     meeting: string;
     project: Project;
   }>;
+  findings?: Section<{
+    id: string;
+    observation: string;
+    severity: string;
+    dueOn: string;
+    overdue: boolean;
+    walkId: string;
+    walk: string;
+    project: Project;
+  }>;
 }
 
 export const useMyWork = () => {
@@ -80,7 +90,14 @@ export const useMyWork = () => {
 
 /** What the menu counts on Home: things to act on now (approvals have their own count; orders are to watch). */
 export const workCount = (w: MyWork | undefined) =>
-  w ? w.rfis.count + w.bills.count + w.ncrs.count + w.followUps.count + (w.actions?.count ?? 0) : 0;
+  w
+    ? w.rfis.count +
+      w.bills.count +
+      w.ncrs.count +
+      w.followUps.count +
+      (w.actions?.count ?? 0) +
+      (w.findings?.count ?? 0)
+    : 0;
 
 function Part({
   title,
@@ -203,6 +220,22 @@ export function MyWorkCard() {
                 </Link>
                 <span className={a.overdue ? 'text-xs font-medium text-danger' : muted}>
                   {a.meeting} · {a.project.name} · by {shortDate(a.dueOn)}
+                </span>
+              </li>
+            ))}
+          </Part>
+          <Part title="Safety findings" count={w.findings?.count ?? 0}>
+            {(w.findings?.items ?? []).map((f) => (
+              <li key={f.id} className={line}>
+                <Link
+                  to="/projects/$projectId/site-walks"
+                  params={{ projectId: f.project.id }}
+                  className="hover:underline"
+                >
+                  {f.observation}
+                </Link>
+                <span className={f.overdue ? 'text-xs font-medium text-danger' : muted}>
+                  {f.walk} · {f.severity} · {f.project.name} · by {shortDate(f.dueOn)}
                 </span>
               </li>
             ))}

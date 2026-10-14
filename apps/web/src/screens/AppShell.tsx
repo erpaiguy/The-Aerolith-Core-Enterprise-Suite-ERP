@@ -30,6 +30,7 @@ import {
   Percent,
   ListTree,
   ReceiptText,
+  Repeat,
   Scale,
   TriangleAlert,
   Fan,
@@ -327,6 +328,7 @@ function projectSections(id: string): Group[] {
           label: 'Subcontract bills',
           icon: <ReceiptText className="size-4" />,
         },
+        { to: `${home}/imprest`, label: 'Site imprest', icon: <Wallet className="size-4" /> },
         {
           to: '/variations',
           search: on,
@@ -350,8 +352,23 @@ function projectSections(id: string): Group[] {
       items: [
         { to: `${home}/meetings`, label: 'Meetings', icon: <Users className="size-4" /> },
         { to: `${home}/letters`, label: 'Correspondence', icon: <MailCheck className="size-4" /> },
+        {
+          to: `${home}/document-list`,
+          label: 'Document list',
+          icon: <FileCheck2 className="size-4" />,
+        },
+        {
+          to: `${home}/itp`,
+          label: 'Inspection and test plan',
+          icon: <ListChecks className="size-4" />,
+        },
         { to: '/quality', search: on, label: 'Quality', icon: <BadgeCheck className="size-4" /> },
         { to: '/safety', search: on, label: 'Safety', icon: <ShieldCheck className="size-4" /> },
+        {
+          to: `${home}/site-walks`,
+          label: 'Safety inspections',
+          icon: <ClipboardList className="size-4" />,
+        },
         {
           to: `${home}/documents`,
           label: 'Documents and drawings',
@@ -844,6 +861,11 @@ export function AppShell() {
             },
             { to: '/accounts/day-book', label: 'Day book', icon: <BookOpen className="size-4" /> },
             {
+              to: '/accounts/recurring',
+              label: 'Recurring entries',
+              icon: <Repeat className="size-4" />,
+            },
+            {
               to: '/accounts/close',
               label: 'Month-end close',
               icon: <CalendarCheck className="size-4" />,
@@ -866,6 +888,11 @@ export function AppShell() {
       group: 'Reports',
       icon: <ChartColumn className="size-4" />,
       items: [
+        {
+          to: '/company-dashboard',
+          label: 'Company dashboard',
+          icon: <Gauge className="size-4" />,
+        },
         { to: '/reports', label: 'Reports', icon: <ChartColumn className="size-4" /> },
         { to: '/reports/builder', label: 'Report builder', icon: <ChartPie className="size-4" /> },
       ],

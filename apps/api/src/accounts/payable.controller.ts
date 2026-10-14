@@ -30,7 +30,7 @@ const decimal = (places: number) =>
     });
 const positive = (places: number) =>
   decimal(places).refine((v) => Number(v) > 0, { message: 'More than nothing' });
-const bill = z.object({
+export const bill = z.object({
   entityId: z.uuid(),
   partyId: z.uuid(),
   orderId: z.uuid().nullable().default(null),

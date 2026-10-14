@@ -78,7 +78,7 @@ const line = z.object({
   costCodeId: z.uuid().nullable().default(null),
   note: text(500).default(''),
 });
-const voucherBody = z.object({
+export const voucherBody = z.object({
   entityId: z.uuid(),
   type: z.enum(TYPED_IN as [VoucherType, ...VoucherType[]]),
   date,

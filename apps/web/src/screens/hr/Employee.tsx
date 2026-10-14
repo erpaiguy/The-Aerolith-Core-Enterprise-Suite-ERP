@@ -22,6 +22,7 @@ import { sendOrKeep } from '../../offline';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
 import { SalaryCard, SettlementCard } from '../payroll/Payroll';
+import { ChecklistsCard } from './Checklists';
 import { LeavePanel } from './MyAttendance';
 import {
   FLAG_LABEL,
@@ -237,6 +238,7 @@ export function EmployeeScreen({ employeeId }: { employeeId: string }) {
           </div>
         </Card>
       ) : null}
+      <ChecklistsCard employeeId={d.id} />
       <SettlementCard employeeId={d.id} leftOn={d.leftOn} />
       <LeavePanel employeeId={d.id} />
     </div>
