@@ -73,6 +73,7 @@ import { usePending } from '../offline';
 import { Badge, Select } from '@aerolith/ui';
 import { load, save } from '../lib/storage';
 import { SearchPalette, type ScreenEntry } from './SearchPalette';
+import { useMyWork, workCount } from './MyWork';
 
 function NavItem({
   to,
@@ -528,6 +529,7 @@ export function AppShell() {
   const projectId = signedIn ? currentProject(path, search) : null;
   useEffect(() => setMenuOpen(false), [path]);
   const pending = inbox.data?.pending;
+  const work = useMyWork();
 
   const menu: Group[] = [
     {
@@ -956,7 +958,11 @@ export function AppShell() {
               <ProjectWorkspace projectId={projectId} open={open} toggle={toggle} />
             ) : null}
             <nav className="space-y-0.5" aria-label="Main">
-              <NavItem to="/" icon={<Bell className="size-4" />} badge={inbox.data?.unread}>
+              <NavItem
+                to="/"
+                icon={<Bell className="size-4" />}
+                badge={(inbox.data?.unread ?? 0) + workCount(work.data)}
+              >
                 Home
               </NavItem>
               <NavItem

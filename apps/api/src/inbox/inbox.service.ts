@@ -2,7 +2,7 @@
 // Chat, to-do lists and richer productivity features are v2 (Wave 7).
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { TenantClaims } from '../auth/auth.service.js';
-import { waitingCount } from '../approvals/approval.service.js';
+import { waitingCount, waitingOn } from '../approvals/approval.service.js';
 import { waitingReviews } from '../dms/review.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 
@@ -62,6 +62,82 @@ export class InboxService {
         receipts: dms?.receipts ?? 0,
       },
     };
+  }
+
+  /**
+   * My work (docs/wave7-plan.md step 7a.7): what waits on this person, by kind. Approvals waiting on them (leave among
+   * them), RFIs assigned to them, bills on the projects they lead, orders still to receive and NCRs open on their
+   * projects, and their CRM follow-ups due within a week. At most 20 of each, with the full count.
+   */
+  async myWork(claims: TenantClaims) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const mine = db`SELECT project_id FROM proj.member WHERE user_id = ${claims.sub}`;
+    const led = db`SELECT project_id FROM proj.member WHERE user_id = ${claims.sub} AND role = 'lead'`;
+    const proj = db`json_build_object('id', p.id, 'number', p.number, 'name', p.name) AS project`;
+    const today = db`(now() AT TIME ZONE 'Asia/Kolkata')::date`;
+    const section = async (
+      rows: Promise<Record<string, unknown>[]>,
+      count: Promise<{ n: number }[]>,
+    ) => {
+      const [items, [c]] = await Promise.all([rows, count]);
+      return { count: c?.n ?? 0, items };
+    };
+    const [approvals, rfis, bills, orders, ncrs, followUps] = await Promise.all([
+      section(
+        db`SELECT r.id, r.doc_type AS "docType", r.title, r.amount::text AS amount,
+            r.submitted_at AS "submittedAt", u.display_name AS "submittedBy"
+          FROM platform.approval_request r JOIN platform."user" u ON u.id = r.submitted_by
+          WHERE r.id IN (${waitingOn(db, claims)}) ORDER BY r.submitted_at LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM (${waitingOn(db, claims)}) w`,
+      ),
+      section(
+        db`SELECT r.id, r.number, r.subject, to_char(r.due_on, 'YYYY-MM-DD') AS "dueOn",
+            r.due_on < ${today} AS overdue, ${proj}
+          FROM dms.rfi r JOIN proj.project p ON p.id = r.project_id
+          WHERE r.assigned_to = ${claims.sub} AND r.status = 'open' ORDER BY r.due_on LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM dms.rfi WHERE assigned_to = ${claims.sub} AND status = 'open'`,
+      ),
+      // Subcontract bills waiting to be certified on the projects they lead.
+      section(
+        db`SELECT b.id, b.ra_no AS "raNo", to_char(b.upto, 'YYYY-MM-DD') AS upto, y.name AS subcontractor,
+            b.figures->>'net' AS net, ${proj}
+          FROM acc.subcontract_bill b JOIN proc.purchase_order o ON o.id = b.order_id
+          JOIN proj.project p ON p.id = o.project_id JOIN platform.party y ON y.id = o.party_id
+          WHERE b.status = 'pending' AND o.project_id IN (${led}) ORDER BY b.upto LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM acc.subcontract_bill b JOIN proc.purchase_order o ON o.id = b.order_id
+          WHERE b.status = 'pending' AND o.project_id IN (${led})`,
+      ),
+      // Purchase orders out with suppliers on their projects: goods still to come in.
+      section(
+        db`SELECT o.id, o.number, y.name AS supplier, o.status, ${proj}
+          FROM proc.purchase_order o JOIN proj.project p ON p.id = o.project_id
+          JOIN platform.party y ON y.id = o.party_id
+          WHERE o.kind = 'purchase' AND o.status IN ('issued', 'acknowledged') AND o.project_id IN (${mine})
+          ORDER BY o.number LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM proc.purchase_order
+          WHERE kind = 'purchase' AND status IN ('issued', 'acknowledged') AND project_id IN (${mine})`,
+      ),
+      // NCRs not closed: raised by them, or on the projects they lead.
+      section(
+        db`SELECT n.id, n.number, n.description, n.status, to_char(n.due_on, 'YYYY-MM-DD') AS "dueOn", ${proj}
+          FROM qa.ncr n JOIN proj.project p ON p.id = n.project_id
+          WHERE n.status <> 'closed' AND (n.created_by = ${claims.sub} OR n.project_id IN (${led}))
+          ORDER BY n.due_on NULLS LAST, n.created_at LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM qa.ncr
+          WHERE status <> 'closed' AND (created_by = ${claims.sub} OR project_id IN (${led}))`,
+      ),
+      section(
+        db`SELECT i.id, i.follow_up AS "followUp", to_char(i.follow_up_on, 'YYYY-MM-DD') AS "dueOn",
+            l.id AS "leadId", l.title AS lead
+          FROM crm.interaction i JOIN crm.lead l ON l.id = i.lead_id
+          WHERE l.owner_id = ${claims.sub} AND i.follow_up_done_at IS NULL
+            AND i.follow_up_on <= ${today} + 7
+          ORDER BY i.follow_up_on LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM crm.interaction i JOIN crm.lead l ON l.id = i.lead_id
+          WHERE l.owner_id = ${claims.sub} AND i.follow_up_done_at IS NULL AND i.follow_up_on <= ${today} + 7`,
+      ),
+    ]);
+    return { approvals, rfis, bills, orders, ncrs, followUps };
   }
 
   async markRead(claims: TenantClaims, id: string) {

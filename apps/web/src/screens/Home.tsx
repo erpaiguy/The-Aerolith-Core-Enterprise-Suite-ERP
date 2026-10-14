@@ -7,6 +7,7 @@ import { daysUntil, errorMessage, formatDate, formatDateTime } from '../lib/form
 import { apiBase } from '../platform';
 import { useSession } from '../session/session';
 import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import { MyWorkCard } from './MyWork';
 
 function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => void }) {
   const router = useRouter();
@@ -158,6 +159,7 @@ export function HomeScreen() {
             </Link>
           </Alert>
         )}
+        <MyWorkCard />
         <Card
           title={
             <>

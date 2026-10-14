@@ -31,6 +31,11 @@ export class InboxController {
     return this.inbox.inbox(claims);
   }
 
+  @Get('my-work')
+  myWork(@Auth() claims: TenantClaims) {
+    return this.inbox.myWork(claims);
+  }
+
   @Post('notifications/read-all')
   @HttpCode(200)
   readAll(@Auth() claims: TenantClaims) {

@@ -1,5 +1,6 @@
-// Company-wide registers and search in a real tenant database (docs/wave7-plan.md steps 7a.3 and 7a.6): every
-// register answers; rows from every project a person can see, none from the others; filters; search kept the same way.
+// Company-wide registers and search in a real tenant database (docs/wave7-plan.md steps 7a.3, 7a.6 and 7a.7): every
+// register answers; rows from every project a person can see, none from the others; filters; search kept the same way;
+// each person's work.
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
@@ -205,5 +206,23 @@ describe.skipIf(!controlUrl || !adminUrl)('company-wide registers (integration)'
       post('/tenant/parties', { name: 'Vidarbha Cement Traders', isClient: false, isVendor: true }),
     );
     expect(await find('vidarbha', worker)).toEqual(['party: Vidarbha Cement Traders']);
+  });
+
+  it("lists each person's work: RFIs assigned, NCRs raised, nothing of others", async () => {
+    interface Section {
+      count: number;
+      items: { number?: string }[];
+    }
+    type Work = Record<'approvals' | 'rfis' | 'bills' | 'orders' | 'ncrs' | 'followUps', Section>;
+    const work = (h: Record<string, string>) => ok<Work>(get('/tenant/my-work', h));
+    const raju = await work(worker);
+    expect(raju.rfis.count).toBe(1);
+    expect(raju.rfis.items.map((r) => r.number)).toEqual(['RFI-001']);
+    expect(raju.ncrs.count).toBe(0);
+    const suresh = await work(manager);
+    expect(suresh.ncrs.count).toBe(2);
+    expect(suresh.rfis.count).toBe(0);
+    const none = await work(lata.headers);
+    for (const s of Object.values(none)) expect(s).toEqual({ count: 0, items: [] });
   });
 });

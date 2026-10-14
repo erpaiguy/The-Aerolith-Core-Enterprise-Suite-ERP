@@ -77,4 +77,13 @@ test('a checklist, a failed cube test raising an NCR, and a snag closed', async 
   await ncrs.getByRole('link', { name: /NCR-001/ }).click();
   await expect(page).toHaveURL(/\/quality\?project=/);
   await expect(page.getByTestId('ncr-NCR-001')).toContainText('open');
+
+  // 6. Home: the NCR waits in My work, and the menu counts it.
+  await nav('Home');
+  const ncrsOpen = page.getByRole('region', { name: 'NCRs open' });
+  await expect(ncrsOpen).toContainText('NCR-001');
+  await expect(ncrsOpen).toContainText('Hostel, Washim');
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }),
+  ).toContainText('1');
 });
