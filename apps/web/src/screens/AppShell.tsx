@@ -320,6 +320,11 @@ export function AppShell() {
         { to: '/projects', label: 'Projects', icon: <Building2 className="size-4" /> },
         { to: '/portfolio', label: 'Portfolio', icon: <LayoutGrid className="size-4" /> },
         {
+          to: '/registers/daily-reports',
+          label: 'Daily reports',
+          icon: <CalendarCheck className="size-4" />,
+        },
+        {
           to: '/monthly-review',
           label: 'Monthly review',
           icon: <CalendarCheck className="size-4" />,
@@ -353,6 +358,12 @@ export function AppShell() {
           icon: <HardHat className="size-4" />,
           items: [
             { to: '/quality', label: 'Quality', icon: <BadgeCheck className="size-4" /> },
+            {
+              to: '/registers/inspections',
+              label: 'Inspections',
+              icon: <ClipboardCheck className="size-4" />,
+            },
+            { to: '/registers/ncrs', label: 'NCRs', icon: <TriangleAlert className="size-4" /> },
             { to: '/safety', label: 'Safety', icon: <ShieldCheck className="size-4" /> },
             { to: '/mep', label: 'MEP', icon: <Fan className="size-4" /> },
           ],
@@ -371,6 +382,12 @@ export function AppShell() {
           badge: pending?.reviews,
         },
         { to: '/transmittals', label: 'Transmittals and RFIs', icon: <Send className="size-4" /> },
+        {
+          to: '/registers/drawings',
+          label: 'Drawings',
+          icon: <LayoutTemplate className="size-4" />,
+        },
+        { to: '/registers/rfis', label: 'RFIs', icon: <ListChecks className="size-4" /> },
         {
           to: '/sign-offs',
           label: 'Sign-offs',
@@ -407,6 +424,16 @@ export function AppShell() {
         { to: '/orders', label: 'Orders', icon: <BriefcaseBusiness className="size-4" /> },
         { to: '/receipts', label: 'Goods receipts', icon: <PackageCheck className="size-4" /> },
         { to: '/stores', label: 'Stores', icon: <Warehouse className="size-4" /> },
+        {
+          to: '/registers/stock-issues',
+          label: 'Stock issues',
+          icon: <ClipboardList className="size-4" />,
+        },
+        {
+          to: '/registers/stock-transfers',
+          label: 'Stock transfers',
+          icon: <ArrowLeftRight className="size-4" />,
+        },
         {
           to: '/procurement-reports',
           label: 'Procurement reports',
@@ -473,6 +500,16 @@ export function AppShell() {
             },
             { to: '/accounts/payables', label: 'Payables', icon: <Wallet className="size-4" /> },
             { to: '/accounts/bank', label: 'Bank', icon: <Building2 className="size-4" /> },
+            {
+              to: '/registers/client-bills',
+              label: 'Client bills',
+              icon: <ReceiptText className="size-4" />,
+            },
+            {
+              to: '/registers/subcontract-bills',
+              label: 'Subcontract bills',
+              icon: <ReceiptText className="size-4" />,
+            },
           ],
         },
         {

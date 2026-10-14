@@ -113,13 +113,14 @@ import { NewVoucherScreen, VoucherScreen, VouchersScreen } from './screens/accou
 import { RequisitionsScreen } from './screens/Requisitions';
 import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
+import { REGISTER_KINDS, type RegisterKind, RegisterScreen } from './screens/Registers';
 import { RfqsScreen } from './screens/Rfqs';
 import { TemplatesScreen } from './screens/Templates';
 import { TenderSettingsScreen } from './screens/TenderSettings';
 import { TenderDetailScreen } from './screens/TenderDetail';
 import { NewTenderScreen, TendersScreen } from './screens/Tenders';
 import { WinLossScreen } from './screens/TenderInsights';
-import { Spinner } from '@aerolith/ui';
+import { Alert, Spinner } from '@aerolith/ui';
 import { lazy, Suspense } from 'react';
 
 // Charts (ECharts) load only when a dashboard is opened, not with the app.
@@ -290,6 +291,17 @@ const dailyReportRoute = createRoute({
     return <DailyReportScreen key={reportId} reportId={reportId} />;
   },
 });
+const registerRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/registers/$kind',
+  component: function RegisterPage() {
+    const { kind } = registerRoute.useParams();
+    if (!(REGISTER_KINDS as readonly string[]).includes(kind))
+      return <Alert tone="danger">There is no such register.</Alert>;
+    return <RegisterScreen key={kind} kind={kind as RegisterKind} />;
+  },
+});
+
 const dailyReportsRoute = createRoute({
   getParentRoute: () => appLayout,
   path: '/projects/$projectId/daily-reports',
@@ -725,6 +737,9 @@ const routeTree = rootRoute.addChildren([
     createRoute({
       getParentRoute: () => appLayout,
       path: '/quality',
+      validateSearch: (s: Record<string, unknown>): { project?: string | undefined } => ({
+        project: typeof s.project === 'string' ? s.project : undefined,
+      }),
       component: QualityScreen,
     }),
     createRoute({
@@ -785,6 +800,9 @@ const routeTree = rootRoute.addChildren([
     createRoute({
       getParentRoute: () => appLayout,
       path: '/transmittals',
+      validateSearch: (s: Record<string, unknown>): { project?: string | undefined } => ({
+        project: typeof s.project === 'string' ? s.project : undefined,
+      }),
       component: TransmittalsScreen,
     }),
     createRoute({
@@ -910,6 +928,7 @@ const routeTree = rootRoute.addChildren([
       }),
     }),
     createRoute({ getParentRoute: () => appLayout, path: '/rfqs', component: RfqsScreen }),
+    registerRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/resources',

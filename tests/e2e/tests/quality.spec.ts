@@ -64,4 +64,17 @@ test('a checklist, a failed cube test raising an NCR, and a snag closed', async 
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByText('Room 101: Skirting tile chipped')).toContainText('closed');
   await shot(page, 'quality');
+
+  // 5. The company-wide NCR register lists it; open, then closed; its row opens Quality on the project.
+  await nav('NCRs');
+  const ncrs = page.getByRole('rowgroup', { name: 'NCRs' });
+  await expect(ncrs.getByRole('row')).toHaveCount(1);
+  await expect(ncrs).toContainText('NCR-001');
+  await expect(ncrs).toContainText('Hostel, Washim');
+  await page.getByLabel('Status').selectOption('closed');
+  await expect(page.getByText('Nothing here.')).toBeVisible();
+  await page.getByLabel('Status').selectOption('');
+  await ncrs.getByRole('link', { name: /NCR-001/ }).click();
+  await expect(page).toHaveURL(/\/quality\?project=/);
+  await expect(page.getByTestId('ncr-NCR-001')).toContainText('open');
 });

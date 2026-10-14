@@ -13,6 +13,7 @@ import {
   Table,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouterState } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
@@ -100,7 +101,11 @@ export function QualityScreen() {
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
     select: (r) => r.items,
   });
-  const [projectId, setProjectId] = useState('');
+  // A register row opens this screen on its project (`?project=`).
+  const opened = useRouterState({
+    select: (r) => (r.location.search as { project?: string | undefined }).project,
+  });
+  const [projectId, setProjectId] = useState(opened ?? '');
   return (
     <div className="space-y-5">
       <PageHeader

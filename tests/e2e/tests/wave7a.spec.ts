@@ -74,3 +74,29 @@ test('parties by kind from the menu, and every enquiry in one list', async ({ pa
   await expect(page.getByRole('heading', { name: 'Enquiries (RFQs)' })).toBeVisible();
   await expect(page.getByText('No enquiries here.')).toBeVisible();
 });
+
+test('every company-wide register opens from the menu', async ({ page }) => {
+  test.setTimeout(150_000);
+  await signInNewAdmin(
+    page,
+    `w7a3-${Date.now()}@malegaon-civil.in`,
+    'Registers-Malegaon-73',
+    'Malegaon Civil',
+  );
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  for (const [link, heading] of [
+    ['Daily reports', 'Daily reports'],
+    ['Inspections', 'Inspections'],
+    ['NCRs', 'NCRs'],
+    ['Drawings', 'Drawings'],
+    ['RFIs', 'RFIs'],
+    ['Stock issues', 'Stock issues'],
+    ['Stock transfers', 'Stock transfers'],
+    ['Client bills', 'Client bills'],
+    ['Subcontract bills', 'Subcontract bills'],
+  ] as const) {
+    await nav.getByRole('link', { name: link, exact: true }).click();
+    await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    await expect(page.getByText('Nothing here.')).toBeVisible();
+  }
+});

@@ -15,6 +15,7 @@ import {
   Textarea,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../../api/client';
 import type { DocVault, ProjectDetail, ProjectSummary } from '../../api/types';
@@ -39,7 +40,11 @@ export function TransmittalsScreen() {
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
     select: (r) => r.items,
   });
-  const [projectId, setProjectId] = useState('');
+  // A register row opens this screen on its project (`?project=`).
+  const opened = useRouterState({
+    select: (r) => (r.location.search as { project?: string | undefined }).project,
+  });
+  const [projectId, setProjectId] = useState(opened ?? '');
   const [tab, setTab] = useState<Tab>('transmittals');
   const [error, setError] = useState<string | null>(null);
   const call: Call = async <T,>(path: string, body: object) => {
