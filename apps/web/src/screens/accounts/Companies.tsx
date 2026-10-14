@@ -18,11 +18,14 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import { useCompanies, type Company } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { type Letterhead, useLetterhead } from '../../print/Letterhead';
+import { Link } from '@tanstack/react-router';
 import { shortDate } from '../../schedule/model';
 
 export function CompaniesScreen() {
   const companies = useCompanies();
   const [editing, setEditing] = useState<string | 'new' | null>(null);
+  const [heading, setHeading] = useState<string | null>(null);
   if (companies.isPending) return <Spinner />;
   if (companies.isError) return <Alert tone="danger">{describeError(companies.error)}</Alert>;
   const { companies: list, mayEdit } = companies.data;
@@ -76,14 +79,24 @@ export function CompaniesScreen() {
                   </td>
                   <td className="text-right">
                     {mayEdit && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setEditing(c.id)}
-                        aria-label={`Edit ${c.name}`}
-                      >
-                        Edit
-                      </Button>
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setHeading(c.id)}
+                          aria-label={`Letterhead of ${c.name}`}
+                        >
+                          Letterhead
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setEditing(c.id)}
+                          aria-label={`Edit ${c.name}`}
+                        >
+                          Edit
+                        </Button>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -92,7 +105,126 @@ export function CompaniesScreen() {
           </tbody>
         </Table>
       </Card>
+      {heading ? (
+        <LetterheadForm key={heading} entityId={heading} onClose={() => setHeading(null)} />
+      ) : null}
     </div>
+  );
+}
+
+/** The company's letterhead for printed documents (docs/wave7-plan.md step 7b.1). */
+function LetterheadForm({ entityId, onClose }: { entityId: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const head = useLetterhead(entityId);
+  const [v, setV] = useState<Record<string, string> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  if (head.isPending) return <Spinner />;
+  if (head.isError) return <Alert tone="danger">{describeError(head.error)}</Alert>;
+  const l = head.data;
+  const f = v ?? {
+    phone: l.phone,
+    email: l.email,
+    website: l.website,
+    footer: l.footer,
+    signatoryName: l.signatoryName,
+    signatoryTitle: l.signatoryTitle,
+  };
+  const set = (k: string) => (e: { target: { value: string } }) => {
+    setSaved(false);
+    setV({ ...f, [k]: e.target.value });
+  };
+  const send = async (path: string, init: { method: string; body?: object }) => {
+    setError(null);
+    try {
+      const out = await api.request<Letterhead>(`/api/tenant/companies/${entityId}/${path}`, init);
+      qc.setQueryData(['letterhead', entityId], out);
+      return true;
+    } catch (err) {
+      setError(describeError(err));
+      return false;
+    }
+  };
+  const logo = (file: File | undefined) => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => void send('logo', { method: 'POST', body: { dataUrl: String(r.result) } });
+    r.readAsDataURL(file);
+  };
+  return (
+    <Card
+      title={`Letterhead of ${l.name}`}
+      actions={
+        <Link
+          to="/print/letterhead/$entityId"
+          params={{ entityId }}
+          className="text-sm text-accent hover:underline"
+        >
+          See a sample page
+        </Link>
+      }
+    >
+      <form
+        aria-label="Letterhead"
+        className="space-y-4"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault();
+          void send('letterhead', { method: 'POST', body: f }).then((ok) => setSaved(ok));
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-4">
+          {l.logo ? (
+            <img src={l.logo} alt="Logo" className="h-16 w-auto rounded border border-line p-1" />
+          ) : (
+            <span className="text-sm text-fg-muted">No logo yet.</span>
+          )}
+          <Field label="Logo (PNG or JPEG, up to 300 KB)">
+            <Input
+              type="file"
+              accept="image/png,image/jpeg"
+              onChange={(e) => logo(e.target.files?.[0])}
+            />
+          </Field>
+          {l.logo ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void send('logo', { method: 'DELETE' })}
+            >
+              Remove the logo
+            </Button>
+          ) : null}
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="Phone">
+            <Input value={f.phone} onChange={set('phone')} maxLength={60} />
+          </Field>
+          <Field label="Email">
+            <Input type="email" value={f.email} onChange={set('email')} maxLength={120} />
+          </Field>
+          <Field label="Website">
+            <Input value={f.website} onChange={set('website')} maxLength={120} />
+          </Field>
+          <Field label="Signs for the company">
+            <Input value={f.signatoryName} onChange={set('signatoryName')} maxLength={120} />
+          </Field>
+          <Field label="Signatory's title">
+            <Input value={f.signatoryTitle} onChange={set('signatoryTitle')} maxLength={120} />
+          </Field>
+        </div>
+        <Field label="Footer">
+          <Textarea value={f.footer} onChange={set('footer')} maxLength={500} rows={2} />
+        </Field>
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+        {saved ? <Alert tone="success">Letterhead saved.</Alert> : null}
+        <div className="flex gap-2">
+          <Button type="submit">Save letterhead</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 

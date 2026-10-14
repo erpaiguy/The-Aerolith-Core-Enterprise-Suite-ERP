@@ -13,6 +13,7 @@ import { LinkedDocuments } from '../documents/LinkedDocuments';
 import { describeError } from '../lib/format';
 import type { Inspection, Receipt } from '../procurement/orders';
 import { shortDate } from '../schedule/model';
+import { printLink } from '../print/Letterhead';
 
 const INSPECTION: Record<Inspection, string> = {
   gate: 'Accepted at the gate',
@@ -86,9 +87,13 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
         }
         actions={
           <div className="flex gap-2 print:hidden">
-            <Button variant="secondary" onClick={() => window.print()}>
+            <Link
+              to="/print/receipts/$receiptId"
+              params={{ receiptId: r.id }}
+              className={printLink}
+            >
               <Printer className="size-4" aria-hidden /> Print
-            </Button>
+            </Link>
             {r.mayCancel && (
               <Button
                 variant="ghost"

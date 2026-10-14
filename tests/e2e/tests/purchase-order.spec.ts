@@ -84,7 +84,15 @@ test('a purchase order with GST on top is issued, acknowledged and amended', asy
   await expect(totals.getByRole('row', { name: /^CGST/ })).toContainText('₹3,514.50');
   await expect(totals.getByRole('row', { name: /^SGST/ })).toContainText('₹3,514.50');
   await expect(totals.getByRole('row', { name: /^Total with GST/ })).toContainText('₹46,079.00');
-  await expect(page.getByRole('button', { name: 'Print' })).toBeVisible();
+  // Printed on the company's letterhead (docs/wave7-plan.md step 7b.2), with the total in words.
+  await page.getByRole('link', { name: 'Print', exact: true }).click();
+  const sheet = page.getByRole('article', { name: 'Purchase order' });
+  await expect(sheet.getByLabel('Letterhead')).toBeVisible();
+  await expect(sheet).toContainText('Vidarbha Cement Traders');
+  await expect(sheet).toContainText('₹46,079.00');
+  await expect(sheet).toContainText('Rupees forty-six thousand seventy-nine only');
+  await expect(sheet).toContainText('30 days from receipt at site');
+  await page.getByRole('button', { name: 'Back' }).click();
 
   // 6. The supplier accepts it.
   await page.getByLabel('Their reference').fill('VCT/26/118');

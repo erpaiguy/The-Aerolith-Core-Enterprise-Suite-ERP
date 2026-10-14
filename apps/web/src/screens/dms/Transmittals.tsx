@@ -21,6 +21,8 @@ import type { DocVault, ProjectDetail, ProjectSummary } from '../../api/types';
 import { describeError } from '../../lib/format';
 import { useProjectParam } from '../../lib/project-param';
 import { useFocusForm, useNewParam } from '../../lib/new-param';
+import { printLink } from '../../print/Letterhead';
+import { Link } from '@tanstack/react-router';
 
 type Tab = 'transmittals' | 'rfis' | 'submittals';
 type Call = <T>(path: string, body: object) => Promise<T | null>;
@@ -214,7 +216,7 @@ function Transmittals({ projectId, call }: { projectId: string; call: Call }) {
           </Table>
         )}
       </Card>
-      {open && <Transmittal key={open} id={open} call={call} />}
+      {open && <Transmittal key={open} id={open} projectId={projectId} call={call} />}
       <Card title="New transmittal">
         <form
           aria-label="New transmittal"
@@ -311,7 +313,7 @@ function Transmittals({ projectId, call }: { projectId: string; call: Call }) {
   );
 }
 
-function Transmittal({ id, call }: { id: string; call: Call }) {
+function Transmittal({ id, projectId, call }: { id: string; projectId: string; call: Call }) {
   const q = useQuery({
     queryKey: ['dms', 'transmittal', id],
     queryFn: () => api.request<TDetail>(`/api/tenant/transmittals/${id}`),
@@ -328,7 +330,18 @@ function Transmittal({ id, call }: { id: string; call: Call }) {
   };
   const live = t.links.find((l) => l.live);
   return (
-    <Card title={`${t.number} ${t.subject}`}>
+    <Card
+      title={`${t.number} ${t.subject}`}
+      actions={
+        <Link
+          to="/print/transmittals/$projectId/$transmittalId"
+          params={{ projectId, transmittalId: t.id }}
+          className={printLink}
+        >
+          Print
+        </Link>
+      }
+    >
       <p className="text-sm" data-testid="transmittal-status">
         To {t.recipient} · {t.purpose} · <Badge tone={tone(t.status)}>{t.status}</Badge>
         {t.dueOn && ` · response due ${t.dueOn}`}

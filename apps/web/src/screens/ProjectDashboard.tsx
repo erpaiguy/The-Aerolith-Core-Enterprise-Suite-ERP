@@ -13,6 +13,7 @@ import { EChart, themeColours, type ChartOption } from '../charts/EChart';
 import { describeError, formatInr, formatInrShort } from '../lib/format';
 import { shortDate } from '../schedule/model';
 import type { Done } from './Progress';
+import { printLink } from '../print/Letterhead';
 
 export interface ProjectDashboard {
   asOf: string;
@@ -134,9 +135,18 @@ export function ProjectDashboardScreen({ projectId }: { projectId: string }) {
         title="Dashboard"
         subtitle={`${p.number} · ${p.name}, as of ${shortDate(d.asOf)}`}
         actions={
-          <Button variant="secondary" onClick={() => window.print()} className="print:hidden">
-            <Printer className="size-4" aria-hidden /> Print
-          </Button>
+          <div className="flex gap-2 print:hidden">
+            <Link
+              to="/print/progress-report/$projectId"
+              params={{ projectId: p.id }}
+              className={printLink}
+            >
+              Client report
+            </Link>
+            <Button variant="secondary" onClick={() => window.print()}>
+              <Printer className="size-4" aria-hidden /> Print
+            </Button>
+          </div>
         }
       />
 

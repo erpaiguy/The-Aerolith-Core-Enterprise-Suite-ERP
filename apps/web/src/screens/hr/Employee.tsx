@@ -31,6 +31,9 @@ import {
   type RegisterRow,
 } from './model';
 import { useDesignations } from './People';
+import { printLink } from '../../print/Letterhead';
+import { HR_LETTERS, type HrLetter } from '../../print/PeopleDocs';
+import { Link } from '@tanstack/react-router';
 
 const FIELDS: { key: keyof Employee; label: string; type?: string; hint?: string }[] = [
   { key: 'name', label: 'Name' },
@@ -218,6 +221,22 @@ export function EmployeeScreen({ employeeId }: { employeeId: string }) {
       </Card>
       <Deployments employee={d} mayEdit={mayEdit} />
       <SalaryCard employeeId={d.id} />
+      {mayEdit ? (
+        <Card title="Letters">
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(HR_LETTERS) as HrLetter[]).map((k) => (
+              <Link
+                key={k}
+                to="/print/hr-letters/$employeeId/$kind"
+                params={{ employeeId: d.id, kind: k }}
+                className={printLink}
+              >
+                {HR_LETTERS[k]}
+              </Link>
+            ))}
+          </div>
+        </Card>
+      ) : null}
       <SettlementCard employeeId={d.id} leftOn={d.leftOn} />
       <LeavePanel employeeId={d.id} />
     </div>

@@ -40,6 +40,7 @@ import { OrderReceipts } from '../procurement/OrderReceipts';
 import { WorkOrderSubcontract } from './accounts/Subcontract';
 import { ResourcePicker } from '../procurement/ResourcePicker';
 import { shortDate } from '../schedule/model';
+import { printLink } from '../print/Letterhead';
 
 const trimZeros = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v);
 
@@ -178,9 +179,9 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
               </Button>
             )}
             {o.inForce && (
-              <Button variant="secondary" onClick={() => window.print()}>
+              <Link to="/print/orders/$orderId" params={{ orderId: o.id }} className={printLink}>
                 <Printer className="size-4" aria-hidden /> Print
-              </Button>
+              </Link>
             )}
             {o.mayAmend && (
               <Button

@@ -18,6 +18,8 @@ import { api, saveFile } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
+import { printLink } from '../../print/Letterhead';
+import { Link } from '@tanstack/react-router';
 
 interface Overview {
   setup: {
@@ -531,7 +533,14 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
     if (await call(`/api/tenant/sales/bookings/${id}/${path}`, body)) await q.refetch();
   };
   return (
-    <Card title={`${b.number} · ${b.unit} · ${b.buyer}`}>
+    <Card
+      title={`${b.number} · ${b.unit} · ${b.buyer}`}
+      actions={
+        <Link to="/print/cost-sheets/$bookingId" params={{ bookingId: b.id }} className={printLink}>
+          Cost sheet
+        </Link>
+      }
+    >
       <p className="text-sm" data-testid="booking-totals">
         {formatInr(b.value)} · <Badge tone={tone(b.status)}>{b.status}</Badge> · demanded{' '}
         {formatInr(b.totals.demanded)} · received {formatInr(b.totals.received)} · outstanding{' '}
@@ -546,6 +555,7 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
             <th>Due</th>
             <th className="text-right">Amount</th>
             <th className="text-right">Open</th>
+            <th />
           </tr>
         </thead>
         <tbody aria-label="Demands">
@@ -556,6 +566,15 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
               <td>{d.dueOn}</td>
               <td className="text-right tabular-nums">{formatInr(d.total)}</td>
               <td className="text-right tabular-nums">{formatInr(d.open)}</td>
+              <td className="text-right">
+                <Link
+                  to="/print/demands/$bookingId/$demandId"
+                  params={{ bookingId: b.id, demandId: d.id }}
+                  className="text-sm text-accent hover:underline"
+                >
+                  Letter
+                </Link>
+              </td>
             </tr>
           ))}
         </tbody>

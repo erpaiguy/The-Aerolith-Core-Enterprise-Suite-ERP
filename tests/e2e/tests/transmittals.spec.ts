@@ -72,6 +72,12 @@ test('a transmittal answered through its link, and an RFI answered', async ({ pa
   await expect(page.getByTestId('transmittal-status')).toContainText('draft');
   await page.getByRole('button', { name: 'Issue', exact: true }).click();
   await expect(page.getByTestId('transmittal-status')).toContainText('issued');
+  // Its cover sheet, printed (docs/wave7-plan.md step 7b.4); back, the project and transmittal are chosen again.
+  await page.getByRole('link', { name: 'Print', exact: true }).click();
+  await expect(page.getByRole('article', { name: 'Transmittal' })).toContainText('Kale Architects');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByLabel('Project').selectOption({ index: 1 });
+  await page.getByRole('row', { name: 'TR-001' }).getByRole('button', { name: 'TR-001' }).click();
   await page.getByRole('button', { name: 'Make a link for the recipient' }).click();
   const link = await page.getByLabel('Link for the recipient').inputValue();
   expect(link).toMatch(/\/share\/[0-9a-f-]{36}\/[A-Za-z0-9_-]{43}$/);

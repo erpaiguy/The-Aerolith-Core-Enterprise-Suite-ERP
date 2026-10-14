@@ -131,6 +131,12 @@ test('an RA bill from the measurement book, certified for less and posted', asyn
     page.getByText('Submitted for ₹5,650.00 net; certified ₹4,520.00: ₹1,130.00 less.'),
   ).toBeVisible();
   await shot(page, 'client-bill-01-certified');
+  // The tax invoice with its abstract, on the letterhead (docs/wave7-plan.md step 7b.3).
+  await page.getByRole('link', { name: 'Print', exact: true }).click();
+  const invoice = page.getByRole('article', { name: /^Tax invoice · RA bill 1$/ });
+  await expect(invoice).toContainText('Abstract');
+  await expect(invoice).toContainText('₹4,720.00');
+  await page.getByRole('button', { name: 'Back' }).click();
   const billUrl = page.url();
   await page.getByRole('link', { name: 'The voucher in the books' }).click();
   const lines = page.getByRole('rowgroup', { name: 'Voucher lines' });
@@ -173,6 +179,11 @@ test('an RA bill from the measurement book, certified for less and posted', asyn
   await receipt.getByRole('button', { name: 'Record the receipt' }).click();
   await page.waitForURL(/\/accounts\/client-receipts\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('rowgroup', { name: 'Allocations' })).toContainText('₹4,402.00');
+  await page.getByRole('link', { name: 'Print the receipt' }).click();
+  await expect(page.getByRole('article', { name: 'Receipt' })).toContainText(
+    'Received with thanks',
+  );
+  await page.getByRole('button', { name: 'Back' }).click();
   await nav('Receivables');
   // Nothing outstanding on the bill; the ₹200 retention is still held.
   await expect(page.getByRole('rowgroup', { name: 'Bills outstanding' })).toHaveCount(0);

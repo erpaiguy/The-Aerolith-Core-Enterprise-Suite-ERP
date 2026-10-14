@@ -726,10 +726,18 @@ export class SalesService {
     const [head] = await db`
       SELECT b.id, b.number, b.status, b.value::text, to_char(b.booked_on, 'YYYY-MM-DD') AS "bookedOn",
         to_char(b.agreement_on, 'YYYY-MM-DD') AS "agreementOn", b.agreement_number AS "agreementNumber",
-        y.name AS buyer, y.co_applicant AS "coApplicant", y.phone, y.email, y.pan,
-        t.name || '-' || u.number AS unit, u.carpet_sqm::text AS "carpetSqm", u.gst_pct::text AS "gstPct"
+        y.name AS buyer, y.co_applicant AS "coApplicant", y.phone, y.email, y.pan, y.address,
+        t.name || '-' || u.number AS unit, u.carpet_sqm::text AS "carpetSqm", u.gst_pct::text AS "gstPct",
+        u.kind AS "unitKind", u.floor, u.rate_per_sqm::text AS "ratePerSqm", u.parking::text,
+        u.charges::text, t.project_id AS "projectId"
       FROM re.booking b JOIN re.buyer y ON y.id = b.buyer_id JOIN re.unit u ON u.id = b.unit_id
       JOIN re.tower t ON t.id = u.tower_id WHERE b.id = ${id}`;
+    // For the cost sheet and demand letters (docs/wave7-plan.md step 7b.5): the payment plan and the registration.
+    const plan = await db`
+      SELECT s.position, s.name, s.pct::text, s.trigger, to_char(s.reached_on, 'YYYY-MM-DD') AS "reachedOn"
+      FROM re.plan_stage s
+      WHERE s.project_id = ${b.project_id} AND (s.tower_id IS NULL OR s.tower_id = ${b.tower_id})
+      ORDER BY s.position`;
     const demands = await db`
       SELECT d.id, d.number, d.kind, s.name AS stage, to_char(d.raised_on, 'YYYY-MM-DD') AS "raisedOn",
         to_char(d.due_on, 'YYYY-MM-DD') AS "dueOn", d.base::text, d.cgst::text, d.sgst::text,
@@ -746,6 +754,9 @@ export class SalesService {
       rupees(xs.reduce((a, x) => a + p(x[k] as string), 0n));
     return {
       ...head!,
+      reraNumber: setup.rera_number,
+      interestPct: setup.interest_pct,
+      plan,
       demands,
       receipts,
       totals: {

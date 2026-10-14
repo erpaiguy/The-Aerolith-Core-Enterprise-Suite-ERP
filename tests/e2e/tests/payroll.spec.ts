@@ -97,5 +97,8 @@ test("an employee's September worked, posted and paid out on a payslip", async (
   // 4. The payslip.
   await page.getByRole('link', { name: 'Payslip' }).click();
   await expect(page.getByTestId('payslip-net')).toHaveText('Net pay ₹17,250.00');
+  await page.getByRole('link', { name: 'Print or save as PDF' }).click();
+  await expect(page.getByRole('article', { name: 'Payslip' })).toContainText('Net pay ₹17,250.00');
+  await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('cell', { name: 'Provident fund' })).toBeVisible();
 });

@@ -90,6 +90,25 @@ test('a flat booked on a payment plan, paid for, and the RERA share due', async 
   await r.getByLabel('UTR or cheque').fill('UTR0001');
   await r.getByRole('button', { name: 'Record receipt' }).click();
   await expect(page.getByTestId('booking-totals')).toContainText('received ₹8,56,800');
+  // The cost sheet and the booking's demand letter (docs/wave7-plan.md step 7b.5).
+  await page.getByRole('link', { name: 'Cost sheet' }).click();
+  const sheet = page.getByRole('article', { name: 'Cost sheet' });
+  await expect(sheet).toContainText('Anil Kulkarni');
+  await expect(sheet).toContainText('₹81,60,000');
+  await expect(sheet).toContainText('Payment plan');
+  // Back on the screen, the project and the booking are chosen again.
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByLabel('Project').selectOption({ index: 1 });
+  await page.getByRole('tab', { name: 'Bookings' }).click();
+  await page.getByRole('row', { name: 'BK-001' }).getByRole('button', { name: 'BK-001' }).click();
+  await page
+    .getByRole('rowgroup', { name: 'Demands' })
+    .getByRole('link', { name: 'Letter' })
+    .first()
+    .click();
+  await expect(page.getByRole('article', { name: 'Demand letter' })).toContainText('₹8,56,800');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByLabel('Project').selectOption({ index: 1 });
 
   // 70% of the ₹8,16,000 that is not GST is due to the designated account.
   await page.getByRole('tab', { name: 'RERA account' }).click();

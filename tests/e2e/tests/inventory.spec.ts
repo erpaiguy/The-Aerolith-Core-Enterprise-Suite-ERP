@@ -107,6 +107,11 @@ test('received cement is stocked, issued to work, returned, reordered and counte
     page.getByRole('heading', { name: /^Issue slip ISS\/\d{4}-\d{2}\/0001$/ }),
   ).toBeVisible();
   await expect(page.getByRole('rowgroup', { name: 'Issued' })).toContainText('₹15,600.00');
+  await page.getByRole('link', { name: 'Print', exact: true }).click();
+  const slip = page.getByRole('article', { name: 'Store issue slip' });
+  await expect(slip).toContainText('₹15,600.00');
+  await expect(slip).toContainText('Received by');
+  await page.getByRole('button', { name: 'Back' }).click();
 
   // 5. 5 bags back unused: 65 bags, ₹25,350.
   await page.getByLabel('Back: Cement OPC 53').fill('5');

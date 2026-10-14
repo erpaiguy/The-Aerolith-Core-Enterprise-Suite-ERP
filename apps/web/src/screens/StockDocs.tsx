@@ -20,6 +20,7 @@ import {
   type Transfer,
 } from '../procurement/inventory';
 import { shortDate } from '../schedule/model';
+import { printLink } from '../print/Letterhead';
 
 const back = (storeId: string, name: string) => (
   <Link
@@ -57,9 +58,9 @@ export function IssueScreen({ issueId }: { issueId: string }) {
         title={`Issue slip ${d.number}`}
         subtitle={`${shortDate(d.issuedOn)} · ${d.wbs.code} ${d.wbs.name} · taken by ${d.issuedTo}`}
         actions={
-          <Button variant="secondary" onClick={() => window.print()}>
+          <Link to="/print/issues/$issueId" params={{ issueId: d.id }} className={printLink}>
             <Printer className="size-4" aria-hidden /> Print
-          </Button>
+          </Link>
         }
       />
       {d.purpose && <p className="text-sm">{d.purpose}</p>}

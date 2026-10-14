@@ -13,6 +13,7 @@ import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
 import { Books } from './Vouchers';
+import { printLink } from '../../print/Letterhead';
 
 interface Report {
   asOf: string;
@@ -709,9 +710,16 @@ export function ClientReceiptScreen({ receiptId }: { receiptId: string }) {
       >
         <ArrowLeft className="size-4" aria-hidden /> Receivables
       </Link>
-      <h1 className="text-xl font-semibold">
+      <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold">
         Receipt from {x.party.name}{' '}
         {x.status === 'cancelled' && <Badge tone="danger">Cancelled</Badge>}
+        <Link
+          to="/print/client-receipts/$receiptId"
+          params={{ receiptId: x.id }}
+          className={`ml-auto ${printLink}`}
+        >
+          Print the receipt
+        </Link>
       </h1>
       {x.statusReason && <Alert tone="info">Cancelled: {x.statusReason}</Alert>}
       {error && <Alert tone="danger">{error}</Alert>}

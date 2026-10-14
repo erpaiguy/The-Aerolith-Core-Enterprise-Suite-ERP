@@ -17,6 +17,8 @@ import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
+import { printLink } from '../../print/Letterhead';
+import { Link } from '@tanstack/react-router';
 
 interface Tile {
   project: { id: string; number: string; name: string };
@@ -55,6 +57,11 @@ export function PortfolioScreen() {
       <PageHeader
         title="Portfolio"
         subtitle="Every project: margin, performance, cash, variations, claims and risks."
+        actions={
+          <Link to="/print/mis" className={printLink}>
+            MIS pack
+          </Link>
+        }
       />
       {q.isPending ? (
         <Spinner />

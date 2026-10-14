@@ -26,6 +26,7 @@ import { describeError } from '../../lib/format';
 import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
 import { ClientBillGst } from './Gst';
+import { printLink } from '../../print/Letterhead';
 
 const n = (v: string | null | undefined) => Number(v ?? 0);
 const q = (v: number) => formatQty(String(Math.round(v * 10000) / 10000));
@@ -143,9 +144,9 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
             <Button type="button" variant="secondary" onClick={excel}>
               <FileSpreadsheet className="size-4" aria-hidden /> Excel
             </Button>
-            <Button type="button" variant="secondary" onClick={() => window.print()}>
+            <Link to="/print/client-bills/$billId" params={{ billId: b.id }} className={printLink}>
               <Printer className="size-4" aria-hidden /> Print
-            </Button>
+            </Link>
             {b.mayCancel && (
               <Button
                 type="button"

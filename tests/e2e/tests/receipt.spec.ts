@@ -129,6 +129,9 @@ test('goods are received, inspected and returned, and the order closes when all 
   await rest.getByRole('button', { name: 'Record the receipt' }).click();
   await page.waitForURL(/\/receipts\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { name: /\/0002$/ })).toBeVisible();
+  await page.getByRole('link', { name: 'Print', exact: true }).click();
+  await expect(page.getByRole('article', { name: 'Goods receipt note' })).toContainText('Accepted');
+  await page.getByRole('button', { name: 'Back' }).click();
   await page.goto(orderUrl);
   await expect(page.getByText('Closed', { exact: true })).toBeVisible();
   await expect(page.getByText('Closed: Received in full')).toBeVisible();

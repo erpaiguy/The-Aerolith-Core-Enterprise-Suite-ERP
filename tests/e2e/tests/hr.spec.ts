@@ -67,6 +67,17 @@ test('an employee deployed, marked present, on leave and counted for the month',
   await deploy.getByLabel('Site').selectOption({ label: 'Ring road' });
   await deploy.getByRole('button', { name: 'Deploy' }).click();
   await expect(page.getByRole('cell', { name: 'Ring road', exact: true })).toBeVisible();
+  // Her experience certificate, with a reference typed before printing (docs/wave7-plan.md step 7b.4).
+  await page.getByRole('link', { name: 'Experience certificate' }).click();
+  await page
+    .getByRole('form', { name: 'Letter details' })
+    .getByLabel('Reference')
+    .fill('HR/2026/014');
+  const letter = page.getByRole('article', { name: 'Experience certificate' });
+  await expect(letter).toContainText('To whom it may concern');
+  await expect(letter).toContainText('Meena Kale');
+  await expect(letter).toContainText('HR/2026/014');
+  await page.getByRole('button', { name: 'Back' }).click();
 
   // 4. A day's casual leave on Monday 14 September, approved at once (no approval rules for leave).
   await page.getByLabel('Leave year').selectOption('2026');

@@ -91,6 +91,11 @@ test("a supplier's bill entered, paid in an approved run with a bank file", asyn
     '₹59,000.00',
   );
   await shot(page, 'payables-01-paid');
+  await page.getByRole('link', { name: 'Payment advices' }).click();
+  const advice = page.getByRole('article', { name: 'Payment advice' });
+  await expect(advice).toContainText('Patil Estates');
+  await expect(advice).toContainText('₹59,000.00');
+  await page.getByRole('button', { name: 'Back' }).click();
   await nav('Payables');
   await expect(page.getByText('Nothing is owed.')).toBeVisible();
 });

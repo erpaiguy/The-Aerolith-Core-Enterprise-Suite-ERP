@@ -116,6 +116,17 @@ import { RfqScreen } from './screens/Rfq';
 import { REGISTER_KINDS, type RegisterKind, RegisterScreen } from './screens/Registers';
 import { RfqsScreen } from './screens/Rfqs';
 import { AuditScreen } from './screens/Audit';
+import { LetterheadSample } from './print/Letterhead';
+import { IssuePrint, OrderPrint, ReceiptPrint } from './print/PurchaseDocs';
+import {
+  ClientBillPrint,
+  ClientReceiptPrint,
+  PaymentAdvicePrint,
+  PayslipPrint,
+} from './print/MoneyDocs';
+import { HR_LETTERS, type HrLetter, HrLetterPrint, TransmittalPrint } from './print/PeopleDocs';
+import { MisPackPrint, ProgressReportPrint } from './print/ReportDocs';
+import { CostSheetPrint, DemandLetterPrint } from './print/SalesDocs';
 import { TemplatesScreen } from './screens/Templates';
 import { TenderSettingsScreen } from './screens/TenderSettings';
 import { TenderDetailScreen } from './screens/TenderDetail';
@@ -501,6 +512,129 @@ const programmeRoute = createRoute({
   component: function ProgrammePage() {
     const { planId } = programmeRoute.useParams();
     return <ProgrammeScreen key={planId} planId={planId} />;
+  },
+});
+
+/** A company's letterhead on a sample page (docs/wave7-plan.md step 7b.1). */
+const letterheadSampleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/letterhead/$entityId',
+  component: function LetterheadSamplePage() {
+    const { entityId } = letterheadSampleRoute.useParams();
+    return <LetterheadSample entityId={entityId} />;
+  },
+});
+
+// Printable purchase documents (docs/wave7-plan.md step 7b.2).
+const orderPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/orders/$orderId',
+  component: function OrderPrintPage() {
+    const { orderId } = orderPrintRoute.useParams();
+    return <OrderPrint orderId={orderId} />;
+  },
+});
+const receiptPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/receipts/$receiptId',
+  component: function ReceiptPrintPage() {
+    const { receiptId } = receiptPrintRoute.useParams();
+    return <ReceiptPrint receiptId={receiptId} />;
+  },
+});
+const issuePrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/issues/$issueId',
+  component: function IssuePrintPage() {
+    const { issueId } = issuePrintRoute.useParams();
+    return <IssuePrint issueId={issueId} />;
+  },
+});
+
+// Printable money documents (docs/wave7-plan.md step 7b.3).
+const clientBillPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/client-bills/$billId',
+  component: function ClientBillPrintPage() {
+    const { billId } = clientBillPrintRoute.useParams();
+    return <ClientBillPrint billId={billId} />;
+  },
+});
+const clientReceiptPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/client-receipts/$receiptId',
+  component: function ClientReceiptPrintPage() {
+    const { receiptId } = clientReceiptPrintRoute.useParams();
+    return <ClientReceiptPrint receiptId={receiptId} />;
+  },
+});
+const paymentAdvicePrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/payment-runs/$runId',
+  component: function PaymentAdvicePrintPage() {
+    const { runId } = paymentAdvicePrintRoute.useParams();
+    return <PaymentAdvicePrint runId={runId} />;
+  },
+});
+const payslipPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/payslips/$runId/$employeeId',
+  component: function PayslipPrintPage() {
+    const { runId, employeeId } = payslipPrintRoute.useParams();
+    return <PayslipPrint runId={runId} employeeId={employeeId} />;
+  },
+});
+
+// Printable transmittals and HR letters (docs/wave7-plan.md step 7b.4).
+const transmittalPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/transmittals/$projectId/$transmittalId',
+  component: function TransmittalPrintPage() {
+    const { projectId, transmittalId } = transmittalPrintRoute.useParams();
+    return <TransmittalPrint projectId={projectId} transmittalId={transmittalId} />;
+  },
+});
+const hrLetterPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/hr-letters/$employeeId/$kind',
+  component: function HrLetterPrintPage() {
+    const { employeeId, kind } = hrLetterPrintRoute.useParams();
+    return kind in HR_LETTERS ? (
+      <HrLetterPrint employeeId={employeeId} kind={kind as HrLetter} />
+    ) : (
+      <Alert tone="danger">There is no such letter.</Alert>
+    );
+  },
+});
+
+// Reports and sales papers for people outside (docs/wave7-plan.md step 7b.5).
+const misPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/mis',
+  component: MisPackPrint,
+});
+const progressReportPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/progress-report/$projectId',
+  component: function ProgressReportPrintPage() {
+    const { projectId } = progressReportPrintRoute.useParams();
+    return <ProgressReportPrint projectId={projectId} />;
+  },
+});
+const costSheetPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/cost-sheets/$bookingId',
+  component: function CostSheetPrintPage() {
+    const { bookingId } = costSheetPrintRoute.useParams();
+    return <CostSheetPrint bookingId={bookingId} />;
+  },
+});
+const demandPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/demands/$bookingId/$demandId',
+  component: function DemandPrintPage() {
+    const { bookingId, demandId } = demandPrintRoute.useParams();
+    return <DemandLetterPrint bookingId={bookingId} demandId={demandId} />;
   },
 });
 
@@ -1014,6 +1148,20 @@ const routeTree = rootRoute.addChildren([
     }),
   ]),
   programmePrintRoute,
+  letterheadSampleRoute,
+  orderPrintRoute,
+  receiptPrintRoute,
+  issuePrintRoute,
+  clientBillPrintRoute,
+  clientReceiptPrintRoute,
+  paymentAdvicePrintRoute,
+  payslipPrintRoute,
+  transmittalPrintRoute,
+  hrLetterPrintRoute,
+  misPrintRoute,
+  progressReportPrintRoute,
+  costSheetPrintRoute,
+  demandPrintRoute,
   lookaheadRoute,
   costSummaryRoute,
   analysisReportRoute,

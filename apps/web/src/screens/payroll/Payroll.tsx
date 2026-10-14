@@ -23,6 +23,7 @@ import { describeError } from '../../lib/format';
 import { rupees } from '../../procurement/OrderLines';
 import { usePermission } from '../../session/permissions';
 import { Books } from '../accounts/Vouchers';
+import { printLink } from '../../print/Letterhead';
 
 interface Component {
   id: string;
@@ -782,9 +783,13 @@ export function PayslipScreen({ runId, employeeId }: { runId: string; employeeId
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex justify-end print:hidden">
-        <Button type="button" variant="secondary" onClick={() => window.print()}>
+        <Link
+          to="/print/payslips/$runId/$employeeId"
+          params={{ runId, employeeId }}
+          className={printLink}
+        >
           Print or save as PDF
-        </Button>
+        </Link>
       </div>
       <Card>
         <div className="mb-4 border-b border-line pb-3">

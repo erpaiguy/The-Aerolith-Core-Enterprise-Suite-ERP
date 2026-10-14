@@ -141,6 +141,12 @@ test('the project dashboard puts money, progress three ways, the S-curve and the
   await page.screenshot(shot('dashboard-01'));
 
   // 6. The progress report, downloaded as Excel.
+  // The month's report for the client (docs/wave7-plan.md step 7b.5).
+  await page.getByRole('link', { name: 'Client report' }).click();
+  await expect(page.getByRole('article', { name: /^Monthly progress report/ })).toContainText(
+    'Work done',
+  );
+  await page.getByRole('button', { name: 'Back' }).click();
   await page.getByRole('link', { name: 'Progress report' }).click();
   await expect(page.getByTestId('physical')).toHaveText('40%');
   const download = page.waitForEvent('download');

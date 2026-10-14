@@ -15,6 +15,7 @@ import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
 import { Books } from './Vouchers';
+import { printLink } from '../../print/Letterhead';
 
 const plusDays = (d: string, n: number) => {
   const x = new Date(`${d}T00:00:00Z`);
@@ -1237,8 +1238,15 @@ export function PaymentRunScreen({ runId }: { runId: string }) {
       >
         <ArrowLeft className="size-4" aria-hidden /> Payables
       </Link>
-      <h1 className="text-xl font-semibold">
+      <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold">
         Payment run {x.number} <Badge tone={RUN_TONE[x.status]}>{x.status}</Badge>
+        <Link
+          to="/print/payment-runs/$runId"
+          params={{ runId: x.id }}
+          className={`ml-auto ${printLink}`}
+        >
+          Payment advices
+        </Link>
       </h1>
       <p className="text-sm text-fg-muted">
         {x.company}: {rupees(x.total)} from {x.bank.code} {x.bank.name},{' '}

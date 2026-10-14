@@ -63,4 +63,8 @@ test('the MEP pack, the portfolio and a monthly review', async ({ page }) => {
   await expect(page.getByTestId('review')).toContainText('Hostel, Akola');
   await expect(page.getByTestId('review-ev')).toContainText('BAC');
   await shot(page, 'monthly-review');
+  // The directors' MIS pack (docs/wave7-plan.md step 7b.5).
+  await nav('Portfolio');
+  await page.getByRole('link', { name: 'MIS pack' }).click();
+  await expect(page.getByRole('article', { name: /^MIS: / })).toContainText('Hostel, Akola');
 });

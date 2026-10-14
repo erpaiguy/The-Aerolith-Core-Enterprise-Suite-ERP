@@ -82,11 +82,11 @@ unticked step.
 - [x] 7a.7 My work
 - [x] 7a.8 Audit trail
 - [x] 7a exit: full check and browser suite
-- [ ] 7b.1 Letterhead
-- [ ] 7b.2 Purchase documents
-- [ ] 7b.3 Money documents
-- [ ] 7b.4 Document control and HR letters
-- [ ] 7b.5 MIS pack, client progress report, RERA documents
+- [x] 7b.1 Letterhead
+- [x] 7b.2 Purchase documents
+- [x] 7b.3 Money documents
+- [x] 7b.4 Document control and HR letters
+- [x] 7b.5 MIS pack, client progress report, RERA documents
 - [ ] 7b exit: full check and browser suite
 - [ ] 7c.1 Daily reports into the measurement book
 - [ ] 7c.2 Material reconciliation
