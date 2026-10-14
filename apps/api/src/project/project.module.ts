@@ -14,6 +14,7 @@ import { ProjectBoqService } from './project-boq.service.js';
 import { ProjectController } from './project.controller.js';
 import { ProgressController } from './progress.controller.js';
 import { ProgressService } from './progress.service.js';
+import { MbProposalService } from './mb-proposal.service.js';
 import { ProjectService } from './project.service.js';
 import { WbsController } from './wbs.controller.js';
 import { WbsService } from './wbs.service.js';
@@ -34,6 +35,7 @@ import { WbsService } from './wbs.service.js';
     WbsService,
     CostCodeService,
     ProgressService,
+    MbProposalService,
     DailyReportService,
     DrawingService,
     // Every BOQ and plan route, whichever module serves it, checks a project's team first.

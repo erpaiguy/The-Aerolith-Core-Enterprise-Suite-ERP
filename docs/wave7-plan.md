@@ -88,17 +88,17 @@ unticked step.
 - [x] 7b.4 Document control and HR letters
 - [x] 7b.5 MIS pack, client progress report, RERA documents
 - [x] 7b exit: full check and browser suite
-- [ ] 7c.1 Daily reports into the measurement book
-- [ ] 7c.2 Material reconciliation
-- [ ] 7c.3 Estimate against actual
-- [ ] 7c.4 Order from a requisition
-- [ ] 7c.5 Rate contracts
-- [ ] 7c.6 Month-end close checklist
-- [ ] 7c.7 Salary revisions in bulk
-- [ ] 7c.8 Bulk imports
+- [x] 7c.1 Daily reports into the measurement book
+- [x] 7c.2 Material reconciliation
+- [x] 7c.3 Estimate against actual
+- [x] 7c.4 Order from a requisition
+- [x] 7c.5 Rate contracts
+- [x] 7c.6 Month-end close checklist
+- [x] 7c.7 Salary revisions in bulk
+- [x] 7c.8 Bulk imports
 - [ ] 7c exit: full check and browser suite
-- [ ] 7d.1 Meetings and actions
-- [ ] 7d.2 Correspondence register
+- [x] 7d.1 Meetings and actions
+- [x] 7d.2 Correspondence register
 - [ ] 7d.3 Master document list
 - [ ] 7d.4 Inspection and test plans
 - [ ] 7d.5 Safety inspections

@@ -11,5 +11,6 @@ import { LabourService } from './labour.service.js';
   imports: [ProvisioningModule, AuthModule, ProjectModule, AccountsModule],
   controllers: [LabourController],
   providers: [LabourService],
+  exports: [LabourService],
 })
 export class LabourModule {}

@@ -306,6 +306,97 @@ export class PayrollService implements OnModuleInit {
     return this.salaries(claims, employeeId);
   }
 
+  // --- salary revisions in bulk (docs/wave7-plan.md step 7c.7) ---
+
+  /** Everyone in service on the day, with the salary in force then and its monthly gross. */
+  async incrementSheet(claims: TenantClaims, entityId: string, from: string) {
+    await this.must(claims);
+    const db = await this.tenants.forTenant(claims.ten);
+    const people = await db<
+      { id: string; code: string; name: string; designation: string | null }[]
+    >`
+      SELECT e.id, e.code, e.name, d.name AS designation FROM hr.employee e
+      LEFT JOIN hr.designation d ON d.id = e.designation_id
+      WHERE e.entity_id = ${entityId} AND e.joined_on <= ${from} AND (e.left_on IS NULL OR e.left_on >= ${from})
+      ORDER BY e.code`;
+    const rows = [];
+    for (const p of people) {
+      const s = await this.salaryOn(db, p.id, from);
+      rows.push({
+        employee: p,
+        salary: s
+          ? { from: s.salary.from_date, gross: String(s.lines.reduce((n, l) => n + l.full, 0)) }
+          : null,
+      });
+    }
+    return { entityId, from, rows };
+  }
+
+  /**
+   * The sheet applied together: for each person given a percentage, a new salary from the day, each fixed amount
+   * raised by it (to the rupee) and each share of basic kept, so it follows the new basic. All or none.
+   */
+  async applyIncrements(
+    claims: TenantClaims,
+    entityId: string,
+    from: string,
+    rows: { employeeId: string; pct: string }[],
+  ) {
+    await this.must(claims);
+    const db = await this.tenants.forTenant(claims.ten);
+    const raise = rows.filter((x) => Number(x.pct) > 0);
+    if (!raise.length)
+      throw new BadRequestException({
+        code: 'nothing_to_apply',
+        message: 'Give someone an increment.',
+      });
+    await db.begin(async (tx) => {
+      for (const x of raise) {
+        const [e] = await tx<{ name: string }[]>`
+            SELECT name FROM hr.employee WHERE id = ${x.employeeId} AND entity_id = ${entityId}`;
+        if (!e) throw new BadRequestException({ code: 'not_in_company' });
+        const cur = await this.salaryOn(tx, x.employeeId, from);
+        if (!cur)
+          throw new BadRequestException({
+            code: 'no_salary',
+            message: `${e.name} has no salary to revise.`,
+          });
+        if (cur.salary.from_date === from)
+          throw new ConflictException({
+            code: 'salary_exists',
+            message: `${e.name} already has a salary from that date.`,
+          });
+        const [paid] = await tx`
+            SELECT 1 FROM pay.run_line l JOIN pay.run r ON r.id = l.run_id
+            WHERE l.employee_id = ${x.employeeId} AND r.status <> 'draft'
+              AND (r.month + interval '1 month' - interval '1 day')::date >= ${from} LIMIT 1`;
+        if (paid)
+          throw new ConflictException({
+            code: 'months_paid',
+            message: `A month from that date is already approved for ${e.name}; pay the difference as arrears.`,
+          });
+        const [ns] = await tx<{ id: string }[]>`
+            INSERT INTO pay.salary (employee_id, from_date, pf_mode, esi, regime, old_deductions, created_by)
+            VALUES (${x.employeeId}, ${from}, ${cur.salary.pf_mode}, ${cur.salary.esi}, ${cur.salary.regime},
+              ${cur.salary.old_deductions}, ${claims.sub})
+            RETURNING id`;
+        for (const l of cur.lines) {
+          const amount =
+            l.component.amount === null
+              ? null
+              : String(Math.round(Number(l.component.amount) * (1 + Number(x.pct) / 100)));
+          await tx`INSERT INTO pay.salary_line (salary_id, component_id, amount, percent_of_basic)
+              VALUES (${ns!.id}, ${l.component.id}, ${amount}, ${l.component.percent_of_basic})`;
+        }
+        await audit(tx, claims.sub, 'payroll.increment', 'employee', x.employeeId, {
+          from,
+          pct: x.pct,
+        });
+      }
+    });
+    return this.incrementSheet(claims, entityId, from);
+  }
+
   /** The salary in force on a date, with each component's full monthly amount. */
   private async salaryOn(db: Db, employeeId: string, on: string) {
     const [s] = await db<Salary[]>`

@@ -313,4 +313,182 @@ describe.skipIf(!controlUrl || !adminUrl)('project enquiries (integration)', () 
       AND kind LIKE 'rfq%' ORDER BY id`;
     expect(ev.map((e) => e.kind)).toEqual(['rfq_created', 'rfq_quote', 'rfq_quote']);
   });
+
+  it('orders approved requisition lines from a supplier, and keeps the link', async () => {
+    // docs/wave7-plan.md step 7c.4: both approved requisitions' lines are open; the draft one's are not offered.
+    interface Open {
+      requisitionId: string;
+      number: string;
+      position: number;
+      description: string;
+    }
+    const open = () => ok<Open[]>(get(`/tenant/projects/${projectId}/requisition-lines`, manager));
+    let lines = await open();
+    expect(lines.map((l) => [l.number, l.position])).toEqual([
+      [first.number, 1],
+      [first.number, 2],
+      [second.number, 1],
+      [second.number, 2],
+    ]);
+    const vendor = rfq.vendors[0]!.partyId;
+    const pick = lines.filter((l) => l.number === first.number);
+    const body = {
+      partyId: vendor,
+      gstPct: '18',
+      lines: pick.map((l) => ({ requisitionId: l.requisitionId, position: l.position })),
+    };
+    // The worker, off the team by now, cannot see the project; its lead orders.
+    expect(
+      (await post(`/tenant/projects/${projectId}/orders/from-requisitions`, body, worker))
+        .statusCode,
+    ).toBe(404);
+    const order = await ok<{
+      id: string;
+      status: string;
+      open: { lines: { description: string; qty: string }[] };
+    }>(post(`/tenant/projects/${projectId}/orders/from-requisitions`, body, manager));
+    expect(order.status).toBe('draft');
+    expect(order.open.lines.map((l) => [l.description, l.qty])).toEqual([
+      ['Cement OPC 53', '100.0000'],
+      ['Binding wire', '25.0000'],
+    ]);
+    const links = await ok<{ number: string; position: number; orderPosition: number }[]>(
+      get(`/tenant/orders/${order.id}/requisitions`, manager),
+    );
+    expect(links.map((l) => [l.number, l.position, l.orderPosition])).toEqual([
+      [first.number, 1, 1],
+      [first.number, 2, 2],
+    ]);
+    // Ordered lines are not offered again, nor ordered twice.
+    lines = await open();
+    expect(lines.map((l) => l.number)).toEqual([second.number, second.number]);
+    expect(
+      (await post(`/tenant/projects/${projectId}/orders/from-requisitions`, body, manager)).json(),
+    ).toMatchObject({ code: 'not_open' });
+  });
+
+  it("takes a rate contract's agreed rate on orders to the supplier, and counts what is ordered", async () => {
+    // docs/wave7-plan.md step 7c.5: cement at ₹385 + 28% from the second vendor for the year, up to 500 bags.
+    const vendor = rfq.vendors[1]!.partyId;
+    interface Contracts {
+      contracts: {
+        id: string;
+        lines: { code: string; rate: string; ordered: string; maxQty: string | null }[];
+      }[];
+    }
+    const body = {
+      partyId: vendor,
+      reference: 'RC/26/04',
+      validFrom: '2026-04-01',
+      validTo: '2027-03-31',
+      lines: [{ resourceId: cement, rate: '385', gstPct: '28', maxQty: '500' }],
+    };
+    expect((await post('/tenant/rate-contracts', body, worker)).statusCode).toBe(403);
+    let list = await ok<Contracts>(post('/tenant/rate-contracts', body, manager));
+    expect(list.contracts[0]!.lines).toEqual([
+      expect.objectContaining({ code: 'CEM', rate: '385.0000', ordered: '0', maxQty: '500.0000' }),
+    ]);
+    // A second contract for the same cement over overlapping days is refused.
+    expect(
+      (
+        await post(
+          '/tenant/rate-contracts',
+          { ...body, validFrom: '2026-10-01', validTo: '2026-12-31' },
+          manager,
+        )
+      ).json(),
+    ).toMatchObject({ code: 'overlapping_contract' });
+    expect(
+      await ok(
+        get(
+          `/tenant/rate-contracts/rate?partyId=${vendor}&resourceId=${cement}&on=2026-10-14`,
+          manager,
+        ),
+      ),
+    ).toMatchObject({ rate: { rate: '385.0000', gstPct: '28.00', reference: 'RC/26/04' } });
+
+    // The second requisition's cement, ordered from that vendor: at the agreed rate (the vendor has no GSTIN, so the
+    // order charges no GST whatever was agreed).
+    const open = await ok<{ requisitionId: string; position: number; description: string }[]>(
+      get(`/tenant/projects/${projectId}/requisition-lines`, manager),
+    );
+    const cem = open.find((l) => l.description === 'Cement OPC 53')!;
+    const order = await ok<{
+      id: string;
+      open: {
+        id: string;
+        rowVersion: number;
+        lines: {
+          lineKey: string;
+          resourceId: string | null;
+          description: string;
+          unit: string;
+          rate: string;
+          gstPct: string;
+          qty: string;
+        }[];
+      };
+    }>(
+      post(
+        `/tenant/projects/${projectId}/orders/from-requisitions`,
+        {
+          partyId: vendor,
+          gstPct: '18',
+          lines: [{ requisitionId: cem.requisitionId, position: cem.position }],
+        },
+        manager,
+      ),
+    );
+    expect(order.open.lines.map((l) => [l.qty, l.rate, l.gstPct])).toEqual([
+      ['60.0000', '385.0000', '0.00'],
+    ]);
+    // Ordered counts once the order is in force: delivered to a site (the place of supply), then submitted (no
+    // approval rules: in force at once).
+    const site = (
+      await ok<{ sites: { id: string }[] }>(
+        post(`/tenant/projects/${projectId}/sites`, { name: 'Washim', stateCode: '27' }, manager),
+      )
+    ).sites.at(-1)!.id;
+    const draft = await ok<{ open: { id: string; rowVersion: number } }>(
+      post(
+        `/tenant/order-revisions/${order.open.id}`,
+        {
+          siteId: site,
+          rowVersion: order.open.rowVersion,
+          lines: order.open.lines.map((l) => ({
+            lineKey: l.lineKey,
+            resourceId: l.resourceId,
+            description: l.description,
+            unit: l.unit,
+            qty: l.qty,
+            rate: l.rate,
+            gstPct: String(Number(l.gstPct)),
+          })),
+        },
+        manager,
+      ),
+    );
+    await ok(
+      post(
+        `/tenant/order-revisions/${draft.open.id}/submit`,
+        { rowVersion: draft.open.rowVersion },
+        manager,
+      ),
+    );
+    list = await ok<Contracts>(get('/tenant/rate-contracts', manager));
+    expect(list.contracts[0]!.lines[0]!.ordered).toBe('60.0000');
+    // Closed: no longer offered.
+    const closed = await ok<Contracts & { contracts: { status: string }[] }>(
+      post(`/tenant/rate-contracts/${list.contracts[0]!.id}/close`, {}, manager),
+    );
+    expect(closed.contracts[0]!.status).toBe('closed');
+    expect(
+      await ok(
+        get(
+          `/tenant/rate-contracts/rate?partyId=${vendor}&resourceId=${cement}&on=2026-10-14`,
+          manager,
+        ),
+      ),
+    ).toEqual({ rate: null });
+  });
 });

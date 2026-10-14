@@ -14,6 +14,7 @@ import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { Idempotent } from '../common/idempotency.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { ReconciliationService } from './reconciliation.service.js';
 import { InventoryService } from './inventory.service.js';
 
 const date = z.iso.date();
@@ -79,7 +80,10 @@ const list = z.object({ projectId: z.uuid().optional() });
 @Controller('tenant')
 @UseGuards(TenantAuthGuard)
 export class InventoryController {
-  constructor(private readonly inventory: InventoryService) {}
+  constructor(
+    private readonly reconciliations: ReconciliationService,
+    private readonly inventory: InventoryService,
+  ) {}
 
   @Get('stock/valuation')
   getValuation(@Auth() c: TenantClaims) {
@@ -107,6 +111,28 @@ export class InventoryController {
     @Body(new ZodPipe(store)) b: z.infer<typeof store>,
   ) {
     return this.inventory.createStore(c, id, b);
+  }
+
+  /** Each item's estimated materials per unit against issues; labour against wage sheets (step 7c.3). */
+  @Get('projects/:id/estimate-vs-actual')
+  estimateVsActual(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(z.object({ from: z.iso.date().optional(), to: z.iso.date().optional() })))
+    q: { from?: string; to?: string },
+  ) {
+    return this.reconciliations.estimateVsActual(c, id, q);
+  }
+
+  /** Measured work's materials against what was issued (docs/wave7-plan.md step 7c.2). */
+  @Get('projects/:id/material-reconciliation')
+  reconciliation(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(z.object({ from: z.iso.date().optional(), to: z.iso.date().optional() })))
+    q: { from?: string; to?: string },
+  ) {
+    return this.reconciliations.reconcile(c, id, q);
   }
 
   @Get('projects/:id/consumption')

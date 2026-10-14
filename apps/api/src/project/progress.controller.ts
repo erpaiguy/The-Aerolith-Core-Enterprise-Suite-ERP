@@ -20,6 +20,7 @@ import { ZodPipe } from '../common/zod.pipe.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { progressXlsx } from './progress-excel.js';
 import { ProgressService } from './progress.service.js';
+import { MbProposalService } from './mb-proposal.service.js';
 
 const date = z.iso.date();
 const dimension = z
@@ -82,6 +83,7 @@ const lineId = (v: string) => {
 @UseGuards(TenantAuthGuard, PermissionGuard)
 export class ProgressController {
   constructor(
+    private readonly proposals: MbProposalService,
     private readonly progress: ProgressService,
     private readonly tenants: TenantConnections,
   ) {}
@@ -182,5 +184,44 @@ export class ProgressController {
     @Body(new ZodPipe(unlink)) b: z.infer<typeof unlink>,
   ) {
     return this.progress.unlink(c, id, lineId(activityId), b.lineKey);
+  }
+
+  /** The month's quantities from the daily reports, to put in the book (docs/wave7-plan.md step 7c.1). */
+  @Get('projects/:id/mb-proposal')
+  mbProposal(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodPipe(z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) })))
+    q: { month: string },
+  ) {
+    return this.proposals.proposal(c, id, q.month);
+  }
+
+  @Post('projects/:id/mb-proposal')
+  @HttpCode(200)
+  @RequiresFeatures()
+  acceptMbProposal(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+          lines: z
+            .array(
+              z.object({
+                boqId: z.uuid(),
+                lineKey: z.uuid(),
+                qty: z.string().regex(/^\d{1,16}(\.\d{1,4})?$/),
+              }),
+            )
+            .min(1)
+            .max(5000),
+        }),
+      ),
+    )
+    b: { month: string; lines: { boqId: string; lineKey: string; qty: string }[] },
+  ) {
+    return this.proposals.accept(c, id, b.month, b.lines);
   }
 }

@@ -25,6 +25,7 @@ import { cents, fromCents } from '../project/money.js';
 import { ProjectService } from '../project/project.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, fmt, mul } from '../rates/decimal.js';
+import { contractRate } from './rate-contract.service.js';
 import { RfqService } from '../rfq/rfq.service.js';
 import { nextNumber } from '../tender/numbering.js';
 import { emit } from '../integrations/events.js';
@@ -355,6 +356,110 @@ export class PurchaseOrderService implements OnModuleInit {
       }
     });
     return { orders: await Promise.all(ids.map((id) => this.get(claims, id))) };
+  }
+
+  // --- orders from requisitions (docs/wave7-plan.md step 7c.4) ---
+
+  /** A project's approved requisition lines not yet on a live order. */
+  async openRequisitionLines(claims: TenantClaims, projectId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.projects.access(db, claims, projectId);
+    return db`
+      SELECT q.id AS "requisitionId", q.number, q.title, l.position, l.description, l.unit, l.qty::text AS qty,
+        l.rate::text AS rate, l.resource_id AS "resourceId", to_char(l.needed_by, 'YYYY-MM-DD') AS "neededBy"
+      FROM proc.requisition q JOIN proc.requisition_line l ON l.requisition_id = q.id
+      WHERE q.project_id = ${projectId} AND q.status = 'approved'
+        AND NOT EXISTS (SELECT 1 FROM proc.po_requisition_line x JOIN proc.purchase_order o ON o.id = x.po_id
+          WHERE x.requisition_id = l.requisition_id AND x.position = l.position AND o.status <> 'cancelled')
+      ORDER BY q.number, l.position`;
+  }
+
+  /**
+   * A draft order to one supplier from the requisition lines chosen: each line as asked (the rate the requisition
+   * estimated, else nothing yet to fill in), delivered to the site the first requisition named. The order keeps
+   * which requisition lines it came from.
+   */
+  async fromRequisitions(
+    claims: TenantClaims,
+    projectId: string,
+    head: { kind: OrderKind; partyId: string; gstPct: string },
+    picks: { requisitionId: string; position: number }[],
+  ) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.mayOrder(db, claims, projectId);
+    const open = (await this.openRequisitionLines(claims, projectId)) as unknown as {
+      requisitionId: string;
+      position: number;
+      description: string;
+      unit: string;
+      qty: string;
+      rate: string | null;
+      resourceId: string | null;
+    }[];
+    const byKey = new Map(open.map((l) => [`${l.requisitionId}:${l.position}`, l]));
+    const lines = picks.map((p) => byKey.get(`${p.requisitionId}:${p.position}`));
+    if (!lines.length || lines.some((l) => !l))
+      throw new ConflictException({
+        code: 'not_open',
+        message:
+          'Order only approved requisition lines of this project that are not on an order yet.',
+      });
+    const [site] = await db<{ site_id: string | null }[]>`
+      SELECT site_id FROM proc.requisition WHERE id = ${picks[0]!.requisitionId}`;
+    // A rate contract in force with the supplier sets the rate and GST of its resources (step 7c.5).
+    const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    const agreed = new Map<string, { rate: string; gstPct: string }>();
+    for (const l of lines)
+      if (l!.resourceId && !agreed.has(l!.resourceId)) {
+        const r = await contractRate(db, head.partyId, l!.resourceId, today);
+        if (r) agreed.set(l!.resourceId, r);
+      }
+    const id = await db.begin(async (tx) => {
+      const orderId = await this.newOrder(
+        tx,
+        claims,
+        projectId,
+        { ...head, rfqId: null },
+        {
+          siteId: site?.site_id ?? null,
+          deliverBy: null,
+          paymentTerms: '',
+          deliveryTerms: '',
+          otherTerms: '',
+          reason: '',
+          lines: lines.map((l) => {
+            const a = l!.resourceId ? agreed.get(l!.resourceId) : undefined;
+            return {
+              resourceId: l!.resourceId,
+              description: l!.description,
+              hsn: null,
+              unit: l!.unit,
+              qty: l!.qty,
+              rate: a?.rate ?? l!.rate ?? '0',
+              gstPct: a ? String(Number(a.gstPct)) : head.gstPct,
+            };
+          }),
+        },
+      );
+      for (const [i, p] of picks.entries())
+        await tx`INSERT INTO proc.po_requisition_line (po_id, requisition_id, position, order_position)
+          VALUES (${orderId}, ${p.requisitionId}, ${p.position}, ${i + 1})`;
+      return orderId;
+    });
+    return this.get(claims, id);
+  }
+
+  /** The requisition lines an order was made from. */
+  async orderRequisitions(claims: TenantClaims, orderId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const o = await this.order(db, orderId);
+    await this.projects.access(db, claims, o.project_id);
+    return db`
+      SELECT q.id, q.number, q.title, x.position, x.order_position AS "orderPosition", l.description,
+        l.qty::text AS qty, l.unit
+      FROM proc.po_requisition_line x JOIN proc.requisition q ON q.id = x.requisition_id
+      JOIN proc.requisition_line l ON l.requisition_id = x.requisition_id AND l.position = x.position
+      WHERE x.po_id = ${orderId} ORDER BY x.order_position`;
   }
 
   /** Changes a draft (or rejected) revision: terms, delivery and lines. */

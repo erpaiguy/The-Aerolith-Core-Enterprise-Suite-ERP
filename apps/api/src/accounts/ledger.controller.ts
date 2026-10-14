@@ -22,6 +22,7 @@ import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { moneyCol, reportXlsx } from '../procurement/procurement-report-excel.js';
 import { TYPED_IN, VOUCHER_TYPES, type VoucherType } from './accounts-rules.js';
+import { CloseService } from './close.service.js';
 import { LedgerService } from './ledger.service.js';
 
 const date = z.iso.date();
@@ -149,7 +150,10 @@ async function openingRows(buf: Buffer) {
 @Controller('tenant')
 @UseGuards(TenantAuthGuard)
 export class LedgerController {
-  constructor(private readonly ledger: LedgerService) {}
+  constructor(
+    private readonly ledger: LedgerService,
+    private readonly close: CloseService,
+  ) {}
 
   private async xlsx<T>(
     reply: FastifyReply,
@@ -302,6 +306,35 @@ export class LedgerController {
     b: { entityId: string; month: string },
   ) {
     return this.ledger.lockMonth(c, b);
+  }
+
+  /** The month-end close checklist (docs/wave7-plan.md step 7c.6). */
+  @Get('accounts/close')
+  closeChecklist(
+    @Auth() c: TenantClaims,
+    @Query(
+      new ZodPipe(
+        z.object({ entityId: z.uuid(), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
+      ),
+    )
+    q: { entityId: string; month: string },
+  ) {
+    return this.close.checklist(c, q.entityId, q.month);
+  }
+
+  @Post('accounts/close/lock')
+  @HttpCode(200)
+  @RequiresFeatures()
+  closeAndLock(
+    @Auth() c: TenantClaims,
+    @Body(
+      new ZodPipe(
+        z.object({ entityId: z.uuid(), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }),
+      ),
+    )
+    b: { entityId: string; month: string },
+  ) {
+    return this.close.lock(c, b.entityId, b.month);
   }
 
   @Post('accounts/periods/reopen')

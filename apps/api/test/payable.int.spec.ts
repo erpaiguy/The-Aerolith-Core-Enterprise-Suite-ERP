@@ -611,4 +611,34 @@ describe.skipIf(!controlUrl || !adminUrl)('payables (integration)', () => {
     expect(after).toEqual({ rateTolerancePct: '2.5', mayEdit: true });
     expect((await get('/tenant/accounts/payables-settings', worker)).statusCode).toBe(403);
   });
+
+  it("works out September's close from the books, and locks it when done", async () => {
+    // docs/wave7-plan.md step 7c.6: the bills of September are posted or cancelled; no staff, assets or statement.
+    interface Close {
+      steps: { key: string; state: string }[];
+      ready: boolean;
+      locked: boolean;
+    }
+    const url = `/tenant/accounts/close?entityId=${entityId}&month=2026-09`;
+    expect((await get(url, worker)).statusCode).toBe(403);
+    const close = await ok<Close>(get(url, manager));
+    expect(close.steps.map((s) => [s.key, s.state])).toEqual([
+      ['supplier_bills', 'done'],
+      ['client_bills', 'done'],
+      ['payroll', 'na'],
+      ['depreciation', 'na'],
+      ['bank', 'na'],
+    ]);
+    expect(close).toMatchObject({ ready: true, locked: false });
+    // The admin locks it; the manager may look but not lock.
+    expect(
+      (await post('/tenant/accounts/close/lock', { entityId, month: '2026-09' }, manager))
+        .statusCode,
+    ).toBe(403);
+    expect(
+      await ok<Close>(post('/tenant/accounts/close/lock', { entityId, month: '2026-09' })),
+    ).toMatchObject({
+      locked: true,
+    });
+  });
 });

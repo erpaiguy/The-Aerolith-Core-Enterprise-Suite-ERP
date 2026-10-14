@@ -115,7 +115,13 @@ import { ProjectDashboardScreen } from './screens/ProjectDashboard';
 import { RfqScreen } from './screens/Rfq';
 import { REGISTER_KINDS, type RegisterKind, RegisterScreen } from './screens/Registers';
 import { RfqsScreen } from './screens/Rfqs';
+import { RateContractsScreen } from './screens/RateContracts';
+import { CloseScreen } from './screens/accounts/Close';
+import { IncrementsScreen } from './screens/payroll/Increments';
 import { AuditScreen } from './screens/Audit';
+import { ImportsScreen } from './screens/Imports';
+import { MeetingsScreen } from './registers/Meetings';
+import { LettersScreen } from './registers/Letters';
 import { LetterheadSample } from './print/Letterhead';
 import { IssuePrint, OrderPrint, ReceiptPrint } from './print/PurchaseDocs';
 import {
@@ -311,6 +317,24 @@ const registerRoute = createRoute({
     if (!(REGISTER_KINDS as readonly string[]).includes(kind))
       return <Alert tone="danger">There is no such register.</Alert>;
     return <RegisterScreen key={kind} kind={kind as RegisterKind} />;
+  },
+});
+
+const meetingsRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/meetings',
+  component: function MeetingsPage() {
+    const { projectId } = meetingsRoute.useParams();
+    return <MeetingsScreen key={projectId} projectId={projectId} />;
+  },
+});
+
+const lettersRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/projects/$projectId/letters',
+  component: function LettersPage() {
+    const { projectId } = lettersRoute.useParams();
+    return <LettersScreen key={projectId} projectId={projectId} />;
   },
 });
 
@@ -861,6 +885,11 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/payroll/increments',
+      component: IncrementsScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/labour',
       component: LabourScreen,
     }),
@@ -992,6 +1021,11 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/accounts/close',
+      component: CloseScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/accounts/chart',
       component: ChartScreen,
     }),
@@ -1063,7 +1097,14 @@ const routeTree = rootRoute.addChildren([
       }),
     }),
     createRoute({ getParentRoute: () => appLayout, path: '/rfqs', component: RfqsScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/rate-contracts',
+      component: RateContractsScreen,
+    }),
     registerRoute,
+    meetingsRoute,
+    lettersRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/resources',
@@ -1097,6 +1138,15 @@ const routeTree = rootRoute.addChildren([
       component: () => (
         <AdminOnly>
           <UsersScreen />
+        </AdminOnly>
+      ),
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/settings/imports',
+      component: () => (
+        <AdminOnly>
+          <ImportsScreen />
         </AdminOnly>
       ),
     }),

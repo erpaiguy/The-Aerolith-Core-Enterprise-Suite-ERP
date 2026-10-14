@@ -581,4 +581,114 @@ describe.skipIf(!controlUrl || !adminUrl)('material budget (integration)', () =>
       /permission denied/,
     );
   });
+
+  it("reconciles the measured work's materials with what was issued", async () => {
+    // docs/wave7-plan.md step 7c.2: A.2's 5 measured on 1 October take 5 × the norms; nothing issued yet, so all of
+    // it shows as under-issued (the stores are yet to issue, or the site used stock from elsewhere).
+    interface Rec {
+      rows: {
+        resource: { code: string };
+        theoretical: string;
+        issued: string;
+        difference: string;
+        overPct: number | null;
+        items: number;
+      }[];
+    }
+    const rec = (q = '') =>
+      ok<Rec>(get(`/tenant/projects/${projectId}/material-reconciliation${q}`, worker));
+    const all = await rec();
+    expect(
+      all.rows.map((r) => [
+        r.resource.code,
+        r.theoretical,
+        r.issued,
+        r.difference,
+        r.overPct,
+        r.items,
+      ]),
+    ).toEqual([
+      ['CEM', '40.800', '0.000', '-40.800', -100, 1],
+      ['SAND', '2.250', '0.000', '-2.250', -100, 1],
+      ['STL', '446.250', '0.000', '-446.250', -100, 1],
+    ]);
+    // Labour (MASON) is not a material; a period before the measurement has nothing.
+    expect((await rec('?from=2026-01-01&to=2026-09-30')).rows).toEqual([]);
+    expect(
+      (await get(`/tenant/projects/${projectId}/material-reconciliation?from=bad`, worker))
+        .statusCode,
+    ).toBe(400);
+
+    // Estimate against actual (step 7c.3): materials per unit as estimated, nothing issued to the items yet; labour
+    // for the work measured at the budget's rate (₹900 a mason-day), against no wage sheets.
+    interface Eva {
+      items: {
+        code: string;
+        measured: string;
+        materials: {
+          resource: { code: string };
+          norm: string;
+          estimated: string;
+          issued: string;
+        }[];
+      }[];
+      labour: {
+        estimated: { resource: { code: string }; qty: string; cost: string }[];
+        estimatedCost: string;
+        actualCost: string;
+      };
+    }
+    // 10 cum of brickwork (A.1) too, measured on 2 October: its mortar materials and 1.2 mason-days a cum.
+    const a1 = (
+      await db<
+        { id: string }[]
+      >`SELECT n.id::text AS id FROM est.boq_node n JOIN est.boq b ON b.id = n.boq_id
+      WHERE b.project_id = ${projectId} AND b.kind = 'contract' AND n.code = 'A.1' LIMIT 1`
+    )[0]!.id;
+    const contract = (
+      await db<
+        { id: string }[]
+      >`SELECT id FROM est.boq WHERE project_id = ${projectId} AND kind = 'contract'`
+    )[0]!.id;
+    await ok(
+      post(
+        `/tenant/boqs/${contract}/lines/${a1}/progress`,
+        { measuredOn: '2026-10-02', qty: '10' },
+        manager,
+      ),
+    );
+    const eva = await ok<Eva>(get(`/tenant/projects/${projectId}/estimate-vs-actual`, worker));
+    expect(
+      eva.items.map((i) => [
+        i.code,
+        i.measured,
+        i.materials.map((m) => [m.resource.code, m.norm, m.estimated, m.issued]),
+      ]),
+    ).toEqual([
+      [
+        'A.1',
+        '10.0000',
+        [
+          ['CEM', '2.0800', '20.800', '0.000'],
+          ['SAND', '0.2860', '2.860', '0.000'],
+        ],
+      ],
+      [
+        'A.2',
+        '5.0000',
+        [
+          ['CEM', '8.1600', '40.800', '0.000'],
+          ['SAND', '0.4500', '2.250', '0.000'],
+          ['STL', '89.2500', '446.250', '0.000'],
+        ],
+      ],
+    ]);
+    expect(eva.labour).toEqual({
+      estimated: [
+        { resource: expect.objectContaining({ code: 'MASON' }), qty: '12.000', cost: '10800.00' },
+      ],
+      estimatedCost: '10800.00',
+      actualCost: '0',
+    });
+  });
 });

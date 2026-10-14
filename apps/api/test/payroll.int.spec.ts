@@ -554,4 +554,57 @@ describe.skipIf(!controlUrl || !adminUrl)('payroll (integration)', () => {
       (await post(`/tenant/payroll/employees/${suresh}/settlement`, { reason: 'resigned' })).json(),
     ).toMatchObject({ code: 'settled' });
   });
+
+  it('revises salaries in bulk from an increment sheet, all or none', async () => {
+    // docs/wave7-plan.md step 7c.7.
+    interface Sheet {
+      rows: {
+        employee: { id: string; code: string };
+        salary: { from: string; gross: string } | null;
+      }[];
+    }
+    const sheet = await ok<Sheet>(
+      get(`/tenant/payroll/increments?entityId=${entityId}&from=2026-11-01`),
+    );
+    const r = sheet.rows.find((x) => x.employee.id === raju)!;
+    expect(r.salary).not.toBeNull();
+    const before = Number(r.salary!.gross);
+    // September is approved: an increment from 1 September is refused, for everyone.
+    expect(
+      (
+        await post('/tenant/payroll/increments', {
+          entityId,
+          from: '2026-09-01',
+          rows: [{ employeeId: raju, pct: '10' }],
+        })
+      ).json(),
+    ).toMatchObject({ code: 'months_paid' });
+    expect(
+      (
+        await post(
+          '/tenant/payroll/increments',
+          { entityId, from: '2026-11-01', rows: [{ employeeId: raju, pct: '10' }] },
+          worker,
+        )
+      ).statusCode,
+    ).toBe(403);
+    const after = await ok<Sheet>(
+      post('/tenant/payroll/increments', {
+        entityId,
+        from: '2026-11-01',
+        rows: [
+          { employeeId: raju, pct: '10' },
+          ...sheet.rows
+            .filter((x) => x.employee.id !== raju)
+            .map((x) => ({ employeeId: x.employee.id, pct: '0' })),
+        ],
+      }),
+    );
+    const now = after.rows.find((x) => x.employee.id === raju)!.salary!;
+    expect(now.from).toBe('2026-11-01');
+    // Each part 10% more, to the rupee: within a rupee a part of the whole.
+    expect(Math.abs(Number(now.gross) - before * 1.1)).toBeLessThan(sheet.rows.length * 3);
+    const history = await ok<{ from: string }[]>(get(`/tenant/payroll/employees/${raju}/salary`));
+    expect(history[0]!.from).toBe('2026-11-01');
+  });
 });

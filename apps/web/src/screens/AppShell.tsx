@@ -348,6 +348,8 @@ function projectSections(id: string): Group[] {
       group: 'Site and documents',
       icon: <HardHat className="size-4" />,
       items: [
+        { to: `${home}/meetings`, label: 'Meetings', icon: <Users className="size-4" /> },
+        { to: `${home}/letters`, label: 'Correspondence', icon: <MailCheck className="size-4" /> },
         { to: '/quality', search: on, label: 'Quality', icon: <BadgeCheck className="size-4" /> },
         { to: '/safety', search: on, label: 'Safety', icon: <ShieldCheck className="size-4" /> },
         {
@@ -713,6 +715,7 @@ export function AppShell() {
           icon: <HardHat className="size-4" />,
         },
         { to: '/orders', label: 'Orders', icon: <BriefcaseBusiness className="size-4" /> },
+        { to: '/rate-contracts', label: 'Rate contracts', icon: <Handshake className="size-4" /> },
         { to: '/receipts', label: 'Goods receipts', icon: <PackageCheck className="size-4" /> },
         { to: '/stores', label: 'Stores', icon: <Warehouse className="size-4" /> },
         {
@@ -748,6 +751,12 @@ export function AppShell() {
           to: '/payroll',
           label: 'Payroll',
           icon: <Banknote className="size-4" />,
+          show: mayPayroll,
+        },
+        {
+          to: '/payroll/increments',
+          label: 'Increments',
+          icon: <TrendingUp className="size-4" />,
           show: mayPayroll,
         },
         {
@@ -835,6 +844,11 @@ export function AppShell() {
             },
             { to: '/accounts/day-book', label: 'Day book', icon: <BookOpen className="size-4" /> },
             {
+              to: '/accounts/close',
+              label: 'Month-end close',
+              icon: <CalendarCheck className="size-4" />,
+            },
+            {
               to: '/accounts/chart',
               label: 'Chart of accounts',
               icon: <ListTree className="size-4" />,
@@ -880,6 +894,7 @@ export function AppShell() {
         },
         { to: '/settings/companies', label: 'Companies', icon: <Landmark className="size-4" /> },
         { to: '/settings/integrations', label: 'Integrations', icon: <Plug className="size-4" /> },
+        { to: '/settings/imports', label: 'Imports', icon: <FileBarChart className="size-4" /> },
         { to: '/settings/audit', label: 'Audit trail', icon: <History className="size-4" /> },
       ],
     },

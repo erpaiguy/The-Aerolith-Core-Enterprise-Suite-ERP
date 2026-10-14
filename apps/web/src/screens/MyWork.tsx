@@ -57,6 +57,15 @@ export interface MyWork {
     project: Project;
   }>;
   followUps: Section<{ id: string; followUp: string; dueOn: string; leadId: string; lead: string }>;
+  actions?: Section<{
+    id: string;
+    description: string;
+    dueOn: string;
+    overdue: boolean;
+    meetingId: string;
+    meeting: string;
+    project: Project;
+  }>;
 }
 
 export const useMyWork = () => {
@@ -71,7 +80,7 @@ export const useMyWork = () => {
 
 /** What the menu counts on Home: things to act on now (approvals have their own count; orders are to watch). */
 export const workCount = (w: MyWork | undefined) =>
-  w ? w.rfis.count + w.bills.count + w.ncrs.count + w.followUps.count : 0;
+  w ? w.rfis.count + w.bills.count + w.ncrs.count + w.followUps.count + (w.actions?.count ?? 0) : 0;
 
 function Part({
   title,
@@ -104,7 +113,7 @@ export function MyWorkCard() {
   if (work.isPending) return <Spinner />;
   if (!work.data) return null;
   const w = work.data;
-  const total = Object.values(w).reduce((n, s) => n + s.count, 0);
+  const total = Object.values(w).reduce((n, s) => n + (s?.count ?? 0), 0);
   return (
     <Card title="My work">
       {total === 0 ? (
@@ -178,6 +187,22 @@ export function MyWorkCard() {
                 <span className={muted}>
                   {n.project.name} · {n.status.replace(/_/g, ' ')}
                   {n.dueOn ? ` · due ${shortDate(n.dueOn)}` : ''}
+                </span>
+              </li>
+            ))}
+          </Part>
+          <Part title="Meeting actions" count={w.actions?.count ?? 0}>
+            {(w.actions?.items ?? []).map((a) => (
+              <li key={a.id} className={line}>
+                <Link
+                  to="/projects/$projectId/meetings"
+                  params={{ projectId: a.project.id }}
+                  className="hover:underline"
+                >
+                  {a.description}
+                </Link>
+                <span className={a.overdue ? 'text-xs font-medium text-danger' : muted}>
+                  {a.meeting} · {a.project.name} · by {shortDate(a.dueOn)}
                 </span>
               </li>
             ))}

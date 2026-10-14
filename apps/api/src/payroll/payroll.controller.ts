@@ -160,6 +160,40 @@ export class PayrollController {
     return this.payroll.addComponent(c, b);
   }
 
+  @Get('increments')
+  incrementSheet(
+    @Auth() c: TenantClaims,
+    @Query(new ZodPipe(z.object({ entityId: z.uuid(), from: z.iso.date() })))
+    q: { entityId: string; from: string },
+  ) {
+    return this.payroll.incrementSheet(c, q.entityId, q.from);
+  }
+
+  /** Salary revisions for everyone at once (docs/wave7-plan.md step 7c.7). */
+  @Post('increments')
+  @HttpCode(200)
+  @RequiresFeatures()
+  applyIncrements(
+    @Auth() c: TenantClaims,
+    @Body(
+      new ZodPipe(
+        z.object({
+          entityId: z.uuid(),
+          from: z.iso.date(),
+          rows: z
+            .array(
+              z.object({ employeeId: z.uuid(), pct: z.string().regex(/^\d{1,2}(\.\d{1,2})?$/) }),
+            )
+            .min(1)
+            .max(5000),
+        }),
+      ),
+    )
+    b: { entityId: string; from: string; rows: { employeeId: string; pct: string }[] },
+  ) {
+    return this.payroll.applyIncrements(c, b.entityId, b.from, b.rows);
+  }
+
   @Get('employees/:id/salary')
   salaries(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
     return this.payroll.salaries(c, id);

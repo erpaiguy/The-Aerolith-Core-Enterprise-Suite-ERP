@@ -82,7 +82,7 @@ export class InboxService {
       const [items, [c]] = await Promise.all([rows, count]);
       return { count: c?.n ?? 0, items };
     };
-    const [approvals, rfis, bills, orders, ncrs, followUps] = await Promise.all([
+    const [approvals, rfis, bills, orders, ncrs, followUps, actions] = await Promise.all([
       section(
         db`SELECT r.id, r.doc_type AS "docType", r.title, r.amount::text AS amount,
             r.submitted_at AS "submittedAt", u.display_name AS "submittedBy"
@@ -136,8 +136,17 @@ export class InboxService {
         db`SELECT count(*)::int AS n FROM crm.interaction i JOIN crm.lead l ON l.id = i.lead_id
           WHERE l.owner_id = ${claims.sub} AND i.follow_up_done_at IS NULL AND i.follow_up_on <= ${today} + 7`,
       ),
+      // Meeting actions on them, open (docs/wave7-plan.md step 7d.1).
+      section(
+        db`SELECT x.id, x.description, to_char(x.due_on, 'YYYY-MM-DD') AS "dueOn", x.due_on < ${today} AS overdue,
+            m.id AS "meetingId", m.number AS meeting, ${proj}
+          FROM proj.meeting_action x JOIN proj.meeting m ON m.id = x.meeting_id
+          JOIN proj.project p ON p.id = m.project_id
+          WHERE x.owner_id = ${claims.sub} AND x.status = 'open' ORDER BY x.due_on LIMIT 20`,
+        db`SELECT count(*)::int AS n FROM proj.meeting_action WHERE owner_id = ${claims.sub} AND status = 'open'`,
+      ),
     ]);
-    return { approvals, rfis, bills, orders, ncrs, followUps };
+    return { approvals, rfis, bills, orders, ncrs, followUps, actions };
   }
 
   async markRead(claims: TenantClaims, id: string) {

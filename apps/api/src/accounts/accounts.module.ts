@@ -15,6 +15,7 @@ import { GstController } from './gst.controller.js';
 import { GstService } from './gst.service.js';
 import { LedgerController } from './ledger.controller.js';
 import { LedgerService } from './ledger.service.js';
+import { CloseService } from './close.service.js';
 import { PayableController } from './payable.controller.js';
 import { PayableService } from './payable.service.js';
 import { ReceivableController } from './receivable.controller.js';
@@ -47,6 +48,7 @@ import { SubcontractService } from './subcontract.service.js';
   ],
   providers: [
     LedgerService,
+    CloseService,
     ClientBillService,
     ReceivableService,
     PayableService,

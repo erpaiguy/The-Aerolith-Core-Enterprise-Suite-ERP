@@ -7,6 +7,9 @@ import { TenderModule } from '../tender/tender.module.js';
 import { InventoryController } from './inventory.controller.js';
 import { InventoryService } from './inventory.service.js';
 import { ProcurementReportController } from './procurement-report.controller.js';
+import { ReconciliationService } from './reconciliation.service.js';
+import { RateContractService } from './rate-contract.service.js';
+import { RateContractController } from './rate-contract.controller.js';
 import { ProcurementReportService } from './procurement-report.service.js';
 import { MaterialBudgetController } from './material-budget.controller.js';
 import { MaterialBudgetService } from './material-budget.service.js';
@@ -21,6 +24,7 @@ import { RequisitionService } from './requisition.service.js';
 @Module({
   imports: [ProvisioningModule, AuthModule, ProjectModule, ApprovalModule, TenderModule],
   controllers: [
+    RateContractController,
     RequisitionController,
     MaterialBudgetController,
     ProjectRfqController,
@@ -36,6 +40,8 @@ import { RequisitionService } from './requisition.service.js';
     ReceiptService,
     InventoryService,
     ProcurementReportService,
+    ReconciliationService,
+    RateContractService,
   ],
 })
 export class ProcurementModule {}

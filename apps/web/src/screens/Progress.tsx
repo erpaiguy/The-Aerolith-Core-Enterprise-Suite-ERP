@@ -10,6 +10,7 @@ import { api, saveFile } from '../api/client';
 import type { ProjectDetail } from '../api/types';
 import { describeError, formatInr } from '../lib/format';
 import { shortDate } from '../schedule/model';
+import { FromDailyReports } from '../project/FromDailyReports';
 
 export interface Done {
   value: string;
@@ -187,6 +188,7 @@ export function ProgressScreen({ projectId }: { projectId: string }) {
           )}
         </>
       )}
+      <FromDailyReports projectId={projectId} />
     </div>
   );
 }

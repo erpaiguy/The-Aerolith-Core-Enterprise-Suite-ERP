@@ -425,4 +425,101 @@ describe.skipIf(!controlUrl || !adminUrl)('project dashboard (integration)', () 
     );
     expect((await get(`/tenant/projects/${projectId}/dashboard`, worker)).statusCode).toBe(200);
   });
+
+  it("proposes a month's quantities from the daily reports, accepted into the book as reviewed", async () => {
+    // docs/wave7-plan.md step 7c.1: two July reports with A.1 done (7 + 5 cum) and one line of no BOQ item.
+    const siteId = (
+      await ok<{ sites: { id: string }[] }>(
+        post(`/tenant/projects/${projectId}/sites`, { name: 'Akola', stateCode: '27' }, manager),
+      )
+    ).sites.at(-1)!.id;
+    interface Report {
+      id: string;
+      rowVersion: number;
+    }
+    const day = async (reportDate: string, work: object[]) => {
+      let r = await ok<Report>(
+        post(`/tenant/projects/${projectId}/daily-reports`, { siteId, reportDate }, manager),
+      );
+      r = await ok<Report>(
+        post(`/tenant/daily-reports/${r.id}`, { rowVersion: r.rowVersion, work }, manager),
+      );
+      return ok<Report>(
+        post(`/tenant/daily-reports/${r.id}/submit`, { rowVersion: r.rowVersion }, manager),
+      );
+    };
+    await day('2026-07-10', [
+      { description: 'Excavation, grid A', qty: '7', unit: 'cum', boqCode: 'A.1' },
+      { description: 'Site cleaning', qty: '1', unit: 'job' },
+    ]);
+    await day('2026-07-11', [
+      { description: 'Excavation, grid B', qty: '5', unit: 'cum', boqCode: 'A.1' },
+    ]);
+    // A draft does not count.
+    await ok(
+      post(
+        `/tenant/projects/${projectId}/daily-reports`,
+        { siteId, reportDate: '2026-07-12' },
+        manager,
+      ),
+    );
+
+    interface Proposal {
+      bookOn: string;
+      lines: {
+        boqId: string;
+        lineKey: string;
+        code: string;
+        reported: string;
+        measured: string;
+        proposed: string;
+        reports: number;
+      }[];
+      mayAccept: boolean;
+    }
+    const proposal = () =>
+      ok<Proposal>(get(`/tenant/projects/${projectId}/mb-proposal?month=2026-07`, manager));
+    let p = await proposal();
+    expect(p.bookOn).toBe('2026-07-31');
+    expect(p.lines.map((l) => [l.code, l.reported, l.measured, l.proposed, l.reports])).toEqual([
+      ['A.1', '12.0000', '0', '12.0000', 2],
+    ]);
+    expect(
+      (await get(`/tenant/projects/${projectId}/mb-proposal?month=2099-01`, manager)).statusCode,
+    ).toBe(400);
+
+    // Reviewed down to 10: the book has 10 on 31 July, and 2 are still proposed.
+    const line = p.lines[0]!;
+    p = await ok<Proposal>(
+      post(
+        `/tenant/projects/${projectId}/mb-proposal`,
+        { month: '2026-07', lines: [{ boqId: line.boqId, lineKey: line.lineKey, qty: '10' }] },
+        manager,
+      ),
+    );
+    expect(p.lines.map((l) => [l.code, l.measured, l.proposed])).toEqual([
+      ['A.1', '10.0000', '2.0000'],
+    ]);
+    const [m] = await db<{ measured_on: string; qty: string; description: string }[]>`
+      SELECT to_char(measured_on, 'YYYY-MM-DD') AS measured_on, qty::text, description FROM proj.measurement
+      WHERE project_id = ${projectId} AND description LIKE 'From the daily reports%'`;
+    expect(m).toEqual({
+      measured_on: '2026-07-31',
+      qty: '10.0000',
+      description: 'From the daily reports of 2026-07',
+    });
+    // A viewer may look, not accept.
+    expect(
+      (await get(`/tenant/projects/${projectId}/mb-proposal?month=2026-07`, worker)).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await post(
+          `/tenant/projects/${projectId}/mb-proposal`,
+          { month: '2026-07', lines: [{ boqId: line.boqId, lineKey: line.lineKey, qty: '2' }] },
+          worker,
+        )
+      ).statusCode,
+    ).toBe(403);
+  });
 });

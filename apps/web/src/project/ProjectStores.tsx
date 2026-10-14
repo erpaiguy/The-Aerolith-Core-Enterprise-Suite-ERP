@@ -13,6 +13,7 @@ import { rupees } from '../procurement/OrderLines';
 import type { StoreRow } from '../procurement/inventory';
 import { StoreTable } from '../screens/Stores';
 import { usePermission } from '../session/permissions';
+import { EstimateVsActual, MaterialReconciliation } from './Reconciliation';
 
 export function ProjectStores({ project: p }: { project: ProjectDetail }) {
   const qc = useQueryClient();
@@ -221,6 +222,8 @@ export function ConsumptionScreen({ projectId }: { projectId: string }) {
           </Table>
         </Card>
       )}
+      <MaterialReconciliation projectId={projectId} />
+      <EstimateVsActual projectId={projectId} />
     </div>
   );
 }

@@ -94,6 +94,47 @@ export class PurchaseOrderController {
     return this.orders.create(c, id, { kind, partyId }, input);
   }
 
+  @Get('projects/:id/requisition-lines')
+  openRequisitionLines(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.openRequisitionLines(c, id);
+  }
+
+  /** A draft order from approved requisition lines (docs/wave7-plan.md step 7c.4). */
+  @Post('projects/:id/orders/from-requisitions')
+  @HttpCode(200)
+  @RequiresFeatures()
+  fromRequisitions(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          kind: z.enum(['purchase', 'work']).default('purchase'),
+          partyId: z.uuid(),
+          gstPct: z.enum(['0', '5', '12', '18', '28']).default('18'),
+          lines: z
+            .array(z.object({ requisitionId: z.uuid(), position: z.number().int().positive() }))
+            .min(1)
+            .max(500),
+        }),
+      ),
+    )
+    b: {
+      kind: 'purchase' | 'work';
+      partyId: string;
+      gstPct: string;
+      lines: { requisitionId: string; position: number }[];
+    },
+  ) {
+    const { lines, ...head } = b;
+    return this.orders.fromRequisitions(c, id, head, lines);
+  }
+
+  @Get('orders/:id/requisitions')
+  orderRequisitions(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.orderRequisitions(c, id);
+  }
+
   @Post('rfqs/:id/orders')
   @HttpCode(200)
   @RequiresFeatures()

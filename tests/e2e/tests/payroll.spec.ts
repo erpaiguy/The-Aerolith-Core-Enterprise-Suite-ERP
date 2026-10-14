@@ -101,4 +101,14 @@ test("an employee's September worked, posted and paid out on a payslip", async (
   await expect(page.getByRole('article', { name: 'Payslip' })).toContainText('Net pay ₹17,250.00');
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('cell', { name: 'Provident fund' })).toBeVisible();
+
+  // 5. An increment of 10% for everyone from 1 December, reviewed and applied (docs/wave7-plan.md step 7c.7).
+  await nav('Increments');
+  await page.getByLabel('From').fill('2026-12-01');
+  const sheet = page.getByRole('rowgroup', { name: 'Increment sheet' });
+  await expect(sheet).toContainText('Raju Shinde');
+  await page.getByLabel('Everyone %').fill('10');
+  await page.getByRole('button', { name: 'Apply the increments' }).click();
+  await expect(page.getByText(/New salaries from .* for 1 person\./)).toBeVisible();
+  await expect(sheet.getByRole('row').filter({ hasText: 'Raju Shinde' })).toContainText('1 Dec');
 });
