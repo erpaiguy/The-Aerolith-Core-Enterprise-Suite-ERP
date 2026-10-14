@@ -9,6 +9,7 @@ import { api } from '../api/client';
 import type { ProjectSummary } from '../api/types';
 import { describeError, formatInr } from '../lib/format';
 import { shortDate } from '../schedule/model';
+import { useProjectParam } from '../lib/project-param';
 
 export const REGISTER_KINDS = [
   'daily-reports',
@@ -304,7 +305,7 @@ export function RegisterScreen({ kind }: { kind: RegisterKind }) {
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
     select: (r) => r.items,
   });
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useProjectParam();
   const [state, setState] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');

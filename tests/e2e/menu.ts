@@ -22,6 +22,11 @@ export const MENU_GROUPS = [
   'Books and statements',
   'Reports',
   'Administration',
+  // The project workspace (on a project's pages).
+  'Plan and progress',
+  'Buy and store',
+  'Money and contract',
+  'Site and documents',
 ];
 
 export const menuOpen = (baseURL: string = BASE_URL) => ({

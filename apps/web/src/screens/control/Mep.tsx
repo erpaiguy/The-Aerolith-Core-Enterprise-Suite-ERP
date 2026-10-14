@@ -18,6 +18,7 @@ import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { useProjectParam } from '../../lib/project-param';
 
 const SYSTEMS = ['hvac', 'electrical', 'plumbing', 'fire', 'elv'] as const;
 const STATUSES = ['planned', 'ordered', 'delivered', 'installed', 'tested', 'commissioned'];
@@ -54,7 +55,7 @@ export function MepScreen() {
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
     select: (r) => r.items,
   });
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useProjectParam();
   const [loaded, setLoaded] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   return (

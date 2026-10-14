@@ -15,7 +15,7 @@ import {
   Textarea,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   ArrowLeft,
   ClipboardList,
@@ -26,7 +26,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react';
-import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { ProjectBoqs } from '../project/ProjectBoqs';
 import { ProjectClientBills } from '../project/ProjectClientBills';
@@ -386,6 +386,12 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
     qc.setQueryData(['project', projectId], p);
     void qc.invalidateQueries({ queryKey: ['projects'] });
   };
+  // A section picked in the project workspace (`#boqs`): scroll to it once the page is drawn.
+  const hash = useRouterState({ select: (r) => r.location.hash });
+  const loaded = project.isSuccess;
+  useEffect(() => {
+    if (loaded && hash) document.getElementById(hash)?.scrollIntoView({ block: 'start' });
+  }, [loaded, hash]);
   if (project.isPending) return <Spinner />;
   if (project.isError) return <Alert tone="danger">{describeError(project.error)}</Alert>;
   const p = project.data;
@@ -494,16 +500,37 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
                   <p className="mt-3 whitespace-pre-wrap text-sm text-fg-muted">{p.description}</p>
                 )}
               </Card>
-              <ProjectBoqs project={p} />
-              <ProjectSchedules project={p} />
-              <ProjectMaterialBudget project={p} />
-              <ProjectRequisitions project={p} />
-              <ProjectEnquiries project={p} />
-              <ProjectOrders project={p} />
-              <ProjectStores project={p} />
-              <ProjectDailyReports project={p} />
-              <ProjectClientBills project={p} />
-              <Sites project={p} onDone={done} />
+              {/* Anchors for the project workspace in the menu (docs/wave7-plan.md step 7a.4). */}
+              <div id="boqs" className="scroll-mt-4">
+                <ProjectBoqs project={p} />
+              </div>
+              <div id="programme" className="scroll-mt-4">
+                <ProjectSchedules project={p} />
+              </div>
+              <div id="material-budget" className="scroll-mt-4">
+                <ProjectMaterialBudget project={p} />
+              </div>
+              <div id="requisitions" className="scroll-mt-4">
+                <ProjectRequisitions project={p} />
+              </div>
+              <div id="enquiries" className="scroll-mt-4">
+                <ProjectEnquiries project={p} />
+              </div>
+              <div id="orders" className="scroll-mt-4">
+                <ProjectOrders project={p} />
+              </div>
+              <div id="stores" className="scroll-mt-4">
+                <ProjectStores project={p} />
+              </div>
+              <div id="daily-reports" className="scroll-mt-4">
+                <ProjectDailyReports project={p} />
+              </div>
+              <div id="client-bills" className="scroll-mt-4">
+                <ProjectClientBills project={p} />
+              </div>
+              <div id="sites" className="scroll-mt-4">
+                <Sites project={p} onDone={done} />
+              </div>
             </div>
             <div className="space-y-5">
               <Team project={p} onDone={done} />

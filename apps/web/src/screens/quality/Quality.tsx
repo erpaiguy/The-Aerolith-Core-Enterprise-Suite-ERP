@@ -13,13 +13,13 @@ import {
   Table,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouterState } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
 import { sendOrKeep } from '../../offline';
+import { useProjectParam } from '../../lib/project-param';
 
 interface Register {
   holdUninspected: boolean;
@@ -102,10 +102,7 @@ export function QualityScreen() {
     select: (r) => r.items,
   });
   // A register row opens this screen on its project (`?project=`).
-  const opened = useRouterState({
-    select: (r) => (r.location.search as { project?: string | undefined }).project,
-  });
-  const [projectId, setProjectId] = useState(opened ?? '');
+  const [projectId, setProjectId] = useProjectParam();
   return (
     <div className="space-y-5">
       <PageHeader

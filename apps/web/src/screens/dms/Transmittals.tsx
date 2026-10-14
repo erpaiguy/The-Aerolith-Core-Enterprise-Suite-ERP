@@ -15,11 +15,11 @@ import {
   Textarea,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../../api/client';
 import type { DocVault, ProjectDetail, ProjectSummary } from '../../api/types';
 import { describeError } from '../../lib/format';
+import { useProjectParam } from '../../lib/project-param';
 
 type Tab = 'transmittals' | 'rfis' | 'submittals';
 type Call = <T>(path: string, body: object) => Promise<T | null>;
@@ -41,10 +41,7 @@ export function TransmittalsScreen() {
     select: (r) => r.items,
   });
   // A register row opens this screen on its project (`?project=`).
-  const opened = useRouterState({
-    select: (r) => (r.location.search as { project?: string | undefined }).project,
-  });
-  const [projectId, setProjectId] = useState(opened ?? '');
+  const [projectId, setProjectId] = useProjectParam();
   const [tab, setTab] = useState<Tab>('transmittals');
   const [error, setError] = useState<string | null>(null);
   const call: Call = async <T,>(path: string, body: object) => {

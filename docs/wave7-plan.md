@@ -76,7 +76,7 @@ unticked step.
 - [x] 7a.1 Missing screens
 - [x] 7a.2 Parties and enquiries
 - [x] 7a.3 Company-wide registers
-- [ ] 7a.4 Project workspace
+- [x] 7a.4 Project workspace
 - [ ] 7a.5 "New" menu
 - [ ] 7a.6 Search everything
 - [ ] 7a.7 My work

@@ -17,6 +17,7 @@ import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today, useCompany } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
+import { useProjectParam } from '../../lib/project-param';
 
 interface Period {
   key: string;
@@ -50,7 +51,7 @@ export function CashFlowScreen() {
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
     select: (r) => r.items,
   });
-  const [scope, setScope] = useState('company');
+  const [scope, setScope] = useProjectParam('company');
   const [by, setBy] = useState<'month' | 'week'>('month');
   const [asOf, setAsOf] = useState(today());
   return (

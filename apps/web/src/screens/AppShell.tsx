@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouterState } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   BadgeCheck,
@@ -65,11 +65,11 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
 import { usePermission } from '../session/permissions';
-import type { Inbox } from '../api/types';
+import type { Inbox, ProjectSummary } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
 import { useSession } from '../session/session';
 import { usePending } from '../offline';
-import { Badge } from '@aerolith/ui';
+import { Badge, Select } from '@aerolith/ui';
 import { load, save } from '../lib/storage';
 
 function NavItem({
@@ -79,6 +79,8 @@ function NavItem({
   badge,
   depth = 0,
   search,
+  hash,
+  exact,
 }: {
   to: string;
   icon: ReactNode;
@@ -86,14 +88,21 @@ function NavItem({
   badge?: number | undefined;
   depth?: number;
   search?: Record<string, string> | undefined;
+  hash?: string | undefined;
+  exact?: boolean | undefined;
 }) {
   return (
     <Link
       to={to}
-      {...(search ? { search, activeOptions: { includeSearch: true } } : {})}
+      {...(search ? { search } : {})}
+      {...(hash ? { hash } : {})}
       className={`flex items-center gap-2.5 rounded-md py-1.5 pr-2.5 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg ${depth ? 'pl-8' : 'pl-2.5'}`}
       activeProps={{ className: 'bg-surface-2 text-fg font-medium' }}
-      activeOptions={{ exact: to === '/' || to.startsWith('/dashboards/') }}
+      activeOptions={{
+        exact: exact ?? (to === '/' || to.startsWith('/dashboards/')),
+        includeSearch: !!search,
+        includeHash: !!hash || !!exact,
+      }}
     >
       {icon}
       <span className="flex-1">{children}</span>
@@ -107,6 +116,10 @@ interface Page {
   to: string;
   /** Query string for a filtered list (Suppliers: parties of kind vendor). */
   search?: Record<string, string>;
+  /** A section of a page (the project workspace's `#boqs`). */
+  hash?: string;
+  /** Lit only on this very address, not below it. */
+  exact?: boolean;
   label: string;
   icon: ReactNode;
   badge?: number | undefined;
@@ -172,9 +185,11 @@ function NavGroup({
             <NavGroup key={i.group} g={i} depth={depth + 1} open={open} toggle={toggle} />
           ) : (
             <NavItem
-              key={i.to + JSON.stringify(i.search ?? {})}
+              key={i.to + JSON.stringify(i.search ?? {}) + (i.hash ?? '')}
               to={i.to}
               search={i.search}
+              hash={i.hash}
+              exact={i.exact}
               icon={i.icon}
               badge={i.badge}
               depth={depth + 1}
@@ -219,6 +234,193 @@ function LicenceBanner() {
   return null;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The project being worked in: a project's own page, or a screen opened on one (`?project=`). */
+function currentProject(path: string, search: Record<string, unknown>): string | null {
+  const m = /^\/projects\/([0-9a-f-]{36})(\/|$)/.exec(path);
+  if (m && UUID.test(m[1]!)) return m[1]!;
+  return typeof search.project === 'string' && UUID.test(search.project) ? search.project : null;
+}
+
+/** One project's sections, for the workspace (docs/wave7-plan.md step 7a.4). */
+function projectSections(id: string): Group[] {
+  const home = `/projects/${id}`;
+  const on = { project: id };
+  return [
+    {
+      group: 'Plan and progress',
+      icon: <ListTree className="size-4" />,
+      items: [
+        { to: home, exact: true, label: 'Overview', icon: <Building2 className="size-4" /> },
+        { to: `${home}/dashboard`, label: 'Dashboard', icon: <Gauge className="size-4" /> },
+        { to: home, hash: 'boqs', label: 'BOQs', icon: <ScrollText className="size-4" /> },
+        { to: `${home}/wbs`, label: 'WBS', icon: <ListTree className="size-4" /> },
+        {
+          to: home,
+          hash: 'programme',
+          label: 'Programme',
+          icon: <CalendarCheck className="size-4" />,
+        },
+        { to: `${home}/macro`, label: 'Macro plan', icon: <LayoutGrid className="size-4" /> },
+        { to: `${home}/progress`, label: 'Measurement', icon: <TrendingUp className="size-4" /> },
+        {
+          to: `${home}/daily-reports`,
+          label: 'Daily reports',
+          icon: <ClipboardList className="size-4" />,
+        },
+      ],
+    },
+    {
+      group: 'Buy and store',
+      icon: <ShoppingCart className="size-4" />,
+      items: [
+        {
+          to: home,
+          hash: 'material-budget',
+          label: 'Material budget',
+          icon: <Boxes className="size-4" />,
+        },
+        {
+          to: home,
+          hash: 'requisitions',
+          label: 'Requisitions',
+          icon: <ShoppingCart className="size-4" />,
+        },
+        { to: home, hash: 'enquiries', label: 'Enquiries', icon: <Send className="size-4" /> },
+        {
+          to: home,
+          hash: 'orders',
+          label: 'Orders',
+          icon: <BriefcaseBusiness className="size-4" />,
+        },
+        { to: home, hash: 'stores', label: 'Stores', icon: <Warehouse className="size-4" /> },
+        {
+          to: `${home}/consumption`,
+          label: 'Consumption',
+          icon: <PackageCheck className="size-4" />,
+        },
+        {
+          to: `${home}/procurement-reports`,
+          label: 'Procurement reports',
+          icon: <FileBarChart className="size-4" />,
+        },
+      ],
+    },
+    {
+      group: 'Money and contract',
+      icon: <Wallet className="size-4" />,
+      items: [
+        {
+          to: home,
+          hash: 'client-bills',
+          label: 'Client bills',
+          icon: <ReceiptText className="size-4" />,
+        },
+        {
+          to: '/registers/subcontract-bills',
+          search: on,
+          label: 'Subcontract bills',
+          icon: <ReceiptText className="size-4" />,
+        },
+        {
+          to: '/variations',
+          search: on,
+          label: 'Variations',
+          icon: <FilePlus2 className="size-4" />,
+        },
+        {
+          to: '/contracts',
+          search: on,
+          label: 'Contracts and claims',
+          icon: <Scale className="size-4" />,
+        },
+        { to: '/risks', search: on, label: 'Risks', icon: <TriangleAlert className="size-4" /> },
+        { to: '/cost-control', search: on, label: 'Cost', icon: <Gauge className="size-4" /> },
+        { to: '/cash-flow', search: on, label: 'Cash flow', icon: <Banknote className="size-4" /> },
+      ],
+    },
+    {
+      group: 'Site and documents',
+      icon: <HardHat className="size-4" />,
+      items: [
+        { to: '/quality', search: on, label: 'Quality', icon: <BadgeCheck className="size-4" /> },
+        { to: '/safety', search: on, label: 'Safety', icon: <ShieldCheck className="size-4" /> },
+        {
+          to: `${home}/documents`,
+          label: 'Documents and drawings',
+          icon: <FileStack className="size-4" />,
+        },
+        {
+          to: '/transmittals',
+          search: on,
+          label: 'Transmittals and RFIs',
+          icon: <Send className="size-4" />,
+        },
+        { to: home, hash: 'sites', label: 'Sites and team', icon: <Users className="size-4" /> },
+      ],
+    },
+  ];
+}
+
+/** On a project's pages the menu leads with that project: a picker to switch, and its sections. */
+function ProjectWorkspace({
+  projectId,
+  open,
+  toggle,
+}: {
+  projectId: string;
+  open: Set<string>;
+  toggle: (key: string) => void;
+}) {
+  const navigate = useNavigate();
+  const location = useRouterState({ select: (r) => r.location });
+  const projects = useQuery({
+    queryKey: ['projects', 'all-items'],
+    queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
+    select: (r) => r.items,
+  });
+  // Another project: the same section of it.
+  const switchTo = (id: string) => {
+    if (!id || id === projectId) return;
+    if (location.pathname.startsWith(`/projects/${projectId}`))
+      void navigate({
+        to: location.pathname.replace(projectId, id),
+        hash: location.hash || undefined,
+      } as never);
+    else
+      void navigate({
+        to: location.pathname,
+        search: { ...(location.search as Record<string, unknown>), project: id },
+      } as never);
+  };
+  return (
+    <nav aria-label="Project" className="mb-2 space-y-0.5 border-b border-line pb-2">
+      <label className="block px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-fg-subtle">
+        Project
+        <Select
+          aria-label="Current project"
+          className="mt-1 w-full normal-case tracking-normal"
+          value={projectId}
+          onChange={(e) => switchTo(e.target.value)}
+        >
+          {(projects.data ?? []).some((p) => p.id === projectId) ? null : (
+            <option value={projectId}>This project</option>
+          )}
+          {(projects.data ?? []).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.number} {p.name}
+            </option>
+          ))}
+        </Select>
+      </label>
+      {projectSections(projectId).map((g) => (
+        <NavGroup key={g.group} g={g} depth={0} open={open} toggle={toggle} />
+      ))}
+    </nav>
+  );
+}
+
 export function AppShell() {
   const session = useSession();
   const isAdmin = session.user?.role === 'admin';
@@ -238,6 +440,8 @@ export function AppShell() {
   // On a phone the menu is folded away behind a button, and folds again on every page change.
   const [menuOpen, setMenuOpen] = useState(false);
   const path = useRouterState({ select: (r) => r.location.pathname });
+  const search = useRouterState({ select: (r) => r.location.search as Record<string, unknown> });
+  const projectId = signedIn ? currentProject(path, search) : null;
   useEffect(() => setMenuOpen(false), [path]);
   const pending = inbox.data?.pending;
 
@@ -619,8 +823,9 @@ export function AppShell() {
         }
     };
     walk(menu);
+    if (projectId) walk(projectSections(projectId));
     if (here.some((k) => !open.has(k))) setOpen((prev) => new Set([...prev, ...here]));
-  }, [path]);
+  }, [path, projectId]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
@@ -650,31 +855,35 @@ export function AppShell() {
               <Menu className="size-5" aria-hidden /> Menu
             </button>
           </div>
-          <nav
-            className={`${menuOpen ? 'block' : 'hidden'} min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2 pb-3 md:block`}
-            aria-label="Main"
+          <div
+            className={`${menuOpen ? 'block' : 'hidden'} min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 md:block`}
             id="main-menu"
           >
-            <NavItem to="/" icon={<Bell className="size-4" />} badge={inbox.data?.unread}>
-              Home
-            </NavItem>
-            <NavItem
-              to="/approvals"
-              icon={<CheckCheck className="size-4" />}
-              badge={pending?.approvals}
-            >
-              Approvals
-            </NavItem>
-            <div className="my-2 border-t border-line" />
-            {menu.filter(visible).map((g) => (
-              <NavGroup key={g.group} g={g} depth={0} open={open} toggle={toggle} />
-            ))}
-            <div className="px-2.5 pt-4">
-              <Link to="/licences" className="text-xs text-fg-subtle hover:underline">
-                Third-party licences
-              </Link>
-            </div>
-          </nav>
+            {projectId ? (
+              <ProjectWorkspace projectId={projectId} open={open} toggle={toggle} />
+            ) : null}
+            <nav className="space-y-0.5" aria-label="Main">
+              <NavItem to="/" icon={<Bell className="size-4" />} badge={inbox.data?.unread}>
+                Home
+              </NavItem>
+              <NavItem
+                to="/approvals"
+                icon={<CheckCheck className="size-4" />}
+                badge={pending?.approvals}
+              >
+                Approvals
+              </NavItem>
+              <div className="my-2 border-t border-line" />
+              {menu.filter(visible).map((g) => (
+                <NavGroup key={g.group} g={g} depth={0} open={open} toggle={toggle} />
+              ))}
+              <div className="px-2.5 pt-4">
+                <Link to="/licences" className="text-xs text-fg-subtle hover:underline">
+                  Third-party licences
+                </Link>
+              </div>
+            </nav>
+          </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">

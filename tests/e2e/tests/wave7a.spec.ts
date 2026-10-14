@@ -100,3 +100,50 @@ test('every company-wide register opens from the menu', async ({ page }) => {
     await expect(page.getByText('Nothing here.')).toBeVisible();
   }
 });
+
+test("a project's pages lead the menu with its sections and a picker", async ({ page }) => {
+  test.setTimeout(150_000);
+  await signInNewAdmin(
+    page,
+    `w7a4-${Date.now()}@shegaon-builders.in`,
+    'Workspace-Shegaon-74',
+    'Shegaon Builders',
+  );
+  const main = page.getByRole('navigation', { name: 'Main' });
+  const work = page.getByRole('navigation', { name: 'Project' });
+  for (const name of ['Hostel, Washim', 'School, Akola']) {
+    await main.getByRole('link', { name: 'Projects', exact: true }).click();
+    await page.getByRole('button', { name: 'New project' }).click();
+    await page.getByLabel('Project name').fill(name);
+    await page.getByRole('button', { name: 'Create project' }).click();
+    await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
+  }
+  // On School, Akola: its workspace; the WBS of it, then the same page of the other project.
+  await expect(work.getByLabel('Current project')).toHaveValue(/[0-9a-f-]{36}/);
+  await expect(work.getByLabel('Current project').locator('option:checked')).toContainText(
+    'School, Akola',
+  );
+  const akola = page.url();
+  await work.getByRole('link', { name: 'WBS', exact: true }).click();
+  await expect(page).toHaveURL(`${akola}/wbs`);
+  const picker = work.getByLabel('Current project');
+  const washim = await picker
+    .locator('option', { hasText: 'Hostel, Washim' })
+    .getAttribute('value');
+  await picker.selectOption(washim!);
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}\/wbs$/);
+  expect(page.url()).not.toContain(akola);
+  await expect(work.getByLabel('Current project').locator('option:checked')).toContainText(
+    'Hostel, Washim',
+  );
+  // A section on the overview, and a company screen opened on the project.
+  await work.getByRole('link', { name: 'Client bills', exact: true }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}#client-bills$/);
+  await work.getByRole('link', { name: 'Quality', exact: true }).click();
+  await expect(page).toHaveURL(/\/quality\?project=/);
+  await expect(page.getByRole('main').getByLabel('Project')).toHaveValue(/[0-9a-f-]{36}/);
+  await expect(work).toBeVisible();
+  // Off the project, the workspace goes.
+  await main.getByRole('link', { name: 'Projects', exact: true }).click();
+  await expect(work).toHaveCount(0);
+});

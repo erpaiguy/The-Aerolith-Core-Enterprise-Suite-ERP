@@ -18,6 +18,7 @@ import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
+import { useProjectParam } from '../../lib/project-param';
 
 interface Register {
   variations: {
@@ -99,7 +100,7 @@ export function VariationsScreen() {
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
     select: (r) => r.items,
   });
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useProjectParam();
   return (
     <div className="space-y-5">
       <PageHeader

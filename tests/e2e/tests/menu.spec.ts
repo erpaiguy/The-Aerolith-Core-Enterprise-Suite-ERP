@@ -37,7 +37,9 @@ test('menu groups fold, remember, and the menu scrolls on its own', async ({ pag
   // Open every group so the menu is taller than the window, then scroll each part.
   const folded = nav.getByRole('button', { expanded: false });
   while (await folded.count()) await folded.first().click();
-  const scrolls = await nav.evaluate((n) => n.scrollHeight > n.clientHeight);
+  // The menu's scrolling part holds the project workspace (on a project's pages) and the main menu.
+  const menu = page.locator('#main-menu');
+  const scrolls = await menu.evaluate((n) => n.scrollHeight > n.clientHeight);
   expect(scrolls).toBe(true);
   await page.evaluate(() => {
     const tall = document.createElement('div');
@@ -47,7 +49,7 @@ test('menu groups fold, remember, and the menu scrolls on its own', async ({ pag
   });
   const box = await page.locator('aside').boundingBox();
   expect(box?.y).toBe(0);
-  await nav.evaluate((n) => n.scrollTo(0, n.scrollHeight));
+  await menu.evaluate((n) => n.scrollTo(0, n.scrollHeight));
   await expect(nav.getByRole('link', { name: 'Integrations' })).toBeInViewport();
   expect(await page.evaluate(() => window.scrollY)).toBe(1500);
 });

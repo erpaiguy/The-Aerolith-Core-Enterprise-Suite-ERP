@@ -9,6 +9,7 @@ import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
 import { EChart, themeColours, type ChartOption } from '../../charts/EChart';
 import { describeError, formatInr, formatInrShort } from '../../lib/format';
+import { useProjectParam } from '../../lib/project-param';
 
 type Method = 'cpi' | 'budget_rate' | 'cpi_spi' | 'bottom_up';
 interface Figures {
@@ -47,7 +48,7 @@ export function EarnedValueScreen() {
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
     select: (r) => r.items,
   });
-  const [projectId, setProjectId] = useState('');
+  const [projectId, setProjectId] = useProjectParam();
   const [asOf, setAsOf] = useState(today());
   return (
     <div className="space-y-5">
