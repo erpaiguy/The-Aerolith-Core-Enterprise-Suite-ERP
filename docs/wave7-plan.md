@@ -87,7 +87,7 @@ unticked step.
 - [x] 7b.3 Money documents
 - [x] 7b.4 Document control and HR letters
 - [x] 7b.5 MIS pack, client progress report, RERA documents
-- [ ] 7b exit: full check and browser suite
+- [x] 7b exit: full check and browser suite
 - [ ] 7c.1 Daily reports into the measurement book
 - [ ] 7c.2 Material reconciliation
 - [ ] 7c.3 Estimate against actual
