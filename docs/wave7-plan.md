@@ -106,4 +106,4 @@ unticked step.
 - [x] 7d.7 Recurring entries
 - [x] 7d.8 Joining and exit checklists
 - [x] 7d.9 Company dashboard
-- [ ] 7d exit: full check, browser suite, demo seed and crawl; report
+- [x] 7d exit: full check, browser suite, demo seed and crawl; report

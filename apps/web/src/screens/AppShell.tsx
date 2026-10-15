@@ -892,6 +892,7 @@ export function AppShell() {
           to: '/company-dashboard',
           label: 'Company dashboard',
           icon: <Gauge className="size-4" />,
+          show: mayBooks,
         },
         { to: '/reports', label: 'Reports', icon: <ChartColumn className="size-4" /> },
         { to: '/reports/builder', label: 'Report builder', icon: <ChartPie className="size-4" /> },
