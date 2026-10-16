@@ -374,5 +374,28 @@ describe.skipIf(!controlUrl || !adminUrl)('real estate sales and RERA (integrati
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(x.rawPayload as unknown as ArrayBuffer);
     expect(String(wb.worksheets[0]!.getCell(2, 1).value)).toContain('P52100012345');
+
+    // docs/wave8-plan.md step 8b.5: the plinth demand paid less the buyer's 1% TDS under 194-IA; the cash and the TDS
+    // together settle it, and 26AS shows the TDS under the buyer's PAN.
+    const pay = { on: '2026-10-14', amount: '2591473.50', tds: '26176.50', reference: 'UTR3' };
+    expect(
+      (await post(`/tenant/sales/bookings/${b.id}/receipts`, pay, manager)).json(),
+    ).toMatchObject({ code: 'ack_needed' });
+    const paid = await ok<B & { totals: { tdsByBuyer: string } }>(
+      post(`/tenant/sales/bookings/${b.id}/receipts`, { ...pay, tdsAck: 'AB1234567' }, manager),
+    );
+    expect(paid.demands.find((d) => d.number === 'DM-003')!.open).toBe('0.00');
+    expect(paid.totals.tdsByBuyer).toBe('26176.50');
+    const [up] = await db<{ id: string }[]>`
+      INSERT INTO acc.tds_credit_upload (entity_id, quarter, file_name) VALUES (${company.id}, '2026-27-Q3', '26as.xlsx')
+      RETURNING id`;
+    await db`INSERT INTO acc.tds_credit_line (upload_id, position, tan, deductor, amount, tds)
+      VALUES (${up!.id}, 1, 'ABCPK1234F', 'ANIL KULKARNI', 2617650, 26176.50)`;
+    const m = await ok<{ rows: { status: string; party: string; books: string | null }[] }>(
+      get(`/tenant/accounts/tds/credits?entityId=${company.id}&quarter=2026-27-Q3`, manager),
+    );
+    expect(m.rows.map((x) => [x.status, x.party, x.books])).toEqual([
+      ['matched', 'Anil Kulkarni', '26176.50'],
+    ]);
   });
 });

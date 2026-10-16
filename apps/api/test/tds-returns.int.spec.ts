@@ -298,6 +298,94 @@ describe.skipIf(!controlUrl || !adminUrl)('TDS returns (integration)', () => {
     expect(wb.getWorksheet('Deductees')!.rowCount).toBe(4);
   });
 
+  it('gives Form 16A and the 26Q text for the FVU, and deducts at a lower certificate rate', async () => {
+    // docs/wave8-plan.md step 8b.3.
+    const parties = await ok<{ id: string; name: string }[]>(get('/tenant/parties'));
+    const ramesh = parties.find((p) => p.name === 'Ramesh Shinde')!.id;
+    const f = await ok<{
+      deductee: { pan: string };
+      tds: string;
+      deposited: string;
+      complete: boolean;
+      rows: unknown[];
+    }>(
+      get(
+        `/tenant/accounts/tds/16a?entityId=${entityId}&quarter=2026-27-Q2&partyId=${ramesh}`,
+        manager,
+      ),
+    );
+    expect([f.deductee.pan, f.rows.length, f.tds, f.deposited, f.complete]).toEqual([
+      'ABCPS1234K',
+      2,
+      '1100.00',
+      '1100.00',
+      true,
+    ]);
+    const file = await app.inject({
+      method: 'GET',
+      url: `/api/tenant/accounts/tds/fvu?entityId=${entityId}&quarter=2026-27-Q2&form=26Q`,
+      headers: manager,
+    });
+    expect(file.headers['content-disposition']).toContain('NGPA12345B_26Q_2026-27-Q2.txt');
+    const recs = file.body
+      .trim()
+      .split('\r\n')
+      .map((l) => l.split('^'));
+    expect(recs.map((r) => r[1])).toEqual(['FH', 'BH', 'CD', 'DD', 'CD', 'DD', 'CD', 'DD']);
+    expect(recs[1]!.slice(2, 5)).toEqual(['1', '3', '26Q']);
+    expect(recs.filter((r) => r[1] === 'DD').map((r) => r.at(-1))).toEqual(['94C', '4IB', '94C']);
+
+    // A contractor with a certificate under section 197 for 0.5% up to ₹1 lakh: ₹50,000 bears ₹250, not ₹1,000.
+    const kale = (
+      await ok<{ id: string }>(
+        post('/tenant/parties', {
+          isClient: false,
+          isVendor: true,
+          name: 'Kale Constructions',
+          pan: 'AAAFK1111L',
+          tdsSection: '194C',
+        }),
+      )
+    ).id;
+    const cert = {
+      entityId,
+      partyId: kale,
+      section: '194C',
+      certNo: 'LDC/2026/4471',
+      rate: '0.5',
+      limit: '100000',
+      validFrom: '2026-10-01',
+      validTo: '2027-03-31',
+    };
+    expect((await post('/tenant/accounts/tds/certificates', cert, worker)).statusCode).toBe(403);
+    await ok(post('/tenant/accounts/tds/certificates', cert, manager));
+    const chart = await ok<{ accounts: { id: string; code: string }[] }>(
+      get('/tenant/accounts/chart', manager),
+    );
+    const b = await ok<{ tds: string; tdsRate: string }>(
+      vbill({
+        partyId: kale,
+        billNo: 'K/1',
+        billDate: '2026-10-05',
+        dueDate: '2026-10-05',
+        lines: [
+          {
+            accountId: chart.accounts.find((a) => a.code === 'X7001')!.id,
+            description: 'Plaster',
+            qty: '1',
+            rate: '50000',
+            gstPct: '0',
+          },
+        ],
+      }),
+    );
+    expect([b.tds, Number(b.tdsRate)]).toEqual(['250.00', 0.5]);
+    const certs = await ok<{ certNo: string; used: string }[]>(
+      get(`/tenant/accounts/tds/certificates?entityId=${entityId}`, manager),
+    );
+    expect(certs.map((x) => [x.certNo, x.used])).toEqual([['LDC/2026/4471', '50000.00']]);
+  });
+
   it('matches what clients deducted against a 26AS extract', async () => {
     const client = async (name: string, tan: string | null) => {
       const id = (await ok<{ id: string }>(post('/tenant/parties', { name, isClient: true, tan })))

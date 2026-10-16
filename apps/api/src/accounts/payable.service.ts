@@ -366,6 +366,7 @@ export class PayableService implements OnModuleInit {
         // TDS: the section given, or the supplier's.
         const sectionName = input.tdsSection ?? party.tds_section;
         let tds = { base: '0.00', rate: '0', tds: '0.00' };
+        let certificateId: string | null = null;
         if (sectionName) {
           const s = await this.section(tx, sectionName, input.billDate);
           const fy = fyOf(input.billDate);
@@ -380,17 +381,35 @@ export class PayableService implements OnModuleInit {
             priorTaxable: prior!.taxable,
             priorTaxed: prior!.taxed,
           });
+          // A lower-deduction certificate (section 197) in force on the bill's date, while its limit lasts.
+          if (dec(tds.base) > 0n) {
+            const [cert] = await tx<{ id: string; rate: string; left: string }[]>`
+              SELECT c.id, c.rate::text AS rate, (c.limit_amount - coalesce((SELECT sum(b.tds_base) FROM acc.vendor_bill b
+                WHERE b.tds_certificate_id = c.id AND b.status <> 'cancelled'), 0))::text AS left
+              FROM acc.tds_certificate c
+              WHERE c.entity_id = ${input.entityId} AND c.party_id = ${input.partyId} AND c.section = ${sectionName}
+                AND ${input.billDate}::date BETWEEN c.valid_from AND c.valid_to
+              ORDER BY c.valid_from DESC LIMIT 1`;
+            if (cert && dec(cert.left) >= dec(tds.base)) {
+              certificateId = cert.id;
+              tds = {
+                base: tds.base,
+                rate: cert.rate,
+                tds: fmt(dec(fmt(mul(dec(tds.base), div(dec(cert.rate), dec('100'))), 0)), 2),
+              };
+            }
+          }
         }
         const payable = total - dec(tds.tds);
         const [row] = await tx<{ id: string }[]>`
           INSERT INTO acc.vendor_bill (entity_id, party_id, order_id, project_id, bill_no, bill_date, due_date, supply,
             status, held_reasons, tds_section, tds_rate, tds_base, taxable, cgst, sgst, igst, total, tds, payable, narration,
-            rcm_category, rcm_cgst, rcm_sgst, rcm_igst, created_by, updated_by)
+            rcm_category, rcm_cgst, rcm_sgst, rcm_igst, tds_certificate_id, created_by, updated_by)
           VALUES (${input.entityId}, ${input.partyId}, ${input.orderId}, ${projectId}, ${input.billNo}, ${input.billDate},
             ${input.dueDate}, ${supply}, 'held', ${tx.json(reasons)}, ${sectionName}, ${tds.rate}, ${tds.base},
             ${money(taxable)}, ${money(cgst)}, ${money(sgst)}, ${money(igst)}, ${money(total)}, ${tds.tds}, ${money(payable)},
-            ${input.narration}, ${rcm}, ${money(rcmTax.cgst)}, ${money(rcmTax.sgst)}, ${money(rcmTax.igst)}, ${claims.sub},
-            ${claims.sub})
+            ${input.narration}, ${rcm}, ${money(rcmTax.cgst)}, ${money(rcmTax.sgst)}, ${money(rcmTax.igst)}, ${certificateId},
+            ${claims.sub}, ${claims.sub})
           RETURNING id`;
         for (const [i, l] of lines.entries())
           await tx`INSERT INTO acc.vendor_bill_line (bill_id, position, line_key, account_id, project_id, description, unit,

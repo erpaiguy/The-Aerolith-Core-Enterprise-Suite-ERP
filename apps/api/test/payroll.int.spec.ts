@@ -492,6 +492,48 @@ describe.skipIf(!controlUrl || !adminUrl)('payroll (integration)', () => {
     });
   });
 
+  it("deposits September's salary TDS by challan and gives the quarter's 24Q", async () => {
+    // docs/wave8-plan.md step 8b.3: Suresh's ₹19,500 under section 192.
+    const c = await ok<{ section: string; tax: string; total: string }>(
+      post('/tenant/accounts/tds/salary-challans', {
+        entityId,
+        period: '2026-09',
+        depositedOn: '2026-10-07',
+        bsrCode: '0510308',
+        challanNo: '00077',
+        bankAccountId: bank,
+      }),
+    );
+    expect(c).toMatchObject({ section: '192', tax: '19500.00', total: '19500.00' });
+    expect(
+      (
+        await post('/tenant/accounts/tds/salary-challans', {
+          entityId,
+          period: '2026-09',
+          depositedOn: '2026-10-07',
+          bsrCode: '0510308',
+          challanNo: '00078',
+          bankAccountId: bank,
+        })
+      ).json(),
+    ).toMatchObject({ code: 'nothing_to_deposit' });
+    const q = await ok<{
+      total: string;
+      problems: string[];
+      deductees: { code: string; paid: string; tds: string; challan: { challanNo: string } }[];
+    }>(get(`/tenant/accounts/tds/24q?entityId=${entityId}&quarter=2026-27-Q2`));
+    expect(q.total).toBe('19500.00');
+    expect(q.deductees.map((d) => [d.code, d.paid, d.tds, d.challan.challanNo])).toEqual([
+      ['E001', '250000.00', '19500.00', '00077'],
+    ]);
+    // Without the company's TAN there is no file for the FVU.
+    expect(
+      (
+        await get(`/tenant/accounts/tds/fvu?entityId=${entityId}&quarter=2026-27-Q2&form=24Q`)
+      ).json(),
+    ).toMatchObject({ code: 'tan_missing' });
+  });
+
   it("settles Suresh's full and final after six years", async () => {
     // Earned leave: 5 days brought forward and 11 accrued by September (15 a year, monthly): 16.
     const el = (

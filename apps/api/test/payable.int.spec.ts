@@ -823,6 +823,84 @@ describe.skipIf(!controlUrl || !adminUrl)('payables (integration)', () => {
     expect((await g3()).itcReclaimed).toMatchObject({ cgst: '900.00', sgst: '900.00' });
   });
 
+  it('warns of MSME bills nearing 45 days, and reports 43B(h) and MSME-1', async () => {
+    // docs/wave8-plan.md step 8b.4. A micro enterprise: a July bill on 90 days' credit is held to 45 (15 August);
+    // a September bill due on 20 October.
+    const chart = await ok<{ accounts: { id: string; systemKey: string | null }[] }>(
+      get('/tenant/accounts/chart', manager),
+    );
+    const material = chart.accounts.find((a) => a.systemKey === 'material_consumption')!.id;
+    const gajanan = (
+      await ok<{ id: string }>(
+        post('/tenant/parties', {
+          isClient: false,
+          isVendor: true,
+          name: 'Gajanan Hardware',
+          udyamNo: 'udyam-mh-12-0012345',
+          msmeType: 'micro',
+        }),
+      )
+    ).id;
+    const gb = (billNo: string, billDate: string, dueDate: string, rate: string) =>
+      ok<Bill>(
+        vbill({
+          partyId: gajanan,
+          billNo,
+          billDate,
+          dueDate,
+          lines: [
+            {
+              accountId: material,
+              projectId,
+              description: 'Binding wire',
+              qty: '1',
+              rate,
+              gstPct: '18',
+            },
+          ],
+        }),
+      );
+    await gb('G/1', '2026-07-01', '2026-09-30', '5000');
+    await gb('G/2', '2026-09-10', '2026-10-20', '3000');
+    interface Row {
+      billNo: string;
+      limitDate: string;
+      outstanding: string;
+    }
+    const alerts = await ok<{ overdue: Row[]; dueSoon: Row[] }>(
+      get(`/tenant/accounts/msme/alerts?entityId=${entityId}&asOf=2026-10-16`, manager),
+    );
+    expect([
+      alerts.overdue.map((b) => [b.billNo, b.limitDate, b.outstanding]),
+      alerts.dueSoon.map((b) => [b.billNo, b.limitDate]),
+    ]).toEqual([[['G/1', '2026-08-15', '5000.00']], [['G/2', '2026-10-20']]]);
+    const h = await ok<{ total: string; rows: { billNo: string; disallowed: string }[] }>(
+      get(`/tenant/accounts/msme/43bh?entityId=${entityId}&year=2026`, manager),
+    );
+    expect([h.total, h.rows.map((r) => [r.billNo, r.disallowed])]).toEqual([
+      '8000.00',
+      [
+        ['G/1', '5000.00'],
+        ['G/2', '3000.00'],
+      ],
+    ]);
+    const m1 = await ok<{
+      suppliers: { party: string; udyamNo: string; amount: string; since: string }[];
+    }>(get(`/tenant/accounts/msme/msme-1?entityId=${entityId}&half=2026-H1`, manager));
+    expect(m1.suppliers).toEqual([
+      expect.objectContaining({
+        party: 'Gajanan Hardware',
+        udyamNo: 'UDYAM-MH-12-0012345',
+        amount: '5000.00',
+        since: '2026-08-15',
+      }),
+    ]);
+    expect(
+      (await get(`/tenant/accounts/msme/alerts?entityId=${entityId}&asOf=2026-10-16`, worker))
+        .statusCode,
+    ).toBe(403);
+  });
+
   it("works out September's close from the books, and locks it when done", async () => {
     // docs/wave7-plan.md step 7c.6: the bills of September are posted or cancelled; no staff, assets or statement.
     interface Close {

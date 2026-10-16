@@ -69,6 +69,9 @@ const receipt = z.object({
   amount,
   mode: z.enum(['bank', 'cheque', 'upi', 'neft', 'rtgs', 'loan']).default('neft'),
   reference: z.string().trim().max(100).default(''),
+  // Section 194-IA (docs/wave8-plan.md step 8b.5).
+  tds: amount.optional(),
+  tdsAck: z.string().trim().max(40).optional(),
 });
 const reraEntry = z.object({
   kind: z.enum(['deposit', 'withdrawal']),

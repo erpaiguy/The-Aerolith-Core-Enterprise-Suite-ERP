@@ -425,4 +425,57 @@ describe.skipIf(!controlUrl || !adminUrl)('receivables (integration)', () => {
     );
     expect(list.map((x) => x.status)).toEqual(['posted', 'cancelled', 'posted']);
   });
+  it('keeps GST TDS by a government client apart, matches it to GSTR-7A and takes it into the cash ledger', async () => {
+    // docs/wave8-plan.md step 8b.2. RA 1 (₹14,420) paid on 5 October less 2% GST TDS of ₹240.
+    await ok(
+      record({
+        receivedOn: '2026-10-05',
+        amount: '14180',
+        gstTds: '240',
+        allocations: [{ kind: 'bill', billId: ra1, amount: '14420' }],
+      }),
+    );
+    interface View {
+      rows: {
+        party: string;
+        month: string;
+        books: string;
+        state: string;
+        credit: { amount: string } | null;
+      }[];
+      totals: { books: string; credited: string };
+    }
+    const url = `/tenant/accounts/gst-tds?entityId=${entityId}&from=2026-10-01&to=2026-10-31`;
+    expect((await get(url, worker)).statusCode).toBe(403);
+    expect((await ok<View>(get(url, manager))).rows).toEqual([
+      expect.objectContaining({
+        party: 'Zilla Parishad Washim',
+        month: '2026-10',
+        books: '240.00',
+        state: 'awaiting',
+      }),
+    ]);
+    const credit = {
+      entityId,
+      partyId: zp,
+      month: '2026-10',
+      deductorGstin: '27AAAGZ0001A1DA',
+      amount: '240',
+      acceptedOn: '2026-11-12',
+    };
+    const after = await ok<View>(post('/tenant/accounts/gst-tds/credits', credit, manager));
+    expect(after.rows.map((r) => [r.state, r.credit?.amount])).toEqual([['matched', '240.00']]);
+    expect((await post('/tenant/accounts/gst-tds/credits', credit, manager)).json()).toMatchObject({
+      code: 'already_accepted',
+    });
+    // The receivable is cleared into the cash ledger.
+    const tb = await ok<{ rows: { name: string; debit: string | null; credit: string | null }[] }>(
+      get(`/tenant/accounts/trial-balance?entityId=${entityId}&asOf=2026-11-30`, manager),
+    );
+    const at = (n: string) => tb.rows.find((x) => x.name === n);
+    expect([
+      at('GST electronic cash ledger')?.debit,
+      at('GST TDS deducted by clients (section 51)'),
+    ]).toEqual(['240.00', undefined]);
+  });
 });

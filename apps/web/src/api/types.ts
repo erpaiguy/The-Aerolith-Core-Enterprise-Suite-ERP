@@ -125,6 +125,8 @@ export interface Party {
   /** A supplier's default TDS section and bank account (docs/wave3-plan.md step 4). */
   tdsSection?: string | null;
   rcmCategory?: string | null;
+  udyamNo?: string | null;
+  msmeType?: string | null;
   bankAccountName?: string | null;
   bankAccountNo?: string | null;
   bankIfsc?: string | null;

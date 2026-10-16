@@ -592,7 +592,15 @@ export class SalesService {
   async receive(
     claims: TenantClaims,
     bookingId: string,
-    input: { on: string; amount: string; mode: string; reference: string },
+    input: {
+      on: string;
+      amount: string;
+      mode: string;
+      reference: string;
+      /** The buyer's TDS under section 194-IA, and their Form 26QB acknowledgement. */
+      tds?: string | undefined;
+      tdsAck?: string | undefined;
+    },
   ) {
     await this.may(claims, 'sales.edit');
     await this.may(claims, 'accounts.post');
@@ -608,14 +616,21 @@ export class SalesService {
     if (input.on > today())
       throw new BadRequestException({ code: 'in_future', message: 'Not a date in the future.' });
     const amount = p(input.amount);
+    const tds = p(input.tds ?? '0');
+    if (tds && !input.tdsAck?.trim())
+      throw new BadRequestException({
+        code: 'ack_needed',
+        message: "Give the buyer's Form 26QB acknowledgement for the TDS.",
+      });
     const { entity_id } = await this.entityOf(db, b.project_id);
     const id = await db.begin(async (tx) => {
       const open = await tx<{ id: string; base: string; gst: string; open: string }[]>`
         SELECT id, base::text, (cgst + sgst)::text AS gst, (base + cgst + sgst - paid)::text AS open
         FROM re.demand WHERE booking_id = ${bookingId} AND base + cgst + sgst > paid
         ORDER BY due_on, number FOR UPDATE`;
+      // The cash and the buyer's TDS together settle the demands.
       const a = allocate(
-        amount,
+        amount + tds,
         open.map((d) => ({ id: d.id, base: p(d.base), gst: p(d.gst), open: p(d.open) })),
       );
       const gstPart = a.allocations.reduce((s, x) => s + x.gst, 0n);
@@ -644,17 +659,20 @@ export class SalesService {
           reference: b.number,
           lines: [
             line(setup.collection_account_id!, amount, 0n),
-            line(await this.ledger.partyLedger(tx, b.party_id), 0n, amount),
+            ...(tds
+              ? [line(await this.ledger.roleAccount(tx, entity_id, 'tds_receivable'), tds, 0n)]
+              : []),
+            line(await this.ledger.partyLedger(tx, b.party_id), 0n, amount + tds),
           ],
         },
         { kind: 're_receipt', id: rid },
       );
       await tx`
         INSERT INTO re.receipt (id, number, booking_id, received_on, amount, gst_part, rera_share, unallocated, mode,
-          reference, voucher_id, created_by)
+          reference, voucher_id, created_by, tds, tds_ack)
         VALUES (${rid}, ${number}, ${bookingId}, ${input.on}, ${rupees(amount)}, ${rupees(gstPart)},
-          ${rupees(reraShare(amount - a.unallocated, gstPart, setup.share_pct))}, ${rupees(a.unallocated)},
-          ${input.mode}, ${input.reference}, ${v.id}, ${claims.sub})`;
+          ${rupees(reraShare(amount + tds - a.unallocated, gstPart, setup.share_pct))}, ${rupees(a.unallocated)},
+          ${input.mode}, ${input.reference}, ${v.id}, ${claims.sub}, ${rupees(tds)}, ${input.tdsAck?.trim() ?? ''})`;
       for (const x of a.allocations) {
         await tx`INSERT INTO re.receipt_allocation (receipt_id, demand_id, amount, gst)
           VALUES (${rid}, ${x.id}, ${rupees(x.amount)}, ${rupees(x.gst)})`;
@@ -748,7 +766,7 @@ export class SalesService {
       WHERE d.booking_id = ${id} ORDER BY d.raised_on, d.number`;
     const receipts = await db`
       SELECT number, to_char(received_on, 'YYYY-MM-DD') AS "receivedOn", amount::text, gst_part::text AS "gstPart",
-        rera_share::text AS "reraShare", unallocated::text, mode, reference
+        rera_share::text AS "reraShare", unallocated::text, mode, reference, tds::text, tds_ack AS "tdsAck"
       FROM re.receipt WHERE booking_id = ${id} ORDER BY received_on, number`;
     const sum = (xs: Record<string, unknown>[], k: string) =>
       rupees(xs.reduce((a, x) => a + p(x[k] as string), 0n));
@@ -762,6 +780,7 @@ export class SalesService {
       totals: {
         demanded: sum(demands, 'total'),
         received: sum(receipts, 'amount'),
+        tdsByBuyer: sum(receipts, 'tds'),
         outstanding: sum(demands, 'open'),
         interestDue: rupees(await this.interestDue(db, id, setup.interest_pct, today())),
       },
@@ -775,7 +794,7 @@ export class SalesService {
       SELECT b.id, b.number, b.status, b.value::text, t.name || '-' || u.number AS unit, y.name AS buyer,
         to_char(b.booked_on, 'YYYY-MM-DD') AS "bookedOn",
         coalesce((SELECT sum(base + cgst + sgst) FROM re.demand d WHERE d.booking_id = b.id), 0)::text AS demanded,
-        coalesce((SELECT sum(amount) FROM re.receipt r WHERE r.booking_id = b.id), 0)::text AS received,
+        coalesce((SELECT sum(amount + tds) FROM re.receipt r WHERE r.booking_id = b.id), 0)::text AS received,
         coalesce((SELECT sum(base + cgst + sgst - paid) FROM re.demand d WHERE d.booking_id = b.id
           AND d.due_on < ${today()}::date), 0)::text AS overdue
       FROM re.booking b JOIN re.unit u ON u.id = b.unit_id JOIN re.tower t ON t.id = u.tower_id

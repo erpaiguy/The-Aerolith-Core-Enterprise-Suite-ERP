@@ -349,7 +349,15 @@ export class TdsReturnService {
       SELECT p.id AS "partyId", p.name AS party, p.tan, sum(r.tds)::text AS tds
       FROM acc.client_receipt r JOIN platform.party p ON p.id = r.party_id
       WHERE r.entity_id = ${q.entityId} AND r.status = 'posted' AND r.tds > 0 AND r.received_on BETWEEN ${from} AND ${to}
-      GROUP BY p.id, p.name, p.tan ORDER BY p.name`;
+      GROUP BY p.id, p.name, p.tan
+      UNION ALL
+      -- Flat buyers' TDS under 194-IA (docs/wave8-plan.md step 8b.5): 26AS shows it under the buyer's PAN.
+      SELECT b.party_id, y.name, y.pan, sum(r.tds)::text
+      FROM re.receipt r JOIN re.booking b ON b.id = r.booking_id JOIN re.buyer y ON y.id = b.buyer_id
+      JOIN re.unit u ON u.id = b.unit_id JOIN re.tower t ON t.id = u.tower_id JOIN proj.project j ON j.id = t.project_id
+      WHERE j.entity_id = ${q.entityId} AND r.tds > 0 AND r.received_on BETWEEN ${from} AND ${to}
+      GROUP BY b.party_id, y.name, y.pan
+      ORDER BY 2`;
     const [u] = await db<{ id: string; fileName: string; uploadedAt: string }[]>`
       SELECT id, file_name AS "fileName", uploaded_at AS "uploadedAt" FROM acc.tds_credit_upload
       WHERE entity_id = ${q.entityId} AND quarter = ${q.quarter}`;

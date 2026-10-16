@@ -133,6 +133,7 @@ import { SiteWalksScreen } from './registers/SiteWalks';
 import { ImprestScreen } from './registers/Imprest';
 import { LetterheadSample } from './print/Letterhead';
 import { IssuePrint, OrderPrint, ReceiptPrint } from './print/PurchaseDocs';
+import { Form16aPrint } from './print/TaxDocs';
 import {
   ClientBillPrint,
   ClientReceiptPrint,
@@ -609,6 +610,14 @@ const receiptPrintRoute = createRoute({
   component: function ReceiptPrintPage() {
     const { receiptId } = receiptPrintRoute.useParams();
     return <ReceiptPrint receiptId={receiptId} />;
+  },
+});
+const form16aPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/form-16a/$entityId/$quarter/$partyId',
+  component: function Form16aPrintPage() {
+    const { entityId, quarter, partyId } = form16aPrintRoute.useParams();
+    return <Form16aPrint entityId={entityId} quarter={quarter} partyId={partyId} />;
   },
 });
 const issuePrintRoute = createRoute({
@@ -1276,6 +1285,7 @@ const routeTree = rootRoute.addChildren([
   orderPrintRoute,
   receiptPrintRoute,
   issuePrintRoute,
+  form16aPrintRoute,
   clientBillPrintRoute,
   clientReceiptPrintRoute,
   paymentAdvicePrintRoute,

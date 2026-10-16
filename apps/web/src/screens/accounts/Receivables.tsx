@@ -295,6 +295,7 @@ export function NewClientReceiptScreen() {
   const [bankId, setBankId] = useState('');
   const [amount, setAmount] = useState('');
   const [tds, setTds] = useState('');
+  const [gstTds, setGstTds] = useState('');
   const [reference, setReference] = useState('');
   const [alloc, setAlloc] = useState<Record<string, string>>({});
   const [deductions, setDeductions] = useState<
@@ -321,6 +322,8 @@ export function NewClientReceiptScreen() {
             setAmount,
             tds,
             setTds,
+            gstTds,
+            setGstTds,
             reference,
             setReference,
             alloc,
@@ -371,6 +374,8 @@ function ReceiptForm(p: {
   setAmount: (v: string) => void;
   tds: string;
   setTds: (v: string) => void;
+  gstTds: string;
+  setGstTds: (v: string) => void;
   reference: string;
   setReference: (v: string) => void;
   alloc: Record<string, string>;
@@ -393,7 +398,10 @@ function ReceiptForm(p: {
     enabled: !!p.partyId,
   });
   const settled =
-    paise(p.amount) + paise(p.tds) + p.deductions.reduce((s, d) => s + paise(d.amount), 0);
+    paise(p.amount) +
+    paise(p.tds) +
+    paise(p.gstTds) +
+    p.deductions.reduce((s, d) => s + paise(d.amount), 0);
   const allocated = Object.values(p.alloc).reduce((s, v) => s + paise(v), 0);
   const oldestFirst = () => {
     let left = settled;
@@ -426,6 +434,7 @@ function ReceiptForm(p: {
       bankAccountId: p.bankId,
       amount: p.amount.replace(/,/g, ''),
       tds: p.tds.replace(/,/g, '') || '0',
+      gstTds: p.gstTds.replace(/,/g, '') || '0',
       reference: p.reference,
       allocations,
       deductions: p.deductions,
@@ -490,6 +499,13 @@ function ReceiptForm(p: {
           </Field>
           <Field label="TDS deducted ₹">
             <Input value={p.tds} onChange={(e) => p.setTds(e.target.value)} inputMode="decimal" />
+          </Field>
+          <Field label="GST TDS deducted ₹" hint="2% by a government client (section 51)">
+            <Input
+              value={p.gstTds}
+              onChange={(e) => p.setGstTds(e.target.value)}
+              inputMode="decimal"
+            />
           </Field>
           <Field label="UTR or cheque no.">
             <Input
@@ -658,6 +674,7 @@ interface Receipt {
   bank: { code: string; name: string };
   amount: string;
   tds: string;
+  gstTds: string;
   reference: string;
   narration: string;
   status: 'posted' | 'cancelled';
@@ -742,6 +759,12 @@ export function ClientReceiptScreen({ receiptId }: { receiptId: string }) {
             <>
               <dt className="text-fg-muted">TDS deducted</dt>
               <dd>{rupees(x.tds)}</dd>
+            </>
+          )}
+          {Number(x.gstTds) > 0 && (
+            <>
+              <dt className="text-fg-muted">GST TDS deducted</dt>
+              <dd>{rupees(x.gstTds)}</dd>
             </>
           )}
           {x.deductions.map((d, i) => (

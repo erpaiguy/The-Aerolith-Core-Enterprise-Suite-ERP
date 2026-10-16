@@ -525,7 +525,13 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
     queryFn: () => api.request<Booking>(`/api/tenant/sales/bookings/${id}`),
   });
   const [agreement, setAgreement] = useState({ on: today(), number: '' });
-  const [rcpt, setRcpt] = useState({ on: today(), amount: '', reference: '' });
+  const [rcpt, setRcpt] = useState({
+    on: today(),
+    amount: '',
+    reference: '',
+    tds: '',
+    tdsAck: '',
+  });
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const b = q.data;
@@ -615,9 +621,13 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
           className="mt-3 grid gap-3 sm:grid-cols-4"
           onSubmit={(e) => {
             e.preventDefault();
-            void act('receipts', { ...rcpt, mode: 'neft' }).then(() =>
-              setRcpt({ ...rcpt, amount: '', reference: '' }),
-            );
+            void act('receipts', {
+              on: rcpt.on,
+              amount: rcpt.amount,
+              reference: rcpt.reference,
+              mode: 'neft',
+              ...(Number(rcpt.tds) > 0 ? { tds: rcpt.tds, tdsAck: rcpt.tdsAck } : {}),
+            }).then(() => setRcpt({ ...rcpt, amount: '', reference: '', tds: '', tdsAck: '' }));
           }}
         >
           <Field label="Received on">
@@ -639,6 +649,21 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
             <Input
               value={rcpt.reference}
               onChange={(e) => setRcpt({ ...rcpt, reference: e.target.value })}
+            />
+          </Field>
+          <Field label="Buyer's TDS (₹)" hint="1% under 194-IA">
+            <Input
+              inputMode="decimal"
+              value={rcpt.tds}
+              onChange={(e) => setRcpt({ ...rcpt, tds: e.target.value })}
+            />
+          </Field>
+          <Field label="26QB acknowledgement">
+            <Input
+              value={rcpt.tdsAck}
+              onChange={(e) => setRcpt({ ...rcpt, tdsAck: e.target.value })}
+              maxLength={40}
+              required={Number(rcpt.tds) > 0}
             />
           </Field>
           <div className="flex items-end gap-2">

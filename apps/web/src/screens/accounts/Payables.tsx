@@ -1,6 +1,7 @@
 // Payables (docs/wave3-plan.md step 4): what is owed to suppliers, aged from the due dates; their bills, entered
 // against an order (matched to it and its receipts, held when they do not match) or to a ledger; debit notes and
 // advances; payment runs approved under the rules, with a file for the bank, marked paid.
+import { MsmeCard } from './Msme';
 import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -96,6 +97,7 @@ export function PayablesScreen() {
             </Button>
           </div>
           <Ageing entityId={entityId} asOf={asOf} />
+          <MsmeCard entityId={entityId} asOf={asOf} />
           <BillList entityId={entityId} />
           <RunList entityId={entityId} />
           <Tolerance />

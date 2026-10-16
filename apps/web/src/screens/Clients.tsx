@@ -55,6 +55,8 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
           address: party.address ?? '',
           tdsSection: party.tdsSection ?? '',
           rcmCategory: party.rcmCategory ?? '',
+          udyamNo: party.udyamNo ?? '',
+          msmeType: party.msmeType ?? '',
           bankAccountName: party.bankAccountName ?? '',
           bankAccountNo: party.bankAccountNo ?? '',
           bankIfsc: party.bankIfsc ?? '',
@@ -193,6 +195,22 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
                   </option>
                 ))}
               </Select>
+            </Field>
+            <Field label="MSME (Udyam)" hint="Micro and small: paid within 45 days">
+              <Select value={v.msmeType ?? ''} onChange={set('msmeType')}>
+                <option value="">Not registered</option>
+                <option value="micro">Micro</option>
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+              </Select>
+            </Field>
+            <Field label="Udyam number">
+              <Input
+                value={v.udyamNo ?? ''}
+                onChange={set('udyamNo')}
+                placeholder="UDYAM-MH-12-0012345"
+                maxLength={19}
+              />
             </Field>
             <Field label="Bank account name">
               <Input

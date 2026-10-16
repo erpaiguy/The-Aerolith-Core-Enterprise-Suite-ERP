@@ -82,6 +82,18 @@ const partyFields = {
     .enum(RCM_CATEGORIES)
     .nullable()
     .or(z.literal('').transform(() => null)),
+  // MSME suppliers (docs/wave8-plan.md step 8b.4).
+  udyamNo: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/, 'A Udyam number: UDYAM-MH-12-0012345')
+    .nullable()
+    .or(z.literal('').transform(() => null)),
+  msmeType: z
+    .enum(['micro', 'small', 'medium'])
+    .nullable()
+    .or(z.literal('').transform(() => null)),
   bankAccountName: text(200),
   bankAccountNo: z
     .string()
@@ -134,6 +146,8 @@ const partyCreate = z.object({
   notes: partyFields.notes.default(''),
   tdsSection: partyFields.tdsSection.default(null),
   rcmCategory: partyFields.rcmCategory.default(null),
+  udyamNo: partyFields.udyamNo.default(null),
+  msmeType: partyFields.msmeType.default(null),
   bankAccountName: partyFields.bankAccountName.default(null),
   bankAccountNo: partyFields.bankAccountNo.default(null),
   bankIfsc: partyFields.bankIfsc.default(null),

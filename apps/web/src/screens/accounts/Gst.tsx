@@ -120,6 +120,7 @@ export function GstScreen() {
           <RegistersCard entityId={entityId} period={period} />
           <TwoB entityId={entityId} period={period} />
           <Rule37 entityId={entityId} />
+          <GstTds entityId={entityId} period={period} />
         </>
       )}
     </Books>
@@ -320,6 +321,156 @@ function Rule37({ entityId }: { entityId: string }) {
             ))}
           </tbody>
         </Table>
+      )}
+    </Card>
+  );
+}
+
+interface GstTdsView {
+  rows: {
+    partyId: string;
+    party: string;
+    month: string;
+    receipts: number;
+    books: string;
+    credit: { amount: string; deductorGstin: string; acceptedOn: string } | null;
+    state: 'matched' | 'differs' | 'awaiting';
+  }[];
+  mayPost: boolean;
+}
+
+/** GST TDS by government clients (docs/wave8-plan.md step 8b.2): the receipts against GSTR-7A. */
+function GstTds({ entityId, period }: { entityId: string; period: string }) {
+  const qc = useQueryClient();
+  const q = `entityId=${entityId}&from=${period}-01&to=${monthEnd(period)}`;
+  const key = ['gst-tds', entityId, period];
+  const v = useQuery({
+    queryKey: key,
+    queryFn: () => api.request<GstTdsView>(`/api/tenant/accounts/gst-tds?${q}`),
+  });
+  const [form, setForm] = useState<{
+    partyId: string;
+    gstin: string;
+    amount: string;
+    on: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const accept = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!form) return;
+    setError(null);
+    try {
+      await api.request('/api/tenant/accounts/gst-tds/credits', {
+        method: 'POST',
+        body: {
+          entityId,
+          partyId: form.partyId,
+          month: period,
+          deductorGstin: form.gstin,
+          amount: form.amount.replace(/,/g, ''),
+          acceptedOn: form.on,
+        },
+      });
+      setForm(null);
+      await qc.invalidateQueries({ queryKey: key });
+    } catch (err) {
+      setError(describeError(err));
+    }
+  };
+  if (v.isPending) return <Spinner />;
+  if (v.isError) return <Alert tone="danger">{describeError(v.error)}</Alert>;
+  if (!v.data.rows.length) return null;
+  return (
+    <Card title="GST TDS by government clients (GSTR-7A)">
+      {error && <Alert tone="danger">{error}</Alert>}
+      <Table minWidth="36rem">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th className="text-right">In our receipts</th>
+            <th className="text-right">In GSTR-7A</th>
+            <th>State</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody aria-label="GST TDS">
+          {v.data.rows.map((r) => (
+            <tr key={`${r.partyId}-${r.month}`}>
+              <td>{r.party}</td>
+              <td className="text-right tabular-nums">{rupees(r.books)}</td>
+              <td className="text-right tabular-nums">
+                {r.credit ? rupees(r.credit.amount) : '—'}
+                {r.credit && (
+                  <div className="text-xs text-fg-muted">
+                    {r.credit.deductorGstin}, accepted {shortDate(r.credit.acceptedOn)}
+                  </div>
+                )}
+              </td>
+              <td>
+                <Badge
+                  tone={
+                    r.state === 'matched' ? 'success' : r.state === 'differs' ? 'danger' : 'warning'
+                  }
+                >
+                  {r.state === 'matched'
+                    ? 'Matched'
+                    : r.state === 'differs'
+                      ? 'Differs'
+                      : 'Awaiting 7A'}
+                </Badge>
+              </td>
+              <td className="text-right">
+                {v.data.mayPost && !r.credit ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      setForm({ partyId: r.partyId, gstin: '', amount: r.books, on: today() })
+                    }
+                  >
+                    Accept credit
+                  </Button>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+      {form && (
+        <form
+          onSubmit={(e) => void accept(e)}
+          className="mt-3 flex flex-wrap items-end gap-3"
+          aria-label="GSTR-7A credit"
+        >
+          <Field label="Deductor's GSTIN">
+            <Input
+              value={form.gstin}
+              onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
+              maxLength={15}
+              required
+            />
+          </Field>
+          <Field label="Credit ₹">
+            <Input
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              inputMode="decimal"
+              required
+            />
+          </Field>
+          <Field label="Accepted on">
+            <Input
+              type="date"
+              value={form.on}
+              onChange={(e) => setForm({ ...form, on: e.target.value })}
+              required
+            />
+          </Field>
+          <Button type="submit">Take into the cash ledger</Button>
+          <Button type="button" variant="ghost" onClick={() => setForm(null)}>
+            Cancel
+          </Button>
+        </form>
       )}
     </Card>
   );

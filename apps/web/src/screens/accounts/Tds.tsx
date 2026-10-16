@@ -12,6 +12,7 @@ import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
 import { Books } from './Vouchers';
+import { Certificates, ReturnFiles, SalaryTds } from './TdsReturns';
 
 /** The financial-year quarter a date falls in: "2026-27-Q2". */
 export const quarterOf = (d: string) => {
@@ -97,6 +98,7 @@ const CREDIT: Record<
 
 export function TdsScreen() {
   const [quarter, setQuarter] = useState(quarterOf(today()));
+  const mayPost = usePermission('accounts.post');
   return (
     <Books title="TDS">
       {(entityId) => (
@@ -111,6 +113,9 @@ export function TdsScreen() {
             </Select>
           </Field>
           <Deductions key={`${entityId}-${quarter}`} entityId={entityId} quarter={quarter} />
+          <SalaryTds entityId={entityId} quarter={quarter} mayPost={mayPost} />
+          <ReturnFiles entityId={entityId} quarter={quarter} />
+          <Certificates entityId={entityId} mayPost={mayPost} />
           <ClientCredits key={`c-${entityId}-${quarter}`} entityId={entityId} quarter={quarter} />
         </>
       )}
