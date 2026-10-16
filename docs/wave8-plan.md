@@ -149,7 +149,7 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8a.1 Revenue on work done (Ind AS 115)
 - [x] 8a.2 Material at site and accruals
 - [x] 8a.3 Free-issue material to subcontractors
-- [ ] 8a.4 Budget check on purchase orders
+- [x] 8a.4 Budget check on purchase orders
 - [ ] 8a.5 Debit notes from the stores
 - [ ] 8a exit: full check and browser suite
 - [ ] 8b.1 GST reverse charge

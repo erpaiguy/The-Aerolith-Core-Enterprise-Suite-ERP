@@ -691,4 +691,62 @@ describe.skipIf(!controlUrl || !adminUrl)('material budget (integration)', () =>
       actualCost: '0',
     });
   });
+
+  it('holds an order beyond the material budget until the lead gives a reason', async () => {
+    // docs/wave8-plan.md step 8a.4: 400 bags of cement is beyond the budget in force.
+    const site = (
+      await ok<{ sites: { id: string }[] }>(
+        post(
+          `/tenant/projects/${projectId}/sites`,
+          { name: 'Budget yard', stateCode: '27' },
+          manager,
+        ),
+      )
+    ).sites.at(-1)!.id;
+    const vendor = (
+      await ok<{ id: string }>(
+        post('/tenant/parties', { name: 'Akola Cement Depot', isClient: false, isVendor: true }),
+      )
+    ).id;
+    const o = await ok<{ id: string; open: { id: string; rowVersion: number } }>(
+      post(
+        `/tenant/projects/${projectId}/orders`,
+        {
+          kind: 'purchase',
+          partyId: vendor,
+          siteId: site,
+          lines: [
+            {
+              resourceId: ids.CEM,
+              description: 'Cement',
+              unit: 'bag',
+              qty: '400',
+              rate: '400',
+              gstPct: '28',
+            },
+          ],
+        },
+        manager,
+      ),
+    );
+    const check = await ok<{ over: { code: string; overQty: string; notInBudget: boolean }[] }>(
+      get(`/tenant/order-revisions/${o.open.id}/budget-check`, manager),
+    );
+    expect(check.over).toEqual([expect.objectContaining({ code: 'CEM', notInBudget: false })]);
+    expect(Number(check.over[0]!.overQty)).toBeGreaterThan(0);
+    const submit = (body: object) =>
+      post(
+        `/tenant/order-revisions/${o.open.id}/submit`,
+        { rowVersion: o.open.rowVersion, ...body },
+        manager,
+      );
+    expect((await submit({})).json()).toMatchObject({ code: 'over_budget' });
+    const issued = await ok<{
+      status: string;
+      inForce: { overBudgetReason: string; overBudget: unknown[] };
+    }>(submit({ overBudgetReason: 'Second raft pour moved up' }));
+    expect(issued.status).toBe('issued');
+    expect(issued.inForce.overBudgetReason).toBe('Second raft pour moved up');
+    expect(issued.inForce.overBudget).toHaveLength(1);
+  });
 });

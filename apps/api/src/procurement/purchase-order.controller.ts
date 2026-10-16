@@ -164,15 +164,27 @@ export class PurchaseOrderController {
     return this.orders.update(c, id, v, input);
   }
 
+  @Get('order-revisions/:id/budget-check')
+  async budgetCheck(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.checkBudget(c, id);
+  }
+
   @Post('order-revisions/:id/submit')
   @HttpCode(200)
   @RequiresFeatures()
   submit(
     @Auth() c: TenantClaims,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodPipe(rowVersion)) b: z.infer<typeof rowVersion>,
+    @Body(
+      new ZodPipe(
+        rowVersion.extend({
+          overBudgetReason: z.string().trim().min(3).max(1000).nullable().default(null),
+        }),
+      ),
+    )
+    b: { rowVersion: number; overBudgetReason: string | null },
   ) {
-    return this.orders.submit(c, id, b.rowVersion);
+    return this.orders.submit(c, id, b.rowVersion, b.overBudgetReason);
   }
 
   @Post('order-revisions/:id/discard')

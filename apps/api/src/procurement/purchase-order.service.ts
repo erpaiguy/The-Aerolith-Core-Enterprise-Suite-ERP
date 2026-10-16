@@ -494,7 +494,85 @@ export class PurchaseOrderService implements OnModuleInit {
    * Sends a revision for approval: revision 0 for its total, an amendment for what it adds to the order in force.
    * With no rule for that amount it is in force at once.
    */
-  async submit(claims: TenantClaims, revisionId: string, rowVersion: number) {
+  /**
+   * Lines of a revision beyond the project's approved material budget (step 8a.4): for each budgeted material, what
+   * the budget allows against what the project's other orders in force take plus this revision. Materials outside
+   * the budget, where one is approved, are named too. Empty when the project has no approved budget.
+   */
+  async budgetCheck(db: Db, revisionId: string) {
+    const rows = await db<
+      {
+        code: string;
+        name: string;
+        unit: string;
+        budgetQty: string | null;
+        budgetAmount: string | null;
+        elsewhereQty: string;
+        elsewhereAmount: string;
+        thisQty: string;
+        thisAmount: string;
+      }[]
+    >`
+      WITH v AS (SELECT r.id, r.po_id, o.project_id FROM proc.po_revision r
+          JOIN proc.purchase_order o ON o.id = r.po_id WHERE r.id = ${revisionId}),
+        b AS (SELECT mb.id FROM proj.material_budget mb, v WHERE mb.project_id = v.project_id AND mb.status = 'approved'),
+        mine AS (SELECT l.resource_id, sum(l.qty) AS qty, sum(l.amount) AS amount FROM proc.po_line l, v
+          WHERE l.revision_id = v.id AND l.resource_id IS NOT NULL GROUP BY l.resource_id)
+      SELECT res.code, res.name, res.unit, bl.qty::text AS "budgetQty", bl.amount::text AS "budgetAmount",
+        coalesce((SELECT sum(l.qty) FROM proc.purchase_order o JOIN proc.po_revision r ON r.po_id = o.id
+          AND r.status = 'approved' JOIN proc.po_line l ON l.revision_id = r.id, v
+          WHERE o.project_id = v.project_id AND o.id <> v.po_id AND o.status NOT IN ('cancelled')
+            AND l.resource_id = mine.resource_id), 0)::text AS "elsewhereQty",
+        coalesce((SELECT sum(l.amount) FROM proc.purchase_order o JOIN proc.po_revision r ON r.po_id = o.id
+          AND r.status = 'approved' JOIN proc.po_line l ON l.revision_id = r.id, v
+          WHERE o.project_id = v.project_id AND o.id <> v.po_id AND o.status NOT IN ('cancelled')
+            AND l.resource_id = mine.resource_id), 0)::text AS "elsewhereAmount",
+        mine.qty::text AS "thisQty", mine.amount::text AS "thisAmount"
+      FROM mine JOIN est.resource res ON res.id = mine.resource_id
+      LEFT JOIN proj.material_budget_line bl ON bl.budget_id = (SELECT id FROM b) AND bl.resource_id = mine.resource_id
+      WHERE EXISTS (SELECT 1 FROM b)
+      ORDER BY res.code`;
+    return rows
+      .map((r) => {
+        const qty = dec(r.elsewhereQty) + dec(r.thisQty);
+        const amount = dec(r.elsewhereAmount) + dec(r.thisAmount);
+        const overQty =
+          r.budgetQty !== null && qty > dec(r.budgetQty) ? qty - dec(r.budgetQty) : 0n;
+        const overAmount =
+          r.budgetAmount !== null && amount > dec(r.budgetAmount)
+            ? amount - dec(r.budgetAmount)
+            : 0n;
+        return {
+          code: r.code,
+          name: r.name,
+          unit: r.unit,
+          budgetQty: r.budgetQty,
+          budgetAmount: r.budgetAmount,
+          orderedQty: fmt(qty, 4),
+          orderedAmount: fmt(amount, 2),
+          overQty: fmt(overQty, 4),
+          overAmount: fmt(overAmount, 2),
+          notInBudget: r.budgetQty === null,
+        };
+      })
+      .filter((r) => r.notInBudget || dec(r.overQty) > 0n || dec(r.overAmount) > 0n);
+  }
+
+  /** The check as it would run on putting the revision up, for the screen to warn first. */
+  async checkBudget(claims: TenantClaims, revisionId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const r = await this.revisionRow(db, revisionId);
+    const o = await this.order(db, r.po_id);
+    await this.projects.access(db, claims, o.project_id);
+    return { over: await this.budgetCheck(db, revisionId) };
+  }
+
+  async submit(
+    claims: TenantClaims,
+    revisionId: string,
+    rowVersion: number,
+    overBudgetReason: string | null = null,
+  ) {
     const db = await this.tenants.forTenant(claims.ten);
     const r0 = await this.revisionRow(db, revisionId);
     const o = await this.order(db, r0.po_id);
@@ -547,6 +625,25 @@ export class PurchaseOrderService implements OnModuleInit {
             });
           }
       }
+      // Beyond the material budget: a reason, and then only the lead puts it through, or an approver.
+      const over = await this.budgetCheck(tx, revisionId);
+      if (over.length && !overBudgetReason)
+        throw new ConflictException({
+          code: 'over_budget',
+          message: `Beyond the material budget: ${over
+            .map((x) =>
+              x.notInBudget
+                ? `${x.name} (not in the budget)`
+                : `${x.name} by ${Number(x.overQty)} ${x.unit}`,
+            )
+            .join(', ')}. Give a reason to put it up.`,
+          over,
+        });
+      const lead = over.length
+        ? (await this.projects.access(tx, claims, o.project_id)).canEdit
+        : true;
+      await tx`UPDATE proc.po_revision SET over_budget = ${over.length ? tx.json(over) : null},
+        over_budget_reason = ${over.length ? overBudgetReason : null} WHERE id = ${revisionId}`;
       const [inForce] = await tx<{ total: string }[]>`
         SELECT total::text FROM proc.po_revision WHERE po_id = ${o.id} AND status = 'approved'`;
       const delta = inForce ? cents(r.total) - cents(inForce.total) : cents(r.total);
@@ -562,6 +659,12 @@ export class PurchaseOrderService implements OnModuleInit {
       });
       await tx`UPDATE proc.po_revision SET status = 'submitted', status_reason = NULL, updated_at = now(),
         updated_by = ${claims.sub}, row_version = row_version + 1 WHERE id = ${revisionId}`;
+      if (res.status === 'approved' && !lead)
+        throw new ConflictException({
+          code: 'over_budget_needs_lead',
+          message:
+            "Beyond the budget, and no approver is set for orders: the project's lead puts it up.",
+        });
       if (res.status === 'approved') await this.putInForce(tx, revisionId, claims);
       await audit(tx, claims.sub, 'order.submit', 'po_revision', revisionId, {
         status: res.status,
@@ -785,6 +888,8 @@ export class PurchaseOrderService implements OnModuleInit {
         total: string;
         approvedAt: string | null;
         rowVersion: number;
+        overBudget: unknown;
+        overBudgetReason: string | null;
       }[]
     >`
       SELECT v.id, v.revision, v.status, v.status_reason AS "statusReason", v.reason,
@@ -793,7 +898,8 @@ export class PurchaseOrderService implements OnModuleInit {
         to_char(v.deliver_by, 'YYYY-MM-DD') AS "deliverBy", v.payment_terms AS "paymentTerms",
         v.delivery_terms AS "deliveryTerms", v.other_terms AS "otherTerms", v.supply,
         v.subtotal::text AS subtotal, v.cgst::text AS cgst, v.sgst::text AS sgst, v.igst::text AS igst,
-        v.total::text AS total, v.approved_at AS "approvedAt", v.row_version AS "rowVersion"
+        v.total::text AS total, v.approved_at AS "approvedAt", v.row_version AS "rowVersion",
+        v.over_budget AS "overBudget", v.over_budget_reason AS "overBudgetReason"
       FROM proc.po_revision v LEFT JOIN proj.site s ON s.id = v.site_id WHERE v.id = ${revisionId}`;
     const lines = await db`
       SELECT l.position, l.line_key AS "lineKey", l.resource_id AS "resourceId", r.code AS "resourceCode", l.rfq_line_id AS "rfqLineId",

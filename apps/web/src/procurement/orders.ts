@@ -69,9 +69,23 @@ export interface OrderLine {
   igst: string;
 }
 
+/** A material beyond the project's approved budget when the revision was put up (docs/wave8-plan.md step 8a.4). */
+export interface OverBudget {
+  code: string;
+  name: string;
+  unit: string;
+  budgetQty: string | null;
+  orderedQty: string;
+  overQty: string;
+  overAmount: string;
+  notInBudget: boolean;
+}
+
 export interface OrderRevision {
   id: string;
   revision: number;
+  overBudget?: OverBudget[] | null;
+  overBudgetReason?: string | null;
   status: OrderRevisionStatus;
   statusReason: string | null;
   reason: string;

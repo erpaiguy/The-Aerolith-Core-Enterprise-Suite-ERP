@@ -35,6 +35,7 @@ import {
   supplyOf,
   type Order,
   type OrderRevision,
+  type OverBudget,
 } from '../procurement/orders';
 import { OrderReceipts } from '../procurement/OrderReceipts';
 import { WorkOrderSubcontract } from './accounts/Subcontract';
@@ -131,6 +132,17 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
     call(k, path, { reason: reason.trim() });
   };
   const shown = editing ?? o.open ?? o.inForce;
+  // Beyond the material budget, the order goes up only with a reason (step 8a.4).
+  const budget = useQuery({
+    queryKey: ['order-budget-check', editing?.id, editing?.rowVersion],
+    queryFn: () =>
+      api.request<{ over: OverBudget[] }>(
+        `/api/tenant/order-revisions/${editing!.id}/budget-check`,
+      ),
+    enabled: !!editing && !dirty,
+  });
+  const [overReason, setOverReason] = useState('');
+  const over = budget.data?.over ?? [];
   const kind = ORDER_KIND[o.kind];
   return (
     <div className="space-y-5">
@@ -167,11 +179,18 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
             {editing && (
               <Button
                 busy={busy === 'submit'}
-                disabled={dirty}
-                title={dirty ? 'Save your changes first' : undefined}
+                disabled={dirty || (over.length > 0 && overReason.trim().length < 3)}
+                title={
+                  dirty
+                    ? 'Save your changes first'
+                    : over.length && overReason.trim().length < 3
+                      ? 'Give the reason for going beyond the budget'
+                      : undefined
+                }
                 onClick={() =>
                   call('submit', `order-revisions/${editing.id}/submit`, {
                     rowVersion: editing.rowVersion,
+                    overBudgetReason: over.length ? overReason.trim() : null,
                   })
                 }
               >
@@ -221,6 +240,37 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
           </div>
         }
       />
+      {editing && over.length > 0 && (
+        <Alert tone="warning">
+          <div className="space-y-2">
+            <div>
+              Beyond the project's material budget:{' '}
+              {over
+                .map((x) =>
+                  x.notInBudget
+                    ? `${x.name} (not in the budget)`
+                    : `${x.name} by ${Number(x.overQty).toLocaleString('en-IN')} ${x.unit}`,
+                )
+                .join('; ')}
+              . Say why to put it up: the project's lead can, or it goes to an approver.
+            </div>
+            <Input
+              aria-label="Reason for going beyond the budget"
+              placeholder="Reason for going beyond the budget"
+              value={overReason}
+              maxLength={1000}
+              onChange={(e) => setOverReason(e.target.value)}
+            />
+          </div>
+        </Alert>
+      )}
+      {!editing && shown?.overBudgetReason && (
+        <Alert tone="info">
+          Put up beyond the material budget (
+          {(shown.overBudget ?? []).map((x) => x.name).join(', ')}
+          ): {shown.overBudgetReason}
+        </Alert>
+      )}
       {o.status === 'cancelled' && o.statusReason && (
         <Alert tone="info">Cancelled: {o.statusReason}</Alert>
       )}
