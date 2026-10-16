@@ -86,7 +86,10 @@ export const ROLES = {
   rcm_sgst: { label: 'SGST payable, reverse charge', key: 'rcm_sgst' },
   rcm_igst: { label: 'IGST payable, reverse charge', key: 'rcm_igst' },
   itc_rule37: { label: 'Input credit reversed, unpaid suppliers (Rule 37)', key: 'itc_rule37' },
-  gst_tds_receivable: { label: 'GST TDS deducted by clients (section 51)', key: 'gst_tds_receivable' },
+  gst_tds_receivable: {
+    label: 'GST TDS deducted by clients (section 51)',
+    key: 'gst_tds_receivable',
+  },
   gst_cash_ledger: { label: 'GST electronic cash ledger', key: 'gst_cash_ledger' },
 } as const;
 export type Role = keyof typeof ROLES;
