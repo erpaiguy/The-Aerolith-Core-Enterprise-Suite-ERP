@@ -142,7 +142,7 @@ test("a month's close worked out from the books, then locked", async ({ page }) 
     .click();
   await page.getByLabel('Month').fill('2026-09');
   const steps = page.getByRole('list', { name: 'Close steps' });
-  await expect(steps.getByRole('listitem')).toHaveCount(5);
+  await expect(steps.getByRole('listitem')).toHaveCount(7);
   await expect(steps).toContainText('None held.');
   await expect(steps).toContainText('No staff on the rolls.');
   await page.getByRole('button', { name: 'Lock the month' }).click();

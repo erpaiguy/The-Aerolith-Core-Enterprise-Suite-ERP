@@ -147,7 +147,7 @@ figures; the approvals engine with delegation; audit log; API keys and webhooks;
 The source of truth for where the work stands. A scheduled check-in resumes from the first unticked line.
 
 - [x] 8a.1 Revenue on work done (Ind AS 115)
-- [ ] 8a.2 Material at site and accruals
+- [x] 8a.2 Material at site and accruals
 - [ ] 8a.3 Free-issue material to subcontractors
 - [ ] 8a.4 Budget check on purchase orders
 - [ ] 8a.5 Debit notes from the stores

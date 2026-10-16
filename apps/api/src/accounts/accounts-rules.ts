@@ -81,6 +81,7 @@ export const ROLES = {
     key: 'contract_loss_provision',
   },
   contract_loss_expense: { label: 'Expected contract losses', key: 'contract_loss_expense' },
+  subcontract_accrued: { label: 'Subcontract work accrued', key: 'subcontract_accrued' },
 } as const;
 export type Role = keyof typeof ROLES;
 export const isRole = (r: string): r is Role => r in ROLES;

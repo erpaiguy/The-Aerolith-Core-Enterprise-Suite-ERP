@@ -612,6 +612,48 @@ describe.skipIf(!controlUrl || !adminUrl)('payables (integration)', () => {
     expect((await get('/tenant/accounts/payables-settings', worker)).statusCode).toBe(403);
   });
 
+  it('accrues goods received but not invoiced at the month end, and reverses it the next day', async () => {
+    // docs/wave8-plan.md step 8a.2: 90 bags billed against 60 received; 40 more come on 20 September, so 10 are
+    // received and not invoiced at the month's end (₹3,900 at the order's ₹390).
+    await ok(
+      post(
+        `/tenant/orders/${po.id}/receipts`,
+        { receivedOn: '2026-09-20', challanNo: 'DC-9', lines: [{ lineKey: po.key, qty: '40' }] },
+        manager,
+      ),
+    );
+    interface Accruals {
+      rows: {
+        project: { id: string };
+        goodsNotInvoiced: string;
+        orders: { number: string; kind: string; amount: string }[];
+        posted: { voucher: string | null; reversal: string | null } | null;
+      }[];
+      posted: boolean;
+    }
+    const url = `/tenant/accounts/month-end-accruals?entityId=${entityId}&month=2026-09`;
+    expect((await get(url, worker)).statusCode).toBe(403);
+    const before = await ok<Accruals>(get(url, manager));
+    expect(before.rows.find((r) => r.project.id === projectId)).toMatchObject({
+      goodsNotInvoiced: '3900.00',
+      orders: [{ kind: 'purchase', amount: '3900.00' }],
+      posted: null,
+    });
+    const after = await ok<Accruals>(
+      post('/tenant/accounts/month-end-accruals', { entityId, month: '2026-09' }, manager),
+    );
+    const row = after.rows.find((r) => r.project.id === projectId)!;
+    expect([row.posted?.voucher, row.posted?.reversal]).toEqual([
+      expect.stringMatching(/^JV/),
+      expect.stringMatching(/^JV/),
+    ]);
+    expect(
+      (
+        await post('/tenant/accounts/month-end-accruals', { entityId, month: '2026-09' }, manager)
+      ).json(),
+    ).toMatchObject({ code: 'already_posted' });
+  });
+
   it("works out September's close from the books, and locks it when done", async () => {
     // docs/wave7-plan.md step 7c.6: the bills of September are posted or cancelled; no staff, assets or statement.
     interface Close {
@@ -628,6 +670,8 @@ describe.skipIf(!controlUrl || !adminUrl)('payables (integration)', () => {
       ['payroll', 'na'],
       ['depreciation', 'na'],
       ['bank', 'na'],
+      ['accruals', 'done'],
+      ['revenue', 'na'],
     ]);
     expect(close).toMatchObject({ ready: true, locked: false });
     // The admin locks it; the manager may look but not lock.

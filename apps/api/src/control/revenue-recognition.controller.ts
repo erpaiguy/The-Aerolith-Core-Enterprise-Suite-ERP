@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { MonthEndAccrualsService } from './month-end-accruals.service.js';
 import { RevenueRecognitionService } from './revenue-recognition.service.js';
 
 const monthQ = z.object({
@@ -26,5 +27,24 @@ export class RevenueRecognitionController {
   @RequiresFeatures()
   post(@Auth() c: TenantClaims, @Body(new ZodPipe(monthQ)) b: z.infer<typeof monthQ>) {
     return this.revenue.post(c, b.entityId, b.month);
+  }
+}
+
+/** Material at site and month-end accruals (docs/wave8-plan.md step 8a.2). */
+@Controller('tenant/accounts/month-end-accruals')
+@UseGuards(TenantAuthGuard)
+export class MonthEndAccrualsController {
+  constructor(private readonly accruals: MonthEndAccrualsService) {}
+
+  @Get()
+  month(@Auth() c: TenantClaims, @Query(new ZodPipe(monthQ)) q: z.infer<typeof monthQ>) {
+    return this.accruals.month(c, q.entityId, q.month);
+  }
+
+  @Post()
+  @HttpCode(200)
+  @RequiresFeatures()
+  post(@Auth() c: TenantClaims, @Body(new ZodPipe(monthQ)) b: z.infer<typeof monthQ>) {
+    return this.accruals.post(c, b.entityId, b.month);
   }
 }

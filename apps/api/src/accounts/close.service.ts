@@ -3,6 +3,7 @@
 // depreciation run, and the bank statement matched. When every step is done (or does not apply) the month may be
 // locked; a step still open blocks the lock.
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { LedgerService } from './ledger.service.js';
@@ -20,7 +21,59 @@ export class CloseService {
   constructor(
     private readonly tenants: TenantConnections,
     private readonly ledger: LedgerService,
+    private readonly modules: ModuleRef,
   ) {}
+
+  /**
+   * Whether the month's work-done revenue and accruals are posted (steps 8a.1 and 8a.2). Those services live in the
+   * control module, which depends on this one, so they are looked up when needed rather than injected.
+   */
+  private async workSteps(
+    entityId: string,
+    month: string,
+    db: Parameters<typeof this.ledger.roleAccount>[0],
+  ) {
+    const { RevenueRecognitionService } = await import('../control/revenue-recognition.service.js');
+    const { MonthEndAccrualsService } = await import('../control/month-end-accruals.service.js');
+    const revenue = this.modules.get(RevenueRecognitionService, { strict: false });
+    const accruals = this.modules.get(MonthEndAccrualsService, { strict: false });
+    const [y, m] = month.split('-').map(Number) as [number, number];
+    const asOf = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+    const [posted] = await db<{ revenue: boolean; accruals: boolean }[]>`
+      SELECT EXISTS (SELECT 1 FROM acc.revenue_recognition WHERE entity_id = ${entityId} AND month = ${`${month}-01`})
+          AS revenue,
+        EXISTS (SELECT 1 FROM acc.month_end_accrual WHERE entity_id = ${entityId} AND month = ${`${month}-01`})
+          AS accruals`;
+    const accrualRows = posted!.accruals ? [] : (await accruals.compute(db, entityId, asOf)).rows;
+    const revenueRows = posted!.revenue
+      ? []
+      : (await revenue.compute(db, entityId, asOf)).filter(
+          (r) => Number(r.adjustment) !== 0 || Number(r.lossProvision) !== 0,
+        );
+    const steps: CloseStep[] = [
+      {
+        key: 'accruals',
+        label: 'Accruals and stock at site posted',
+        state: posted!.accruals ? 'done' : accrualRows.length ? 'open' : 'na',
+        detail: posted!.accruals
+          ? "Posted for the month end, reversed on the next month's first."
+          : accrualRows.length
+            ? `${accrualRows.length} project(s) with goods or work not yet billed, or stock at site.`
+            : 'Nothing received or measured unbilled, and no stock at site.',
+      },
+      {
+        key: 'revenue',
+        label: 'Revenue on work done posted',
+        state: posted!.revenue ? 'done' : revenueRows.length ? 'open' : 'na',
+        detail: posted!.revenue
+          ? "Posted for the month end, reversed on the next month's first."
+          : revenueRows.length
+            ? `${revenueRows.length} project(s) earned more or less than billed. Post the accruals first.`
+            : 'No project earned more or less than its bills took.',
+      },
+    ];
+    return steps;
+  }
 
   async checklist(claims: TenantClaims, entityId: string, month: string) {
     if (claims.role !== 'admin' && claims.role !== 'manager')
@@ -108,6 +161,7 @@ export class CloseService {
             ? `${n(c!.unmatched, 'line', 'lines')} not matched to the books.`
             : 'Every line matched.',
       },
+      ...(await this.workSteps(entityId, month, db)),
     ];
     return {
       entityId,
