@@ -66,7 +66,7 @@ test('a controlled revision checked signed out, and a drawing signed with a draw
   await page.getByLabel('Project name').fill('Market yard, Washim');
   await page.getByRole('button', { name: 'Create project' }).click();
   await page.waitForURL(/\/projects\/[0-9a-f-]{36}$/);
-  await page.getByRole('link', { name: 'Documents and drawings' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Documents and drawings' }).click();
   await page.waitForURL(/\/documents$/);
 
   // Revision control: numbers after P; the admin (the lead) on the matrix for every discipline.

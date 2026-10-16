@@ -110,7 +110,7 @@ test("a receipt's challan, the drawings register and the procurement reports", a
 
   // 3. The drawings register: A-101, its first revision for approval, then R1 good for construction.
   await page.goto(projectUrl);
-  await page.getByRole('link', { name: 'Documents and drawings' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Documents and drawings' }).click();
   await page.waitForURL(/\/documents$/);
   await page.getByRole('button', { name: 'Add a drawing' }).click();
   await page.getByLabel('Drawing number').fill('A-101');

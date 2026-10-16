@@ -151,12 +151,12 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8a.3 Free-issue material to subcontractors
 - [x] 8a.4 Budget check on purchase orders
 - [x] 8a.5 Debit notes from the stores
-- [ ] 8a exit: full check and browser suite
+- [x] 8a exit: full check and browser suite
 - [x] 8b.1 GST reverse charge
-- [ ] 8b.2 GST TDS by government clients
-- [ ] 8b.3 TDS returns and certificates
-- [ ] 8b.4 MSME suppliers
-- [ ] 8b.5 TDS on flat buyers' payments
+- [x] 8b.2 GST TDS by government clients
+- [x] 8b.3 TDS returns and certificates
+- [x] 8b.4 MSME suppliers
+- [x] 8b.5 TDS on flat buyers' payments
 - [ ] 8b exit: full check and browser suite
 - [ ] 8c.1 Contract labour compliance
 - [ ] 8c.2 Worker muster you can trust

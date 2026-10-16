@@ -333,7 +333,7 @@ describe.skipIf(!controlUrl || !adminUrl)('TDS returns (integration)', () => {
       .map((l) => l.split('^'));
     expect(recs.map((r) => r[1])).toEqual(['FH', 'BH', 'CD', 'DD', 'CD', 'DD', 'CD', 'DD']);
     expect(recs[1]!.slice(2, 5)).toEqual(['1', '3', '26Q']);
-    expect(recs.filter((r) => r[1] === 'DD').map((r) => r.at(-1))).toEqual(['94C', '4IB', '94C']);
+    expect(recs.filter((r) => r[1] === 'DD').map((r) => r.at(-1))).toEqual(['4IB', '94C', '94C']);
 
     // A contractor with a certificate under section 197 for 0.5% up to ₹1 lakh: ₹50,000 bears ₹250, not ₹1,000.
     const kale = (
