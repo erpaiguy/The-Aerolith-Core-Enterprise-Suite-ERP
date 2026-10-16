@@ -6,6 +6,7 @@ import type { Seeder } from '../demo-seed.js';
 import { installClock, realNow, setClock } from './clock.js';
 import { type Ctx, type H, Scheduler, on, step } from './ctx.js';
 import { scheduleCompany, scheduleRealEstate } from './extras.js';
+import { scheduleCompanyRegisters } from './registers.js';
 import { fixHistory } from './fixups.js';
 import { scheduleMoney } from './money.js';
 import { Labour, schedulePeople } from './people.js';
@@ -62,6 +63,7 @@ export async function seedHistory(
   scheduleMoney(c);
   scheduleRealEstate(c);
   scheduleCompany(c);
+  scheduleCompanyRegisters(c);
   for (let m = '2024-02-01'; m <= c.today; m = addMonths(m, 1)) {
     const prev = addMonths(m, -1).slice(0, 7);
     const d = addDays(m, 1);

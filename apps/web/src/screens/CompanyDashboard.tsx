@@ -79,8 +79,8 @@ export function CompanyDashboardScreen() {
     const m = q.data.revenue.months;
     return {
       tooltip: { trigger: 'axis' },
-      legend: { data: ['Plan', 'Booked'] },
-      grid: { left: 48, right: 16, top: 32, bottom: 24 },
+      legend: { top: 0, data: ['Plan', 'Booked'] },
+      grid: { left: 48, right: 16, top: 40, bottom: 28 },
       xAxis: { type: 'category', data: m.map((x) => x.month.slice(5)) },
       yAxis: { type: 'value', name: '₹ lakh' },
       series: [

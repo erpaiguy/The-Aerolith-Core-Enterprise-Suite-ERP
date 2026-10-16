@@ -4,6 +4,7 @@
 // come in; finished projects are closed out and their retention released after the defects period.
 import { type Ctx, type ItemState, type ProjectState, as, bump, on, pause, step } from './ctx.js';
 import { scheduleProjectExtras } from './extras.js';
+import { scheduleProjectRegisters } from './registers.js';
 import { isWorkDay, siteTeam } from './people.js';
 import {
   ANALYSES,
@@ -881,6 +882,7 @@ async function setUpProject(c: Ctx, p: ProjectPlan, tenderId: string, bid: numbe
   });
   scheduleProjectMonths(c, ps);
   scheduleProjectExtras(c, ps);
+  scheduleProjectRegisters(c, ps);
 }
 
 async function workOrder(c: Ctx, ps: ProjectState, k: string) {
