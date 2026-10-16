@@ -7,12 +7,14 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { DebitProposalService } from './debit-proposal.service.js';
 import { FreeIssueService, type MaterialTerm } from './free-issue.service.js';
 
 const decimal = (places: number) =>
@@ -70,5 +72,39 @@ export class FreeIssueController {
   @RequiresFeatures()
   recover(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
     return this.free.recover(c, id);
+  }
+}
+
+/** Debit notes proposed from the stores and the order (docs/wave8-plan.md step 8a.5). */
+@Controller('tenant/accounts/debit-note-proposals')
+@UseGuards(TenantAuthGuard)
+export class DebitProposalController {
+  constructor(private readonly proposals: DebitProposalService) {}
+
+  @Get()
+  list(
+    @Auth() c: TenantClaims,
+    @Query(new ZodPipe(z.object({ entityId: z.uuid() }))) q: { entityId: string },
+  ) {
+    return this.proposals.proposals(c, q.entityId);
+  }
+
+  @Post()
+  @HttpCode(200)
+  @RequiresFeatures()
+  accept(
+    @Auth() c: TenantClaims,
+    @Body(
+      new ZodPipe(
+        z.object({
+          entityId: z.uuid(),
+          key: z.string().regex(/^(short|rate):[0-9a-f-]{36}:[0-9a-f-]{36}$/),
+          date: z.iso.date().optional(),
+        }),
+      ),
+    )
+    b: { entityId: string; key: string; date?: string },
+  ) {
+    return this.proposals.accept(c, b.entityId, b.key, b.date);
   }
 }

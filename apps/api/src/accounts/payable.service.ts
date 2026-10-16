@@ -175,7 +175,8 @@ export class PayableService implements OnModuleInit {
   }
 
   /** A bill's outstanding: payable less runs paid, advances applied and debit notes. */
-  private outstandingSql(db: Db) {
+  /** What is still owed on bill `b`, for queries that alias the bill so. */
+  outstandingSql(db: Db) {
     return db`(b.payable
       - coalesce((SELECT sum(l.amount) FROM acc.payment_run_line l JOIN acc.payment_run r ON r.id = l.run_id
           WHERE l.bill_id = b.id AND r.status = 'paid'), 0)
@@ -645,6 +646,8 @@ export class PayableService implements OnModuleInit {
     claims: TenantClaims,
     billId: string,
     input: { date: string; reason: string; taxable: string; gstPct: string },
+    /** What the note came from, when proposed from the stores and the order (step 8a.5). */
+    source: { kind: 'short' | 'rate'; lineKey: string; qty: string } | null = null,
   ) {
     await this.may(claims, 'accounts.post');
     const db = await this.tenants.forTenant(claims.ten);
@@ -727,9 +730,10 @@ export class PayableService implements OnModuleInit {
           { kind: 'debit_note', id: billId },
         );
         await tx`INSERT INTO acc.debit_note (entity_id, bill_id, note_date, reason, taxable, gst_pct, cgst, sgst, igst, total,
-            voucher_id, created_by)
+            voucher_id, created_by, source_kind, source_line_key, source_qty)
           VALUES (${b.entity_id}, ${billId}, ${input.date}, ${input.reason}, ${money(taxable)}, ${gstPct}, ${money(cgst)},
-            ${money(sgst)}, ${money(igst)}, ${money(total)}, ${v!.id}, ${claims.sub})`;
+            ${money(sgst)}, ${money(igst)}, ${money(total)}, ${v!.id}, ${claims.sub}, ${source?.kind ?? null},
+            ${source?.lineKey ?? null}, ${source?.qty ?? null})`;
       })
       .catch(fromDb);
     return this.bill(claims, billId);

@@ -861,6 +861,11 @@ export function AppShell() {
             },
             { to: '/accounts/day-book', label: 'Day book', icon: <BookOpen className="size-4" /> },
             {
+              to: '/accounts/debit-note-proposals',
+              label: 'Debit notes to raise',
+              icon: <ReceiptText className="size-4" />,
+            },
+            {
               to: '/accounts/month-end-accruals',
               label: 'Month-end accruals',
               icon: <CalendarCheck className="size-4" />,

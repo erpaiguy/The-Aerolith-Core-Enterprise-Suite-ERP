@@ -654,6 +654,43 @@ describe.skipIf(!controlUrl || !adminUrl)('payables (integration)', () => {
     ).toMatchObject({ code: 'already_posted' });
   });
 
+  it('proposes a debit note for the cement billed above the order rate, and raises it once', async () => {
+    // docs/wave8-plan.md step 8a.5: V/102 billed 30 bags at ₹395 against the order's ₹390: ₹150 + GST to debit.
+    interface Proposals {
+      proposals: {
+        key: string;
+        kind: string;
+        bill: { billNo: string };
+        taxable: string;
+        reason: string;
+      }[];
+    }
+    const url = `/tenant/accounts/debit-note-proposals?entityId=${entityId}`;
+    const before = await ok<Proposals>(get(url, manager));
+    const p = before.proposals.find((x) => x.kind === 'rate' && x.bill.billNo === 'V/102')!;
+    expect(p).toMatchObject({
+      taxable: '150.00',
+      reason: expect.stringContaining('billed at ₹395'),
+    });
+    const after = await ok<Proposals>(
+      post(
+        '/tenant/accounts/debit-note-proposals',
+        { entityId, key: p.key, date: '2026-10-01' },
+        manager,
+      ),
+    );
+    expect(after.proposals.find((x) => x.key === p.key)).toBeUndefined();
+    expect(
+      (
+        await post('/tenant/accounts/debit-note-proposals', { entityId, key: p.key }, manager)
+      ).json(),
+    ).toMatchObject({ code: 'no_such_proposal' });
+    const bill = await ok<{ debitNotes: { total: string }[] }>(
+      get(`/tenant/accounts/vendor-bills/${bills.v102}`, manager),
+    );
+    expect(bill.debitNotes.map((d) => d.total)).toEqual(['192.00']); // 150 + 28% GST
+  });
+
   it("works out September's close from the books, and locks it when done", async () => {
     // docs/wave7-plan.md step 7c.6: the bills of September are posted or cancelled; no staff, assets or statement.
     interface Close {
