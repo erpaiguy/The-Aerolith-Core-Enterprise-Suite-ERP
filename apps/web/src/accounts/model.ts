@@ -192,3 +192,13 @@ export function ledgerOptions(accounts: Account[]) {
     .map((a) => ({ ...a, label: `${a.code} ${a.name}`, group: path(a) }))
     .sort((a, b) => a.group.localeCompare(b.group) || a.code.localeCompare(b.code));
 }
+
+/** GST reverse charge (docs/wave8-plan.md step 8b.1): what the supplier supplies that makes the company pay the tax. */
+export const RCM_LABELS: Record<string, string> = {
+  gta: 'Goods transport agency',
+  legal: 'Legal services by an advocate',
+  security: 'Security services',
+  renting: 'Renting by a non-body-corporate',
+  unregistered: 'Notified goods from the unregistered',
+  other: 'Other notified supply',
+};

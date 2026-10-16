@@ -334,7 +334,8 @@ describe.skipIf(!controlUrl || !adminUrl)('cost control (integration)', () => {
       }>(
         post(
           `/tenant/order-revisions/${o.open.id}/submit`,
-          { rowVersion: o.open.rowVersion },
+          // The cement is quoted above the estimate's rate (docs/wave8-plan.md step 8a.4).
+          { rowVersion: o.open.rowVersion, overBudgetReason: 'Quoted above the estimate rate' },
           manager,
         ),
       );

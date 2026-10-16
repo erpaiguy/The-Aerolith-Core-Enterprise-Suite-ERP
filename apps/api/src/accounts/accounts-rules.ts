@@ -82,8 +82,25 @@ export const ROLES = {
   },
   contract_loss_expense: { label: 'Expected contract losses', key: 'contract_loss_expense' },
   subcontract_accrued: { label: 'Subcontract work accrued', key: 'subcontract_accrued' },
+  rcm_cgst: { label: 'CGST payable, reverse charge', key: 'rcm_cgst' },
+  rcm_sgst: { label: 'SGST payable, reverse charge', key: 'rcm_sgst' },
+  rcm_igst: { label: 'IGST payable, reverse charge', key: 'rcm_igst' },
+  itc_rule37: { label: 'Input credit reversed, unpaid suppliers (Rule 37)', key: 'itc_rule37' },
+  gst_tds_receivable: { label: 'GST TDS deducted by clients (section 51)', key: 'gst_tds_receivable' },
+  gst_cash_ledger: { label: 'GST electronic cash ledger', key: 'gst_cash_ledger' },
 } as const;
 export type Role = keyof typeof ROLES;
+
+/** GST reverse charge (docs/wave8-plan.md step 8b.1): supplies from the unregistered where notified, and services. */
+export const RCM_CATEGORIES = [
+  'unregistered',
+  'gta',
+  'legal',
+  'security',
+  'renting',
+  'other',
+] as const;
+export type RcmCategory = (typeof RCM_CATEGORIES)[number];
 export const isRole = (r: string): r is Role => r in ROLES;
 
 /** Where a party's ledger is opened: under debtors for clients, creditors for everyone else. */

@@ -65,9 +65,14 @@ interface Registers {
 type Heads = Record<'igst' | 'cgst' | 'sgst' | 'cess', string>;
 interface Gstr3b {
   outward: Heads & { taxable: string };
+  inwardReverseCharge: Heads & { taxable: string };
   itcAll: Heads;
+  itcReverseCharge: Heads;
   itcBlocked: Heads;
+  itcReversedRule37: Heads;
+  itcReclaimed: Heads;
   itcNet: Heads;
+  payableInCash: Heads;
 }
 interface Recon {
   upload: { fileName: string; uploadedAt: string } | null;
@@ -114,6 +119,7 @@ export function GstScreen() {
           <Returns entityId={entityId} period={period} />
           <RegistersCard entityId={entityId} period={period} />
           <TwoB entityId={entityId} period={period} />
+          <Rule37 entityId={entityId} />
         </>
       )}
     </Books>
@@ -170,9 +176,148 @@ function Returns({ entityId, period }: { entityId: string; period: string }) {
           </thead>
           <tbody aria-label="GSTR-3B">
             {row('3.1(a) Outward taxable supplies', b.data.outward)}
+            {row('3.1(d) Inward supplies under reverse charge', b.data.inwardReverseCharge)}
+            {row('4(A)(3) Input tax on reverse charge', b.data.itcReverseCharge)}
             {row('4(A)(5) Input tax, all other', b.data.itcAll)}
             {row('4(B)(1) Reversed: section 17(5)', b.data.itcBlocked)}
+            {row('4(B)(2) Reversed: Rule 37, suppliers unpaid', b.data.itcReversedRule37)}
+            {row('4(D)(1) Re-claimed on payment', b.data.itcReclaimed)}
             {row('4(C) Net input tax available', b.data.itcNet, true)}
+            {row('Reverse-charge tax, paid in cash', b.data.payableInCash, true)}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+interface Rule37Row {
+  billId: string;
+  billNo: string;
+  billDate: string;
+  party: string;
+  unpaid: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+}
+interface Rule37View {
+  due: Rule37Row[];
+  reversed: (Rule37Row & { reversedOn: string; outstanding: string })[];
+  toReclaim: (Rule37Row & { reclaim: Record<'cgst' | 'sgst' | 'igst', string> })[];
+  mayPost: boolean;
+}
+
+/** Rule 37 (docs/wave8-plan.md step 8b.1): credit on bills unpaid after 180 days, and its return on payment. */
+function Rule37({ entityId }: { entityId: string }) {
+  const qc = useQueryClient();
+  const [asOf, setAsOf] = useState(today());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const key = ['itc-reversals', entityId, asOf];
+  const q = useQuery({
+    queryKey: key,
+    queryFn: () =>
+      api.request<Rule37View>(
+        `/api/tenant/accounts/itc-reversals?entityId=${entityId}&asOf=${asOf}`,
+      ),
+  });
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      qc.setQueryData(
+        key,
+        await api.request<Rule37View>('/api/tenant/accounts/itc-reversals', {
+          method: 'POST',
+          body: { entityId, asOf },
+        }),
+      );
+      await qc.invalidateQueries({ queryKey: ['gstr3b'] });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const tax = (r: Record<'cgst' | 'sgst' | 'igst', string>) =>
+    rupees(String(Number(r.cgst) + Number(r.sgst) + Number(r.igst)));
+  const rows = q.data
+    ? [
+        ...q.data.due.map((r) => ({ ...r, state: 'Reverse now', amount: tax(r) })),
+        ...q.data.toReclaim.map((r) => ({
+          ...r,
+          state: 'Paid: take back',
+          amount: tax(r.reclaim),
+        })),
+        ...q.data.reversed.map((r) => ({
+          ...r,
+          state: `Reversed ${shortDate(r.reversedOn)}`,
+          amount: tax(r),
+        })),
+      ]
+    : [];
+  return (
+    <Card
+      title="Credit on suppliers unpaid after 180 days (Rule 37)"
+      actions={
+        <div className="flex items-end gap-2">
+          <Input
+            type="date"
+            aria-label="As on"
+            value={asOf}
+            onChange={(e) => e.target.value && setAsOf(e.target.value)}
+            className="w-40"
+          />
+          {q.data?.mayPost && (q.data.due.length || q.data.toReclaim.length) ? (
+            <Button type="button" busy={busy} onClick={() => void run()}>
+              Post reversals and re-claims
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
+      {error && <Alert tone="danger">{error}</Alert>}
+      {q.isPending ? (
+        <Spinner />
+      ) : q.isError ? (
+        <Alert tone="danger">{describeError(q.error)}</Alert>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-fg-muted">No bill has gone 180 days unpaid.</p>
+      ) : (
+        <Table minWidth="40rem">
+          <thead>
+            <tr>
+              <th>Supplier and bill</th>
+              <th>Dated</th>
+              <th className="text-right">Unpaid</th>
+              <th className="text-right">Input tax</th>
+              <th>State</th>
+            </tr>
+          </thead>
+          <tbody aria-label="Rule 37">
+            {rows.map((r) => (
+              <tr key={`${r.billId}-${r.state}`}>
+                <td>
+                  {r.party}{' '}
+                  <Link
+                    to="/accounts/vendor-bills/$billId"
+                    params={{ billId: r.billId }}
+                    className="text-xs hover:underline"
+                  >
+                    {r.billNo}
+                  </Link>
+                </td>
+                <td>{shortDate(r.billDate)}</td>
+                <td className="text-right tabular-nums">{rupees(r.unpaid)}</td>
+                <td className="text-right tabular-nums">{r.amount}</td>
+                <td>
+                  <Badge tone={r.state.startsWith('Reverse now') ? 'warning' : 'neutral'}>
+                    {r.state}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </Table>
       )}

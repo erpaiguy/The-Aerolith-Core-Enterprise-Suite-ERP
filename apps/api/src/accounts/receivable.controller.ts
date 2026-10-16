@@ -32,6 +32,7 @@ const receipt = z.object({
   bankAccountId: z.uuid(),
   amount: amount.refine((v) => Number(v) > 0, { message: 'More than nothing' }),
   tds: amount.default('0'),
+  gstTds: amount.default('0'),
   reference: z.string().trim().max(100).default(''),
   narration: z.string().trim().max(2000).default(''),
   allocations: z

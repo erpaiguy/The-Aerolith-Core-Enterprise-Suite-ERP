@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { RCM_CATEGORIES } from '../accounts/accounts-rules.js';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { PermissionGuard, RequiresPermission } from '../auth/permissions.js';
@@ -76,6 +77,11 @@ const partyFields = {
     .enum(['194C', '194J', '194I', '194Q'])
     .nullable()
     .or(z.literal('').transform(() => null)),
+  // Services under GST reverse charge (docs/wave8-plan.md step 8b.1): the supplier's bills default to it.
+  rcmCategory: z
+    .enum(RCM_CATEGORIES)
+    .nullable()
+    .or(z.literal('').transform(() => null)),
   bankAccountName: text(200),
   bankAccountNo: z
     .string()
@@ -127,6 +133,7 @@ const partyCreate = z.object({
   address: partyFields.address.default(null),
   notes: partyFields.notes.default(''),
   tdsSection: partyFields.tdsSection.default(null),
+  rcmCategory: partyFields.rcmCategory.default(null),
   bankAccountName: partyFields.bankAccountName.default(null),
   bankAccountNo: partyFields.bankAccountNo.default(null),
   bankIfsc: partyFields.bankIfsc.default(null),

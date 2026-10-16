@@ -17,7 +17,7 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { dec, div, fmt, mul, type Dec } from '../rates/decimal.js';
 import { nextNumber } from '../tender/numbering.js';
 import { audit } from '../tender/tender-records.js';
-import { fromDb, fyOf, isRole } from './accounts-rules.js';
+import { fromDb, fyOf, isRole, type RcmCategory } from './accounts-rules.js';
 import { LedgerService, type LineInput } from './ledger.service.js';
 import { workTds, type TdsSection } from './tds.js';
 
@@ -80,6 +80,8 @@ export interface VendorBillInput {
   tdsSection: string | null;
   narration: string;
   lines: BillLineInput[];
+  /** Reverse charge: the category, null for none, left out for the supplier's own setting. */
+  reverseCharge?: RcmCategory | null | undefined;
 }
 
 @Injectable()
@@ -193,9 +195,16 @@ export class PayableService implements OnModuleInit {
     const id = await db
       .begin(async (tx) => {
         const [party] = await tx<
-          { name: string; gstin: string | null; pan: string | null; tds_section: string | null }[]
+          {
+            name: string;
+            gstin: string | null;
+            pan: string | null;
+            tds_section: string | null;
+            rcm_category: RcmCategory | null;
+          }[]
         >`
-          SELECT name, gstin, pan, tds_section FROM platform.party WHERE id = ${input.partyId} AND deleted_at IS NULL`;
+          SELECT name, gstin, pan, tds_section, rcm_category FROM platform.party
+          WHERE id = ${input.partyId} AND deleted_at IS NULL`;
         if (!party) throw new NotFoundException({ code: 'party_not_found' });
         const [company] = await tx<{ state_code: string | null }[]>`
           SELECT state_code FROM platform.entity WHERE id = ${input.entityId}`;
@@ -320,10 +329,25 @@ export class PayableService implements OnModuleInit {
             });
           }
         }
+        // Under reverse charge the supplier charges no GST; the company owes it at the line's rate (an unregistered
+        // supplier's state is not known, so the tax is taken as within the state).
+        const rcm = input.reverseCharge === undefined ? party.rcm_category : input.reverseCharge;
+        const rcmTax = { cgst: 0n, sgst: 0n, igst: 0n };
         // Amounts and GST line by line, as the invoice shows them.
         let [taxable, cgst, sgst, igst] = [0n, 0n, 0n, 0n];
         for (const l of lines) {
           l.amount = r2(mul(dec(l.qty), dec(l.rate)));
+          if (rcm) {
+            if (supply === 'inter')
+              rcmTax.igst += r2(mul(l.amount, div(dec(l.gstPct), dec('100'))));
+            else {
+              const half = r2(mul(l.amount, div(dec(l.gstPct), dec('200'))));
+              rcmTax.cgst += half;
+              rcmTax.sgst += half;
+            }
+            taxable += l.amount;
+            continue;
+          }
           const gstPct = supply === 'unregistered' ? '0' : l.gstPct;
           if (supply === 'intra') {
             const half = r2(mul(l.amount, div(dec(gstPct), dec('200'))));
@@ -361,11 +385,12 @@ export class PayableService implements OnModuleInit {
         const [row] = await tx<{ id: string }[]>`
           INSERT INTO acc.vendor_bill (entity_id, party_id, order_id, project_id, bill_no, bill_date, due_date, supply,
             status, held_reasons, tds_section, tds_rate, tds_base, taxable, cgst, sgst, igst, total, tds, payable, narration,
-            created_by, updated_by)
+            rcm_category, rcm_cgst, rcm_sgst, rcm_igst, created_by, updated_by)
           VALUES (${input.entityId}, ${input.partyId}, ${input.orderId}, ${projectId}, ${input.billNo}, ${input.billDate},
             ${input.dueDate}, ${supply}, 'held', ${tx.json(reasons)}, ${sectionName}, ${tds.rate}, ${tds.base},
             ${money(taxable)}, ${money(cgst)}, ${money(sgst)}, ${money(igst)}, ${money(total)}, ${tds.tds}, ${money(payable)},
-            ${input.narration}, ${claims.sub}, ${claims.sub})
+            ${input.narration}, ${rcm}, ${money(rcmTax.cgst)}, ${money(rcmTax.sgst)}, ${money(rcmTax.igst)}, ${claims.sub},
+            ${claims.sub})
           RETURNING id`;
         for (const [i, l] of lines.entries())
           await tx`INSERT INTO acc.vendor_bill_line (bill_id, position, line_key, account_id, project_id, description, unit,
@@ -398,10 +423,15 @@ export class PayableService implements OnModuleInit {
         payable: string;
         tds_section: string | null;
         name: string;
+        rcm: boolean;
+        rcm_cgst: string;
+        rcm_sgst: string;
+        rcm_igst: string;
       }[]
     >`
       SELECT b.entity_id, b.party_id, b.project_id, b.bill_no, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date,
-        b.cgst::text, b.sgst::text, b.igst::text, b.tds::text, b.payable::text, b.tds_section, p.name
+        b.cgst::text, b.sgst::text, b.igst::text, b.tds::text, b.payable::text, b.tds_section, p.name,
+        b.rcm_category IS NOT NULL AS rcm, b.rcm_cgst::text, b.rcm_sgst::text, b.rcm_igst::text
       FROM acc.vendor_bill b JOIN platform.party p ON p.id = b.party_id WHERE b.id = ${id}`;
     // A line to a ledger whose input tax is blocked (section 17(5) and the like) takes its GST into the expense.
     const items = await tx<
@@ -412,10 +442,34 @@ export class PayableService implements OnModuleInit {
         gst: string;
         description: string;
         blocked: boolean;
+        gst_pct: string;
       }[]
     >`
-      SELECT l.account_id, l.project_id, l.amount::text, l.gst::text, l.description, a.itc_blocked AS blocked
+      SELECT l.account_id, l.project_id, l.amount::text, l.gst::text, l.description, a.itc_blocked AS blocked,
+        l.gst_pct::text
       FROM acc.vendor_bill_line l JOIN acc.account a ON a.id = l.account_id WHERE l.bill_id = ${id} ORDER BY l.position`;
+    // Reverse charge: the tax the company owes is its input credit too, except on a blocked ledger, where it is cost.
+    const rcm = { cgst: dec(b!.rcm_cgst), sgst: dec(b!.rcm_sgst), igst: dec(b!.rcm_igst) };
+    const rcmInput = { ...rcm };
+    if (b!.rcm) {
+      let rcmBlocked = 0n;
+      for (const l of items.filter((x) => x.blocked)) {
+        if (rcm.igst) {
+          const t = r2(mul(dec(l.amount), div(dec(l.gst_pct), dec('100'))));
+          rcmInput.igst -= t;
+          rcmBlocked += t;
+          l.amount = money(dec(l.amount) + t);
+        } else {
+          const half = r2(mul(dec(l.amount), div(dec(l.gst_pct), dec('200'))));
+          rcmInput.cgst -= half;
+          rcmInput.sgst -= half;
+          rcmBlocked += half * 2n;
+          l.amount = money(dec(l.amount) + half * 2n);
+        }
+      }
+      if (rcmBlocked)
+        await tx`UPDATE acc.vendor_bill SET rcm_blocked = ${money(rcmBlocked)} WHERE id = ${id}`;
+    }
     let blocked = 0n;
     for (const l of items.filter((x) => x.blocked)) {
       blocked += dec(l.gst);
@@ -462,6 +516,24 @@ export class PayableService implements OnModuleInit {
       ...(nz(b!.cgst) ? [line(await role('input_cgst'), b!.cgst, '0', null)] : []),
       ...(nz(b!.sgst) ? [line(await role('input_sgst'), b!.sgst, '0', null)] : []),
       ...(nz(b!.igst) ? [line(await role('input_igst'), b!.igst, '0', null)] : []),
+      ...(rcmInput.cgst
+        ? [line(await role('input_cgst'), money(rcmInput.cgst), '0', null, 'Reverse charge')]
+        : []),
+      ...(rcmInput.sgst
+        ? [line(await role('input_sgst'), money(rcmInput.sgst), '0', null, 'Reverse charge')]
+        : []),
+      ...(rcmInput.igst
+        ? [line(await role('input_igst'), money(rcmInput.igst), '0', null, 'Reverse charge')]
+        : []),
+      ...(rcm.cgst
+        ? [line(await role('rcm_cgst'), '0', money(rcm.cgst), null, 'Reverse charge')]
+        : []),
+      ...(rcm.sgst
+        ? [line(await role('rcm_sgst'), '0', money(rcm.sgst), null, 'Reverse charge')]
+        : []),
+      ...(rcm.igst
+        ? [line(await role('rcm_igst'), '0', money(rcm.igst), null, 'Reverse charge')]
+        : []),
       line(
         await this.ledger.partyLedger(tx, b!.party_id),
         '0',
@@ -602,7 +674,9 @@ export class PayableService implements OnModuleInit {
         b.tds_section AS "tdsSection", b.tds_rate::text AS "tdsRate", b.tds_base::text AS "tdsBase", b.taxable::text AS taxable,
         b.cgst::text AS cgst, b.sgst::text AS sgst, b.igst::text AS igst, b.total::text AS total, b.tds::text AS tds,
         b.payable::text AS payable, ${this.outstandingSql(db)}::text AS outstanding, b.narration, b.source,
-        b.itc_blocked::text AS "itcBlocked",
+        b.itc_blocked::text AS "itcBlocked", b.rcm_category AS "reverseCharge",
+        json_build_object('cgst', b.rcm_cgst::text, 'sgst', b.rcm_sgst::text, 'igst', b.rcm_igst::text,
+          'blocked', b.rcm_blocked::text) AS "reverseChargeTax",
         (SELECT json_build_object('id', v.id, 'number', v.number) FROM acc.voucher v WHERE v.id = b.voucher_id) AS voucher,
         coalesce((SELECT json_agg(json_build_object('position', l.position, 'lineKey', l.line_key, 'description', l.description,
           'unit', l.unit, 'qty', l.qty::text, 'rate', l.rate::text, 'gstPct', l.gst_pct::text, 'amount', l.amount::text,
@@ -663,9 +737,10 @@ export class PayableService implements OnModuleInit {
             bill_no: string;
             project_id: string | null;
             bill_date: string;
+            rcm_category: string | null;
           }[]
         >`
-          SELECT b.status, b.entity_id, b.party_id, b.supply, b.bill_no, b.project_id, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date,
+          SELECT b.status, b.entity_id, b.party_id, b.supply, b.rcm_category, b.bill_no, b.project_id, to_char(b.bill_date, 'YYYY-MM-DD') AS bill_date,
             ${this.outstandingSql(tx)}::text AS outstanding
           FROM acc.vendor_bill b WHERE b.id = ${billId} FOR UPDATE OF b`;
         if (!b || b.status !== 'posted')
@@ -676,7 +751,8 @@ export class PayableService implements OnModuleInit {
         if (input.date < b.bill_date)
           throw new BadRequestException({ code: 'before_bill', message: 'Not before the bill.' });
         const taxable = dec(input.taxable);
-        const gstPct = b.supply === 'unregistered' ? '0' : input.gstPct;
+        // The supplier charged no GST on a reverse-charge bill, so its debit note carries none either.
+        const gstPct = b.supply === 'unregistered' || b.rcm_category ? '0' : input.gstPct;
         const [cgst, sgst, igst] =
           b.supply === 'intra'
             ? [

@@ -19,6 +19,7 @@ import { attachment } from '../boq/import/import.controller.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { moneyCol, reportXlsx } from '../procurement/procurement-report-excel.js';
 import { PayableService } from './payable.service.js';
+import { RCM_CATEGORIES } from './accounts-rules.js';
 
 const date = z.iso.date();
 const decimal = (places: number) =>
@@ -40,6 +41,7 @@ export const bill = z.object({
   dueDate: date,
   tdsSection: z.enum(['194C', '194J', '194I', '194Q']).nullable().default(null),
   narration: z.string().trim().max(2000).default(''),
+  reverseCharge: z.enum(RCM_CATEGORIES).nullable().optional(),
   lines: z
     .array(
       z.object({

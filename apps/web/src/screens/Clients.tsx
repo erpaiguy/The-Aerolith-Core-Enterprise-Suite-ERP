@@ -1,5 +1,6 @@
 // Party master (docs/04-features.md P10): clients, suppliers, subcontractors and competitors in one list, filtered by
 // kind from the menu (docs/wave7-plan.md step 7a.2).
+import { RCM_LABELS } from '../accounts/model';
 import {
   Alert,
   Badge,
@@ -53,6 +54,7 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
           phone: party.phone ?? '',
           address: party.address ?? '',
           tdsSection: party.tdsSection ?? '',
+          rcmCategory: party.rcmCategory ?? '',
           bankAccountName: party.bankAccountName ?? '',
           bankAccountNo: party.bankAccountNo ?? '',
           bankIfsc: party.bankIfsc ?? '',
@@ -180,6 +182,16 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
                 <option value="194J">194J professional fees</option>
                 <option value="194I">194I rent</option>
                 <option value="194Q">194Q purchase of goods</option>
+              </Select>
+            </Field>
+            <Field label="GST reverse charge" hint="The company pays the GST on their bills">
+              <Select value={v.rcmCategory ?? ''} onChange={set('rcmCategory')}>
+                <option value="">No</option>
+                {Object.entries(RCM_LABELS).map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {label}
+                  </option>
+                ))}
               </Select>
             </Field>
             <Field label="Bank account name">

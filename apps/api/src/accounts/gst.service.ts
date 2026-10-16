@@ -522,11 +522,16 @@ export class GstService {
     };
   }
 
-  /** The month's GSTR-3B: 3.1(a) outward taxable supplies; 4 input tax, all, blocked, net. */
+  /**
+   * The month's GSTR-3B: 3.1(a) outward taxable supplies; 3.1(d) inward supplies under reverse charge, whose tax is
+   * paid in cash; 4 input tax: all (with reverse charge apart, 4(A)(3)), blocked, reversed under Rule 37 (4(B)(2)),
+   * re-claimed (4(D)(1)), net.
+   */
   async gstr3b(claims: TenantClaims, q: { entityId: string; period: string }) {
     await this.may(claims, 'accounts.view');
     const { from, to } = monthRange(q.period);
     const r = await this.registers(claims, { entityId: q.entityId, from, to });
+    const db = await this.tenants.forTenant(claims.ten);
     const blocked = { igst: 0n, cgst: 0n, sgst: 0n };
     for (const b of r.inward.filter((x) => x.kind === 'bill' && dec(x.blocked))) {
       if (dec(b.igst)) blocked.igst += dec(b.blocked);
@@ -535,7 +540,49 @@ export class GstService {
         blocked.sgst += dec(b.blocked) / 2n;
       }
     }
+    const [rc] = await db<
+      {
+        taxable: string;
+        cgst: string;
+        sgst: string;
+        igst: string;
+        bi: string;
+        bcs: string;
+      }[]
+    >`
+      SELECT coalesce(sum(taxable), 0)::text AS taxable, coalesce(sum(rcm_cgst), 0)::text AS cgst,
+        coalesce(sum(rcm_sgst), 0)::text AS sgst, coalesce(sum(rcm_igst), 0)::text AS igst,
+        coalesce(sum(rcm_blocked) FILTER (WHERE rcm_igst > 0), 0)::text AS bi,
+        coalesce(sum(rcm_blocked) FILTER (WHERE rcm_igst = 0), 0)::text AS bcs
+      FROM acc.vendor_bill
+      WHERE entity_id = ${q.entityId} AND status = 'posted' AND rcm_category IS NOT NULL
+        AND bill_date BETWEEN ${from} AND ${to}`;
+    const [rv] = await db<
+      { rc: string; rs: string; ri: string; cc: string; cs: string; ci: string }[]
+    >`
+      SELECT
+        coalesce(sum(cgst) FILTER (WHERE reversed_on BETWEEN ${from} AND ${to}), 0)::text AS rc,
+        coalesce(sum(sgst) FILTER (WHERE reversed_on BETWEEN ${from} AND ${to}), 0)::text AS rs,
+        coalesce(sum(igst) FILTER (WHERE reversed_on BETWEEN ${from} AND ${to}), 0)::text AS ri,
+        coalesce(sum(cgst) FILTER (WHERE reclaimed_on BETWEEN ${from} AND ${to}), 0)::text AS cc,
+        coalesce(sum(sgst) FILTER (WHERE reclaimed_on BETWEEN ${from} AND ${to}), 0)::text AS cs,
+        coalesce(sum(igst) FILTER (WHERE reclaimed_on BETWEEN ${from} AND ${to}), 0)::text AS ci
+      FROM acc.itc_reversal WHERE entity_id = ${q.entityId}`;
+    const rcm = { igst: dec(rc!.igst), cgst: dec(rc!.cgst), sgst: dec(rc!.sgst) };
+    // Blocked reverse-charge tax is not credit: all of it, or half each side within the state.
+    const rcmBlocked = { igst: dec(rc!.bi), cgst: dec(rc!.bcs) / 2n, sgst: dec(rc!.bcs) / 2n };
+    const reversed = { igst: dec(rv!.ri), cgst: dec(rv!.rc), sgst: dec(rv!.rs) };
+    const reclaimed = { igst: dec(rv!.ci), cgst: dec(rv!.cc), sgst: dec(rv!.cs) };
     const all = r.inwardTotals;
+    const heads = ['igst', 'cgst', 'sgst'] as const;
+    const each = (f: (k: (typeof heads)[number]) => bigint) => ({
+      igst: money(f('igst')),
+      cgst: money(f('cgst')),
+      sgst: money(f('sgst')),
+      cess: '0.00',
+    });
+    const net = (k: (typeof heads)[number]) =>
+      dec(all[k]) - blocked[k] + rcm[k] - rcmBlocked[k] - reversed[k] + reclaimed[k];
     return {
       ...q,
       outward: {
@@ -545,24 +592,20 @@ export class GstService {
         sgst: r.outwardTotals.sgst,
         cess: '0.00',
       },
+      inwardReverseCharge: { taxable: rc!.taxable, ...each((k) => rcm[k]) },
       itcAll: { igst: all.igst, cgst: all.cgst, sgst: all.sgst, cess: '0.00' },
-      itcBlocked: {
-        igst: money(blocked.igst),
-        cgst: money(blocked.cgst),
-        sgst: money(blocked.sgst),
-        cess: '0.00',
-      },
-      itcNet: {
-        igst: money(dec(all.igst) - blocked.igst),
-        cgst: money(dec(all.cgst) - blocked.cgst),
-        sgst: money(dec(all.sgst) - blocked.sgst),
-        cess: '0.00',
-      },
+      itcReverseCharge: each((k) => rcm[k] - rcmBlocked[k]),
+      itcBlocked: each((k) => blocked[k] + rcmBlocked[k]),
+      itcReversedRule37: each((k) => reversed[k]),
+      itcReclaimed: each((k) => reclaimed[k]),
+      itcNet: each(net),
+      // Paid from the credit ledger; reverse-charge tax only in cash.
       payable: {
-        igst: money(dec(r.outwardTotals.igst) - dec(all.igst) + blocked.igst),
-        cgst: money(dec(r.outwardTotals.cgst) - dec(all.cgst) + blocked.cgst),
-        sgst: money(dec(r.outwardTotals.sgst) - dec(all.sgst) + blocked.sgst),
+        igst: money(dec(r.outwardTotals.igst) - net('igst')),
+        cgst: money(dec(r.outwardTotals.cgst) - net('cgst')),
+        sgst: money(dec(r.outwardTotals.sgst) - net('sgst')),
       },
+      payableInCash: { igst: money(rcm.igst), cgst: money(rcm.cgst), sgst: money(rcm.sgst) },
     };
   }
 

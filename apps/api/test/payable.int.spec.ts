@@ -691,6 +691,138 @@ describe.skipIf(!controlUrl || !adminUrl)('payables (integration)', () => {
     expect(bill.debitNotes.map((d) => d.total)).toEqual(['192.00']); // 150 + 28% GST
   });
 
+  it('charges GST on a transporter under reverse charge, and reverses credit unpaid after 180 days', async () => {
+    // docs/wave8-plan.md step 8b.1. An unregistered transporter (GTA): ₹10,000 at 5%, owed by the company itself.
+    const chart = await ok<{ accounts: { id: string; systemKey: string | null }[] }>(
+      get('/tenant/accounts/chart', manager),
+    );
+    const material = chart.accounts.find((a) => a.systemKey === 'material_consumption')!.id;
+    const swift = (
+      await ok<{ id: string }>(
+        post('/tenant/parties', {
+          isClient: false,
+          isVendor: true,
+          name: 'Swift Roadlines',
+          rcmCategory: 'gta',
+        }),
+      )
+    ).id;
+    const gta = await ok<
+      Bill & { reverseCharge: string; reverseChargeTax: { cgst: string; sgst: string } }
+    >(
+      vbill({
+        partyId: swift,
+        billNo: 'LR/88',
+        billDate: '2026-10-05',
+        dueDate: '2026-10-20',
+        lines: [
+          {
+            accountId: material,
+            projectId,
+            description: 'Cement freight',
+            qty: '1',
+            rate: '10000',
+            gstPct: '5',
+          },
+        ],
+      }),
+    );
+    expect([...figures(gta), gta.reverseCharge, gta.reverseChargeTax.cgst]).toEqual([
+      'posted',
+      '10000.00',
+      '0.00',
+      '0.00',
+      '0.00',
+      '10000.00',
+      '0.00',
+      '10000.00',
+      'gta',
+      '250.00',
+    ]);
+
+    // Cement bought in April, ₹10,000 + 18%, still unpaid in October: its ₹1,800 credit goes back.
+    const april = await ok<Bill>(
+      vbill({
+        partyId: vidarbha,
+        billNo: 'V/APR',
+        billDate: '2026-04-10',
+        dueDate: '2026-05-10',
+        lines: [
+          {
+            accountId: material,
+            projectId,
+            description: 'Cement',
+            qty: '10',
+            rate: '1000',
+            gstPct: '18',
+          },
+        ],
+      }),
+    );
+    expect(april.total).toBe('11800.00');
+    interface Rule37 {
+      due: { billNo: string; cgst: string; sgst: string }[];
+      reversed: { billNo: string }[];
+      toReclaim: { billNo: string }[];
+    }
+    const url = `/tenant/accounts/itc-reversals?entityId=${entityId}&asOf=2026-10-16`;
+    expect((await get(url, worker)).statusCode).toBe(403);
+    const before = await ok<Rule37>(get(url, manager));
+    expect(before.due.map((d) => [d.billNo, d.cgst, d.sgst])).toEqual([
+      ['V/APR', '900.00', '900.00'],
+    ]);
+    const run1 = await ok<Rule37>(
+      post('/tenant/accounts/itc-reversals', { entityId, asOf: '2026-10-16' }, manager),
+    );
+    expect([run1.due, run1.reversed.map((r) => r.billNo)]).toEqual([[], ['V/APR']]);
+
+    interface Heads {
+      cgst: string;
+      sgst: string;
+    }
+    const g3 = () =>
+      ok<{
+        inwardReverseCharge: Heads & { taxable: string };
+        itcReverseCharge: Heads;
+        itcReversedRule37: Heads;
+        itcReclaimed: Heads;
+        payableInCash: Heads;
+      }>(get(`/tenant/accounts/gst/gstr3b?entityId=${entityId}&period=2026-10`, manager));
+    expect(await g3()).toMatchObject({
+      inwardReverseCharge: { taxable: '10000.00', cgst: '250.00', sgst: '250.00' },
+      itcReverseCharge: { cgst: '250.00', sgst: '250.00' },
+      itcReversedRule37: { cgst: '900.00', sgst: '900.00' },
+      itcReclaimed: { cgst: '0.00' },
+      payableInCash: { cgst: '250.00', sgst: '250.00' },
+    });
+
+    // Paid: the credit comes back on the next run.
+    let pay = await ok<{ id: string; status: string; approval: { id: string } | null }>(
+      post(
+        '/tenant/accounts/payment-runs',
+        {
+          entityId,
+          bankAccountId: hdfc,
+          payOn: '2026-10-16',
+          lines: [{ partyId: vidarbha, kind: 'bill', billId: april.id, amount: '11800' }],
+        },
+        manager,
+      ),
+    );
+    pay = await ok(post(`/tenant/accounts/payment-runs/${pay.id}/submit`, {}, manager));
+    if (pay.status === 'pending' && pay.approval)
+      await ok(post(`/tenant/approvals/${pay.approval.id}/approve`, {}));
+    await ok(
+      post(`/tenant/accounts/payment-runs/${pay.id}/paid`, { paidOn: '2026-10-16' }, manager),
+    );
+    expect((await ok<Rule37>(get(url, manager))).toReclaim.map((r) => r.billNo)).toEqual(['V/APR']);
+    const run2 = await ok<Rule37>(
+      post('/tenant/accounts/itc-reversals', { entityId, asOf: '2026-10-16' }, manager),
+    );
+    expect([run2.reversed, run2.toReclaim]).toEqual([[], []]);
+    expect((await g3()).itcReclaimed).toMatchObject({ cgst: '900.00', sgst: '900.00' });
+  });
+
   it("works out September's close from the books, and locks it when done", async () => {
     // docs/wave7-plan.md step 7c.6: the bills of September are posted or cancelled; no staff, assets or statement.
     interface Close {

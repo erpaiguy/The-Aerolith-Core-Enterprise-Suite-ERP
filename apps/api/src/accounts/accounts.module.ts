@@ -15,6 +15,8 @@ import { GstController } from './gst.controller.js';
 import { GstService } from './gst.service.js';
 import { LedgerController } from './ledger.controller.js';
 import { DebitProposalService } from './debit-proposal.service.js';
+import { ItcReversalService } from './itc-reversal.service.js';
+import { TaxComplianceController } from './tax-compliance.controller.js';
 import { DebitProposalController, FreeIssueController } from './free-issue.controller.js';
 import { FreeIssueService } from './free-issue.service.js';
 import { ImprestController } from './imprest.controller.js';
@@ -43,6 +45,7 @@ import { SubcontractService } from './subcontract.service.js';
     ImprestController,
     FreeIssueController,
     DebitProposalController,
+    TaxComplianceController,
     RecurringController,
     LedgerController,
     ClientBillController,
@@ -62,6 +65,7 @@ import { SubcontractService } from './subcontract.service.js';
     ImprestService,
     FreeIssueService,
     DebitProposalService,
+    ItcReversalService,
     RecurringService,
     CloseService,
     ClientBillService,

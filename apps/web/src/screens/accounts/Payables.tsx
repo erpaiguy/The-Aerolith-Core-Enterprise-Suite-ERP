@@ -8,7 +8,7 @@ import { ArrowLeft, FileSpreadsheet, Plus, Printer, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react';
 import { api, saveFile } from '../../api/client';
 import type { Party, ProjectSummary } from '../../api/types';
-import { ledgerOptions, today, useChart } from '../../accounts/model';
+import { RCM_LABELS, ledgerOptions, today, useChart } from '../../accounts/model';
 import { describeError } from '../../lib/format';
 import type { Order, OrderRow } from '../../procurement/orders';
 import { rupees } from '../../procurement/OrderLines';
@@ -321,6 +321,7 @@ export function NewVendorBillScreen() {
   const [billDate, setBillDate] = useState(today());
   const [dueDate, setDueDate] = useState(plusDays(today(), 30));
   const [tdsSection, setTdsSection] = useState('');
+  const [rcm, setRcm] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -388,6 +389,7 @@ export function NewVendorBillScreen() {
                 billDate,
                 dueDate,
                 tdsSection: tdsSection || null,
+                reverseCharge: rcm || null,
                 lines: lines
                   .filter((l) => Number(l.qty) > 0)
                   .map((l) => ({
@@ -422,9 +424,9 @@ export function NewVendorBillScreen() {
                       setPartyId(e.target.value);
                       setOrderId('');
                       setLines([blankLine()]);
-                      setTdsSection(
-                        suppliers.data?.find((p) => p.id === e.target.value)?.tdsSection ?? '',
-                      );
+                      const chosen = suppliers.data?.find((p) => p.id === e.target.value);
+                      setTdsSection(chosen?.tdsSection ?? '');
+                      setRcm(chosen?.rcmCategory ?? '');
                     }}
                     required
                   >
@@ -487,6 +489,16 @@ export function NewVendorBillScreen() {
                     <option value="194J">194J professional fees</option>
                     <option value="194I">194I rent</option>
                     <option value="194Q">194Q purchase of goods</option>
+                  </Select>
+                </Field>
+                <Field label="GST reverse charge" hint="The supplier charges no GST; we pay it">
+                  <Select value={rcm} onChange={(e) => setRcm(e.target.value)}>
+                    <option value="">No</option>
+                    {Object.entries(RCM_LABELS).map(([k, label]) => (
+                      <option key={k} value={k}>
+                        {label}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
               </div>
@@ -622,6 +634,8 @@ interface VendorBill {
   passReason: string | null;
   statusReason: string | null;
   tdsSection: string | null;
+  reverseCharge: string | null;
+  reverseChargeTax: Record<'cgst' | 'sgst' | 'igst' | 'blocked', string>;
   tdsRate: string;
   tdsBase: string;
   taxable: string;
@@ -760,11 +774,19 @@ export function VendorBillScreen({ billId }: { billId: string }) {
           )}
           <dt className="text-fg-muted">GST</dt>
           <dd>
-            {x.supply === 'intra'
-              ? 'CGST and SGST'
-              : x.supply === 'inter'
-                ? 'IGST'
-                : 'None (unregistered)'}
+            {x.reverseCharge
+              ? `Reverse charge (${RCM_LABELS[x.reverseCharge] ?? x.reverseCharge}): we pay ${rupees(
+                  String(
+                    Number(x.reverseChargeTax.cgst) +
+                      Number(x.reverseChargeTax.sgst) +
+                      Number(x.reverseChargeTax.igst),
+                  ),
+                )}`
+              : x.supply === 'intra'
+                ? 'CGST and SGST'
+                : x.supply === 'inter'
+                  ? 'IGST'
+                  : 'None (unregistered)'}
           </dd>
           {x.tdsSection && (
             <>

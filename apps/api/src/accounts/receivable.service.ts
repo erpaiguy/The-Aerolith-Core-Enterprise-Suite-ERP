@@ -32,6 +32,8 @@ export interface ReceiptInput {
   bankAccountId: string;
   amount: string;
   tds: string;
+  /** GST TDS (section 51) deducted by a government client. */
+  gstTds: string;
   reference: string;
   narration: string;
   allocations: {
@@ -163,12 +165,13 @@ export class ReceivableService {
         const settled =
           dec(input.amount) +
           dec(input.tds) +
+          dec(input.gstTds) +
           input.deductions.reduce((s, d) => s + dec(d.amount), 0n);
         const allocated = input.allocations.reduce((s, a) => s + dec(a.amount), 0n);
         if (allocated !== settled)
           throw new BadRequestException({
             code: 'not_allocated',
-            message: `The receipt settles ₹${money(settled)} (received, TDS and deductions); ₹${money(allocated)} is allocated.`,
+            message: `The receipt settles ₹${money(settled)} (received, TDS, GST TDS and deductions); ₹${money(allocated)} is allocated.`,
           });
         // Each allocation within what is open, the bills locked so two receipts cannot both settle the same rupees.
         const lines: LineInput[] = [];
@@ -283,6 +286,17 @@ export class ReceivableService {
                 ),
               ]
             : []),
+          ...(dec(input.gstTds) > 0n
+            ? [
+                line(
+                  await this.ledger.roleAccount(tx, input.entityId, 'gst_tds_receivable'),
+                  input.gstTds,
+                  '0',
+                  null,
+                  'GST TDS deducted by the client (section 51)',
+                ),
+              ]
+            : []),
           ...input.deductions.map((d) => line(d.accountId, d.amount, '0', null, d.description)),
         ];
         // A ledger that needs a project takes the first project the receipt settles.
@@ -310,10 +324,10 @@ export class ReceivableService {
           { kind: 'client_receipt', id },
         );
         await tx`
-          INSERT INTO acc.client_receipt (id, entity_id, party_id, received_on, bank_account_id, amount, tds, reference,
-            narration, voucher_id, created_by, updated_by)
+          INSERT INTO acc.client_receipt (id, entity_id, party_id, received_on, bank_account_id, amount, tds, gst_tds,
+            reference, narration, voucher_id, created_by, updated_by)
           VALUES (${id}, ${input.entityId}, ${input.partyId}, ${input.receivedOn}, ${input.bankAccountId}, ${input.amount},
-            ${input.tds}, ${input.reference}, ${input.narration}, ${v!.id}, ${claims.sub}, ${claims.sub})`;
+            ${input.tds}, ${input.gstTds}, ${input.reference}, ${input.narration}, ${v!.id}, ${claims.sub}, ${claims.sub})`;
         for (const [i, a] of input.allocations.entries())
           await tx`INSERT INTO acc.client_receipt_alloc (receipt_id, position, kind, bill_id, project_id, amount)
             VALUES (${id}, ${i + 1}, ${a.kind}, ${a.kind === 'bill' ? a.billId : null}, ${a.projectId}, ${a.amount})`;
@@ -386,6 +400,7 @@ export class ReceivableService {
       SELECT r.id, r.entity_id AS "entityId", e.name AS company, json_build_object('id', c.id, 'name', c.name) AS party,
         to_char(r.received_on, 'YYYY-MM-DD') AS "receivedOn",
         json_build_object('id', a.id, 'code', a.code, 'name', a.name) AS bank, r.amount::text AS amount, r.tds::text AS tds,
+        r.gst_tds::text AS "gstTds",
         r.reference, r.narration, r.status, r.status_reason AS "statusReason",
         (SELECT json_build_object('id', v.id, 'number', v.number) FROM acc.voucher v WHERE v.id = r.voucher_id) AS voucher,
         (SELECT json_build_object('id', v.id, 'number', v.number) FROM acc.voucher v WHERE v.id = r.cancel_voucher_id)

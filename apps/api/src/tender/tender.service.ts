@@ -42,6 +42,7 @@ export interface PartyInput {
   address: string | null;
   notes: string;
   tdsSection?: string | null;
+  rcmCategory?: string | null;
   bankAccountName?: string | null;
   bankAccountNo?: string | null;
   bankIfsc?: string | null;
@@ -75,7 +76,7 @@ export interface TenderInput {
 
 const PARTY_COLUMNS = `id, name, is_client AS "isClient", is_vendor AS "isVendor",
   is_subcontractor AS "isSubcontractor", is_competitor AS "isCompetitor", gstin, pan, contact_name AS "contactName", email, phone, address, notes,
-  tds_section AS "tdsSection", bank_account_name AS "bankAccountName", bank_account_no AS "bankAccountNo",
+  tds_section AS "tdsSection", rcm_category AS "rcmCategory", bank_account_name AS "bankAccountName", bank_account_no AS "bankAccountNo",
   bank_ifsc AS "bankIfsc", legal_name AS "legalName", city, pincode, state_code AS "stateCode", tan,
   row_version AS "rowVersion"`;
 
@@ -114,6 +115,7 @@ const PARTY_COLUMN: Record<keyof PartyInput, string> = {
   address: 'address',
   notes: 'notes',
   tdsSection: 'tds_section',
+  rcmCategory: 'rcm_category',
   bankAccountName: 'bank_account_name',
   bankAccountNo: 'bank_account_no',
   bankIfsc: 'bank_ifsc',
