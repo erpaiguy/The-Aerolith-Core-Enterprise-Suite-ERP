@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AccountsModule } from '../accounts/accounts.module.js';
 import { ApprovalModule } from '../approvals/approval.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { ProjectModule } from '../project/project.module.js';
@@ -21,6 +22,8 @@ import { CostControlController } from './cost-control.controller.js';
 import { EarnedValueController } from './earned-value.controller.js';
 import { EarnedValueService } from './earned-value.service.js';
 import { CostControlService } from './cost-control.service.js';
+import { RevenueRecognitionController } from './revenue-recognition.controller.js';
+import { RevenueRecognitionService } from './revenue-recognition.service.js';
 
 /** Control (docs/wave4-plan.md): cost control, cash flow, earned value, variations, contracts and claims, risks, the portfolio, reviews and the MEP pack. */
 @Module({
@@ -32,6 +35,7 @@ import { CostControlService } from './cost-control.service.js';
     RatesModule,
     ScheduleModule,
     TenderModule,
+    AccountsModule,
   ],
   controllers: [
     CostControlController,
@@ -41,6 +45,7 @@ import { CostControlService } from './cost-control.service.js';
     ContractsController,
     RisksController,
     ReviewController,
+    RevenueRecognitionController,
   ],
   providers: [
     CostControlService,
@@ -51,6 +56,8 @@ import { CostControlService } from './cost-control.service.js';
     RisksService,
     MepService,
     ReviewService,
+    RevenueRecognitionService,
   ],
+  exports: [RevenueRecognitionService],
 })
 export class ControlModule {}

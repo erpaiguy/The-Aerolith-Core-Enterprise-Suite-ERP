@@ -74,6 +74,13 @@ export const ROLES = {
   interest_income: { label: 'Interest income', key: 'interest_income' },
   round_off: { label: 'Round off', key: 'round_off' },
   profit_and_loss: { label: 'Profit and loss account', key: 'profit_and_loss' },
+  unbilled_revenue: { label: 'Unbilled revenue (contract asset)', key: 'unbilled_revenue' },
+  billing_in_excess: { label: 'Billing in excess of revenue', key: 'billing_in_excess' },
+  contract_loss_provision: {
+    label: 'Provision for expected contract losses',
+    key: 'contract_loss_provision',
+  },
+  contract_loss_expense: { label: 'Expected contract losses', key: 'contract_loss_expense' },
 } as const;
 export type Role = keyof typeof ROLES;
 export const isRole = (r: string): r is Role => r in ROLES;

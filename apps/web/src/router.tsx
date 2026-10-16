@@ -118,6 +118,7 @@ import { RfqsScreen } from './screens/Rfqs';
 import { RateContractsScreen } from './screens/RateContracts';
 import { CloseScreen } from './screens/accounts/Close';
 import { RecurringScreen } from './screens/accounts/Recurring';
+import { RevenueRecognitionScreen } from './screens/accounts/RevenueRecognition';
 import { CompanyDashboardScreen } from './screens/CompanyDashboard';
 import { IncrementsScreen } from './screens/payroll/Increments';
 import { AuditScreen } from './screens/Audit';
@@ -1070,6 +1071,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/accounts/recurring',
       component: RecurringScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/accounts/revenue-recognition',
+      component: RevenueRecognitionScreen,
     }),
     createRoute({
       getParentRoute: () => appLayout,

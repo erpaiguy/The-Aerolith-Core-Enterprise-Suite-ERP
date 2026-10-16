@@ -30,6 +30,8 @@ interface Dashboard {
   };
   margin: {
     project: Ref;
+    billed: string;
+    basis: string;
     revenue: string;
     cost: string;
     margin: string;
@@ -177,7 +179,8 @@ export function CompanyDashboardScreen() {
                   <thead>
                     <tr>
                       <th>Project</th>
-                      <th className={right}>Revenue</th>
+                      <th className={right}>Billed</th>
+                      <th className={right}>Earned</th>
                       <th className={right}>Cost</th>
                       <th className={right}>Margin</th>
                     </tr>
@@ -188,7 +191,11 @@ export function CompanyDashboardScreen() {
                         <td>
                           <ProjectLink p={m.project} />
                         </td>
-                        <td className={right}>{formatInr(m.revenue)}</td>
+                        <td className={right}>{formatInr(m.billed)}</td>
+                        <td className={right}>
+                          {formatInr(m.revenue)}
+                          <div className="text-xs text-fg-muted">{m.basis}</div>
+                        </td>
                         <td className={right}>{formatInr(m.cost)}</td>
                         <td
                           className={`${right} ${Number(m.margin) < 0 ? 'font-medium text-danger' : ''}`}

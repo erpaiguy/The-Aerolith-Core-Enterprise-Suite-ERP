@@ -8,6 +8,7 @@ import type { TenantClaims } from '../auth/auth.service.js';
 import { PermissionsService } from '../auth/permissions.js';
 import { ReceivableService } from '../accounts/receivable.service.js';
 import { fyOf } from '../accounts/accounts-rules.js';
+import { RevenueRecognitionService } from '../control/revenue-recognition.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 
 const indiaToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
@@ -41,6 +42,7 @@ export class CompanyDashboardService {
     private readonly tenants: TenantConnections,
     private readonly permissions: PermissionsService,
     private readonly receivables: ReceivableService,
+    private readonly revenue: RevenueRecognitionService,
   ) {}
 
   async get(claims: TenantClaims, entityId: string, asOf = indiaToday()) {
@@ -116,15 +118,27 @@ export class CompanyDashboardService {
       };
     });
 
+    // Margin on revenue earned by work done (step 8a.1), not on what has been billed: costs come before the bills,
+    // so billed revenue alone shows a young project as a loss. Projects without a contract value stay on the books'.
+    const done = new Map(
+      (await this.revenue.compute(db, entityId, asOf)).map((w) => [w.project.id, w]),
+    );
     const margin = projects
-      .filter((p) => n(p.revenue) !== 0 || n(p.cost) !== 0)
-      .map((p) => ({
-        project: { id: p.id, number: p.number, name: p.name },
-        revenue: r2(n(p.revenue)),
-        cost: r2(n(p.cost)),
-        margin: r2(n(p.revenue) - n(p.cost)),
-        marginPct: n(p.revenue) ? r2(((n(p.revenue) - n(p.cost)) / n(p.revenue)) * 100) : null,
-      }))
+      .filter((p) => n(p.revenue) !== 0 || n(p.cost) !== 0 || done.has(p.id))
+      .map((p) => {
+        const w = done.get(p.id);
+        const revenue = w ? n(w.recognised) : n(p.revenue);
+        const cost = w ? n(w.costToDate) + n(w.lossProvision) : n(p.cost);
+        return {
+          project: { id: p.id, number: p.number, name: p.name },
+          billed: r2(w ? n(w.billed) : n(p.revenue)),
+          revenue: r2(revenue),
+          cost: r2(cost),
+          margin: r2(revenue - cost),
+          marginPct: revenue ? r2(((revenue - cost) / revenue) * 100) : null,
+          basis: w ? `${(w.pctComplete * 100).toFixed(1)}% complete by ${w.method}` : 'as billed',
+        };
+      })
       .sort((a, b) => n(a.marginPct ?? -1e9) - n(b.marginPct ?? -1e9));
 
     const cash = await db<{ id: string; name: string; kind: string; balance: string }[]>`
