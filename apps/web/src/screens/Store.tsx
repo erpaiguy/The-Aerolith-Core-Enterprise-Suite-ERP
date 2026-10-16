@@ -34,6 +34,7 @@ import {
   type StoreRow,
   type Transfer,
 } from '../procurement/inventory';
+import type { OrderRow } from '../procurement/orders';
 import { shortDate } from '../schedule/model';
 
 export function StoreScreen({ storeId }: { storeId: string }) {
@@ -396,7 +397,23 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
     queryKey: ['wbs', s.project.id],
     queryFn: () => api.request<WbsNode[]>(`/api/tenant/projects/${s.project.id}/wbs`),
   });
-  const [head, setHead] = useState({ issuedOn: today(), wbsCode: '', issuedTo: '', purpose: '' });
+  // A subcontractor's work order the material goes against, for recovering what goes beyond its norm (step 8a.3).
+  const workOrders = useQuery({
+    queryKey: ['orders', s.project.id, 'open'],
+    queryFn: () =>
+      api.request<OrderRow[]>(`/api/tenant/orders?status=open&projectId=${s.project.id}`),
+    select: (rows) =>
+      rows.filter(
+        (o) => o.kind === 'work' && (o.status === 'issued' || o.status === 'acknowledged'),
+      ),
+  });
+  const [head, setHead] = useState({
+    issuedOn: today(),
+    wbsCode: '',
+    issuedTo: '',
+    purpose: '',
+    orderId: '',
+  });
   const [qty, setQty] = useState<Record<string, string>>({});
   const [boq, setBoq] = useState<Record<string, string>>({});
   const [queued, setQueued] = useState(false);
@@ -416,6 +433,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
               `/api/tenant/stores/${s.id}/issues`,
               {
                 ...head,
+                orderId: head.orderId || null,
                 lines: lines.map((x) => ({
                   resourceId: x.resourceId,
                   qty: qty[x.resourceId]!.trim(),
@@ -458,6 +476,28 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
               </Select>
             </Field>
           </div>
+          {workOrders.data?.length ? (
+            <Field label="Against work order">
+              <Select
+                value={head.orderId}
+                onChange={(e) => {
+                  const o = workOrders.data!.find((x) => x.id === e.target.value);
+                  setHead({
+                    ...head,
+                    orderId: e.target.value,
+                    issuedTo: o && !head.issuedTo ? o.vendor : head.issuedTo,
+                  });
+                }}
+              >
+                <option value="">None (our own work)</option>
+                {workOrders.data.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.number} {o.vendor}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           <Field label="Taken by">
             <Input
               value={head.issuedTo}

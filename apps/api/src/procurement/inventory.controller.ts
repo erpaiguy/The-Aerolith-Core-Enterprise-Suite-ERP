@@ -30,6 +30,7 @@ const issue = z.object({
   issuedTo: z.string().trim().min(1).max(200),
   purpose: z.string().trim().max(1000).default(''),
   equipmentId: z.uuid().nullable().default(null),
+  orderId: z.uuid().nullable().default(null),
   lines: z
     .array(
       z.object({

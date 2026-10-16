@@ -24,6 +24,7 @@ import { formatQty } from '../../boq/model';
 import { describeError } from '../../lib/format';
 import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
+import { FreeIssueBill, FreeIssueOrder } from './FreeIssue';
 
 const n = (v: string | null | undefined) => Number(v ?? 0);
 const q = (v: number) => formatQty(String(Math.round(v * 10000) / 10000));
@@ -256,6 +257,7 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
           )}
         </form>
       </Card>
+      <FreeIssueOrder orderId={w.order.id} mayEdit={w.mayBill} />
       <Card title="Measurement book" className="print:hidden">
         <Table minWidth="40rem">
           <thead>
@@ -658,6 +660,13 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
           </tbody>
         </Table>
       </Card>
+      <FreeIssueBill
+        billId={b.id}
+        mayRecover={b.mayEdit}
+        onRecovered={() =>
+          void api.request<ScBill>(`/api/tenant/subcontract-bills/${b.id}`).then(onChanged)
+        }
+      />
       {b.mayEdit && (
         <Card title="Back-charges">
           <div className="space-y-2">

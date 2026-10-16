@@ -14,6 +14,8 @@ import { EquipmentService } from './equipment.service.js';
 import { GstController } from './gst.controller.js';
 import { GstService } from './gst.service.js';
 import { LedgerController } from './ledger.controller.js';
+import { FreeIssueController } from './free-issue.controller.js';
+import { FreeIssueService } from './free-issue.service.js';
 import { ImprestController } from './imprest.controller.js';
 import { ImprestService } from './imprest.service.js';
 import { LedgerService } from './ledger.service.js';
@@ -38,6 +40,7 @@ import { SubcontractService } from './subcontract.service.js';
   imports: [ProvisioningModule, AuthModule, ProjectModule, ApprovalModule],
   controllers: [
     ImprestController,
+    FreeIssueController,
     RecurringController,
     LedgerController,
     ClientBillController,
@@ -55,6 +58,7 @@ import { SubcontractService } from './subcontract.service.js';
   providers: [
     LedgerService,
     ImprestService,
+    FreeIssueService,
     RecurringService,
     CloseService,
     ClientBillService,

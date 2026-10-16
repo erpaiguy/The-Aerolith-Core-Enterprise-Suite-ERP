@@ -50,6 +50,8 @@ export interface IssueInput {
   lines: { resourceId: string; qty: string; boqCode: string | null }[];
   /** The machine the fuel or spares went to (docs/wave3-plan.md step 10). */
   equipmentId?: string | null;
+  /** The subcontractor's work order the material is issued against (docs/wave8-plan.md step 8a.3). */
+  orderId?: string | null;
 }
 export interface TransferInput {
   toStoreId: string;
@@ -406,6 +408,15 @@ export class InventoryService implements OnModuleInit {
         });
       seen.add(l.resourceId);
     }
+    if (input.orderId) {
+      const [o] = await db<{ kind: string; status: string }[]>`
+        SELECT kind, status FROM proc.purchase_order WHERE id = ${input.orderId} AND project_id = ${s.project_id}`;
+      if (!o || o.kind !== 'work' || !['issued', 'acknowledged'].includes(o.status))
+        throw new BadRequestException({
+          code: 'not_a_work_order',
+          message: "Issue against an issued work order of the project's.",
+        });
+    }
     const keys = new Map<string, string>();
     for (const code of new Set(input.lines.map((l) => l.boqCode).filter((x): x is string => !!x))) {
       const found = await db<{ line_key: string }[]>`
@@ -430,9 +441,9 @@ export class InventoryService implements OnModuleInit {
       );
       const [iss] = await tx<{ id: string }[]>`
         INSERT INTO proc.stock_issue (project_id, store_id, number, issued_on, wbs_id, issued_to, purpose, equipment_id,
-          created_by)
+          order_id, created_by)
         VALUES (${s.project_id}, ${storeId}, ${number}, ${input.issuedOn}, ${wbs.id}, ${input.issuedTo},
-          ${input.purpose}, ${input.equipmentId ?? null}, ${claims.sub})
+          ${input.purpose}, ${input.equipmentId ?? null}, ${input.orderId ?? null}, ${claims.sub})
         RETURNING id`;
       for (const [i, l] of input.lines.entries()) {
         const qty = dec(l.qty);

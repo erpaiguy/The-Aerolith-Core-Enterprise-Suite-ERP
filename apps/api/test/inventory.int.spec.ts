@@ -37,6 +37,8 @@ describe.skipIf(!controlUrl || !adminUrl)('inventory (integration)', () => {
 
   const post = (url: string, payload: object = {}, headers: Record<string, string> = t.admin) =>
     app.inject({ method: 'POST', url: `/api${url}`, payload, headers });
+  const put = (url: string, payload: object = {}, headers: Record<string, string> = t.admin) =>
+    app.inject({ method: 'PUT', url: `/api${url}`, payload, headers });
   const get = (url: string, headers: Record<string, string> = t.admin) =>
     app.inject({ method: 'GET', url: `/api${url}`, headers });
   const ok = async <T>(p: Promise<{ statusCode: number; body: string; json: <U>() => U }>) => {
@@ -515,5 +517,146 @@ describe.skipIf(!controlUrl || !adminUrl)('inventory (integration)', () => {
     const i2 = await issue('40');
     expect(i2.lines[0]!.value).toBe('16165.00');
     expect(await balance(store, as)).toEqual({ CEM: [20, 8210] });
+  });
+
+  it('recovers cement issued to a subcontractor beyond what the certified work allows', async () => {
+    // docs/wave8-plan.md step 8a.3. 100 bags into the site's store; a plastering work order of 100 sqm measured.
+    const store = washim;
+    const po = await ok<{ id: string; open: { id: string; rowVersion: number } }>(
+      post(
+        `/tenant/projects/${s.project}/orders`,
+        {
+          kind: 'purchase',
+          partyId: s.vendor,
+          siteId: s.site,
+          lines: [cementLine(s.cement, '100', '400')],
+        },
+        manager,
+      ),
+    );
+    const bought = await ok<{ id: string; progress: { lineKey: string }[] }>(
+      post(
+        `/tenant/order-revisions/${po.open.id}/submit`,
+        { rowVersion: po.open.rowVersion },
+        manager,
+      ),
+    );
+    await ok(
+      post(
+        `/tenant/orders/${bought.id}/receipts`,
+        {
+          receivedOn: '2026-10-01',
+          challanNo: 'DC-FI',
+          storeId: store,
+          lines: [{ lineKey: bought.progress[0]!.lineKey, qty: '100' }],
+        },
+        manager,
+      ),
+    );
+    const wo = await ok<{ id: string; open: { id: string; rowVersion: number } }>(
+      post(
+        `/tenant/projects/${s.project}/orders`,
+        {
+          kind: 'work',
+          partyId: s.vendor,
+          siteId: s.site,
+          lines: [
+            { description: 'Plaster 12 mm', unit: 'sqm', qty: '500', rate: '120', gstPct: '18' },
+          ],
+        },
+        manager,
+      ),
+    );
+    const issued = await ok<{ id: string; inForce: { lines: { lineKey: string }[] } }>(
+      post(
+        `/tenant/order-revisions/${wo.open.id}/submit`,
+        { rowVersion: wo.open.rowVersion },
+        manager,
+      ),
+    );
+    const lineKey = issued.inForce.lines[0]!.lineKey;
+    await ok(
+      post(
+        `/tenant/work-orders/${issued.id}/measurements`,
+        { lineKey, measuredOn: '2026-10-08', qty: '100' },
+        manager,
+      ),
+    );
+    // Half a bag a square metre, 2% wastage allowed, ₹450 a bag beyond that.
+    await ok(
+      put(
+        `/tenant/work-orders/${issued.id}/free-issue`,
+        {
+          items: [
+            { lineKey, resourceId: s.cement, perUnit: '0.5', wastagePct: '2', penalRate: '450' },
+          ],
+        },
+        manager,
+      ),
+    );
+    // 60 bags go to the plasterer: 51 allowed for 100 sqm, 9 beyond.
+    expect(
+      (
+        await post(
+          `/tenant/stores/${store}/issues`,
+          {
+            issuedOn: '2026-10-09',
+            wbsCode: 'SUP',
+            issuedTo: 'Plasterer',
+            orderId: s.vendor,
+            lines: [{ resourceId: s.cement, qty: '60' }],
+          },
+          manager,
+        )
+      ).json(),
+    ).toMatchObject({ code: 'not_a_work_order' });
+    await ok(
+      post(
+        `/tenant/stores/${store}/issues`,
+        {
+          issuedOn: '2026-10-09',
+          wbsCode: 'SUP',
+          issuedTo: 'Plasterer',
+          orderId: issued.id,
+          lines: [{ resourceId: s.cement, qty: '60' }],
+        },
+        manager,
+      ),
+    );
+    const bill = await ok<{ id: string }>(
+      post(`/tenant/work-orders/${issued.id}/subcontract-bills`, { upto: '2026-10-10' }, manager),
+    );
+    interface Free {
+      rows: {
+        theoretical: string;
+        allowed: string;
+        excess: string;
+        toRecover: string;
+        amount: string;
+        recoveredHere: string | null;
+      }[];
+    }
+    const view = await ok<Free>(get(`/tenant/subcontract-bills/${bill.id}/free-issue`, manager));
+    expect(view.rows[0]).toMatchObject({
+      theoretical: '50.0000',
+      allowed: '51.0000',
+      excess: '9.0000',
+      toRecover: '9.0000',
+      amount: '4050.00',
+      recoveredHere: null,
+    });
+    const after = await ok<Free>(
+      post(`/tenant/subcontract-bills/${bill.id}/free-issue/recover`, {}, manager),
+    );
+    expect(after.rows[0]).toMatchObject({ recoveredHere: '4050.00' });
+    const sb = await ok<{ backcharges: { description: string; amount: string }[] }>(
+      get(`/tenant/subcontract-bills/${bill.id}`, manager),
+    );
+    expect(sb.backcharges).toEqual([
+      expect.objectContaining({ amount: '4050.00', description: expect.stringContaining('9 bag') }),
+    ]);
+    expect(
+      (await post(`/tenant/subcontract-bills/${bill.id}/free-issue/recover`, {}, manager)).json(),
+    ).toMatchObject({ code: 'nothing_to_recover' });
   });
 });
