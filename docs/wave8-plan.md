@@ -1,10 +1,13 @@
-# Wave 8: close the real gaps (draft for review)
+# Wave 8: close the real gaps
 
 An audit of every department in October 2026 checked what a mid-size Indian contractor needs against what the code
 holds (migrations, services and routes, not menus). This plan keeps only gaps confirmed missing or half-built, ranked
 by what they cost the business when absent. Things the audit found solid are listed at the end so they are not redone.
 
-**Status: draft. Nothing here is built until the order below is agreed.**
+**Status: agreed 16 Oct 2026; build all of 8a to 8g in order without stopping.** Decisions taken where the owner did
+not choose: revenue on work done uses cost to date over estimated total cost (falling back to measured value where a
+project has no cost estimate), with the method shown on every figure so accounts can change it later; all sub-waves
+run back to back. After Wave 8: a full debug pass (the debug log, below), then Wave 9 ([wave9-plan.md](wave9-plan.md)).
 
 ## Rules for every step
 
@@ -141,4 +144,47 @@ figures; the approvals engine with delegation; audit log; API keys and webhooks;
 
 ## Progress
 
-Not started: awaiting agreement on the order above.
+The source of truth for where the work stands. A scheduled check-in resumes from the first unticked line.
+
+- [ ] 8a.1 Revenue on work done (Ind AS 115)
+- [ ] 8a.2 Material at site and accruals
+- [ ] 8a.3 Free-issue material to subcontractors
+- [ ] 8a.4 Budget check on purchase orders
+- [ ] 8a.5 Debit notes from the stores
+- [ ] 8a exit: full check and browser suite
+- [ ] 8b.1 GST reverse charge
+- [ ] 8b.2 GST TDS by government clients
+- [ ] 8b.3 TDS returns and certificates
+- [ ] 8b.4 MSME suppliers
+- [ ] 8b.5 TDS on flat buyers' payments
+- [ ] 8b exit: full check and browser suite
+- [ ] 8c.1 Contract labour compliance
+- [ ] 8c.2 Worker muster you can trust
+- [ ] 8c.3 Statutory payments and returns
+- [ ] 8c.4 Payroll gaps
+- [ ] 8c.5 Leave to the reporting manager
+- [ ] 8c exit: full check and browser suite
+- [ ] 8d.1 Price escalation (CPWD 10CC)
+- [ ] 8d.2 Look-ahead with constraints
+- [ ] 8d.3 Snags, handover and defect liability
+- [ ] 8d.4 Geotagged photos and offline site entry
+- [ ] 8d.5 Deviation statement
+- [ ] 8d exit: full check and browser suite
+- [ ] 8e.1 Vendor master
+- [ ] 8e.2 Delivery follow-up
+- [ ] 8e.3 Receipts and transfers as they really happen
+- [ ] 8e.4 Buying with history
+- [ ] 8e.5 Scrap and tools
+- [ ] 8e exit: full check and browser suite
+- [ ] 8f.1 Booking life after sale
+- [ ] 8f.2 Schedule-of-rates tendering
+- [ ] 8f exit: full check and browser suite
+- [ ] 8g.1 Two-factor sign-in for staff
+- [ ] 8g.2 Backup, restore and audit export
+- [ ] 8g.3 Reminders that go out
+- [ ] 8g.4 Finer permissions
+- [ ] 8g.5 Marathi and Hindi for site screens
+- [ ] 8 exit: full check, browser suite, demo reseed and crawl; notify the owner
+- [ ] Debug pass: run everything, log every failure, error and fault in docs/debug-log.md; show the owner
+- [ ] Debug fixes: clear each logged item (fix or recommendation), log the action taken against it
+- [ ] Wave 9: build as its own Progress list in docs/wave9-plan.md, then notify the owner and delete the routine
