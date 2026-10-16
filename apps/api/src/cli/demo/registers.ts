@@ -453,7 +453,6 @@ export function scheduleCompanyRegisters(c: Ctx) {
           kavita(),
         );
         bump(c, 'recurring entries', 2);
-        c.paths.push('/accounts/recurring');
       }),
     );
   // Each month accounts posts what is due, but the month still running is left in the list.
