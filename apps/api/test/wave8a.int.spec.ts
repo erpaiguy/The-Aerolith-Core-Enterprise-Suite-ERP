@@ -28,8 +28,6 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8a: money (integration)', () => 
   let t: Awaited<ReturnType<typeof readyTenant>>;
   let manager: Record<string, string>;
   let worker: Record<string, string>;
-  let workerId: string;
-  let lata: { id: string; headers: Record<string, string> };
   let projectId: string;
 
   const post = (url: string, payload: object = {}, headers: Record<string, string> = t.admin) =>
@@ -96,8 +94,7 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8a: money (integration)', () => 
     await control`UPDATE core.licence SET tier_id = 'test10', seat_cap = 10 WHERE id = ${t.licenceId}`;
     const m = await staff('suresh', 'manager');
     const w = await staff('raju', 'worker');
-    [manager, worker, workerId] = [m.headers, w.headers, w.id];
-    lata = await staff('lata', 'worker');
+    [manager, worker] = [m.headers, w.headers];
   }, 90_000);
 
   afterAll(async () => {
