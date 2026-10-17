@@ -322,7 +322,9 @@ export class InventoryService implements OnModuleInit {
       SELECT r.id AS "resourceId", r.code, r.name, r.unit, coalesce(b.qty, 0)::text AS qty,
         coalesce(b.value, 0)::text AS value,
         CASE WHEN coalesce(b.qty, 0) > 0 THEN round(b.value / b.qty, 4)::text END AS rate,
-        l.level::text AS "reorderLevel", (l.level IS NOT NULL AND coalesce(b.qty, 0) < l.level) AS below
+        l.level::text AS "reorderLevel", l.max_level::text AS "maxLevel",
+        (l.level IS NOT NULL AND coalesce(b.qty, 0) < l.level) AS below,
+        (l.max_level IS NOT NULL AND coalesce(b.qty, 0) > l.max_level) AS above
       FROM est.resource r
       LEFT JOIN proc.stock_balance b ON b.resource_id = r.id AND b.store_id = ${storeId}
       LEFT JOIN proc.reorder_level l ON l.resource_id = r.id AND l.store_id = ${storeId}
@@ -386,6 +388,7 @@ export class InventoryService implements OnModuleInit {
     storeId: string,
     resourceId: string,
     level: string | null,
+    max: string | null = null,
   ) {
     const db = await this.tenants.forTenant(claims.ten);
     const s = await this.store(db, storeId);
@@ -396,20 +399,20 @@ export class InventoryService implements OnModuleInit {
       if (level === null)
         await tx`DELETE FROM proc.reorder_level WHERE store_id = ${storeId} AND resource_id = ${resourceId}`;
       else
-        await tx`INSERT INTO proc.reorder_level (store_id, resource_id, level)
-          VALUES (${storeId}, ${resourceId}, ${level})
-          ON CONFLICT (store_id, resource_id) DO UPDATE SET level = EXCLUDED.level`;
-      await audit(tx, claims.sub, 'store.reorder', 'store', storeId, { resourceId, level });
+        await tx`INSERT INTO proc.reorder_level (store_id, resource_id, level, max_level)
+          VALUES (${storeId}, ${resourceId}, ${level}, ${max})
+          ON CONFLICT (store_id, resource_id) DO UPDATE SET level = EXCLUDED.level, max_level = EXCLUDED.max_level`;
+      await audit(tx, claims.sub, 'store.reorder', 'store', storeId, { resourceId, level, max });
     });
     return this.getStore(claims, storeId);
   }
 
-  /** A draft requisition for what is below its reorder level: up to the level again. */
+  /** A draft requisition for what is below its reorder level: up to the maximum, or the level when none is set. */
   async reorderRequisition(claims: TenantClaims, storeId: string) {
     const db = await this.tenants.forTenant(claims.ten);
     const s = await this.store(db, storeId);
     const below = await db<{ resource_id: string; name: string; unit: string; short: string }[]>`
-      SELECT l.resource_id, r.name, r.unit, (l.level - coalesce(b.qty, 0))::text AS short
+      SELECT l.resource_id, r.name, r.unit, (coalesce(l.max_level, l.level) - coalesce(b.qty, 0))::text AS short
       FROM proc.reorder_level l JOIN est.resource r ON r.id = l.resource_id
       LEFT JOIN proc.stock_balance b ON b.store_id = l.store_id AND b.resource_id = l.resource_id
       WHERE l.store_id = ${storeId} AND coalesce(b.qty, 0) < l.level ORDER BY r.code`;

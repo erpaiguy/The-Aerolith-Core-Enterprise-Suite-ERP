@@ -20,6 +20,8 @@ import { ReceiptController } from './receipt.controller.js';
 import { ReceiptService } from './receipt.service.js';
 import { RequisitionController } from './requisition.controller.js';
 import { RequisitionService } from './requisition.service.js';
+import { BuyingHistoryController } from './buying-history.controller.js';
+import { BuyingHistoryService } from './buying-history.service.js';
 import { DeliveryController } from './delivery.controller.js';
 import { DeliveryService } from './delivery.service.js';
 import { VendorMasterController } from './vendor-master.controller.js';
@@ -46,6 +48,7 @@ import { DocumentsModule } from '../documents/documents.module.js';
     ProcurementReportController,
     VendorMasterController,
     DeliveryController,
+    BuyingHistoryController,
   ],
   providers: [
     RequisitionService,
@@ -58,6 +61,7 @@ import { DocumentsModule } from '../documents/documents.module.js';
     RateContractService,
     VendorMasterService,
     DeliveryService,
+    BuyingHistoryService,
   ],
 })
 export class ProcurementModule {}

@@ -95,7 +95,16 @@ const count = z.object({
 });
 const countUpdate = count.extend({ rowVersion: z.number().int().positive() });
 const rowVersion = z.object({ rowVersion: z.number().int().positive() });
-const reorder = z.object({ resourceId: z.uuid(), level: positive.nullable() });
+// The reorder (minimum) level and, if given, the maximum a reorder fills up to (step 8e.4).
+const reorder = z
+  .object({
+    resourceId: z.uuid(),
+    level: positive.nullable(),
+    max: positive.nullable().default(null),
+  })
+  .refine((r) => r.max === null || (r.level !== null && Number(r.max) >= Number(r.level)), {
+    message: 'The maximum is at least the reorder level',
+  });
 const method = z.object({ method: z.enum(['average', 'fifo']) });
 const list = z.object({ projectId: z.uuid().optional() });
 
@@ -210,7 +219,7 @@ export class InventoryController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(reorder)) b: z.infer<typeof reorder>,
   ) {
-    return this.inventory.setReorder(c, id, b.resourceId, b.level);
+    return this.inventory.setReorder(c, id, b.resourceId, b.level, b.max);
   }
 
   @Post('stores/:id/reorder-requisition')

@@ -39,6 +39,7 @@ import {
 } from '../procurement/orders';
 import { OrderReceipts } from '../procurement/OrderReceipts';
 import { DeliveryFollowUp } from '../procurement/DeliveryFollowUp';
+import { LastRates } from '../procurement/LastRates';
 import { WorkOrderSubcontract } from './accounts/Subcontract';
 import { ResourcePicker } from '../procurement/ResourcePicker';
 import { shortDate } from '../schedule/model';
@@ -780,6 +781,12 @@ function Editor({
               <Plus className="size-4" aria-hidden /> Line typed in
             </Button>
           </div>
+          <LastRates
+            resourceIds={draft.lines.map((l) => l.resourceId)}
+            names={Object.fromEntries(
+              draft.lines.filter((l) => l.resourceId).map((l) => [l.resourceId!, l.description]),
+            )}
+          />
           <dl
             className="ml-auto grid max-w-xs grid-cols-[1fr_auto] gap-x-6 gap-y-1 pt-2 text-sm"
             data-testid="draft-totals"

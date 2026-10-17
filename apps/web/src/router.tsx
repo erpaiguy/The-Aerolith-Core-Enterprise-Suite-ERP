@@ -140,6 +140,7 @@ import { HandoverPrint } from './print/QualityDocs';
 import { DeviationStatementPrint } from './print/DeviationStatement';
 import { VendorScreen, VendorsScreen } from './screens/Vendors';
 import { DeliveriesScreen } from './screens/Deliveries';
+import { StockAgeingScreen } from './screens/StockAgeing';
 import { Form16Print } from './print/Form16';
 import {
   ClientBillPrint,
@@ -1235,6 +1236,11 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/deliveries',
       component: DeliveriesScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/stock-ageing',
+      component: StockAgeingScreen,
     }),
     vendorRoute,
     createRoute({

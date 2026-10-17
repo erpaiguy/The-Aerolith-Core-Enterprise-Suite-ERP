@@ -305,6 +305,8 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8e: purchase and stores (integra
     expect(lt.orders[0]).toMatchObject({ toDeliver: 0, total: 0 });
   });
 
+  let sandId: string;
+
   it('takes a weighbridge load within tolerance, and moves sand to a central store with a transit loss', async () => {
     const entityId = (await ok<{ companies: { id: string }[] }>(get('/tenant/companies')))
       .companies[0]!.id;
@@ -320,6 +322,7 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8e: purchase and stores (integra
         }),
       )
     ).id;
+    sandId = sand;
     const ultra = (
       await ok<{ id: string; name: string }[]>(get('/tenant/vendors?status=approved'))
     ).find((v) => v.name.startsWith('UltraTech'))!.id;
@@ -441,5 +444,104 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8e: purchase and stores (integra
       get(`/tenant/stores/${central.id}`, worker),
     );
     expect(c.stock.map((x) => [x.code, x.qty, x.value])).toEqual([['SAND', '48.0000', '86400.00']]);
+  });
+
+  it('shows the last rate and its change, fills a store up to its maximum, and ages the stock', async () => {
+    const ultra = (
+      await ok<{ id: string; name: string }[]>(get('/tenant/vendors?status=approved'))
+    ).find((v) => v.name.startsWith('UltraTech'))!.id;
+    const o = await ok<{ id: string; open: { id: string; rowVersion: number } }>(
+      post(
+        `/tenant/projects/${projectId}/orders`,
+        {
+          kind: 'purchase',
+          partyId: ultra,
+          siteId: site,
+          lines: [
+            {
+              resourceId: sandId,
+              description: 'River sand',
+              unit: 'cum',
+              qty: '20',
+              rate: '1890',
+              gstPct: '5',
+            },
+          ],
+        },
+        manager,
+      ),
+    );
+    await ok(
+      post(
+        `/tenant/order-revisions/${o.open.id}/submit`,
+        { rowVersion: o.open.rowVersion },
+        manager,
+      ),
+    );
+    expect(
+      (await get(`/tenant/procurement/purchase-history?resourceIds=${sandId}`, worker)).statusCode,
+    ).toBe(403);
+    const [h] = await ok<
+      {
+        last: { rate: string; party: string };
+        previousRate: string;
+        changePct: number;
+        trend: object[];
+      }[]
+    >(get(`/tenant/procurement/purchase-history?resourceIds=${sandId}`, manager));
+    expect(h).toMatchObject({
+      last: { rate: '1890.0000', party: 'UltraTech dealer, Akola' },
+      previousRate: '1800.0000',
+      changePct: 5,
+    });
+    expect(h!.trend).toHaveLength(1);
+
+    // The site store holds 54 cum: below a minimum of 60, so a reorder fills it up to the maximum of 120.
+    const stores = await ok<{ id: string; central: boolean }[]>(get('/tenant/stores', manager));
+    const siteStore = stores.find((x) => !x.central)!.id;
+    expect(
+      (
+        await post(
+          `/tenant/stores/${siteStore}/reorder`,
+          { resourceId: sandId, level: '60', max: '50' },
+          manager,
+        )
+      ).statusCode,
+    ).toBe(400);
+    const store = await ok<{
+      stock: { code: string; qty: string; maxLevel: string; below: boolean }[];
+    }>(
+      post(
+        `/tenant/stores/${siteStore}/reorder`,
+        { resourceId: sandId, level: '60', max: '120' },
+        manager,
+      ),
+    );
+    expect(store.stock.find((x) => x.code === 'SAND')).toMatchObject({
+      qty: '54.0000',
+      maxLevel: '120.0000',
+      below: true,
+    });
+    const req = await ok<{ lines: { qty: string }[] }>(
+      post(`/tenant/stores/${siteStore}/reorder-requisition`, {}, manager),
+    );
+    expect(req.lines.map((l) => l.qty)).toEqual(['66.0000']);
+
+    // Ageing: all of it came in today, none issued yet, so nothing is slow.
+    const age = await ok<{
+      rows: {
+        store: string;
+        code: string;
+        qty: string;
+        buckets: Record<string, string>;
+        slow: boolean;
+      }[];
+      totals: Record<string, string>;
+    }>(get('/tenant/procurement/stock-ageing', manager));
+    expect(age.rows.map((r) => [r.code, r.qty, r.buckets['0-30'], r.slow])).toEqual([
+      ['SAND', '48.0000', '86400.00', false],
+      ['SAND', '54.0000', '97200.00', false],
+    ]);
+    expect(age.totals['0-30']).toBe('183600.00');
   });
 });

@@ -42,6 +42,9 @@ export interface StockLine {
   value: string;
   rate: string | null;
   reorderLevel: string | null;
+  /** What a reorder fills up to (step 8e.4). */
+  maxLevel: string | null;
+  above: boolean;
   below: boolean;
 }
 

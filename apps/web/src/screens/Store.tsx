@@ -203,6 +203,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                 <th className="text-right">Rate</th>
                 <th className="text-right">Value</th>
                 <th className="text-right">Reorder at</th>
+                <th className="text-right">Fill up to</th>
                 <th />
               </tr>
             </thead>
@@ -221,6 +222,12 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                         <Badge tone="warning">Below</Badge>
                       </>
                     )}
+                    {x.above && (
+                      <>
+                        {' '}
+                        <Badge tone="neutral">Over the maximum</Badge>
+                      </>
+                    )}
                   </td>
                   <td className="text-right tabular-nums">{x.rate ? formatRate(x.rate) : '-'}</td>
                   <td className="text-right tabular-nums">{rupees(x.value)}</td>
@@ -233,13 +240,37 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                           void run('level', () =>
                             api.request(`/api/tenant/stores/${s.id}/reorder`, {
                               method: 'POST',
-                              body: { resourceId: x.resourceId, level },
+                              body: {
+                                resourceId: x.resourceId,
+                                level,
+                                max: level ? x.maxLevel : null,
+                              },
                             }),
                           )
                         }
                       />
                     ) : x.reorderLevel ? (
                       formatQty(x.reorderLevel)
+                    ) : (
+                      '-'
+                    )}
+                  </td>
+                  <td className="text-right">
+                    {s.mayManage && x.reorderLevel ? (
+                      <ReorderInput
+                        level={x.maxLevel}
+                        label={`Maximum of ${x.name}`}
+                        onSave={(max) =>
+                          void run('level', () =>
+                            api.request(`/api/tenant/stores/${s.id}/reorder`, {
+                              method: 'POST',
+                              body: { resourceId: x.resourceId, level: x.reorderLevel, max },
+                            }),
+                          )
+                        }
+                      />
+                    ) : x.maxLevel ? (
+                      formatQty(x.maxLevel)
                     ) : (
                       '-'
                     )}

@@ -42,6 +42,7 @@ import { formatAmount, formatQty, formatRate, type BoqHeader, type BoqRow } from
 import { describeError, formatDate, formatInr } from '../lib/format';
 import type { RequisitionRow } from '../procurement/model';
 import { useTradeCategories } from './Vendors';
+import { LastRates } from '../procurement/LastRates';
 import { usePermission } from '../session/permissions';
 
 export const RFQ_STATUS: Record<RfqStatus, string> = {
@@ -1880,6 +1881,12 @@ function Comparative({
           />
         </tfoot>
       </Table>
+      <LastRates
+        resourceIds={rfq.lines.map((l) => l.resourceId)}
+        names={Object.fromEntries(
+          rfq.lines.filter((l) => l.resourceId).map((l) => [l.resourceId!, l.description]),
+        )}
+      />
       {rfq.projectId && <MakeOrders rfq={rfq} lines={t.linesSelected} />}
       {canEdit && rfq.tenderId && (
         <div className="mt-4 space-y-3 border-t border-line pt-4">

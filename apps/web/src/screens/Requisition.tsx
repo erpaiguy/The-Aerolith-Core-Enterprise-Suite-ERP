@@ -32,6 +32,7 @@ import {
 } from '../procurement/model';
 import { ResourcePicker } from '../procurement/ResourcePicker';
 import { formatQty } from '../boq/model';
+import { LastRates } from '../procurement/LastRates';
 import { RequisitionLines } from '../procurement/RequisitionLines';
 import { shortDate } from '../schedule/model';
 import { usePermission } from '../session/permissions';
@@ -486,6 +487,12 @@ function Editor({
               <Plus className="size-4" aria-hidden /> Line typed in
             </Button>
           </div>
+          <LastRates
+            resourceIds={draft.lines.map((l) => l.resourceId)}
+            names={Object.fromEntries(
+              draft.lines.filter((l) => l.resourceId).map((l) => [l.resourceId!, l.description]),
+            )}
+          />
           <DemandAdder
             projectId={projectId}
             onAdd={(found) => {
