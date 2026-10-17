@@ -103,7 +103,8 @@ export async function restoreDatabase(
           throw new Error(
             `The database is older than the backup: migrate it first (missing ${missing.join(', ')}).`,
           );
-        if (have.size) await tx.unsafe(`TRUNCATE ${[...have.keys()].map(qname).join(', ')}`);
+        if (have.size)
+          await tx.unsafe(`TRUNCATE ${[...have.keys()].map(qname).join(', ')} CASCADE`);
       } else if (e.kind === 'start') {
         const cols = have.get(e.table);
         if (!cols) throw new Error(`The backup has a table this version does not: ${e.table}.`);
