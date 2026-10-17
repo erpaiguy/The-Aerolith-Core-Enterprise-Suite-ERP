@@ -295,6 +295,13 @@ export class StatutoryService {
             code: 'not_posted',
             message: 'Post the run before paying its dues.',
           });
+        const [dup] = await tx`
+          SELECT 1 FROM pay.statutory_challan WHERE kind = ${input.kind} AND reference = ${input.reference}`;
+        if (dup)
+          throw new ConflictException({
+            code: 'challan_exists',
+            message: 'This challan is already entered.',
+          });
         const head = (await this.dues(tx, runId)).heads.find((h) => h.kind === input.kind)!;
         if (Number(input.amount) > Number(head.left) + 0.005)
           throw new BadRequestException({

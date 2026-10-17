@@ -157,10 +157,10 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8b.3 TDS returns and certificates
 - [x] 8b.4 MSME suppliers
 - [x] 8b.5 TDS on flat buyers' payments
-- [ ] 8b exit: full check and browser suite
+- [x] 8b exit: full check and browser suite
 - [x] 8c.1 Contract labour compliance
 - [x] 8c.2 Worker muster you can trust
-- [ ] 8c.3 Statutory payments and returns
+- [x] 8c.3 Statutory payments and returns
 - [ ] 8c.4 Payroll gaps
 - [ ] 8c.5 Leave to the reporting manager
 - [ ] 8c exit: full check and browser suite
