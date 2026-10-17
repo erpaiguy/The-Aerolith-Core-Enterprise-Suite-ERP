@@ -11,6 +11,7 @@ import {
 import ExcelJS from 'exceljs';
 import type { Sql, TransactionSql } from 'postgres';
 import { complianceReasons } from './labour-rules.js';
+import { DEFAULT_RADIUS_M, distanceM } from '../hr/hr-rules.js';
 import { fromDb } from '../accounts/accounts-rules.js';
 import { LedgerService, type LineInput } from '../accounts/ledger.service.js';
 import type { TenantClaims } from '../auth/auth.service.js';
@@ -43,6 +44,23 @@ export interface WorkerInput {
   uan: string | null;
   esiNumber: string | null;
   joinedOn: string;
+}
+
+/** A photo sent as a data URL ("data:image/jpeg;base64,…"): its bytes and type, or a refusal. */
+export function decodePhoto(dataUrl: string) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!m)
+    throw new BadRequestException({
+      code: 'bad_photo',
+      message: 'The photo is not a JPEG, PNG or WebP image.',
+    });
+  const bytes = Buffer.from(m[2]!, 'base64');
+  if (bytes.length > 600_000)
+    throw new BadRequestException({
+      code: 'photo_too_large',
+      message: 'The photo is over 600 KB.',
+    });
+  return { bytes, type: m[1]! };
 }
 
 @Injectable()
@@ -79,9 +97,19 @@ export class LabourService {
 
   private async site(db: Db, siteId: string) {
     const [s] = await db<
-      { id: string; name: string; project_id: string; state_code: string | null; project: string }[]
+      {
+        id: string;
+        name: string;
+        project_id: string;
+        state_code: string | null;
+        project: string;
+        latitude: string | null;
+        longitude: string | null;
+        radius_m: number | null;
+      }[]
     >`
-      SELECT s.id, s.name, s.project_id, s.state_code, p.name AS project FROM proj.site s
+      SELECT s.id, s.name, s.project_id, s.state_code, p.name AS project, s.latitude::text, s.longitude::text,
+        s.radius_m FROM proj.site s
       JOIN proj.project p ON p.id = s.project_id WHERE s.id = ${siteId}`;
     if (!s) throw new NotFoundException({ code: 'site_not_found' });
     return s;
@@ -288,7 +316,22 @@ export class LabourService {
       FROM lab.worker w LEFT JOIN lab.muster m ON m.worker_id = w.id AND m.day = ${day} AND m.site_id = ${siteId}
       WHERE w.party_id = ${partyId} AND w.joined_on <= ${day} AND (w.left_on IS NULL OR w.left_on >= ${day})
       ORDER BY lower(w.name)`;
-    return { site: { id: s.id, name: s.name, project: s.project }, day, partyId, rows };
+    const proofs = await db`
+      SELECT id, to_char(created_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI') AS at, latitude::text, longitude::text,
+        distance_m AS "distanceM", flag, photo IS NOT NULL AS "hasPhoto", workers
+      FROM lab.muster_proof WHERE site_id = ${siteId} AND day = ${day} AND party_id = ${partyId} ORDER BY created_at`;
+    return { site: { id: s.id, name: s.name, project: s.project }, day, partyId, rows, proofs };
+  }
+
+  /** A muster's photo, for those who may see the site's muster. */
+  async proofPhoto(claims: TenantClaims, id: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const [p] = await db<{ site_id: string; photo: Buffer | null; photo_type: string | null }[]>`
+      SELECT site_id, photo, photo_type FROM lab.muster_proof WHERE id = ${id}`;
+    if (!p?.photo) throw new NotFoundException({ code: 'no_photo' });
+    const s = await this.site(db, p.site_id);
+    await this.mayMuster(db, claims, s.project_id);
+    return { bytes: p.photo, type: p.photo_type! };
   }
 
   async mark(
@@ -302,6 +345,14 @@ export class LabourService {
         status: 'present' | 'half_day' | 'absent' | null;
         overtimeHours: string;
       }[];
+      /** From a phone: where it was and a photo of the gang (docs/wave8-plan.md step 8c.2). */
+      proof?:
+        | {
+            latitude: number | null;
+            longitude: number | null;
+            photo: string | null;
+          }
+        | undefined;
     },
   ) {
     if (input.date > indiaDay())
@@ -341,6 +392,28 @@ export class LabourService {
               ${claims.sub})
             ON CONFLICT (site_id, day, worker_id) DO UPDATE SET status = EXCLUDED.status,
               overtime_hours = EXCLUDED.overtime_hours, updated_at = now(), updated_by = EXCLUDED.updated_by`;
+        }
+        if (input.proof) {
+          const p = input.proof;
+          const distance =
+            p.latitude !== null && p.longitude !== null && s.latitude && s.longitude
+              ? distanceM(Number(s.latitude), Number(s.longitude), p.latitude, p.longitude)
+              : null;
+          const flag =
+            p.latitude === null
+              ? 'no_location'
+              : distance === null
+                ? 'no_site_location'
+                : distance > (s.radius_m ?? DEFAULT_RADIUS_M)
+                  ? 'outside_site'
+                  : null;
+          const photo = p.photo ? decodePhoto(p.photo) : null;
+          await tx`
+            INSERT INTO lab.muster_proof (site_id, day, party_id, latitude, longitude, distance_m, flag, photo, photo_type,
+              workers, created_by)
+            VALUES (${siteId}, ${input.date}, ${input.partyId}, ${p.latitude}, ${p.longitude}, ${distance}, ${flag},
+              ${photo?.bytes ?? null}, ${photo?.type ?? null},
+              ${input.marks.filter((m) => m.status === 'present' || m.status === 'half_day').length}, ${claims.sub})`;
         }
         await audit(tx, claims.sub, 'labour.muster', 'site', siteId, {
           date: input.date,

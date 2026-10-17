@@ -8,13 +8,16 @@ import {
   Post,
   Put,
   Query,
+  Res,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { attachment } from '../boq/import/import.controller.js';
+import { Idempotent } from '../common/idempotency.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { LabourService, type WorkerInput } from './labour.service.js';
 
@@ -95,6 +98,14 @@ const muster = z.object({
       }),
     )
     .max(2000),
+  // From a phone (docs/wave8-plan.md step 8c.2): where it was, and a photo as a data URL.
+  proof: z
+    .object({
+      latitude: z.number().min(-90).max(90).nullable().default(null),
+      longitude: z.number().min(-180).max(180).nullable().default(null),
+      photo: z.string().max(820_000).nullable().default(null),
+    })
+    .optional(),
 });
 
 /** Contract labour (docs/wave3-plan.md step 13). Who may do what is checked by the service. */
@@ -205,12 +216,24 @@ export class LabourController {
   @Post('sites/:id/muster')
   @HttpCode(200)
   @RequiresFeatures()
+  @Idempotent()
   mark(
     @Auth() c: TenantClaims,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(muster)) b: z.infer<typeof muster>,
   ) {
     return this.labour.mark(c, id, b);
+  }
+
+  @Get('muster-proofs/:id/photo')
+  async proofPhoto(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const p = await this.labour.proofPhoto(c, id);
+    reply.header('Cache-Control', 'private, max-age=86400');
+    return new StreamableFile(p.bytes, { type: p.type });
   }
 
   @Post('wage-sheets')

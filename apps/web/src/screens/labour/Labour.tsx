@@ -22,6 +22,8 @@ import { today, useChart } from '../../accounts/model';
 import { describeError } from '../../lib/format';
 import { rupees } from '../../procurement/OrderLines';
 import { ComplianceCard } from './Compliance';
+import { here, shrink } from './proof';
+import { sendOrKeep } from '../../offline';
 
 interface Contractor {
   partyId: string;
@@ -898,6 +900,14 @@ export function MusterScreen() {
           overtimeHours: string | null;
           elsewhere: boolean;
         }[];
+        proofs: {
+          id: string;
+          at: string;
+          flag: string | null;
+          hasPhoto: boolean;
+          distanceM: number | null;
+          workers: number;
+        }[];
       }>(`/api/tenant/labour/sites/${f.siteId}/muster?date=${f.day}&partyId=${f.partyId}`),
     enabled: Boolean(f.siteId && f.partyId),
   });
@@ -905,11 +915,14 @@ export function MusterScreen() {
     Record<string, { status?: string | null; overtimeHours?: string }>
   >({});
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  // From a phone (docs/wave8-plan.md step 8c.2): its place and a photo of the gang go with the marks.
+  const [withProof, setWithProof] = useState(false);
+  const [photo, setPhoto] = useState<File | null>(null);
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSaved(false);
+    setSaved(null);
     try {
       const marks = Object.entries(edits).map(([workerId, x]) => {
         const r = m.data!.rows.find((y) => y.workerId === workerId)!;
@@ -919,15 +932,24 @@ export function MusterScreen() {
           overtimeHours: x.overtimeHours ?? r.overtimeHours ?? '0',
         };
       });
-      qc.setQueryData(
-        key,
-        await api.request(`/api/tenant/labour/sites/${f.siteId}/muster`, {
-          method: 'POST',
-          body: { date: f.day, partyId: f.partyId, marks },
-        }),
+      const proof = withProof
+        ? {
+            ...((await here()) ?? { latitude: null, longitude: null }),
+            photo: photo ? await shrink(photo) : null,
+          }
+        : undefined;
+      const sent = await sendOrKeep<typeof m.data>(
+        `Muster of ${f.day}`,
+        `/api/tenant/labour/sites/${f.siteId}/muster`,
+        { date: f.day, partyId: f.partyId, marks, ...(proof ? { proof } : {}) },
       );
+      if (sent.queued) setSaved('No signal: kept on this phone, and sent when the signal returns.');
+      else {
+        qc.setQueryData(key, sent.result);
+        setSaved('Saved.');
+      }
       setEdits({});
-      setSaved(true);
+      setPhoto(null);
     } catch (err) {
       setError(describeError(err));
     }
@@ -1046,8 +1068,66 @@ export function MusterScreen() {
                 <Button type="submit" disabled={Object.keys(edits).length === 0}>
                   Save the muster
                 </Button>
-                {saved && <span className="text-sm text-fg-muted">Saved.</span>}
+                {saved && <span className="text-sm text-fg-muted">{saved}</span>}
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={withProof}
+                    onChange={(e) => setWithProof(e.target.checked)}
+                  />
+                  Mark from this phone, with its place
+                </label>
+                {withProof && (
+                  <label className="flex items-center gap-2">
+                    Photo of the gang
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      aria-label="Photo of the gang"
+                      onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                )}
+              </div>
+              {m.data.proofs.length > 0 && (
+                <ul className="mt-3 space-y-1 text-sm" aria-label="Muster proofs">
+                  {m.data.proofs.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2">
+                      <span>
+                        {p.at}: {p.workers} marked
+                        {p.distanceM !== null ? `, ${p.distanceM} m from the site` : ''}
+                      </span>
+                      {p.flag ? (
+                        <Badge tone="warning">
+                          {p.flag === 'outside_site'
+                            ? 'away from the site'
+                            : p.flag === 'no_location'
+                              ? 'no location'
+                              : 'site has no location'}
+                        </Badge>
+                      ) : (
+                        <Badge tone="success">on site</Badge>
+                      )}
+                      {p.hasPhoto && (
+                        <button
+                          type="button"
+                          className="hover:underline"
+                          onClick={() =>
+                            void api
+                              .download(`/api/tenant/labour/muster-proofs/${p.id}/photo`)
+                              .then(({ blob }) => window.open(URL.createObjectURL(blob), '_blank'))
+                          }
+                        >
+                          photo
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {error && <Alert tone="danger">{error}</Alert>}
             </form>
           )}

@@ -301,6 +301,65 @@ describe.skipIf(!controlUrl || !adminUrl)('contract labour (integration)', () =>
     ]);
   });
 
+  it('takes a muster from a phone with its place and a photo, once, and flags it away from the site', async () => {
+    // docs/wave8-plan.md step 8c.2. The site at 20.9374 N, 77.7796 E within 150 m.
+    await ok(
+      put(`/tenant/hr/sites/${s1}`, { latitude: '20.9374', longitude: '77.7796', radiusM: 150 }),
+    );
+    // A 1×1 PNG.
+    const photo =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const body = (lat: number, lng: number, withPhoto: boolean) => ({
+      date: day(5),
+      partyId: party,
+      marks: [{ workerId: w.get('Ramesh'), status: 'present' }],
+      proof: { latitude: lat, longitude: lng, photo: withPhoto ? photo : null },
+    });
+    const send = (b: object, key: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/tenant/labour/sites/${s1}/muster`,
+        payload: b,
+        headers: { ...manager, 'idempotency-key': key },
+      });
+    // On the site, with the gang's photo; sent twice from the outbox with the same key: kept once.
+    await ok(send(body(20.9375, 77.7797, true), 'muster-key-0001-aaaaaaaaaa'));
+    await ok(send(body(20.9375, 77.7797, true), 'muster-key-0001-aaaaaaaaaa'));
+    // Five kilometres away, no photo: stands, but flagged.
+    await send(body(20.9824, 77.7796, false), 'muster-key-0002-aaaaaaaaaa');
+    expect(
+      (
+        await send(
+          {
+            ...body(20.9375, 77.7797, false),
+            proof: { latitude: 1, longitude: 1, photo: 'not-an-image' },
+          },
+          'muster-key-0003-aaaaaaaaaa',
+        )
+      ).json(),
+    ).toMatchObject({ code: 'bad_photo' });
+    const m = await ok<{
+      proofs: {
+        id: string;
+        flag: string | null;
+        hasPhoto: boolean;
+        distanceM: number;
+        workers: number;
+      }[];
+    }>(get(`/tenant/labour/sites/${s1}/muster?date=${day(5)}&partyId=${party}`, manager));
+    expect(m.proofs.map((p) => [p.flag, p.hasPhoto, p.workers])).toEqual([
+      [null, true, 1],
+      ['outside_site', false, 1],
+    ]);
+    expect(m.proofs[0]!.distanceM).toBeLessThan(150);
+    const img = await app.inject({
+      method: 'GET',
+      url: `/api/tenant/labour/muster-proofs/${m.proofs[0]!.id}/photo`,
+      headers: manager,
+    });
+    expect([img.statusCode, img.headers['content-type']]).toEqual([200, 'image/png']);
+  });
+
   it("works September's wage sheet against the minimum wage, then verifies it paid", async () => {
     const sheet = await ok<{
       id: string;
