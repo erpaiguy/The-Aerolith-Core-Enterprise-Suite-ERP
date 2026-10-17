@@ -401,6 +401,61 @@ describe.skipIf(!controlUrl || !adminUrl)('contract labour (integration)', () =>
     ).toEqual([2, 'Ramesh Pawar', 'Bhagwan Pawar']);
   });
 
+  it("checks the contractor's PF and ESI as principal employer, and holds their bills until paid", async () => {
+    // docs/wave8-plan.md step 8c.1. September's sheet: PF 12% each side of ₹2,080 + ₹3,750 + ₹1,750 (₹250 + ₹450
+    // + ₹210, twice) = ₹1,820; ESI 0.75% and 3.25% of each gross, rounded up = ₹321.
+    const on = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    interface Compliance {
+      dues: { month: string; kind: string; due: string; paid: string }[];
+      holds: string[];
+    }
+    const url = `/tenant/labour/contractors/${party}/compliance?on=${on}`;
+    let c = await ok<Compliance>(get(url));
+    expect(c.dues).toEqual([
+      { month: '2026-09', kind: 'esi', due: '321.00', paid: '0.00' },
+      { month: '2026-09', kind: 'pf', due: '1820.00', paid: '0.00' },
+    ]);
+    expect(c.holds).toEqual([
+      '2026-09: ESI of ₹321.00 due, ₹0.00 shown paid.',
+      '2026-09: PF of ₹1820.00 due, ₹0.00 shown paid.',
+    ]);
+    // The contractor's challans for September.
+    await ok(
+      post(`/tenant/labour/contractors/${party}/challans`, {
+        month: '2026-09',
+        kind: 'pf',
+        reference: 'TRRN 1234567890',
+        amount: '1820',
+        paidOn: '2026-10-12',
+      }),
+    );
+    expect(
+      (
+        await post(`/tenant/labour/contractors/${party}/challans`, {
+          month: '2026-09',
+          kind: 'pf',
+          reference: 'TRRN 1234567890',
+          amount: '1820',
+          paidOn: '2026-10-12',
+        })
+      ).json(),
+    ).toMatchObject({ code: 'challan_exists' });
+    c = await ok<Compliance>(
+      post(`/tenant/labour/contractors/${party}/challans`, {
+        month: '2026-09',
+        kind: 'esi',
+        reference: 'ESIC 55120',
+        amount: '321',
+        paidOn: '2026-10-14',
+      }),
+    );
+    expect(c.holds).toEqual([]);
+    // After the licence ends, the bills wait again.
+    const later = new Date(Date.now() + 330 * 60_000 + 40 * 86_400_000).toISOString().slice(0, 10);
+    c = await ok<Compliance>(get(`/tenant/labour/contractors/${party}/compliance?on=${later}`));
+    expect(c.holds[0]).toMatch(/^The contract labour licence lapsed on /);
+  });
+
   it('tracks BOCW cess on the cost of construction to payment', async () => {
     const chart = await ok<{ accounts: { id: string; systemKey: string | null; code: string }[] }>(
       get('/tenant/accounts/chart', manager),

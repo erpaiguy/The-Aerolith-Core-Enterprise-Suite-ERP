@@ -21,6 +21,7 @@ import type { Party, ProjectDetail, ProjectSummary } from '../../api/types';
 import { today, useChart } from '../../accounts/model';
 import { describeError } from '../../lib/format';
 import { rupees } from '../../procurement/OrderLines';
+import { ComplianceCard } from './Compliance';
 
 interface Contractor {
   partyId: string;
@@ -104,6 +105,7 @@ export function LabourScreen() {
       />
       <Contractors open={open} onOpen={setOpen} />
       {open && <ContractorCard key={open} partyId={open} />}
+      {open && <ComplianceCard key={`c-${open}`} partyId={open} />}
       <MinWages />
       <Cess />
     </div>

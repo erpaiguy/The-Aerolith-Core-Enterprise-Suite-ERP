@@ -641,6 +641,14 @@ export class SubcontractService implements OnModuleInit {
         b.status === 'certified'
           ? []
           : await LabourService.unverified(db, o.party_id, String((h as { upto: string }).upto)),
+      labourHolds:
+        b.status === 'draft'
+          ? await LabourService.complianceReasons(
+              db,
+              o.party_id,
+              String((h as { upto: string }).upto),
+            )
+          : [],
       mayEdit: may && b.status === 'draft',
       maySubmit: may && b.status === 'draft' && !problem,
       mayCancel: may && ['draft', 'pending'].includes(b.status),
@@ -746,6 +754,14 @@ export class SubcontractService implements OnModuleInit {
         const o = await this.order(tx, b.order_id);
         this.inForce(o);
         const f = await this.figures(tx, b, o);
+        // A labour contractor's bill waits on their compliance (docs/wave8-plan.md step 8c.1).
+        const holds = await LabourService.complianceReasons(tx, o.party_id, b.upto);
+        if (holds.length)
+          throw new ConflictException({
+            code: 'labour_compliance',
+            message: `Held for contract labour compliance: ${holds.join(' ')}`,
+            holds,
+          });
         if (dec(f.gross) <= 0n)
           throw new BadRequestException({
             code: 'nothing_to_bill',

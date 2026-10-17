@@ -209,7 +209,7 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
   it('rolls out new migrations to every tenant and pauses on failures', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aerolith-mig-'));
     cpSync(TENANT_MIGRATIONS, dir, { recursive: true });
-    writeFileSync(join(dir, '0090_probe.sql'), 'CREATE TABLE platform.probe (id int PRIMARY KEY);');
+    writeFileSync(join(dir, '9990_probe.sql'), 'CREATE TABLE platform.probe (id int PRIMARY KEY);');
 
     const first = (
       await post('/owner/migrations/rollout', { concurrency: 2, failureThreshold: 1 })
@@ -221,14 +221,14 @@ describe.skipIf(!controlUrl || !adminUrl)('tenant provisioning (integration)', (
     const run = await app.get(orchestrator).rollout({ dir, concurrency: 2, failureThreshold: 1 });
     expect(run).toMatchObject({
       status: 'completed',
-      targetVersion: '0090_probe.sql',
+      targetVersion: '9990_probe.sql',
       counts: { applied: 2 },
     });
     const appB = connect(open((await secrets(tenantB)).app_url_secret, ENC));
     expect(await appB`SELECT count(*)::int AS n FROM platform.probe`).toEqual([{ n: 0 }]); // default privileges apply
 
     // Break tenant A's migrator credentials; with threshold 1 and concurrency 1, B must not be attempted.
-    writeFileSync(join(dir, '0091_probe2.sql'), 'CREATE TABLE platform.probe2 (id int);');
+    writeFileSync(join(dir, '9991_probe2.sql'), 'CREATE TABLE platform.probe2 (id int);');
     const bad = new URL(open((await secrets(tenantA)).migrator_url_secret, ENC));
     bad.password = 'wrong-password';
     await control`UPDATE core.tenant_db SET migrator_url_secret = ${seal(bad.toString(), ENC)} WHERE tenant_id = ${tenantA}`;

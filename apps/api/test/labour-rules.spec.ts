@@ -1,7 +1,7 @@
 // Contract labour's arithmetic by hand (docs/wave3-plan.md step 13): a month's wages with overtime at twice the
 // ordinary rate, the shortfall against the minimum wage, and a licence's days left.
 import { describe, expect, it } from 'vitest';
-import { licenceState, wageLine } from '../src/labour/labour-rules.js';
+import { complianceReasons, licenceState, wageLine } from '../src/labour/labour-rules.js';
 
 describe('labour rules', () => {
   it('works a month with overtime and the minimum wage', () => {
@@ -18,7 +18,18 @@ describe('labour rules', () => {
         overtimeHours: 6,
         minimum: 500,
       }),
-    ).toMatchObject({ days: 21, wages: 9450, overtime: 675, gross: 10125, shortfall: 1125 });
+    ).toMatchObject({
+      days: 21,
+      wages: 9450,
+      overtime: 675,
+      gross: 10125,
+      shortfall: 1125,
+      // docs/wave8-plan.md step 8c.1: PF 12% of ₹9,450 each side; ESI on ₹10,125 at 0.75% and 3.25%, rounded up.
+      pfEmployee: 1134,
+      pfEmployer: 1134,
+      esiEmployee: 76,
+      esiEmployer: 330,
+    });
     expect(
       wageLine({
         workerId: 'w',
@@ -31,6 +42,21 @@ describe('labour rules', () => {
         minimum: null,
       }),
     ).toMatchObject({ gross: 750, shortfall: 0, minimum: null });
+  });
+
+  it("words what holds a labour contractor's bill", () => {
+    expect(
+      complianceReasons({
+        licenceValidTo: '2026-09-30',
+        on: '2026-10-05',
+        belowMinimum: [{ month: '2026-09', site: 'Washim', shortfall: '1125.00' }],
+        unpaid: [{ month: '2026-09', kind: 'pf', due: '2268.00', paid: '0.00' }],
+      }),
+    ).toEqual([
+      'The contract labour licence lapsed on 2026-09-30.',
+      '2026-09 at Washim: workers paid ₹1125.00 below the minimum wage.',
+      '2026-09: PF of ₹2268.00 due, ₹0.00 shown paid.',
+    ]);
   });
 
   it("tells a licence's days left", () => {

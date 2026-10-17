@@ -144,6 +144,38 @@ export class LabourController {
     return this.labour.updateWorker(c, id, b);
   }
 
+  /** Compliance as principal employer (docs/wave8-plan.md step 8c.1): PF and ESI due and paid, and what holds bills. */
+  @Get('contractors/:partyId/compliance')
+  compliance(
+    @Auth() c: TenantClaims,
+    @Param('partyId', ParseUUIDPipe) partyId: string,
+    @Query(new ZodPipe(z.object({ on: date }))) q: { on: string },
+  ) {
+    return this.labour.compliance(c, partyId, q.on);
+  }
+
+  @Post('contractors/:partyId/challans')
+  @HttpCode(200)
+  @RequiresFeatures()
+  addChallan(
+    @Auth() c: TenantClaims,
+    @Param('partyId', ParseUUIDPipe) partyId: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          month,
+          kind: z.enum(['pf', 'esi']),
+          reference: z.string().trim().min(3).max(40),
+          amount: amount.refine((v) => Number(v) > 0, { message: 'More than zero' }),
+          paidOn: date,
+        }),
+      ),
+    )
+    b: { month: string; kind: 'pf' | 'esi'; reference: string; amount: string; paidOn: string },
+  ) {
+    return this.labour.addChallan(c, partyId, b);
+  }
+
   @Get('contractors/:partyId/wage-sheets')
   sheets(@Auth() c: TenantClaims, @Param('partyId', ParseUUIDPipe) partyId: string) {
     return this.labour.sheets(c, partyId);

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import type { Sql, TransactionSql } from 'postgres';
+import { complianceReasons } from './labour-rules.js';
 import { fromDb } from '../accounts/accounts-rules.js';
 import { LedgerService, type LineInput } from '../accounts/ledger.service.js';
 import type { TenantClaims } from '../auth/auth.service.js';
@@ -450,8 +451,11 @@ export class LabourService {
         );
       const total = lines.reduce((t, l) => t + l.gross, 0);
       const shortfall = lines.reduce((t, l) => t + l.shortfall, 0);
+      const pf = lines.reduce((t, l) => t + l.pfEmployee + l.pfEmployer, 0);
+      const esi = lines.reduce((t, l) => t + l.esiEmployee + l.esiEmployer, 0);
       await tx`UPDATE lab.wage_sheet SET lines = ${tx.json(JSON.parse(JSON.stringify(lines)))}, total = ${total.toFixed(2)},
-        shortfall = ${shortfall.toFixed(2)}, worked_at = now(), row_version = row_version + 1 WHERE id = ${id}`;
+        shortfall = ${shortfall.toFixed(2)}, pf_due = ${pf.toFixed(2)}, esi_due = ${esi.toFixed(2)}, worked_at = now(),
+        row_version = row_version + 1 WHERE id = ${id}`;
     });
     return this.sheet(claims, id);
   }
@@ -462,7 +466,8 @@ export class LabourService {
     const [x] = await db`
       SELECT w.id, w.party_id AS "partyId", p.name AS contractor, w.site_id AS "siteId", s.name AS site,
         pr.name AS project, to_char(w.month, 'YYYY-MM') AS month, w.status, w.lines, w.total::text,
-        w.shortfall::text, to_char(w.paid_on, 'YYYY-MM-DD') AS "paidOn", w.paid_reference AS "paidReference",
+        w.shortfall::text, w.pf_due::text AS "pfDue", w.esi_due::text AS "esiDue",
+        to_char(w.paid_on, 'YYYY-MM-DD') AS "paidOn", w.paid_reference AS "paidReference",
         w.paid_mode AS "paidMode"
       FROM lab.wage_sheet w JOIN platform.party p ON p.id = w.party_id JOIN proj.site s ON s.id = w.site_id
       JOIN proj.project pr ON pr.id = s.project_id WHERE w.id = ${id}`;
@@ -529,6 +534,83 @@ export class LabourService {
       SELECT to_char(w.month, 'YYYY-MM') AS month, s.name AS site, w.status FROM lab.wage_sheet w
       JOIN proj.site s ON s.id = w.site_id
       WHERE w.party_id = ${partyId} AND w.month <= ${upto} AND w.status <> 'verified' ORDER BY w.month`;
+  }
+
+  // --- compliance as principal employer (docs/wave8-plan.md step 8c.1) ---
+
+  /** Each month's PF and ESI due on the contractor's passed wage sheets to the date, and what their challans show. */
+  static async dues(db: Db, partyId: string, upto: string) {
+    return db<{ month: string; kind: 'pf' | 'esi'; due: string; paid: string }[]>`
+      WITH due AS (
+        SELECT month, 'pf' AS kind, sum(pf_due) AS due FROM lab.wage_sheet
+        WHERE party_id = ${partyId} AND status <> 'draft' AND month <= ${upto} GROUP BY month
+        UNION ALL
+        SELECT month, 'esi', sum(esi_due) FROM lab.wage_sheet
+        WHERE party_id = ${partyId} AND status <> 'draft' AND month <= ${upto} GROUP BY month)
+      SELECT to_char(d.month, 'YYYY-MM') AS month, d.kind, d.due::text AS due,
+        coalesce((SELECT sum(c.amount) FROM lab.contractor_challan c WHERE c.party_id = ${partyId}
+          AND c.month = d.month AND c.kind = d.kind), 0)::numeric(20,2)::text AS paid
+      FROM due d WHERE d.due > 0 ORDER BY d.month, d.kind`;
+  }
+
+  /** What holds a labour contractor's bill on a date; none for a party who is not one. */
+  static async complianceReasons(db: Db, partyId: string, on: string) {
+    const [c] = await db<{ valid_to: string | null }[]>`
+      SELECT to_char(licence_valid_to, 'YYYY-MM-DD') AS valid_to FROM lab.contractor WHERE party_id = ${partyId}`;
+    if (!c) return [];
+    const below = await db<{ month: string; site: string; shortfall: string }[]>`
+      SELECT to_char(w.month, 'YYYY-MM') AS month, s.name AS site, w.shortfall::text AS shortfall
+      FROM lab.wage_sheet w JOIN proj.site s ON s.id = w.site_id
+      WHERE w.party_id = ${partyId} AND w.month <= ${on} AND w.shortfall > 0 ORDER BY w.month`;
+    // A month's contributions are due by the 15th of the next; only months before the bill's are counted.
+    const before = `${on.slice(0, 7)}-01`;
+    const unpaid = (await LabourService.dues(db, partyId, before)).filter(
+      (d) => d.month < on.slice(0, 7) && Number(d.paid) + 0.5 < Number(d.due),
+    );
+    return complianceReasons({ licenceValidTo: c.valid_to, on, belowMinimum: below, unpaid });
+  }
+
+  async compliance(claims: TenantClaims, partyId: string, on: string) {
+    await this.must(claims);
+    const db = await this.tenants.forTenant(claims.ten);
+    return {
+      partyId,
+      on,
+      dues: await LabourService.dues(db, partyId, on),
+      challans: await db`
+        SELECT id, to_char(month, 'YYYY-MM') AS month, kind, reference, amount::text,
+          to_char(paid_on, 'YYYY-MM-DD') AS "paidOn"
+        FROM lab.contractor_challan WHERE party_id = ${partyId} ORDER BY month DESC, kind`,
+      holds: await LabourService.complianceReasons(db, partyId, on),
+    };
+  }
+
+  /** A contractor's PF or ESI challan for a month, as they showed it. */
+  async addChallan(
+    claims: TenantClaims,
+    partyId: string,
+    input: { month: string; kind: 'pf' | 'esi'; reference: string; amount: string; paidOn: string },
+  ) {
+    await this.must(claims);
+    const db = await this.tenants.forTenant(claims.ten);
+    await db`
+      INSERT INTO lab.contractor_challan (party_id, month, kind, reference, amount, paid_on, created_by)
+      VALUES (${partyId}, ${`${input.month}-01`}, ${input.kind}, ${input.reference}, ${input.amount}, ${input.paidOn},
+        ${claims.sub})`.catch((err: unknown) => {
+      const code = (err as { code?: string }).code;
+      if (code === '23505')
+        throw new ConflictException({
+          code: 'challan_exists',
+          message: 'This challan is already entered.',
+        });
+      if (code === '23503')
+        throw new NotFoundException({
+          code: 'not_a_contractor',
+          message: 'Not a labour contractor.',
+        });
+      throw err;
+    });
+    return this.compliance(claims, partyId, input.paidOn);
   }
 
   // --- registers ---

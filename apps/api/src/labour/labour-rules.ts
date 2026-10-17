@@ -17,7 +17,16 @@ export interface WageLine {
   /** The minimum daily wage for their skill, or null when none is on record. */
   minimum: number | null;
   shortfall: number;
+  /** PF (12% each side on wages up to ₹15,000 a month) and ESI (0.75% and 3.25% while gross is ₹21,000 or less). */
+  pfEmployee: number;
+  pfEmployer: number;
+  esiEmployee: number;
+  esiEmployer: number;
 }
+
+/** The statutory limits the contributions turn on. [Guessing] The CA confirms each year's figures. */
+export const PF_WAGE_CEILING = 15000;
+export const ESI_GROSS_CEILING = 21000;
 
 const r2 = (v: number) => Math.round(v * 100 + 1e-9) / 100;
 
@@ -36,6 +45,9 @@ export function wageLine(w: {
   const overtime = r2((w.overtimeHours * w.rate * 2) / HOURS_A_DAY);
   const short = w.minimum !== null && w.rate < w.minimum ? w.minimum - w.rate : 0;
   const shortfall = r2(days * short + (w.overtimeHours * short * 2) / HOURS_A_DAY);
+  const gross = r2(wages + overtime);
+  const pfBase = Math.min(wages, PF_WAGE_CEILING);
+  const esi = gross <= ESI_GROSS_CEILING;
   return {
     workerId: w.workerId,
     name: w.name,
@@ -45,9 +57,13 @@ export function wageLine(w: {
     overtimeHours: w.overtimeHours,
     wages,
     overtime,
-    gross: r2(wages + overtime),
+    gross,
     minimum: w.minimum,
     shortfall,
+    pfEmployee: Math.round(pfBase * 0.12),
+    pfEmployer: Math.round(pfBase * 0.12),
+    esiEmployee: esi ? Math.ceil(gross * 0.0075) : 0,
+    esiEmployer: esi ? Math.ceil(gross * 0.0325) : 0,
   };
 }
 
@@ -58,4 +74,21 @@ export function licenceState(validTo: string | null, today: string, warnDays = 3
     (Date.parse(`${validTo}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
   );
   return { daysLeft: days, lapsed: days < 0, nearing: days >= 0 && days <= warnDays };
+}
+
+/** What holds a labour contractor's bill: each reason in words. */
+export function complianceReasons(x: {
+  licenceValidTo: string | null;
+  on: string;
+  belowMinimum: { month: string; site: string; shortfall: string }[];
+  unpaid: { month: string; kind: 'pf' | 'esi'; due: string; paid: string }[];
+}) {
+  const out: string[] = [];
+  if (x.licenceValidTo && x.licenceValidTo < x.on)
+    out.push(`The contract labour licence lapsed on ${x.licenceValidTo}.`);
+  for (const b of x.belowMinimum)
+    out.push(`${b.month} at ${b.site}: workers paid ₹${b.shortfall} below the minimum wage.`);
+  for (const u of x.unpaid)
+    out.push(`${u.month}: ${u.kind.toUpperCase()} of ₹${u.due} due, ₹${u.paid} shown paid.`);
+  return out;
 }
