@@ -881,6 +881,9 @@ function Photos({
   const [error, setError] = useState<string | null>(null);
   const [queued, setQueued] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  // The position is asked for when the camera is opened, so it is usually ready when the photo is; it never holds the
+  // upload up for more than a moment (a phone with location refused or no fix sends the photo without one).
+  const position = useRef<ReturnType<typeof here> | null>(null);
   const add = async (files: FileList | null) => {
     if (!files?.length) return;
     setBusy(true);
@@ -888,7 +891,11 @@ function Photos({
     try {
       let next: DailyReport | null = null;
       // Where the phone is now and when each picture was taken (the camera's file time), kept with the photo.
-      const at = await here(5_000);
+      const at = await Promise.race([
+        (position.current ??= here(10_000)),
+        new Promise<null>((ok) => setTimeout(() => ok(null), 1_500)),
+      ]);
+      position.current = null;
       for (const f of Array.from(files)) {
         const meta = {
           caption: caption.trim(),
@@ -1004,7 +1011,14 @@ function Photos({
             aria-label="Photo file"
             onChange={(e) => void add(e.target.files)}
           />
-          <Button type="button" busy={busy} onClick={() => input.current?.click()}>
+          <Button
+            type="button"
+            busy={busy}
+            onClick={() => {
+              position.current = here(10_000);
+              input.current?.click();
+            }}
+          >
             <Camera className="size-4" aria-hidden /> Add photo
           </Button>
         </div>
