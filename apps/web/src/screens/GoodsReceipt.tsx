@@ -11,6 +11,7 @@ import { useRun } from '../approvals/model';
 import { formatQty } from '../boq/model';
 import { LinkedDocuments } from '../documents/LinkedDocuments';
 import { describeError } from '../lib/format';
+import { useT } from '../i18n/i18n';
 import type { Inspection, Receipt } from '../procurement/orders';
 import { shortDate } from '../schedule/model';
 import { printLink } from '../print/Letterhead';
@@ -47,6 +48,7 @@ export function GoodsReceiptScreen({ receiptId }: { receiptId: string }) {
 }
 
 function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) => void }) {
+  const t = useT();
   const { run, busy, error } = useRun(() => undefined);
   const call = (k: string, path: string, body: object) =>
     run(k, async () =>
@@ -66,18 +68,19 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
         params={{ orderId: r.order.id }}
         className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline print:hidden"
       >
-        <ArrowLeft className="size-4" aria-hidden /> Purchase order {r.order.number}
+        <ArrowLeft className="size-4" aria-hidden />{' '}
+        {t('Purchase order {n}', { n: r.order.number })}
       </Link>
       <PageHeader
-        title={`Goods receipt ${r.number}`}
+        title={t('Goods receipt {n}', { n: r.number })}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             {r.status === 'cancelled' ? (
-              <Badge tone="danger">Cancelled</Badge>
+              <Badge tone="danger">{t('Cancelled')}</Badge>
             ) : held.length ? (
-              <Badge tone="warning">{held.length} held for inspection</Badge>
+              <Badge tone="warning">{t('{n} held for inspection', { n: held.length })}</Badge>
             ) : (
-              <Badge tone="success">Received</Badge>
+              <Badge tone="success">{t('Received')}</Badge>
             )}
             <span>{r.vendor.name}</span>
             <span>
@@ -92,19 +95,19 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
               params={{ receiptId: r.id }}
               className={printLink}
             >
-              <Printer className="size-4" aria-hidden /> Print
+              <Printer className="size-4" aria-hidden /> {t('Print')}
             </Link>
             {r.mayCancel && (
               <Button
                 variant="ghost"
                 busy={busy === 'cancel'}
                 onClick={() => {
-                  const reason = window.prompt('Why is the receipt cancelled?');
+                  const reason = window.prompt(t('Why is the receipt cancelled?'));
                   if (reason && reason.trim().length >= 3)
                     void call('cancel', 'cancel', { reason: reason.trim() });
                 }}
               >
-                Cancel receipt
+                {t('Cancel receipt')}
               </Button>
             )}
           </div>
@@ -112,19 +115,21 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
       />
       {r.status === 'cancelled' && r.statusReason && (
         <Alert tone="info">
-          Cancelled: {r.statusReason}. What it recorded is owed again on the order.
+          {t('Cancelled: {reason}. What it recorded is owed again on the order.', {
+            reason: r.statusReason,
+          })}
         </Alert>
       )}
       {error && <Alert tone="danger">{error}</Alert>}
       <Card>
         <dl className="mb-4 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-          <dt className="text-fg-muted">Received</dt>
+          <dt className="text-fg-muted">{t('Received')}</dt>
           <dd>
             {shortDate(r.receivedOn)}
-            {r.site && ` at ${r.site.name}`}
+            {r.site && ` ${t('at {site}', { site: r.site.name })}`}
             {r.store && (
               <>
-                {', into '}
+                {`, ${t('into')} `}
                 <Link
                   to="/stores/$storeId"
                   params={{ storeId: r.store.id }}
@@ -134,28 +139,28 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
                 </Link>
               </>
             )}
-            {r.receivedBy && `, by ${r.receivedBy}`}
+            {r.receivedBy && `, ${t('by {name}', { name: r.receivedBy })}`}
           </dd>
-          <dt className="text-fg-muted">Challan</dt>
+          <dt className="text-fg-muted">{t('Challan')}</dt>
           <dd>
             {r.challanNo}
-            {r.challanDate && ` of ${shortDate(r.challanDate)}`}
+            {r.challanDate && ` ${t('of {date}', { date: shortDate(r.challanDate) })}`}
           </dd>
           {r.vehicleNo && (
             <>
-              <dt className="text-fg-muted">Vehicle</dt>
+              <dt className="text-fg-muted">{t('Vehicle')}</dt>
               <dd>{r.vehicleNo}</dd>
             </>
           )}
           {r.invoiceNo && (
             <>
-              <dt className="text-fg-muted">Invoice</dt>
+              <dt className="text-fg-muted">{t('Invoice')}</dt>
               <dd>{r.invoiceNo}</dd>
             </>
           )}
           {r.notes && (
             <>
-              <dt className="text-fg-muted">Notes</dt>
+              <dt className="text-fg-muted">{t('Notes')}</dt>
               <dd className="whitespace-pre-wrap">{r.notes}</dd>
             </>
           )}
@@ -164,15 +169,15 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
           <thead>
             <tr>
               <th className="w-8">#</th>
-              <th>Description</th>
-              <th className="text-right">Came</th>
-              <th>Inspection</th>
-              <th className="text-right">Accepted</th>
-              <th className="text-right">Rejected</th>
-              <th className="text-right">Returned</th>
+              <th>{t('Description')}</th>
+              <th className="text-right">{t('Came')}</th>
+              <th>{t('Inspection')}</th>
+              <th className="text-right">{t('Accepted')}</th>
+              <th className="text-right">{t('Rejected')}</th>
+              <th className="text-right">{t('Returned')}</th>
             </tr>
           </thead>
-          <tbody aria-label="Receipt lines">
+          <tbody aria-label={t('Receipt lines')}>
             {r.lines.map((l) => (
               <tr key={l.position}>
                 <td className="tabular-nums text-fg-muted">{l.position}</td>
@@ -180,7 +185,7 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
                   {l.description}
                   {!l.stocked && (
                     <span className="block text-xs text-fg-muted">
-                      Typed in, not from the library: not stocked
+                      {t('Typed in, not from the library: not stocked')}
                     </span>
                   )}
                 </td>
@@ -189,12 +194,14 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
                 </td>
                 <td>
                   {l.inspection === 'hold' ? (
-                    <Badge tone="warning">{INSPECTION[l.inspection]}</Badge>
+                    <Badge tone="warning">{t(INSPECTION[l.inspection])}</Badge>
                   ) : (
-                    <span className="text-sm">{INSPECTION[l.inspection]}</span>
+                    <span className="text-sm">{t(INSPECTION[l.inspection])}</span>
                   )}
                   {l.inspectedBy && (
-                    <span className="block text-xs text-fg-muted">by {l.inspectedBy}</span>
+                    <span className="block text-xs text-fg-muted">
+                      {t('by {name}', { name: l.inspectedBy })}
+                    </span>
                   )}
                 </td>
                 <td className="text-right tabular-nums">
@@ -215,7 +222,7 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
         </Table>
       </Card>
       {(r.documents.length > 0 || r.mayAttach) && (
-        <Card title="Challan and certificates">
+        <Card title={t('Challan and certificates')}>
           <LinkedDocuments
             vault={`projects/${r.project.id}`}
             kind="goods_receipt"
@@ -234,7 +241,9 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
           />
           {r.documents.length === 0 && (
             <p className="mt-2 text-sm text-fg-muted">
-              Attach the delivery challan, the test certificates: kept in the project's documents.
+              {t(
+                "Attach the delivery challan, the test certificates: kept in the project's documents.",
+              )}
             </p>
           )}
         </Card>
@@ -254,14 +263,15 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
         />
       )}
       {r.returns.length > 0 && (
-        <Card title="Returned to the supplier">
-          <ul className="space-y-2 text-sm" aria-label="Returns">
-            {r.returns.map((t) => (
-              <li key={t.id}>
-                <span className="font-mono">{t.number}</span> on {shortDate(t.returnedOn)}
-                {t.reference && ` (${t.reference})`}: {t.reason}
+        <Card title={t('Returned to the supplier')}>
+          <ul className="space-y-2 text-sm" aria-label={t('Returns')}>
+            {r.returns.map((ret) => (
+              <li key={ret.id}>
+                <span className="font-mono">{ret.number}</span>{' '}
+                {t('on {date}', { date: shortDate(ret.returnedOn) })}
+                {ret.reference && ` (${ret.reference})`}: {ret.reason}
                 <span className="block text-xs text-fg-muted">
-                  {t.lines
+                  {ret.lines
                     .map((x) => {
                       const l = r.lines.find((g) => g.position === x.position);
                       return `${formatQty(x.qty)} ${l?.unit ?? ''} ${l?.description ?? ''}`;
@@ -297,19 +307,21 @@ function InspectForm({
   );
   const set = (p: number, patch: Partial<{ accepted: string; rejected: string; reason: string }>) =>
     setV({ ...v, [p]: { ...v[p]!, ...patch } });
+  const t = useT();
   return (
-    <Card title="Inspection" className="print:hidden">
+    <Card title={t('Inspection')} className="print:hidden">
       <form
         className="space-y-3"
-        aria-label="Inspection"
+        aria-label={t('Inspection')}
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit(lines.map((l) => ({ position: l.position, ...v[l.position]! })));
         }}
       >
         <p className="text-sm text-fg-muted">
-          What passed and what did not: together, what came. Rejected goods are still owed by the
-          supplier, and go back on a return.
+          {t(
+            'What passed and what did not: together, what came. Rejected goods are still owed by the supplier, and go back on a return.',
+          )}
         </p>
         {lines.map((l) => {
           const x = v[l.position]!;
@@ -317,16 +329,16 @@ function InspectForm({
             <div
               key={l.position}
               role="group"
-              aria-label={`Inspect ${l.description}`}
+              aria-label={t('Inspect {name}', { name: l.description })}
               className="flex flex-wrap items-end gap-2"
             >
               <div className="min-w-48 flex-1 pb-2 text-sm">
                 {l.description}{' '}
                 <span className="text-fg-muted">
-                  ({formatQty(l.qty)} {l.unit} came)
+                  {t('({qty} {unit} came)', { qty: formatQty(l.qty), unit: l.unit })}
                 </span>
               </div>
-              <Field label="Accepted">
+              <Field label={t('Accepted')}>
                 <Input
                   inputMode="decimal"
                   value={x.accepted}
@@ -334,7 +346,7 @@ function InspectForm({
                   onChange={(e) => set(l.position, { accepted: e.target.value })}
                 />
               </Field>
-              <Field label="Rejected">
+              <Field label={t('Rejected')}>
                 <Input
                   inputMode="decimal"
                   value={x.rejected}
@@ -343,7 +355,7 @@ function InspectForm({
                 />
               </Field>
               <div className="min-w-48 flex-1">
-                <Field label="Why rejected">
+                <Field label={t('Why rejected')}>
                   <Input
                     value={x.reason}
                     maxLength={1000}
@@ -355,7 +367,7 @@ function InspectForm({
           );
         })}
         <Button type="submit" busy={busy}>
-          Record the inspection
+          {t('Record the inspection')}
         </Button>
       </form>
     </Card>
@@ -371,6 +383,7 @@ function ReturnForm({
   busy: boolean;
   onSubmit: (body: object) => void;
 }) {
+  const t = useT();
   const [returnedOn, setReturnedOn] = useState(today());
   const [reference, setReference] = useState('');
   const [reason, setReason] = useState('');
@@ -380,10 +393,10 @@ function ReturnForm({
     ),
   );
   return (
-    <Card title="Return rejected goods" className="print:hidden">
+    <Card title={t('Return rejected goods')} className="print:hidden">
       <form
         className="space-y-3"
-        aria-label="Return to supplier"
+        aria-label={t('Return to supplier')}
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit({
@@ -401,11 +414,13 @@ function ReturnForm({
             <div className="min-w-48 flex-1 pb-2 text-sm">
               {l.description}{' '}
               <span className="text-fg-muted">
-                ({formatQty(String(Number(l.rejected) - Number(l.returned)))} {l.unit} rejected, not
-                yet returned)
+                {t('({qty} {unit} rejected, not yet returned)', {
+                  qty: formatQty(String(Number(l.rejected) - Number(l.returned))),
+                  unit: l.unit,
+                })}
               </span>
             </div>
-            <Field label={`Return of ${l.description}`}>
+            <Field label={t('Return of {name}', { name: l.description })}>
               <Input
                 inputMode="decimal"
                 value={qty[l.position] ?? ''}
@@ -416,7 +431,7 @@ function ReturnForm({
           </div>
         ))}
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Returned on">
+          <Field label={t('Returned on')}>
             <Input
               type="date"
               value={returnedOn}
@@ -424,7 +439,7 @@ function ReturnForm({
               onChange={(e) => setReturnedOn(e.target.value)}
             />
           </Field>
-          <Field label="Gate pass or debit note">
+          <Field label={t('Gate pass or debit note')}>
             <Input
               value={reference}
               maxLength={200}
@@ -432,13 +447,13 @@ function ReturnForm({
             />
           </Field>
           <div className="min-w-56 flex-1">
-            <Field label="Why it goes back">
+            <Field label={t('Why it goes back')}>
               <Input value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} />
             </Field>
           </div>
         </div>
         <Button type="submit" busy={busy} disabled={reason.trim().length < 3}>
-          Return to the supplier
+          {t('Return to the supplier')}
         </Button>
       </form>
     </Card>

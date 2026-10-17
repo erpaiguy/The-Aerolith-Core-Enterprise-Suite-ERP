@@ -22,6 +22,7 @@ import { useRun } from '../approvals/model';
 import { sendOrKeep } from '../offline';
 import { formatQty, formatRate } from '../boq/model';
 import { describeError } from '../lib/format';
+import { useT } from '../i18n/i18n';
 import { rupees } from '../procurement/OrderLines';
 import {
   MOVE_KIND,
@@ -58,6 +59,7 @@ export function StoreScreen({ storeId }: { storeId: string }) {
 }
 
 function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
+  const t = useT();
   const navigate = useNavigate();
   const [form, setForm] = useState<'issue' | 'transfer' | null>(null);
   const [ledgerOf, setLedgerOf] = useState<string | null>(null);
@@ -78,15 +80,18 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
         title={s.name}
         subtitle={
           <span>
-            At {s.site.name} · {rupees(total.toFixed(2))} in stock ·{' '}
-            {s.valuation === 'fifo' ? 'FIFO' : 'weighted average'}
+            {t('At {site} · {value} in stock · {method}', {
+              site: s.site.name,
+              value: rupees(total.toFixed(2)),
+              method: s.valuation === 'fifo' ? 'FIFO' : t('weighted average'),
+            })}
           </span>
         }
         actions={
           <div className="flex flex-wrap gap-2">
             {s.mayIssue && inStock.length > 0 && (
               <Button onClick={() => setForm(form === 'issue' ? null : 'issue')}>
-                <PackageMinus className="size-4" aria-hidden /> Issue
+                <PackageMinus className="size-4" aria-hidden /> {t('Issue')}
               </Button>
             )}
             {s.mayManage && inStock.length > 0 && (
@@ -94,7 +99,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                 variant="secondary"
                 onClick={() => setForm(form === 'transfer' ? null : 'transfer')}
               >
-                <ArrowRightLeft className="size-4" aria-hidden /> Transfer
+                <ArrowRightLeft className="size-4" aria-hidden /> {t('Transfer')}
               </Button>
             )}
             {s.openCount ? (
@@ -103,7 +108,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                 params={{ countId: s.openCount.id }}
                 className="inline-flex items-center gap-1 self-center text-sm text-accent hover:underline"
               >
-                Stock take {s.openCount.number}
+                {t('Stock take {n}', { n: s.openCount.number })}
               </Link>
             ) : (
               s.mayManage &&
@@ -127,7 +132,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                     })
                   }
                 >
-                  <ClipboardList className="size-4" aria-hidden /> Stock take
+                  <ClipboardList className="size-4" aria-hidden /> {t('Stock take')}
                 </Button>
               )
             )}
@@ -148,24 +153,27 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
       )}
       {s.transfers.length > 0 && (
         <Alert tone="info">
-          In transit:{' '}
-          {s.transfers.map((t, i) => (
-            <span key={t.id}>
+          {t('In transit:')}{' '}
+          {s.transfers.map((tr, i) => (
+            <span key={tr.id}>
               {i > 0 && '; '}
               <Link
                 to="/transfers/$transferId"
-                params={{ transferId: t.id }}
+                params={{ transferId: tr.id }}
                 className="font-mono text-accent hover:underline"
               >
-                {t.number}
+                {tr.number}
               </Link>{' '}
-              {t.incoming ? `from ${t.fromStore}` : `to ${t.toStore}`}, sent {shortDate(t.sentOn)}
+              {tr.incoming
+                ? t('from {store}', { store: tr.fromStore })
+                : t('to {store}', { store: tr.toStore })}
+              , {t('sent {date}', { date: shortDate(tr.sentOn) })}
             </span>
           ))}
         </Alert>
       )}
       <Card
-        title="Stock"
+        title={t('Stock')}
         actions={
           s.mayIssue &&
           below.length > 0 && (
@@ -185,29 +193,29 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                 })
               }
             >
-              Requisition for what is short
+              {t('Requisition for what is short')}
             </Button>
           )
         }
       >
         {s.stock.length === 0 ? (
           <p className="text-sm text-fg-muted">
-            Empty. Goods received against the project&apos;s purchase orders come in here.
+            {t("Empty. Goods received against the project's purchase orders come in here.")}
           </p>
         ) : (
           <Table minWidth="44rem">
             <thead>
               <tr>
-                <th>Material</th>
-                <th className="text-right">In stock</th>
-                <th className="text-right">Rate</th>
-                <th className="text-right">Value</th>
-                <th className="text-right">Reorder at</th>
-                <th className="text-right">Fill up to</th>
+                <th>{t('Material')}</th>
+                <th className="text-right">{t('In stock')}</th>
+                <th className="text-right">{t('Rate')}</th>
+                <th className="text-right">{t('Value')}</th>
+                <th className="text-right">{t('Reorder at')}</th>
+                <th className="text-right">{t('Fill up to')}</th>
                 <th />
               </tr>
             </thead>
-            <tbody aria-label="Stock">
+            <tbody aria-label={t('Stock')}>
               {s.stock.map((x) => (
                 <tr key={x.resourceId}>
                   <td>
@@ -219,13 +227,13 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                     {x.below && (
                       <>
                         {' '}
-                        <Badge tone="warning">Below</Badge>
+                        <Badge tone="warning">{t('Below')}</Badge>
                       </>
                     )}
                     {x.above && (
                       <>
                         {' '}
-                        <Badge tone="neutral">Over the maximum</Badge>
+                        <Badge tone="neutral">{t('Over the maximum')}</Badge>
                       </>
                     )}
                   </td>
@@ -235,7 +243,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                     {s.mayManage ? (
                       <ReorderInput
                         level={x.reorderLevel}
-                        label={`Reorder level of ${x.name}`}
+                        label={t('Reorder level of {name}', { name: x.name })}
                         onSave={(level) =>
                           void run('level', () =>
                             api.request(`/api/tenant/stores/${s.id}/reorder`, {
@@ -259,7 +267,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                     {s.mayManage && x.reorderLevel ? (
                       <ReorderInput
                         level={x.maxLevel}
-                        label={`Maximum of ${x.name}`}
+                        label={t('Maximum of {name}', { name: x.name })}
                         onSave={(max) =>
                           void run('level', () =>
                             api.request(`/api/tenant/stores/${s.id}/reorder`, {
@@ -280,7 +288,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                       variant="ghost"
                       onClick={() => setLedgerOf(ledgerOf === x.resourceId ? null : x.resourceId)}
                     >
-                      Ledger
+                      {t('Ledger')}
                     </Button>
                   </td>
                 </tr>
@@ -291,7 +299,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
       </Card>
       {ledgerOf && <Ledger storeId={s.id} resourceId={ledgerOf} />}
       {s.moves.length > 0 && (
-        <Card title="Recent movements">
+        <Card title={t('Recent movements')}>
           <Moves moves={s.moves} />
         </Card>
       )}
@@ -308,6 +316,7 @@ function ReorderInput({
   label: string;
   onSave: (level: string | null) => void;
 }) {
+  const t = useT();
   const [v, setV] = useState(level ? trimZeros(level) : '');
   const changed = v.trim() !== (level ? trimZeros(level) : '');
   return (
@@ -323,7 +332,7 @@ function ReorderInput({
       </span>
       {changed && (
         <Button variant="ghost" onClick={() => onSave(v.trim() ? v.trim() : null)}>
-          Set
+          {t('Set')}
         </Button>
       )}
     </span>
@@ -359,25 +368,26 @@ function DocLink({ m }: { m: Move }) {
 }
 
 function Moves({ moves, running = false }: { moves: Move[]; running?: boolean }) {
+  const t = useT();
   return (
     <Table minWidth="44rem">
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Movement</th>
-          {!running && <th>Material</th>}
-          <th className="text-right">Quantity</th>
-          <th className="text-right">Value</th>
-          {running && <th className="text-right">Balance</th>}
-          {running && <th className="text-right">Value</th>}
+          <th>{t('Date')}</th>
+          <th>{t('Movement')}</th>
+          {!running && <th>{t('Material')}</th>}
+          <th className="text-right">{t('Quantity')}</th>
+          <th className="text-right">{t('Value')}</th>
+          {running && <th className="text-right">{t('Balance')}</th>}
+          {running && <th className="text-right">{t('Value')}</th>}
         </tr>
       </thead>
-      <tbody aria-label={running ? 'Ledger' : 'Movements'}>
+      <tbody aria-label={running ? t('Ledger') : t('Movements')}>
         {moves.map((m) => (
           <tr key={m.id}>
             <td className="whitespace-nowrap tabular-nums">{shortDate(m.movedOn)}</td>
             <td>
-              {MOVE_KIND[m.kind]} <DocLink m={m} />
+              {t(MOVE_KIND[m.kind])} <DocLink m={m} />
               {m.wbsCode && <span className="text-xs text-fg-muted"> · {m.wbsCode}</span>}
             </td>
             {!running && (
@@ -404,6 +414,7 @@ function Moves({ moves, running = false }: { moves: Move[]; running?: boolean })
 }
 
 function Ledger({ storeId, resourceId }: { storeId: string; resourceId: string }) {
+  const t = useT();
   const l = useQuery({
     queryKey: ['stock-ledger', storeId, resourceId],
     queryFn: () =>
@@ -414,7 +425,11 @@ function Ledger({ storeId, resourceId }: { storeId: string; resourceId: string }
   if (!l.data) return <Spinner />;
   return (
     <Card
-      title={`Ledger: ${l.data.resource.code} ${l.data.resource.name} (${l.data.resource.unit})`}
+      title={t('Ledger: {code} {name} ({unit})', {
+        code: l.data.resource.code,
+        name: l.data.resource.name,
+        unit: l.data.resource.unit,
+      })}
     >
       <Moves moves={l.data.moves} running />
     </Card>
@@ -422,6 +437,7 @@ function Ledger({ storeId, resourceId }: { storeId: string; resourceId: string }
 }
 
 function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
+  const t = useT();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const wbs = useQuery({
@@ -452,10 +468,10 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
   const inStock = s.stock.filter((x) => Number(x.qty) > 0);
   const lines = inStock.filter((x) => Number(qty[x.resourceId]) > 0);
   return (
-    <Card title="Issue to work">
+    <Card title={t('Issue to work')}>
       <form
         className="space-y-3"
-        aria-label="Issue"
+        aria-label={t('Issue')}
         onSubmit={(e) => {
           e.preventDefault();
           void run('issue', async () => {
@@ -483,7 +499,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
         }}
       >
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Issued on">
+          <Field label={t('Issued on')}>
             <Input
               type="date"
               value={head.issuedOn}
@@ -492,12 +508,12 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
             />
           </Field>
           <div className="w-64">
-            <Field label="For (WBS element)">
+            <Field label={t('For (WBS element)')}>
               <Select
                 value={head.wbsCode}
                 onChange={(e) => setHead({ ...head, wbsCode: e.target.value })}
               >
-                <option value="">Choose</option>
+                <option value="">{t('Choose')}</option>
                 {wbs.data?.map((w) => (
                   <option key={w.id} value={w.code}>
                     {' '.repeat(w.depth * 2)}
@@ -508,7 +524,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
             </Field>
           </div>
           {workOrders.data?.length ? (
-            <Field label="Against work order">
+            <Field label={t('Against work order')}>
               <Select
                 value={head.orderId}
                 onChange={(e) => {
@@ -520,7 +536,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
                   });
                 }}
               >
-                <option value="">None (our own work)</option>
+                <option value="">{t('None (our own work)')}</option>
                 {workOrders.data.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.number} {o.vendor}
@@ -529,7 +545,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
               </Select>
             </Field>
           ) : null}
-          <Field label="Taken by">
+          <Field label={t('Taken by')}>
             <Input
               value={head.issuedTo}
               maxLength={200}
@@ -537,7 +553,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
             />
           </Field>
           <div className="min-w-56 flex-1">
-            <Field label="Purpose">
+            <Field label={t('Purpose')}>
               <Input
                 value={head.purpose}
                 maxLength={1000}
@@ -548,23 +564,23 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
         </div>
         {wbs.data?.length === 0 && (
           <Alert tone="warning">
-            The project has no WBS yet: set it up on the project&apos;s page to issue against it.
+            {t("The project has no WBS yet: set it up on the project's page to issue against it.")}
           </Alert>
         )}
         {inStock.map((x) => (
           <div
             key={x.resourceId}
             role="group"
-            aria-label={`Issue ${x.name}`}
+            aria-label={t('Issue {name}', { name: x.name })}
             className="flex flex-wrap items-end gap-2"
           >
             <div className="min-w-48 flex-1 pb-2 text-sm">
               {x.name}{' '}
               <span className="text-fg-muted">
-                ({formatQty(x.qty)} {x.unit} in stock)
+                {t('({qty} {unit} in stock)', { qty: formatQty(x.qty), unit: x.unit })}
               </span>
             </div>
-            <Field label="Quantity">
+            <Field label={t('Quantity')}>
               <Input
                 inputMode="decimal"
                 value={qty[x.resourceId] ?? ''}
@@ -572,7 +588,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
                 onChange={(e) => setQty({ ...qty, [x.resourceId]: e.target.value })}
               />
             </Field>
-            <Field label="BOQ item">
+            <Field label={t('BOQ item')}>
               <Input
                 value={boq[x.resourceId] ?? ''}
                 maxLength={40}
@@ -588,16 +604,16 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
             busy={busy === 'issue'}
             disabled={!head.wbsCode || !head.issuedTo.trim() || lines.length === 0}
           >
-            Issue
+            {t('Issue')}
           </Button>
           <Button type="button" variant="ghost" onClick={onCancel}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </div>
         {queued && (
           <Alert tone="warning">
             <span data-testid="issue-queued">
-              Saved on this phone; it will be sent when there is signal (see the Outbox).
+              {t('Saved on this phone; it will be sent when there is signal (see the Outbox).')}
             </span>
           </Alert>
         )}
@@ -616,6 +632,7 @@ function TransferForm({
   onCancel: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const stores = useQuery({
     queryKey: ['stores', 'all'],
@@ -629,10 +646,10 @@ function TransferForm({
   const inStock = s.stock.filter((x) => Number(x.qty) > 0);
   const lines = inStock.filter((x) => Number(qty[x.resourceId]) > 0);
   return (
-    <Card title="Transfer to another store">
+    <Card title={t('Transfer to another store')}>
       <form
         className="space-y-3"
-        aria-label="Transfer"
+        aria-label={t('Transfer')}
         onSubmit={(e) => {
           e.preventDefault();
           void run('send', async () => {
@@ -657,9 +674,9 @@ function TransferForm({
       >
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-80">
-            <Field label="To">
+            <Field label={t('To')}>
               <Select value={to} onChange={(e) => setTo(e.target.value)}>
-                <option value="">Choose a store</option>
+                <option value="">{t('Choose a store')}</option>
                 {stores.data
                   ?.filter((x) => x.id !== s.id && x.active)
                   .map((x) => (
@@ -670,7 +687,7 @@ function TransferForm({
               </Select>
             </Field>
           </div>
-          <Field label="Vehicle no.">
+          <Field label={t('Vehicle no.')}>
             <Input
               value={carrier.vehicleNo}
               maxLength={30}
@@ -678,25 +695,25 @@ function TransferForm({
               onChange={(e) => setCarrier({ ...carrier, vehicleNo: e.target.value })}
             />
           </Field>
-          <Field label="Transporter">
+          <Field label={t('Transporter')}>
             <Input
               value={carrier.transporter}
               maxLength={200}
               onChange={(e) => setCarrier({ ...carrier, transporter: e.target.value })}
             />
           </Field>
-          <Field label="E-way bill no.">
+          <Field label={t('E-way bill no.')}>
             <Input
               value={carrier.ewayBillNo}
               inputMode="numeric"
               pattern="\d{12}"
-              title="12 digits"
+              title={t('12 digits')}
               className="w-36"
               onChange={(e) => setCarrier({ ...carrier, ewayBillNo: e.target.value })}
             />
           </Field>
           <div className="min-w-56 flex-1">
-            <Field label="Note">
+            <Field label={t('Note')}>
               <Input value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />
             </Field>
           </div>
@@ -706,10 +723,10 @@ function TransferForm({
             <div className="min-w-48 flex-1 pb-2 text-sm">
               {x.name}{' '}
               <span className="text-fg-muted">
-                ({formatQty(x.qty)} {x.unit} in stock)
+                {t('({qty} {unit} in stock)', { qty: formatQty(x.qty), unit: x.unit })}
               </span>
             </div>
-            <Field label={`Send ${x.name}`}>
+            <Field label={t('Send {name}', { name: x.name })}>
               <Input
                 inputMode="decimal"
                 value={qty[x.resourceId] ?? ''}
@@ -721,10 +738,10 @@ function TransferForm({
         ))}
         <div className="flex gap-2">
           <Button type="submit" busy={busy === 'send'} disabled={!to || lines.length === 0}>
-            Send
+            {t('Send')}
           </Button>
           <Button type="button" variant="ghost" onClick={onCancel}>
-            Cancel
+            {t('Cancel')}
           </Button>
         </div>
         {error && <Alert tone="danger">{error}</Alert>}

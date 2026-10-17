@@ -18,12 +18,14 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { useRun } from '../approvals/model';
 import { describeError } from '../lib/format';
+import { useT } from '../i18n/i18n';
 import { rupees } from '../procurement/OrderLines';
 import type { StoreRow } from '../procurement/inventory';
 import { usePermission } from '../session/permissions';
 import { useSession } from '../session/session';
 
 export function StoresScreen() {
+  const t = useT();
   const rows = useQuery({
     queryKey: ['stores', 'all'],
     queryFn: () => api.request<StoreRow[]>('/api/tenant/stores'),
@@ -31,8 +33,10 @@ export function StoresScreen() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Stores"
-        subtitle="What is in the stores of the projects you are on, and what it is worth. A site's store is made when goods are first received there."
+        title={t('Stores')}
+        subtitle={t(
+          "What is in the stores of the projects you are on, and what it is worth. A site's store is made when goods are first received there.",
+        )}
       />
       <Card>
         {rows.isPending ? (
@@ -51,6 +55,7 @@ export function StoresScreen() {
 
 /** A company's central store, not tied to a project (docs/wave8-plan.md step 8e.3). */
 function CentralStore() {
+  const t = useT();
   const qc = useQueryClient();
   const may = usePermission('stores.manage');
   const companies = useQuery({
@@ -68,14 +73,15 @@ function CentralStore() {
   if (!may) return null;
   const entityId = form.entityId || companies.data?.[0]?.id || '';
   return (
-    <Card title="Central store">
+    <Card title={t('Central store')}>
       <p className="mb-3 text-sm text-fg-muted">
-        A company store at a yard, not tied to a project: projects send to it and draw from it by
-        transfer.
+        {t(
+          'A company store at a yard, not tied to a project: projects send to it and draw from it by transfer.',
+        )}
       </p>
       {error && <Alert tone="danger">{error}</Alert>}
       <form
-        aria-label="New central store"
+        aria-label={t('New central store')}
         className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
@@ -93,7 +99,7 @@ function CentralStore() {
         }}
       >
         {(companies.data?.length ?? 0) > 1 && (
-          <Field label="Company">
+          <Field label={t('Company')}>
             <Select
               value={entityId}
               onChange={(e) => setForm({ ...form, entityId: e.target.value })}
@@ -106,7 +112,7 @@ function CentralStore() {
             </Select>
           </Field>
         )}
-        <Field label="Store name">
+        <Field label={t('Store name')}>
           <Input
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -114,7 +120,7 @@ function CentralStore() {
             minLength={2}
           />
         </Field>
-        <Field label="Yard">
+        <Field label={t('Yard')}>
           <Input
             value={form.yard}
             onChange={(e) => setForm({ ...form, yard: e.target.value })}
@@ -122,7 +128,7 @@ function CentralStore() {
             minLength={2}
           />
         </Field>
-        <Field label="GST state code">
+        <Field label={t('GST state code')}>
           <Input
             value={form.stateCode}
             className="w-16"
@@ -131,7 +137,7 @@ function CentralStore() {
           />
         </Field>
         <Button type="submit" variant="secondary" busy={busy === 'central'}>
-          Add central store
+          {t('Add central store')}
         </Button>
       </form>
     </Card>
@@ -145,18 +151,19 @@ export function StoreTable({
   rows: StoreRow[];
   showProject?: boolean;
 }) {
-  if (!rows.length) return <p className="text-sm text-fg-muted">None yet.</p>;
+  const t = useT();
+  if (!rows.length) return <p className="text-sm text-fg-muted">{t('None yet.')}</p>;
   return (
     <Table minWidth="36rem">
       <thead>
         <tr>
-          <th>Store</th>
-          {showProject && <th>Project</th>}
-          <th className="text-right">Materials</th>
-          <th className="text-right">Value</th>
+          <th>{t('Store')}</th>
+          {showProject && <th>{t('Project')}</th>}
+          <th className="text-right">{t('Materials')}</th>
+          <th className="text-right">{t('Value')}</th>
         </tr>
       </thead>
-      <tbody aria-label="Stores">
+      <tbody aria-label={t('Stores')}>
         {rows.map((s) => (
           <tr key={s.id}>
             <td>
@@ -167,7 +174,9 @@ export function StoreTable({
               >
                 {s.name}
               </Link>
-              <span className="block text-xs text-fg-muted">at {s.site.name}</span>
+              <span className="block text-xs text-fg-muted">
+                {t('at {site}', { site: s.site.name })}
+              </span>
             </td>
             {showProject && (
               <td className="text-sm">
@@ -179,7 +188,7 @@ export function StoreTable({
               {s.below > 0 && (
                 <>
                   {' '}
-                  <Badge tone="warning">{s.below} below reorder</Badge>
+                  <Badge tone="warning">{t('{n} below reorder', { n: s.below })}</Badge>
                 </>
               )}
             </td>
@@ -193,6 +202,7 @@ export function StoreTable({
 
 /** Weighted average or FIFO: chosen by the admin before anything moves, then fixed. */
 function Valuation() {
+  const t = useT();
   const { user } = useSession();
   const qc = useQueryClient();
   const v = useQuery({
@@ -209,20 +219,20 @@ function Valuation() {
   if (!v.data) return null;
   const label = v.data.method === 'fifo' ? 'First in, first out (FIFO)' : 'Weighted average';
   return (
-    <Card title="Stock valuation">
+    <Card title={t('Stock valuation')}>
       <p className="text-sm" data-testid="valuation">
-        {label}, per store and material.{' '}
+        {t('{method}, per store and material.', { method: t(label) })}{' '}
         {v.data.changeable
-          ? 'It can be changed until the first stock moves, then it is fixed.'
-          : 'Fixed: stock has moved.'}
+          ? t('It can be changed until the first stock moves, then it is fixed.')
+          : t('Fixed: stock has moved.')}
       </p>
       {user?.role === 'admin' && v.data.changeable && (
         <div className="mt-3 flex items-end gap-2">
           <div className="w-64">
-            <Field label="Method">
+            <Field label={t('Method')}>
               <Select value={method ?? v.data.method} onChange={(e) => setMethod(e.target.value)}>
-                <option value="average">Weighted average</option>
-                <option value="fifo">First in, first out (FIFO)</option>
+                <option value="average">{t('Weighted average')}</option>
+                <option value="fifo">{t('First in, first out (FIFO)')}</option>
               </Select>
             </Field>
           </div>
@@ -236,7 +246,7 @@ function Valuation() {
               )
             }
           >
-            Save
+            {t('Save')}
           </Button>
         </div>
       )}
