@@ -17,7 +17,8 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit } from '../tender/tender-records.js';
 
 type Db = Sql | TransactionSql;
-export type Approver = 'project_lead' | 'manager' | 'admin' | 'user' | 'designation';
+export type Approver =
+  'project_lead' | 'manager' | 'admin' | 'user' | 'designation' | 'reporting_manager';
 export type Outcome = 'approved' | 'rejected' | 'withdrawn';
 
 /** What the engine needs from a document type. */
@@ -78,7 +79,22 @@ export const APPROVER_LABEL: Record<Approver, string> = {
   admin: 'Any admin',
   user: 'A named person',
   designation: 'Whoever holds a designation',
+  reporting_manager: "The submitter's reporting manager",
 };
+
+/**
+ * Who stands in for whom today: delegations set by hand, and (docs/wave8-plan.md step 8c.5) each employee on approved
+ * leave by their own reporting manager.
+ */
+export const standIns = (db: Db, today: string) => db`
+  SELECT d.from_user, d.to_user, d.created_at FROM platform.approval_delegation d
+  WHERE d.cancelled_at IS NULL AND ${today}::date BETWEEN d.starts_on AND d.ends_on
+  UNION ALL
+  SELECT e.user_id, m.user_id, l.decided_at FROM hr.leave_application l
+  JOIN hr.employee e ON e.id = l.employee_id JOIN hr.employee m ON m.id = e.manager_id
+  WHERE l.status = 'approved' AND ${today}::date BETWEEN l.from_date AND l.to_date
+    AND e.user_id IS NOT NULL AND m.user_id IS NOT NULL AND m.user_id <> e.user_id
+    AND (m.left_on IS NULL OR m.left_on >= ${today}::date)`;
 
 /** Today in India: delegations run on Indian dates. */
 export const indiaToday = (now = new Date()) =>
@@ -106,6 +122,8 @@ function matching(
       WHEN 'admin' THEN u.role = 'admin'
       WHEN 'designation' THEN EXISTS (SELECT 1 FROM hr.employee e WHERE e.user_id = u.id
         AND e.designation_id = ${step.designation_id} AND (e.left_on IS NULL OR e.left_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date))
+      WHEN 'reporting_manager' THEN EXISTS (SELECT 1 FROM hr.employee s JOIN hr.employee m ON m.id = s.manager_id
+        WHERE s.user_id = ${submittedBy} AND m.user_id = u.id)
       ELSE EXISTS (SELECT 1 FROM proj.member m WHERE m.project_id = ${projectId} AND m.user_id = u.id
         AND m.role = 'lead') END`;
 }
@@ -123,9 +141,9 @@ export function waitingOn(db: Db, claims: TenantClaims, today = indiaToday()) {
     WITH acting AS (
       SELECT u.id, u.role FROM platform."user" u WHERE u.id = ${claims.sub} AND u.status = 'active'
       UNION
-      SELECT u.id, u.role FROM platform.approval_delegation d
+      SELECT u.id, u.role FROM (${standIns(db, today)}) d
       JOIN platform."user" u ON u.id = d.from_user AND u.status = 'active'
-      WHERE d.to_user = ${claims.sub} AND d.cancelled_at IS NULL AND ${today}::date BETWEEN d.starts_on AND d.ends_on
+      WHERE d.to_user = ${claims.sub}
     )
     SELECT r.id FROM platform.approval_request r
     JOIN platform.approval_step s ON s.request_id = r.id AND s.level = r.level
@@ -140,6 +158,8 @@ export function waitingOn(db: Db, claims: TenantClaims, today = indiaToday()) {
         OR (s.approver = 'admin' AND a.role = 'admin')
         OR (s.approver = 'designation' AND EXISTS (SELECT 1 FROM hr.employee e WHERE e.user_id = a.id
           AND e.designation_id = s.designation_id AND (e.left_on IS NULL OR e.left_on >= (now() AT TIME ZONE 'Asia/Kolkata')::date)))
+        OR (s.approver = 'reporting_manager' AND EXISTS (SELECT 1 FROM hr.employee se
+          JOIN hr.employee me ON me.id = se.manager_id WHERE se.user_id = r.submitted_by AND me.user_id = a.id))
         OR (s.approver = 'project_lead' AND EXISTS (SELECT 1 FROM proj.member m
           WHERE m.project_id = r.project_id AND m.user_id = a.id AND m.role = 'lead'))))))`;
 }
@@ -345,9 +365,8 @@ export class ApprovalService {
     const today = indiaToday();
     const delegates = people.length
       ? await tx<{ id: string }[]>`
-          SELECT DISTINCT d.to_user AS id FROM platform.approval_delegation d
-          WHERE d.from_user = ANY(${people}::uuid[]) AND d.to_user <> ${r!.submitted_by}
-            AND d.cancelled_at IS NULL AND ${today}::date BETWEEN d.starts_on AND d.ends_on`
+          SELECT DISTINCT d.to_user AS id FROM (${standIns(tx, today)}) d
+          WHERE d.from_user = ANY(${people}::uuid[]) AND d.to_user <> ${r!.submitted_by}`
       : [];
     const t = this.type(r!.doc_type);
     for (const id of new Set([...people, ...delegates.map((d) => d.id)]))
@@ -379,10 +398,9 @@ export class ApprovalService {
     if (ids.includes(claims.sub)) return { onBehalfOf: null };
     if (!ids.length) return null;
     const [d] = await db<{ from_user: string }[]>`
-      SELECT from_user FROM platform.approval_delegation
-      WHERE to_user = ${claims.sub} AND from_user = ANY(${ids}::uuid[]) AND cancelled_at IS NULL
-        AND ${indiaToday()}::date BETWEEN starts_on AND ends_on
-      ORDER BY created_at LIMIT 1`;
+      SELECT from_user FROM (${standIns(db, indiaToday())}) d
+      WHERE to_user = ${claims.sub} AND from_user = ANY(${ids}::uuid[])
+      ORDER BY created_at NULLS LAST LIMIT 1`;
     return d ? { onBehalfOf: d.from_user } : null;
   }
 

@@ -30,6 +30,7 @@ const APPROVERS: { value: Approver; label: string; project?: boolean }[] = [
   { value: 'admin', label: 'Any admin' },
   { value: 'user', label: 'A named person' },
   { value: 'designation', label: 'Whoever holds a designation' },
+  { value: 'reporting_manager', label: "The submitter's reporting manager" },
 ];
 interface Designation {
   id: string;

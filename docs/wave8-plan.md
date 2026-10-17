@@ -162,7 +162,7 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8c.2 Worker muster you can trust
 - [x] 8c.3 Statutory payments and returns
 - [x] 8c.4 Payroll gaps
-- [ ] 8c.5 Leave to the reporting manager
+- [x] 8c.5 Leave to the reporting manager
 - [ ] 8c exit: full check and browser suite
 - [ ] 8d.1 Price escalation (CPWD 10CC)
 - [ ] 8d.2 Look-ahead with constraints

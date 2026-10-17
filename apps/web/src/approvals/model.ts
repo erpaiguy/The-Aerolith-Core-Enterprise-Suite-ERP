@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { describeError } from '../lib/format';
 
-export type Approver = 'project_lead' | 'manager' | 'admin' | 'user' | 'designation';
+export type Approver =
+  'project_lead' | 'manager' | 'admin' | 'user' | 'designation' | 'reporting_manager';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 
 export interface ApprovalStep {

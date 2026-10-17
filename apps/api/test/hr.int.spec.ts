@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap.js';
 import { migrate } from '../src/db/migrate.js';
+import { TenantConnections } from '../src/provisioning/tenant-connections.js';
 import { readyTenant } from './helpers/tenant.js';
 
 const controlUrl = process.env.TEST_CONTROL_DATABASE_URL;
@@ -706,5 +707,68 @@ describe.skipIf(!controlUrl || !adminUrl)('HR (integration)', () => {
     expect(
       (await post('/tenant/hr/leave/carry-forward', { entityId, year: 2026 }, worker)).statusCode,
     ).toBe(403);
+  });
+  it('routes leave to the reporting manager, who stands in while an approver is on leave', async () => {
+    // docs/wave8-plan.md step 8c.5. Raju reports to Suresh: his leave goes to Suresh, not to every manager.
+    await ok(
+      post('/tenant/approval-rules/leave_application', {
+        rules: [{ minAmount: '0', approver: 'reporting_manager' }],
+      }),
+    );
+    const day = new Date(Date.now() + 330 * 60_000 + 30 * 86_400_000).toISOString().slice(0, 10);
+    const leave = await ok<{ id: string }>(
+      post(
+        '/tenant/hr/leave',
+        { leaveTypeId: cl, from: day, to: day, reason: 'Village fair' },
+        worker,
+      ),
+    );
+    const waiting = await ok<{ id: string; title: string }[]>(
+      get('/tenant/approvals?view=waiting', manager),
+    );
+    const request = waiting.find((w) => w.title.startsWith('Raju Shinde'))!;
+    expect(
+      (
+        await ok<{ steps: { approverName: string }[] }>(
+          get(`/tenant/approvals/${request.id}`, manager),
+        )
+      ).steps[0]!.approverName,
+    ).toBe("The submitter's reporting manager");
+    // The admin is not Raju's manager.
+    expect(
+      (await post(`/tenant/approvals/${request.id}/approve`, {})).statusCode,
+    ).toBeGreaterThanOrEqual(400);
+    await ok(post(`/tenant/approvals/${request.id}/approve`, {}, manager));
+    expect(await ok(get(`/tenant/hr/leave/${leave.id}`))).toMatchObject({ status: 'approved' });
+
+    // Raju approves leave himself, but is on approved leave today: Suresh, his manager, stands in.
+    await ok(
+      post('/tenant/approval-rules/leave_application', {
+        rules: [{ minAmount: '0', approver: 'user', userId: rajuId }],
+      }),
+    );
+    const db = await app.get(TenantConnections).forTenant(t.tenantId);
+    const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    await db`
+      INSERT INTO hr.leave_application (employee_id, leave_type_id, from_date, to_date, days, status, applied_by, decided_at)
+      VALUES (${raju}, ${cl}, ${today}, ${today}, 1, 'approved', ${rajuId}, now())`;
+    const meenaLeave = await ok<{ id: string }>(
+      post('/tenant/hr/leave', {
+        employeeId: meena,
+        leaveTypeId: cl,
+        from: day,
+        to: day,
+        reason: 'Exam',
+      }),
+    );
+    const mine = await ok<{ id: string; title: string }[]>(
+      get('/tenant/approvals?view=waiting', manager),
+    );
+    const r2 = mine.find((w) => w.title.startsWith('Meena Kale') && w.title.includes(day))!;
+    expect(r2).toBeDefined();
+    await ok(post(`/tenant/approvals/${r2.id}/approve`, {}, manager));
+    expect(await ok(get(`/tenant/hr/leave/${meenaLeave.id}`))).toMatchObject({
+      status: 'approved',
+    });
   });
 });

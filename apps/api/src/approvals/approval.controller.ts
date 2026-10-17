@@ -25,7 +25,14 @@ const rules = z.object({
       z
         .object({
           minAmount: money,
-          approver: z.enum(['project_lead', 'manager', 'admin', 'user', 'designation']),
+          approver: z.enum([
+            'project_lead',
+            'manager',
+            'admin',
+            'user',
+            'designation',
+            'reporting_manager',
+          ]),
           userId: z.uuid().nullable().default(null),
           designationId: z.uuid().nullable().default(null),
           label: z.string().trim().max(100).default(''),
