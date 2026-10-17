@@ -20,6 +20,7 @@ import { api } from '../../api/client';
 import { ApprovalSteps } from '../../approvals/ApprovalTrail';
 import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { useT } from '../../i18n/i18n';
 import { usePermission } from '../../session/permissions';
 import { shortDate } from '../../schedule/model';
 import { MyPayslips } from '../payroll/Payroll';
@@ -39,6 +40,7 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
 };
 
 export function MyAttendanceScreen() {
+  const t = useT();
   const me = useQuery({
     queryKey: ['hr-me'],
     queryFn: () => api.request<Me>('/api/tenant/hr/attendance/me'),
@@ -47,9 +49,14 @@ export function MyAttendanceScreen() {
   if (me.isError) return <Alert tone="danger">{describeError(me.error)}</Alert>;
   return (
     <div className="space-y-5">
-      <PageHeader title="My attendance" subtitle="Mark yourself in and out, and apply for leave." />
+      <PageHeader
+        title={t('My attendance')}
+        subtitle={t('Mark yourself in and out, and apply for leave.')}
+      />
       {!me.data.employee ? (
-        <Alert tone="info">You have no employee record. Ask HR to link one to your sign-in.</Alert>
+        <Alert tone="info">
+          {t('You have no employee record. Ask HR to link one to your sign-in.')}
+        </Alert>
       ) : (
         <>
           <Today me={me.data} />
@@ -62,13 +69,14 @@ export function MyAttendanceScreen() {
 }
 
 function Today({ me }: { me: Me }) {
+  const t = useT();
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const punch = (action: 'in' | 'out') => {
     setError(null);
     if (!navigator.geolocation) {
-      setError('This device cannot tell where it is.');
+      setError(t('This device cannot tell where it is.'));
       return;
     }
     setBusy(true);
@@ -85,42 +93,46 @@ function Today({ me }: { me: Me }) {
       },
       () => {
         setBusy(false);
-        setError('Allow this page to use your location to mark attendance.');
+        setError(t('Allow this page to use your location to mark attendance.'));
       },
       { enableHighAccuracy: true, timeout: 20_000 },
     );
   };
-  const t = me.today;
+  const mark = me.today;
   return (
-    <Card title={`Today, ${shortDate(me.day!)}`}>
+    <Card title={t('Today, {day}', { day: shortDate(me.day!) })}>
       <p className="mb-3 text-sm text-fg-muted">
-        {me.site ? `${me.site.project}, ${me.site.name}` : 'Head office'}
-        {me.kind === 'holiday' ? ' · a holiday' : me.kind === 'week_off' ? ' · a weekly off' : ''}
+        {me.site ? `${me.site.project}, ${me.site.name}` : t('Head office')}
+        {me.kind === 'holiday'
+          ? t(' · a holiday')
+          : me.kind === 'week_off'
+            ? t(' · a weekly off')
+            : ''}
       </p>
-      {t ? (
+      {mark ? (
         <p className="mb-3 text-sm" data-testid="today-mark">
-          <strong>{STATUS_LABEL[t.status]}</strong>
-          {t.inTime && ` · in ${t.inTime}`}
-          {t.outTime && ` · out ${t.outTime}`}
-          {t.flag && (
+          <strong>{t(STATUS_LABEL[mark.status] ?? '')}</strong>
+          {mark.inTime && t(' · in {time}', { time: mark.inTime })}
+          {mark.outTime && t(' · out {time}', { time: mark.outTime })}
+          {mark.flag && (
             <>
               {' '}
-              <Badge tone="warning">{FLAG_LABEL[t.flag] ?? t.flag}</Badge>
+              <Badge tone="warning">{t(FLAG_LABEL[mark.flag] ?? mark.flag)}</Badge>
             </>
           )}
         </p>
       ) : (
-        <p className="mb-3 text-sm text-fg-muted">Not marked yet.</p>
+        <p className="mb-3 text-sm text-fg-muted">{t('Not marked yet.')}</p>
       )}
       <div className="flex gap-2">
-        {!t && (
+        {!mark && (
           <Button type="button" busy={busy} onClick={() => punch('in')}>
-            Mark in
+            {t('Mark in')}
           </Button>
         )}
-        {t?.inTime && !t.outTime && t.source === 'phone' && (
+        {mark?.inTime && !mark.outTime && mark.source === 'phone' && (
           <Button type="button" busy={busy} onClick={() => punch('out')}>
-            Mark out
+            {t('Mark out')}
           </Button>
         )}
       </div>
@@ -129,10 +141,10 @@ function Today({ me }: { me: Me }) {
         <Table minWidth="24rem">
           <thead>
             <tr>
-              <th>Day</th>
-              <th>Mark</th>
-              <th>In</th>
-              <th>Out</th>
+              <th>{t('Day')}</th>
+              <th>{t('Mark')}</th>
+              <th>{t('In')}</th>
+              <th>{t('Out')}</th>
             </tr>
           </thead>
           <tbody>
@@ -140,8 +152,8 @@ function Today({ me }: { me: Me }) {
               <tr key={r.day}>
                 <td>{shortDate(r.day)}</td>
                 <td>
-                  {STATUS_LABEL[r.status]}{' '}
-                  {r.flag && <Badge tone="warning">{FLAG_LABEL[r.flag] ?? r.flag}</Badge>}
+                  {t(STATUS_LABEL[r.status] ?? '')}{' '}
+                  {r.flag && <Badge tone="warning">{t(FLAG_LABEL[r.flag] ?? r.flag)}</Badge>}
                 </td>
                 <td>{r.inTime ?? '—'}</td>
                 <td>{r.outTime ?? '—'}</td>
@@ -156,6 +168,7 @@ function Today({ me }: { me: Me }) {
 
 /** An employee's leave for a year: balances, applications and the form to apply. */
 export function LeavePanel({ employeeId, self = false }: { employeeId: string; self?: boolean }) {
+  const t = useT();
   const qc = useQueryClient();
   const [year, setYear] = useState(Number(today().slice(0, 4)));
   const key = ['hr-leave', employeeId, year];
@@ -219,10 +232,10 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
   };
   return (
     <Card
-      title="Leave"
+      title={t('Leave')}
       actions={
         <Select
-          aria-label="Leave year"
+          aria-label={t('Leave year')}
           value={String(year)}
           onChange={(e) => setYear(Number(e.target.value))}
         >
@@ -241,19 +254,19 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
           <Table minWidth="32rem">
             <thead>
               <tr>
-                <th>Leave</th>
-                <th className="text-right">Opening</th>
-                <th className="text-right">Accrued</th>
-                <th className="text-right">Taken</th>
-                <th className="text-right">Waiting</th>
-                <th className="text-right">Available</th>
+                <th>{t('Leave')}</th>
+                <th className="text-right">{t('Opening')}</th>
+                <th className="text-right">{t('Accrued')}</th>
+                <th className="text-right">{t('Taken')}</th>
+                <th className="text-right">{t('Waiting')}</th>
+                <th className="text-right">{t('Available')}</th>
               </tr>
             </thead>
             <tbody>
               {leave.data.balances.map((b) => (
                 <tr key={b.leaveTypeId} data-testid={`balance-${b.code}`}>
                   <td>
-                    {b.name} {!b.paid && <Badge>unpaid</Badge>}
+                    {b.name} {!b.paid && <Badge>{t('unpaid')}</Badge>}
                   </td>
                   <td className="text-right">{b.opening}</td>
                   <td className="text-right">{b.accrued}</td>
@@ -264,20 +277,22 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
               ))}
             </tbody>
           </Table>
-          <p className="mt-1 text-xs text-fg-muted">Accrued up to {shortDate(leave.data.asOf)}.</p>
+          <p className="mt-1 text-xs text-fg-muted">
+            {t('Accrued up to {date}.', { date: shortDate(leave.data.asOf) })}
+          </p>
           {mayEdit && (
             <form
-              aria-label="Opening balance"
+              aria-label={t('Opening balance')}
               className="mt-3 flex flex-wrap items-end gap-3"
               onSubmit={(e) => void setOpening(e)}
             >
-              <Field label={`Opening for ${year}`}>
+              <Field label={t('Opening for {year}', { year })}>
                 <Select
                   value={o.leaveTypeId}
                   onChange={(e) => setO({ ...o, leaveTypeId: e.target.value })}
                   required
                 >
-                  <option value="">Leave…</option>
+                  <option value="">{t('Leave…')}</option>
                   {leave.data.balances
                     .filter((b) => b.paid)
                     .map((b) => (
@@ -287,17 +302,17 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
                     ))}
                 </Select>
               </Field>
-              <Field label="Days">
+              <Field label={t('Days')}>
                 <Input
                   inputMode="decimal"
                   value={o.days}
                   onChange={(e) => setO({ ...o, days: e.target.value })}
-                  placeholder="e.g. 4.5"
+                  placeholder={t('e.g. 4.5')}
                   required
                 />
               </Field>
               <Button type="submit" variant="secondary">
-                Set opening
+                {t('Set opening')}
               </Button>
             </form>
           )}
@@ -305,11 +320,11 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
             <Table minWidth="32rem">
               <thead>
                 <tr>
-                  <th>Leave</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th className="text-right">Days</th>
-                  <th>Status</th>
+                  <th>{t('Leave')}</th>
+                  <th>{t('From')}</th>
+                  <th>{t('To')}</th>
+                  <th className="text-right">{t('Days')}</th>
+                  <th>{t('Status')}</th>
                   <th />
                 </tr>
               </thead>
@@ -326,15 +341,15 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
                       </Link>
                     </td>
                     <td>{shortDate(a.from)}</td>
-                    <td>{a.halfDay ? 'half day' : shortDate(a.to)}</td>
+                    <td>{a.halfDay ? t('half day') : shortDate(a.to)}</td>
                     <td className="text-right">{a.days}</td>
                     <td>
-                      <Badge tone={STATUS_TONE[a.status] ?? 'neutral'}>{a.status}</Badge>
+                      <Badge tone={STATUS_TONE[a.status] ?? 'neutral'}>{t(a.status)}</Badge>
                     </td>
                     <td>
                       {a.status === 'pending' && self && (
                         <Button type="button" variant="ghost" onClick={() => void withdraw(a.id)}>
-                          Withdraw
+                          {t('Withdraw')}
                         </Button>
                       )}
                     </td>
@@ -346,27 +361,27 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
         </>
       )}
       <form
-        aria-label="Apply for leave"
+        aria-label={t('Apply for leave')}
         className="mt-4 grid gap-3 sm:grid-cols-5"
         onSubmit={(e) => void apply(e)}
       >
-        <Field label="Leave">
+        <Field label={t('Leave')}>
           <Select
             value={f.leaveTypeId}
             onChange={(e) => setF({ ...f, leaveTypeId: e.target.value })}
             required
           >
-            <option value="">Choose…</option>
+            <option value="">{t('Choose…')}</option>
             {(types.data ?? [])
-              .filter((t) => t.active)
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              .filter((lt) => lt.active)
+              .map((lt) => (
+                <option key={lt.id} value={lt.id}>
+                  {lt.name}
                 </option>
               ))}
           </Select>
         </Field>
-        <Field label="From">
+        <Field label={t('From')}>
           <Input
             type="date"
             value={f.from}
@@ -374,7 +389,7 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
             required
           />
         </Field>
-        <Field label="To">
+        <Field label={t('To')}>
           <Input
             type="date"
             value={f.halfDay ? f.from : f.to}
@@ -383,7 +398,7 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
             required
           />
         </Field>
-        <Field label="Reason">
+        <Field label={t('Reason')}>
           <Input
             value={f.reason}
             maxLength={500}
@@ -397,9 +412,9 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
               checked={f.halfDay}
               onChange={(e) => setF({ ...f, halfDay: e.target.checked })}
             />
-            Half day
+            {t('Half day')}
           </label>
-          <Button type="submit">Apply</Button>
+          <Button type="submit">{t('Apply')}</Button>
         </div>
       </form>
       {error && <Alert tone="danger">{error}</Alert>}
@@ -408,6 +423,7 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
 }
 
 export function LeaveScreen({ leaveId }: { leaveId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ['hr-leave-application', leaveId];
   const l = useQuery({
@@ -436,17 +452,17 @@ export function LeaveScreen({ leaveId }: { leaveId: string }) {
     <div className="space-y-5">
       <PageHeader
         title={`${d.leaveType}: ${d.employee}`}
-        subtitle={`${d.employeeCode} · ${shortDate(d.from)}${d.halfDay ? ' (half day)' : d.to !== d.from ? ` to ${shortDate(d.to)}` : ''} · ${d.days} days`}
+        subtitle={`${d.employeeCode} · ${shortDate(d.from)}${d.halfDay ? t(' (half day)') : d.to !== d.from ? t(' to {date}', { date: shortDate(d.to) }) : ''} · ${t('{n} days', { n: d.days })}`}
         actions={
           <div className="flex gap-2">
             {d.mayWithdraw && (
               <Button type="button" variant="secondary" onClick={() => void act('withdraw')}>
-                Withdraw
+                {t('Withdraw')}
               </Button>
             )}
             {d.mayCancel && (
               <Button type="button" variant="secondary" onClick={() => void act('cancel')}>
-                Cancel the leave
+                {t('Cancel the leave')}
               </Button>
             )}
           </div>
@@ -454,8 +470,8 @@ export function LeaveScreen({ leaveId }: { leaveId: string }) {
       />
       <Card>
         <p className="text-sm">
-          <Badge tone={STATUS_TONE[d.status] ?? 'neutral'}>{d.status}</Badge>{' '}
-          {d.paid ? 'Paid leave' : 'Unpaid leave'}
+          <Badge tone={STATUS_TONE[d.status] ?? 'neutral'}>{t(d.status)}</Badge>{' '}
+          {d.paid ? t('Paid leave') : t('Unpaid leave')}
           {d.reason && ` · ${d.reason}`}
         </p>
         {d.approval && <ApprovalSteps approval={d.approval} />}

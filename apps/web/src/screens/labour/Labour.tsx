@@ -24,6 +24,7 @@ import { rupees } from '../../procurement/OrderLines';
 import { ComplianceCard } from './Compliance';
 import { here, shrink } from './proof';
 import { sendOrKeep } from '../../offline';
+import { useT } from '../../i18n/i18n';
 
 interface Contractor {
   partyId: string;
@@ -879,6 +880,7 @@ export function WageSheetScreen({ sheetId }: { sheetId: string }) {
 }
 
 export function MusterScreen() {
+  const t = useT();
   const qc = useQueryClient();
   const projects = useProjects();
   const contractors = useQuery({
@@ -939,14 +941,15 @@ export function MusterScreen() {
           }
         : undefined;
       const sent = await sendOrKeep<typeof m.data>(
-        `Muster of ${f.day}`,
+        t('Muster of {day}', { day: f.day }),
         `/api/tenant/labour/sites/${f.siteId}/muster`,
         { date: f.day, partyId: f.partyId, marks, ...(proof ? { proof } : {}) },
       );
-      if (sent.queued) setSaved('No signal: kept on this phone, and sent when the signal returns.');
+      if (sent.queued)
+        setSaved(t('No signal: kept on this phone, and sent when the signal returns.'));
       else {
         qc.setQueryData(key, sent.result);
-        setSaved('Saved.');
+        setSaved(t('Saved.'));
       }
       setEdits({});
       setPhoto(null);
@@ -956,15 +959,18 @@ export function MusterScreen() {
   };
   return (
     <div className="space-y-5">
-      <PageHeader title="Labour muster" subtitle="A contractor's workers at a site, day by day." />
+      <PageHeader
+        title={t('Labour muster')}
+        subtitle={t("A contractor's workers at a site, day by day.")}
+      />
       <Card>
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Project">
+          <Field label={t('Project')}>
             <Select
               value={f.projectId}
               onChange={(e) => setF({ ...f, projectId: e.target.value, siteId: '' })}
             >
-              <option value="">Choose…</option>
+              <option value="">{t('Choose…')}</option>
               {(projects.data ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.number} {p.name}
@@ -972,9 +978,9 @@ export function MusterScreen() {
               ))}
             </Select>
           </Field>
-          <Field label="Site">
+          <Field label={t('Site')}>
             <Select value={f.siteId} onChange={(e) => setF({ ...f, siteId: e.target.value })}>
-              <option value="">Choose…</option>
+              <option value="">{t('Choose…')}</option>
               {(sites.data ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -982,9 +988,9 @@ export function MusterScreen() {
               ))}
             </Select>
           </Field>
-          <Field label="Contractor">
+          <Field label={t('Contractor')}>
             <Select value={f.partyId} onChange={(e) => setF({ ...f, partyId: e.target.value })}>
-              <option value="">Choose…</option>
+              <option value="">{t('Choose…')}</option>
               {(contractors.data ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -992,7 +998,7 @@ export function MusterScreen() {
               ))}
             </Select>
           </Field>
-          <Field label="Day">
+          <Field label={t('Day')}>
             <Input
               type="date"
               value={f.day}
@@ -1006,22 +1012,24 @@ export function MusterScreen() {
         </div>
       </Card>
       {f.siteId && f.partyId && (
-        <Card title="Muster">
+        <Card title={t('Muster')}>
           {m.isPending ? (
             <Spinner />
           ) : m.isError ? (
             <Alert tone="danger">{describeError(m.error)}</Alert>
           ) : m.data.rows.length === 0 ? (
-            <p className="text-sm text-fg-muted">This contractor has no workers on that day.</p>
+            <p className="text-sm text-fg-muted">
+              {t('This contractor has no workers on that day.')}
+            </p>
           ) : (
-            <form aria-label="Muster" onSubmit={(e) => void save(e)}>
+            <form aria-label={t('Muster')} onSubmit={(e) => void save(e)}>
               <Table minWidth="32rem">
                 <thead>
                   <tr>
-                    <th>Worker</th>
-                    <th>Trade</th>
-                    <th>Mark</th>
-                    <th>Overtime hours</th>
+                    <th>{t('Worker')}</th>
+                    <th>{t('Trade')}</th>
+                    <th>{t('Mark')}</th>
+                    <th>{t('Overtime hours')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1036,24 +1044,25 @@ export function MusterScreen() {
                     return (
                       <tr key={r.workerId} aria-label={r.name}>
                         <td>
-                          {r.name} {r.elsewhere && <Badge tone="warning">on another site</Badge>}
+                          {r.name}{' '}
+                          {r.elsewhere && <Badge tone="warning">{t('on another site')}</Badge>}
                         </td>
                         <td>{r.trade}</td>
                         <td>
                           <Select
-                            aria-label="Mark"
+                            aria-label={t('Mark')}
                             value={x.status ?? ''}
                             onChange={(e) => set({ status: e.target.value || null })}
                           >
                             <option value="">—</option>
-                            <option value="present">Present</option>
-                            <option value="half_day">Half day</option>
-                            <option value="absent">Absent</option>
+                            <option value="present">{t('Present')}</option>
+                            <option value="half_day">{t('Half day')}</option>
+                            <option value="absent">{t('Absent')}</option>
                           </Select>
                         </td>
                         <td>
                           <Input
-                            aria-label="Overtime"
+                            aria-label={t('Overtime')}
                             inputMode="decimal"
                             value={x.overtimeHours ?? ''}
                             onChange={(e) => set({ overtimeHours: e.target.value })}
@@ -1066,7 +1075,7 @@ export function MusterScreen() {
               </Table>
               <div className="mt-3 flex items-center gap-3">
                 <Button type="submit" disabled={Object.keys(edits).length === 0}>
-                  Save the muster
+                  {t('Save the muster')}
                 </Button>
                 {saved && <span className="text-sm text-fg-muted">{saved}</span>}
               </div>
@@ -1077,39 +1086,39 @@ export function MusterScreen() {
                     checked={withProof}
                     onChange={(e) => setWithProof(e.target.checked)}
                   />
-                  Mark from this phone, with its place
+                  {t('Mark from this phone, with its place')}
                 </label>
                 {withProof && (
                   <label className="flex items-center gap-2">
-                    Photo of the gang
+                    {t('Photo of the gang')}
                     <input
                       type="file"
                       accept="image/*"
                       capture="environment"
-                      aria-label="Photo of the gang"
+                      aria-label={t('Photo of the gang')}
                       onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
                     />
                   </label>
                 )}
               </div>
               {m.data.proofs.length > 0 && (
-                <ul className="mt-3 space-y-1 text-sm" aria-label="Muster proofs">
+                <ul className="mt-3 space-y-1 text-sm" aria-label={t('Muster proofs')}>
                   {m.data.proofs.map((p) => (
                     <li key={p.id} className="flex items-center gap-2">
                       <span>
-                        {p.at}: {p.workers} marked
-                        {p.distanceM !== null ? `, ${p.distanceM} m from the site` : ''}
+                        {t('{at}: {n} marked', { at: p.at, n: p.workers })}
+                        {p.distanceM !== null ? t(', {m} m from the site', { m: p.distanceM }) : ''}
                       </span>
                       {p.flag ? (
                         <Badge tone="warning">
                           {p.flag === 'outside_site'
-                            ? 'away from the site'
+                            ? t('away from the site')
                             : p.flag === 'no_location'
-                              ? 'no location'
-                              : 'site has no location'}
+                              ? t('no location')
+                              : t('site has no location')}
                         </Badge>
                       ) : (
-                        <Badge tone="success">on site</Badge>
+                        <Badge tone="success">{t('on site')}</Badge>
                       )}
                       {p.hasPhoto && (
                         <button
@@ -1121,7 +1130,7 @@ export function MusterScreen() {
                               .then(({ blob }) => window.open(URL.createObjectURL(blob), '_blank'))
                           }
                         >
-                          photo
+                          {t('photo')}
                         </button>
                       )}
                     </li>
