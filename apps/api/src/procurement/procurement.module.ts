@@ -22,11 +22,14 @@ import { RequisitionController } from './requisition.controller.js';
 import { RequisitionService } from './requisition.service.js';
 import { BuyingHistoryController } from './buying-history.controller.js';
 import { BuyingHistoryService } from './buying-history.service.js';
+import { ScrapToolsController } from './scrap-tools.controller.js';
+import { ScrapToolsService } from './scrap-tools.service.js';
 import { DeliveryController } from './delivery.controller.js';
 import { DeliveryService } from './delivery.service.js';
 import { VendorMasterController } from './vendor-master.controller.js';
 import { VendorMasterService } from './vendor-master.service.js';
 import { DocumentsModule } from '../documents/documents.module.js';
+import { AccountsModule } from '../accounts/accounts.module.js';
 
 @Module({
   imports: [
@@ -36,6 +39,7 @@ import { DocumentsModule } from '../documents/documents.module.js';
     ApprovalModule,
     TenderModule,
     DocumentsModule,
+    AccountsModule,
   ],
   controllers: [
     RateContractController,
@@ -49,6 +53,7 @@ import { DocumentsModule } from '../documents/documents.module.js';
     VendorMasterController,
     DeliveryController,
     BuyingHistoryController,
+    ScrapToolsController,
   ],
   providers: [
     RequisitionService,
@@ -62,6 +67,7 @@ import { DocumentsModule } from '../documents/documents.module.js';
     VendorMasterService,
     DeliveryService,
     BuyingHistoryService,
+    ScrapToolsService,
   ],
 })
 export class ProcurementModule {}

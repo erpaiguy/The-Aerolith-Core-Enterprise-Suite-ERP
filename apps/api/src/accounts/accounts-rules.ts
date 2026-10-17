@@ -72,6 +72,7 @@ export const ROLES = {
   staff_advances: { label: 'Staff advances', key: 'staff_advances' },
   buyer_advances: { label: 'Advances from flat buyers', key: 'advances_from_buyers' },
   interest_income: { label: 'Interest income', key: 'interest_income' },
+  scrap_sales: { label: 'Scrap sales', key: 'scrap_sales' },
   round_off: { label: 'Round off', key: 'round_off' },
   profit_and_loss: { label: 'Profit and loss account', key: 'profit_and_loss' },
   unbilled_revenue: { label: 'Unbilled revenue (contract asset)', key: 'unbilled_revenue' },

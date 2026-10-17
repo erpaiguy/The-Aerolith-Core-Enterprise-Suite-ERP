@@ -66,6 +66,7 @@ import {
   Warehouse,
   CalendarClock,
   Hourglass,
+  Recycle,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
@@ -744,6 +745,7 @@ export function AppShell() {
         { to: '/receipts', label: 'Goods receipts', icon: <PackageCheck className="size-4" /> },
         { to: '/stores', label: 'Stores', icon: <Warehouse className="size-4" /> },
         { to: '/stock-ageing', label: 'Stock ageing', icon: <Hourglass className="size-4" /> },
+        { to: '/scrap-tools', label: 'Scrap and tools', icon: <Recycle className="size-4" /> },
         {
           to: '/registers/stock-issues',
           label: 'Stock issues',

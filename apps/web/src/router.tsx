@@ -141,6 +141,7 @@ import { DeviationStatementPrint } from './print/DeviationStatement';
 import { VendorScreen, VendorsScreen } from './screens/Vendors';
 import { DeliveriesScreen } from './screens/Deliveries';
 import { StockAgeingScreen } from './screens/StockAgeing';
+import { ScrapToolsScreen } from './screens/ScrapTools';
 import { Form16Print } from './print/Form16';
 import {
   ClientBillPrint,
@@ -1241,6 +1242,14 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/stock-ageing',
       component: StockAgeingScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/scrap-tools',
+      component: ScrapToolsScreen,
+      validateSearch: (s: Record<string, unknown>): { project?: string | undefined } => ({
+        project: typeof s.project === 'string' ? s.project : undefined,
+      }),
     }),
     vendorRoute,
     createRoute({

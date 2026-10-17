@@ -174,7 +174,7 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8e.2 Delivery follow-up
 - [x] 8e.3 Receipts and transfers as they really happen
 - [x] 8e.4 Buying with history
-- [ ] 8e.5 Scrap and tools
+- [x] 8e.5 Scrap and tools
 - [ ] 8e exit: full check and browser suite
 - [ ] 8f.1 Booking life after sale
 - [ ] 8f.2 Schedule-of-rates tendering

@@ -544,4 +544,91 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8e: purchase and stores (integra
     ]);
     expect(age.totals['0-30']).toBe('183600.00');
   });
+
+  it('sells scrap noted on site with GST, and chases tools not returned', async () => {
+    const note = (qty: string) =>
+      post(
+        `/tenant/projects/${projectId}/scrap`,
+        { material: 'Steel cut ends', unit: 't', qty, source: 'cut_ends', notedOn: '2026-10-05' },
+        manager,
+      );
+    expect((await note('2')).statusCode).toBe(200);
+    expect((await note('1.5')).statusCode).toBe(200);
+    // A Gujarat buyer, a Maharashtra site: IGST.
+    const buyer = (
+      await ok<{ id: string }>(
+        post('/tenant/parties', { name: 'Surat Scrap Traders', gstin: '24ABCDE1234F1Z5' }),
+      )
+    ).id;
+    const sale = (qty: string) =>
+      post(
+        `/tenant/projects/${projectId}/scrap-sales`,
+        {
+          partyId: buyer,
+          siteId: site,
+          soldOn: '2026-10-12',
+          lines: [{ material: 'steel cut ends', unit: 'T', qty, rate: '32000', gstPct: '18' }],
+        },
+        manager,
+      );
+    expect((await sale('4')).json()).toMatchObject({ code: 'more_than_on_hand' });
+    const sold = await ok<{
+      balances: { material: string; onHand: string }[];
+      sales: { number: string; amount: string; gst: string; total: string; voucher: string }[];
+    }>(sale('3'));
+    expect(sold.balances.map((b) => [b.material, b.onHand])).toEqual([
+      ['Steel cut ends', '0.5000'],
+    ]);
+    expect(sold.sales[0]).toMatchObject({
+      number: expect.stringMatching(/^SCR\//),
+      amount: '96000.00',
+      gst: '17280.00',
+      total: '113280.00',
+    });
+    const db = await app.get(TenantConnections).forTenant(t.tenantId);
+    const lines = await db<{ key: string | null; debit: string; credit: string }[]>`
+      SELECT a.system_key AS key, l.debit::text, l.credit::text FROM acc.voucher v
+      JOIN acc.voucher_line l ON l.voucher_id = v.id JOIN acc.account a ON a.id = l.account_id
+      WHERE v.number = ${sold.sales[0]!.voucher} ORDER BY l.debit DESC, a.system_key`;
+    expect(lines.map((l) => [l.key, l.debit, l.credit])).toEqual([
+      [null, '113280.00', '0.00'],
+      ['output_igst', '0.00', '17280.00'],
+      ['scrap_sales', '0.00', '96000.00'],
+    ]);
+
+    // Two vibrator needles to a gang, due back on the 10th: overdue; one back, one lost (with how).
+    const tools = await ok<{ issues: { id: string; overdue: boolean; out: number }[] }>(
+      post(
+        `/tenant/projects/${projectId}/tools`,
+        {
+          tool: 'Vibrator needle 40 mm',
+          qty: 2,
+          issuedTo: "Ramesh's concrete gang",
+          issuedOn: '2026-10-01',
+          dueOn: '2026-10-10',
+        },
+        manager,
+      ),
+    );
+    expect(tools.issues[0]).toMatchObject({ overdue: true, out: 2 });
+    const late = await ok<{ tool: string; out: number }[]>(
+      get('/tenant/procurement/overdue-tools', manager),
+    );
+    expect(late.map((x) => [x.tool, x.out])).toEqual([['Vibrator needle 40 mm', 2]]);
+    const id = tools.issues[0]!.id;
+    expect(
+      (
+        await post(`/tenant/tool-issues/${id}/return`, { returned: 1, lost: 1, on: today }, manager)
+      ).json(),
+    ).toMatchObject({ code: 'reason_needed' });
+    const back = await ok<{ issues: { closedOn: string; returned: number; lost: number }[] }>(
+      post(
+        `/tenant/tool-issues/${id}/return`,
+        { returned: 1, lost: 1, on: today, note: 'Fell into the raft pour' },
+        manager,
+      ),
+    );
+    expect(back.issues[0]).toMatchObject({ closedOn: today, returned: 1, lost: 1 });
+    expect(await ok<object[]>(get('/tenant/procurement/overdue-tools', manager))).toEqual([]);
+  });
 });
