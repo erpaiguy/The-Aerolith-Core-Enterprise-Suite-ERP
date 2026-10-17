@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { ProjectDetail } from '../api/types';
 import { EChart, themeColours, type ChartOption } from '../charts/EChart';
+import { useT } from '../i18n/i18n';
 import { describeError } from '../lib/format';
 import {
   ACCOUNT,
@@ -72,6 +73,7 @@ export function DailyReportsScreen({
   projectId: string;
   siteId: string | undefined;
 }) {
+  const t = useT();
   const navigate = useNavigate();
   const project = useQuery({
     queryKey: ['project', projectId],
@@ -105,9 +107,9 @@ export function DailyReportsScreen({
         className="inline-flex items-center gap-1 text-sm text-fg-muted hover:underline"
       >
         <ArrowLeft className="size-4" aria-hidden />{' '}
-        {project.data ? `${project.data.number} · ${project.data.name}` : 'Project'}
+        {project.data ? `${project.data.number} · ${project.data.name}` : t('Project')}
       </Link>
-      <h1 className="text-xl font-semibold">Daily site reports</h1>
+      <h1 className="text-xl font-semibold">{t('Daily site reports')}</h1>
       {error && <Alert tone="danger">{error}</Alert>}
       {d.mayWrite && sites.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -117,7 +119,7 @@ export function DailyReportsScreen({
               busy={busy === `${s.id} ${indiaToday()}`}
               onClick={() => void open(s.id, indiaToday())}
             >
-              <Plus className="size-4" aria-hidden /> Today at {s.name}
+              <Plus className="size-4" aria-hidden /> {t('Today at {site}', { site: s.name })}
             </Button>
           ))}
         </div>
@@ -125,7 +127,7 @@ export function DailyReportsScreen({
       <Missing list={d} mayWrite={d.mayWrite} open={open} />
       {sites.length > 1 && (
         <div className="w-56">
-          <Field label="Site">
+          <Field label={t('Site')}>
             <Select
               value={siteId ?? ''}
               onChange={(e) =>
@@ -136,7 +138,7 @@ export function DailyReportsScreen({
                 })
               }
             >
-              <option value="">All sites</option>
+              <option value="">{t('All sites')}</option>
               {sites.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -146,7 +148,7 @@ export function DailyReportsScreen({
           </Field>
         </div>
       )}
-      <Card title="Reports">
+      <Card title={t('Reports')}>
         <ReportTable rows={d.reports} />
       </Card>
       {summary.data && <Weekly s={summary.data} />}
@@ -163,11 +165,12 @@ export function Missing({
   mayWrite: boolean;
   open: (siteId: string, date: string) => Promise<void>;
 }) {
+  const t = useT();
   if (!list.missing.length) return null;
   return (
     <Alert tone="warning">
       <span data-testid="missing-reports">
-        No submitted report:{' '}
+        {t('No submitted report:')}{' '}
         {list.missing.map((m, i) => (
           <span key={m.site.id}>
             {i > 0 && '; '}
@@ -196,20 +199,21 @@ export function Missing({
 }
 
 export function ReportTable({ rows }: { rows: DailyReportList['reports'] }) {
-  if (!rows.length) return <p className="text-sm text-fg-muted">None yet.</p>;
+  const t = useT();
+  if (!rows.length) return <p className="text-sm text-fg-muted">{t('None yet.')}</p>;
   return (
     <Table minWidth="32rem">
       <thead>
         <tr>
-          <th>Day</th>
-          <th>Site</th>
-          <th className="text-right">Manpower</th>
-          <th className="text-right">Hindrance h</th>
-          <th className="text-right">Photos</th>
-          <th>Status</th>
+          <th>{t('Day')}</th>
+          <th>{t('Site')}</th>
+          <th className="text-right">{t('Manpower')}</th>
+          <th className="text-right">{t('Hindrance h')}</th>
+          <th className="text-right">{t('Photos')}</th>
+          <th>{t('Status')}</th>
         </tr>
       </thead>
-      <tbody aria-label="Daily reports">
+      <tbody aria-label={t('Daily reports')}>
         {rows.map((r) => (
           <tr key={r.id}>
             <td className="whitespace-nowrap">
@@ -228,7 +232,7 @@ export function ReportTable({ rows }: { rows: DailyReportList['reports'] }) {
             </td>
             <td className="text-right tabular-nums">{r.photos || '-'}</td>
             <td>
-              <Badge tone={DSR_TONE[r.status]}>{DSR_STATUS[r.status]}</Badge>
+              <Badge tone={DSR_TONE[r.status]}>{t(DSR_STATUS[r.status])}</Badge>
             </td>
           </tr>
         ))}
@@ -239,7 +243,8 @@ export function ReportTable({ rows }: { rows: DailyReportList['reports'] }) {
 
 /** The last eight weeks, from submitted reports. */
 function Weekly({ s }: { s: Summary }) {
-  const t = themeColours();
+  const t = useT();
+  const colours = themeColours();
   const weeks = useMemo(
     () =>
       [...new Set([...s.manpower.map((m) => m.week), ...s.equipment.map((e) => e.week)])].sort(),
@@ -250,8 +255,8 @@ function Weekly({ s }: { s: Summary }) {
     tooltip: { trigger: 'axis' },
     legend: { bottom: 0 },
     grid: { left: 40, right: 12, top: 12, bottom: 48 },
-    xAxis: { type: 'category', data: weeks.map((w) => `w/c ${shortDate(w)}`) },
-    yAxis: { type: 'value', name: 'man-days' },
+    xAxis: { type: 'category', data: weeks.map((w) => t('w/c {date}', { date: shortDate(w) })) },
+    yAxis: { type: 'value', name: t('man-days') },
     series: trades.map((tr) => ({
       name: tr,
       type: 'bar',
@@ -265,21 +270,21 @@ function Weekly({ s }: { s: Summary }) {
     tooltip: { trigger: 'axis' },
     legend: { bottom: 0 },
     grid: { left: 40, right: 12, top: 12, bottom: 48 },
-    xAxis: { type: 'category', data: weeks.map((w) => `w/c ${shortDate(w)}`) },
-    yAxis: { type: 'value', name: 'hours' },
+    xAxis: { type: 'category', data: weeks.map((w) => t('w/c {date}', { date: shortDate(w) })) },
+    yAxis: { type: 'value', name: t('hours') },
     series: [
       {
-        name: 'Worked',
+        name: t('Worked'),
         type: 'bar',
         stack: 'e',
-        color: t.success,
+        color: colours.success,
         data: weeks.map((w) => sum(w, 'worked')),
       },
       {
-        name: 'Idle',
+        name: t('Idle'),
         type: 'bar',
         stack: 'e',
-        color: t.warning,
+        color: colours.warning,
         data: weeks.map((w) => sum(w, 'idle')),
       },
     ],
@@ -288,31 +293,31 @@ function Weekly({ s }: { s: Summary }) {
   return (
     <>
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Man-days by week">
-          <EChart option={manpower} label="Man-days by trade, by week" />
+        <Card title={t('Man-days by week')}>
+          <EChart option={manpower} label={t('Man-days by trade, by week')} />
         </Card>
-        <Card title="Equipment hours by week">
-          <EChart option={equipment} label="Equipment hours worked and idle, by week" />
+        <Card title={t('Equipment hours by week')}>
+          <EChart option={equipment} label={t('Equipment hours worked and idle, by week')} />
         </Card>
       </div>
-      <Card title="Hindrances, last eight weeks">
+      <Card title={t('Hindrances, last eight weeks')}>
         {s.hindrances.length === 0 ? (
-          <p className="text-sm text-fg-muted">None recorded.</p>
+          <p className="text-sm text-fg-muted">{t('None recorded.')}</p>
         ) : (
           <Table minWidth="30rem">
             <thead>
               <tr>
-                <th>Cause</th>
-                <th>Account</th>
-                <th className="text-right">Hours</th>
-                <th className="text-right">Days</th>
+                <th>{t('Cause')}</th>
+                <th>{t('Account')}</th>
+                <th className="text-right">{t('Hours')}</th>
+                <th className="text-right">{t('Days')}</th>
               </tr>
             </thead>
-            <tbody aria-label="Hindrances by cause">
+            <tbody aria-label={t('Hindrances by cause')}>
               {s.hindrances.map((h) => (
                 <tr key={`${h.cause}-${h.account}`}>
-                  <td>{CAUSE[h.cause]}</td>
-                  <td className="text-sm">{ACCOUNT[h.account]}</td>
+                  <td>{t(CAUSE[h.cause])}</td>
+                  <td className="text-sm">{t(ACCOUNT[h.account])}</td>
                   <td className="text-right tabular-nums">{Number(h.hours)}</td>
                   <td className="text-right tabular-nums">{h.days}</td>
                 </tr>
