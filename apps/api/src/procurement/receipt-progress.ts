@@ -60,6 +60,8 @@ export async function orderProgress(db: Db, orderId: string) {
       onHold: r.onHold,
       rejected: r.rejected,
       returned: r.returned,
+      /** Accepted and on hold, which may run past the order within its tolerance (step 8e.3). */
+      counted: r.counted,
       outstanding: fmt(owed > 0n ? owed : 0n, 4),
     };
   });

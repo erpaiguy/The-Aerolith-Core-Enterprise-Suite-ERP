@@ -57,6 +57,10 @@ export interface TransferInput {
   toStoreId: string;
   sentOn: string;
   note: string;
+  /** The lorry and its papers (step 8e.3). */
+  vehicleNo?: string | null | undefined;
+  transporter?: string | null | undefined;
+  ewayBillNo?: string | null | undefined;
   lines: { resourceId: string; qty: string }[];
 }
 export interface CountInput {
@@ -230,12 +234,62 @@ export class InventoryService implements OnModuleInit {
     return this.getStore(claims, id);
   }
 
+  /**
+   * A company's central store, not tied to a project (docs/wave8-plan.md step 8e.3): kept on the company's "central
+   * stores" project, made with its yard as the site the first time, which every member of staff works as its team.
+   */
+  async createCentralStore(
+    claims: TenantClaims,
+    input: { entityId: string; name: string; yard: string; stateCode: string | null },
+  ) {
+    if (!(await this.permissions.can(claims, 'stores.manage')))
+      throw new ForbiddenException({ code: 'permission_denied', permission: 'stores.manage' });
+    const db = await this.tenants.forTenant(claims.ten);
+    const id = await db.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${'central ' + input.entityId}))`;
+      const [e] = await tx`SELECT 1 FROM platform.entity WHERE id = ${input.entityId}`;
+      if (!e) throw new BadRequestException({ code: 'entity_not_found' });
+      let [p] = await tx<{ id: string }[]>`
+        SELECT id FROM proj.project WHERE entity_id = ${input.entityId} AND is_central`;
+      if (!p) {
+        const [n] = await tx<
+          { n: number }[]
+        >`SELECT count(*)::int AS n FROM proj.project WHERE is_central`;
+        [p] = await tx<{ id: string }[]>`
+          INSERT INTO proj.project (entity_id, number, name, status, is_central, created_by, updated_by)
+          VALUES (${input.entityId}, ${`CENTRAL-${n!.n + 1}`}, 'Central stores', 'active', true, ${claims.sub},
+            ${claims.sub})
+          RETURNING id`;
+      }
+      let [site] = await tx<{ id: string }[]>`
+        SELECT id FROM proj.site WHERE project_id = ${p!.id} AND lower(name) = lower(${input.yard})`;
+      site ??= (
+        await tx<{ id: string }[]>`
+          INSERT INTO proj.site (project_id, name, state_code) VALUES (${p!.id}, ${input.yard}, ${input.stateCode})
+          RETURNING id`
+      )[0];
+      const [st] = await tx<{ id: string }[]>`
+        INSERT INTO proc.store (project_id, site_id, name, created_by)
+        VALUES (${p!.id}, ${site!.id}, ${input.name}, ${claims.sub})
+        ON CONFLICT DO NOTHING RETURNING id`;
+      if (!st)
+        throw new ConflictException({
+          code: 'store_exists',
+          message: 'There is a central store by that name.',
+        });
+      await audit(tx, claims.sub, 'store.create', 'store', st.id, { ...input, central: true });
+      return st.id;
+    });
+    return this.getStore(claims, id);
+  }
+
   async listStores(claims: TenantClaims, projectId?: string) {
     const db = await this.tenants.forTenant(claims.ten);
     if (projectId) await this.projects.access(db, claims, projectId);
     const all = claims.role === 'admin' || (await this.permissions.can(claims, 'projects.all'));
     return db`
-      SELECT s.id, s.name, s.active, json_build_object('id', p.id, 'number', p.number, 'name', p.name) AS project,
+      SELECT s.id, s.name, s.active, p.is_central AS central,
+        json_build_object('id', p.id, 'number', p.number, 'name', p.name) AS project,
         json_build_object('id', t.id, 'name', t.name) AS site,
         coalesce((SELECT sum(b.value) FROM proc.stock_balance b WHERE b.store_id = s.id), 0)::text AS value,
         (SELECT count(*)::int FROM proc.stock_balance b WHERE b.store_id = s.id AND b.qty > 0) AS items,
@@ -246,7 +300,8 @@ export class InventoryService implements OnModuleInit {
       WHERE ${
         all
           ? db`true`
-          : db`EXISTS (SELECT 1 FROM proj.member m WHERE m.project_id = s.project_id AND m.user_id = ${claims.sub})`
+          : db`(p.is_central OR EXISTS (SELECT 1 FROM proj.member m WHERE m.project_id = s.project_id
+              AND m.user_id = ${claims.sub}))`
       }
         ${projectId ? db`AND s.project_id = ${projectId}` : db``}
       ORDER BY p.number, s.name`;
@@ -257,7 +312,8 @@ export class InventoryService implements OnModuleInit {
     const s = await this.store(db, storeId);
     await this.projects.access(db, claims, s.project_id);
     const [head] = await db`
-      SELECT s.id, s.name, s.active, json_build_object('id', p.id, 'number', p.number, 'name', p.name) AS project,
+      SELECT s.id, s.name, s.active, p.is_central AS central,
+        json_build_object('id', p.id, 'number', p.number, 'name', p.name) AS project,
         json_build_object('id', t.id, 'name', t.name) AS site
       FROM proc.store s JOIN proj.project p ON p.id = s.project_id JOIN proj.site t ON t.id = s.site_id
       WHERE s.id = ${storeId}`;
@@ -613,8 +669,10 @@ export class InventoryService implements OnModuleInit {
         new Date(),
       );
       const [t] = await tx<{ id: string }[]>`
-        INSERT INTO proc.stock_transfer (number, from_store_id, to_store_id, sent_on, note, created_by)
-        VALUES (${number}, ${from.id}, ${to.id}, ${input.sentOn}, ${input.note}, ${claims.sub}) RETURNING id`;
+        INSERT INTO proc.stock_transfer (number, from_store_id, to_store_id, sent_on, note, vehicle_no, transporter,
+          eway_bill_no, created_by)
+        VALUES (${number}, ${from.id}, ${to.id}, ${input.sentOn}, ${input.note}, ${input.vehicleNo ?? null},
+          ${input.transporter ?? null}, ${input.ewayBillNo ?? null}, ${claims.sub}) RETURNING id`;
       for (const [i, l] of input.lines.entries()) {
         const qty = dec(l.qty);
         const value = await stockOut(
@@ -667,9 +725,17 @@ export class InventoryService implements OnModuleInit {
     return rows[0];
   }
 
-  /** Arrived: into the receiving store at what it cost the sender. */
-  async receiveTransfer(claims: TenantClaims, transferId: string, receivedOn: string) {
-    return this.landTransfer(claims, transferId, receivedOn, 'in');
+  /**
+   * Arrived: into the receiving store at what it cost the sender. A line that came short (step 8e.3) takes in what
+   * arrived at its share of the value; the rest is a transit loss, kept on the line with the reason.
+   */
+  async receiveTransfer(
+    claims: TenantClaims,
+    transferId: string,
+    receivedOn: string,
+    short: { position: number; receivedQty: string; reason: string }[] = [],
+  ) {
+    return this.landTransfer(claims, transferId, receivedOn, 'in', short);
   }
 
   /** Not sent after all (or turned back): into the sending store again, at the same value. */
@@ -682,6 +748,7 @@ export class InventoryService implements OnModuleInit {
     transferId: string,
     on: string,
     way: 'in' | 'back',
+    short: { position: number; receivedQty: string; reason: string }[] = [],
   ) {
     const db = await this.tenants.forTenant(claims.ten);
     const t0 = await this.transferRow(db, transferId);
@@ -701,10 +768,41 @@ export class InventoryService implements OnModuleInit {
           message: `It is already ${t.status}.`,
         });
       const method = await valuation(tx);
-      const lines = await tx<{ resource_id: string; qty: string; value: string }[]>`
-        SELECT resource_id, qty::text AS qty, value::text AS value FROM proc.stock_transfer_line
+      const lines = await tx<
+        { position: number; resource_id: string; qty: string; value: string }[]
+      >`
+        SELECT position, resource_id, qty::text AS qty, value::text AS value FROM proc.stock_transfer_line
         WHERE transfer_id = ${transferId} ORDER BY position`;
-      for (const l of lines)
+      for (const x of short)
+        if (!lines.some((l) => l.position === x.position))
+          throw new BadRequestException({ code: 'no_such_line' });
+      for (const l0 of lines) {
+        const s = way === 'in' ? short.find((x) => x.position === l0.position) : undefined;
+        let l = l0;
+        if (s) {
+          const [sent, came] = [dec(l0.qty), dec(s.receivedQty)];
+          if (came > sent)
+            throw new BadRequestException({
+              code: 'more_than_sent',
+              message: `Line ${l0.position}: more arrived than was sent.`,
+            });
+          if (came < sent && s.reason.trim().length < 3)
+            throw new BadRequestException({
+              code: 'reason_needed',
+              message: `Line ${l0.position}: say why it came short.`,
+            });
+          // The value that arrived is the sent value's share; the rest is lost.
+          const kept = fmt(sent === 0n ? 0n : (dec(l0.value) * came) / sent, 2);
+          const lost = dec(l0.value) - dec(kept);
+          await tx`
+            UPDATE proc.stock_transfer_line SET received_qty = ${q4(came)}, lost_qty = ${q4(sent - came)},
+              lost_value = ${fmt(lost, 2)}, loss_reason = ${came < sent ? s.reason.trim() : null}
+            WHERE transfer_id = ${transferId} AND position = ${l0.position}`;
+          if (came === 0n) continue;
+          l = { ...l0, qty: q4(came), value: kept };
+        } else if (way === 'in')
+          await tx`UPDATE proc.stock_transfer_line SET received_qty = qty
+            WHERE transfer_id = ${transferId} AND position = ${l0.position}`;
         await stockIn(
           tx,
           method,
@@ -721,6 +819,7 @@ export class InventoryService implements OnModuleInit {
           dec(l.qty),
           dec(l.value),
         );
+      }
       await tx`UPDATE proc.stock_transfer SET status = ${way === 'in' ? 'received' : 'cancelled'},
           received_on = ${way === 'in' ? on : null}, received_by = ${way === 'in' ? claims.sub : null},
           row_version = row_version + 1
@@ -753,7 +852,8 @@ export class InventoryService implements OnModuleInit {
     if (!seen.some(Boolean)) throw new NotFoundException({ code: 'transfer_not_found' });
     const [head] = await db`
       SELECT t.id, t.number, t.status, to_char(t.sent_on, 'YYYY-MM-DD') AS "sentOn",
-        to_char(t.received_on, 'YYYY-MM-DD') AS "receivedOn", t.note,
+        to_char(t.received_on, 'YYYY-MM-DD') AS "receivedOn", t.note, t.vehicle_no AS "vehicleNo", t.transporter,
+        t.eway_bill_no AS "ewayBillNo",
         json_build_object('id', f.id, 'name', f.name, 'project', fp.number) AS "fromStore",
         json_build_object('id', d.id, 'name', d.name, 'project', dp.number) AS "toStore",
         u.display_name AS "sentBy", v.display_name AS "receivedBy"
@@ -763,7 +863,9 @@ export class InventoryService implements OnModuleInit {
       LEFT JOIN platform."user" u ON u.id = t.created_by LEFT JOIN platform."user" v ON v.id = t.received_by
       WHERE t.id = ${transferId}`;
     const lines = await db`
-      SELECT l.position, r.code, r.name, r.unit, l.qty::text AS qty, l.value::text AS value
+      SELECT l.position, r.code, r.name, r.unit, l.qty::text AS qty, l.value::text AS value,
+        l.received_qty::text AS "receivedQty", l.lost_qty::text AS "lostQty", l.lost_value::text AS "lostValue",
+        l.loss_reason AS "lossReason"
       FROM proc.stock_transfer_line l JOIN est.resource r ON r.id = l.resource_id
       WHERE l.transfer_id = ${transferId} ORDER BY l.position`;
     const transit = t.status === 'in_transit';

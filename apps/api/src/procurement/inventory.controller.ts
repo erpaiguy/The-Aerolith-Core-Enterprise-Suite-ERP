@@ -55,9 +55,31 @@ const transfer = z.object({
   toStoreId: z.uuid(),
   sentOn: date,
   note: z.string().trim().max(1000).default(''),
+  vehicleNo: z.string().trim().max(30).nullable().default(null),
+  transporter: z.string().trim().max(200).nullable().default(null),
+  ewayBillNo: z
+    .string()
+    .trim()
+    .regex(/^(\d{12})?$/, { message: 'An e-way bill number is 12 digits' })
+    .transform((v) => v || null)
+    .nullable()
+    .default(null),
   lines: z.array(z.object({ resourceId: z.uuid(), qty: positive })).max(200),
 });
-const received = z.object({ receivedOn: date });
+// Lines that came short, with what arrived and why (step 8e.3); the rest arrived whole.
+const received = z.object({
+  receivedOn: date,
+  short: z
+    .array(
+      z.object({
+        position: z.number().int().positive(),
+        receivedQty: qty,
+        reason: z.string().trim().max(500).default(''),
+      }),
+    )
+    .max(200)
+    .default([]),
+});
 const count = z.object({
   countedOn: date,
   notes: z.string().trim().max(2000).default(''),
@@ -101,6 +123,31 @@ export class InventoryController {
   @Get('stores')
   stores(@Auth() c: TenantClaims, @Query(new ZodPipe(list)) q: z.infer<typeof list>) {
     return this.inventory.listStores(c, q.projectId);
+  }
+
+  /** A central store, not tied to a project (step 8e.3). */
+  @Post('stores/central')
+  @HttpCode(200)
+  @RequiresFeatures()
+  createCentralStore(
+    @Auth() c: TenantClaims,
+    @Body(
+      new ZodPipe(
+        z.object({
+          entityId: z.uuid(),
+          name: z.string().trim().min(2).max(200),
+          yard: z.string().trim().min(2).max(200),
+          stateCode: z
+            .string()
+            .regex(/^\d{2}$/)
+            .nullable()
+            .default(null),
+        }),
+      ),
+    )
+    b: { entityId: string; name: string; yard: string; stateCode: string | null },
+  ) {
+    return this.inventory.createCentralStore(c, b);
   }
 
   @Post('projects/:id/stores')
@@ -225,7 +272,7 @@ export class InventoryController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(received)) b: z.infer<typeof received>,
   ) {
-    return this.inventory.receiveTransfer(c, id, b.receivedOn);
+    return this.inventory.receiveTransfer(c, id, b.receivedOn, b.short);
   }
 
   @Post('transfers/:id/cancel')

@@ -592,6 +592,7 @@ function TransferForm({
   });
   const [to, setTo] = useState('');
   const [note, setNote] = useState('');
+  const [carrier, setCarrier] = useState({ vehicleNo: '', transporter: '', ewayBillNo: '' });
   const [qty, setQty] = useState<Record<string, string>>({});
   const { run, busy, error } = useRun(onDone);
   const inStock = s.stock.filter((x) => Number(x.qty) > 0);
@@ -610,6 +611,9 @@ function TransferForm({
                 toStoreId: to,
                 sentOn: today(),
                 note,
+                vehicleNo: carrier.vehicleNo.trim() || null,
+                transporter: carrier.transporter.trim() || null,
+                ewayBillNo: carrier.ewayBillNo.trim(),
                 lines: lines.map((x) => ({
                   resourceId: x.resourceId,
                   qty: qty[x.resourceId]!.trim(),
@@ -635,6 +639,31 @@ function TransferForm({
               </Select>
             </Field>
           </div>
+          <Field label="Vehicle no.">
+            <Input
+              value={carrier.vehicleNo}
+              maxLength={30}
+              className="w-32"
+              onChange={(e) => setCarrier({ ...carrier, vehicleNo: e.target.value })}
+            />
+          </Field>
+          <Field label="Transporter">
+            <Input
+              value={carrier.transporter}
+              maxLength={200}
+              onChange={(e) => setCarrier({ ...carrier, transporter: e.target.value })}
+            />
+          </Field>
+          <Field label="E-way bill no.">
+            <Input
+              value={carrier.ewayBillNo}
+              inputMode="numeric"
+              pattern="\d{12}"
+              title="12 digits"
+              className="w-36"
+              onChange={(e) => setCarrier({ ...carrier, ewayBillNo: e.target.value })}
+            />
+          </Field>
           <div className="min-w-56 flex-1">
             <Field label="Note">
               <Input value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} />

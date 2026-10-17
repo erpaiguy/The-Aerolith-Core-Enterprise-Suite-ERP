@@ -106,10 +106,13 @@ export class ProjectService {
     claims: TenantClaims,
     projectId: string,
   ): Promise<{ role: ProjectRole | null; canEdit: boolean }> {
-    const [p] = await db<{ role: ProjectRole | null }[]>`
-      SELECT (SELECT m.role FROM proj.member m WHERE m.project_id = p.id AND m.user_id = ${claims.sub}) AS role
+    const [p] = await db<{ role: ProjectRole | null; is_central: boolean }[]>`
+      SELECT (SELECT m.role FROM proj.member m WHERE m.project_id = p.id AND m.user_id = ${claims.sub}) AS role,
+        p.is_central
       FROM proj.project p WHERE p.id = ${projectId}`;
     if (!p) throw notFound();
+    // The company's central stores (docs/wave8-plan.md step 8e.3): all staff are its team; permissions still decide.
+    if (p.is_central) p.role ??= 'member';
     const all = await this.seesAll(claims);
     if (!p.role && !all) throw notFound();
     const canEdit =
@@ -152,7 +155,7 @@ export class ProjectService {
     const items = await db`
       SELECT ${db.unsafe(SUMMARY)}
       FROM proj.project p LEFT JOIN platform.party c ON c.id = p.client_id
-      WHERE true ${visible} ${status}
+      WHERE NOT p.is_central ${visible} ${status}
         ${
           pattern
             ? db`AND (p.name ILIKE ${pattern} OR p.number ILIKE ${pattern} OR p.client_ref ILIKE ${pattern}

@@ -31,6 +31,7 @@ import { nextNumber } from '../tender/numbering.js';
 import { emit } from '../integrations/events.js';
 import { orderProgress, receivedByLine } from './receipt-progress.js';
 import { ReceiptService } from './receipt.service.js';
+import { mustBeAllowed } from './vendor-rules.js';
 import { audit } from '../tender/tender-records.js';
 import { QualityService } from '../quality/quality.service.js';
 
@@ -251,6 +252,7 @@ export class PurchaseOrderService implements OnModuleInit {
     const [party] =
       await tx`SELECT 1 FROM platform.party WHERE id = ${head.partyId} AND deleted_at IS NULL`;
     if (!party) throw new BadRequestException({ code: 'vendor_not_found' });
+    await mustBeAllowed(tx, head.partyId, null);
     const number = await nextNumber(
       tx,
       head.kind === 'work' ? 'work_order' : 'purchase_order',

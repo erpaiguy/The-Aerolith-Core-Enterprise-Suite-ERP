@@ -161,6 +161,8 @@ export function TransferScreen({ transferId }: { transferId: string }) {
     void qc.invalidateQueries({ queryKey: key });
     void qc.invalidateQueries({ queryKey: ['store'] });
   });
+  // What arrived, line by line, when it is not all that was sent (step 8e.3).
+  const [arrived, setArrived] = useState<Record<number, { qty: string; reason: string }>>({});
   if (t.isPending) return <Spinner />;
   if (t.isError) return <Alert tone="danger">{describeError(t.error)}</Alert>;
   const d = t.data;
@@ -202,7 +204,19 @@ export function TransferScreen({ transferId }: { transferId: string }) {
                   void run('receive', () =>
                     api.request(`/api/tenant/transfers/${d.id}/receive`, {
                       method: 'POST',
-                      body: { receivedOn: today() },
+                      body: {
+                        receivedOn: today(),
+                        short: d.lines
+                          .filter((l) => {
+                            const a = arrived[l.position];
+                            return a && a.qty.trim() !== '' && Number(a.qty) !== Number(l.qty);
+                          })
+                          .map((l) => ({
+                            position: l.position,
+                            receivedQty: arrived[l.position]!.qty.trim(),
+                            reason: arrived[l.position]!.reason,
+                          })),
+                      },
                     }),
                   )
                 }
@@ -234,6 +248,17 @@ export function TransferScreen({ transferId }: { transferId: string }) {
       />
       {error && <Alert tone="danger">{error}</Alert>}
       {d.note && <p className="text-sm">{d.note}</p>}
+      {(d.vehicleNo || d.transporter || d.ewayBillNo) && (
+        <p className="text-sm">
+          {[
+            d.vehicleNo && `Vehicle ${d.vehicleNo}`,
+            d.transporter,
+            d.ewayBillNo && `e-way bill ${d.ewayBillNo}`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
       <Card>
         <Table minWidth="30rem">
           <thead>
@@ -241,6 +266,7 @@ export function TransferScreen({ transferId }: { transferId: string }) {
               <th>Material</th>
               <th className="text-right">Quantity</th>
               <th className="text-right">Value</th>
+              {(d.mayReceive || d.lines.some((l) => Number(l.lostQty) > 0)) && <th>Arrived</th>}
             </tr>
           </thead>
           <tbody aria-label="Transferred">
@@ -254,6 +280,50 @@ export function TransferScreen({ transferId }: { transferId: string }) {
                   {formatQty(l.qty)} {l.unit}
                 </td>
                 <td className="text-right tabular-nums">{rupees(l.value)}</td>
+                {d.mayReceive ? (
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                        aria-label={`Arrived of ${l.code}`}
+                        inputMode="decimal"
+                        className="w-24"
+                        placeholder={formatQty(l.qty)}
+                        value={arrived[l.position]?.qty ?? ''}
+                        onChange={(e) =>
+                          setArrived({
+                            ...arrived,
+                            [l.position]: {
+                              reason: '',
+                              ...arrived[l.position],
+                              qty: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                      {arrived[l.position]?.qty &&
+                        Number(arrived[l.position]!.qty) < Number(l.qty) && (
+                          <Input
+                            aria-label={`Why ${l.code} came short`}
+                            placeholder="Why short"
+                            value={arrived[l.position]!.reason}
+                            onChange={(e) =>
+                              setArrived({
+                                ...arrived,
+                                [l.position]: { ...arrived[l.position]!, reason: e.target.value },
+                              })
+                            }
+                          />
+                        )}
+                    </div>
+                  </td>
+                ) : (
+                  Number(l.lostQty) > 0 && (
+                    <td className="text-sm">
+                      {formatQty(l.receivedQty ?? '0')} arrived; {formatQty(l.lostQty)} lost (
+                      {rupees(l.lostValue)}){l.lossReason ? `: ${l.lossReason}` : ''}
+                    </td>
+                  )
+                )}
               </tr>
             ))}
           </tbody>

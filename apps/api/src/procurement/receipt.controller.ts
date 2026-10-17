@@ -37,6 +37,14 @@ const receive = z.object({
   challanDate: date.nullable().default(null),
   invoiceNo: text(100),
   vehicleNo: text(30),
+  transporter: text(200),
+  ewayBillNo: z
+    .string()
+    .trim()
+    .regex(/^(\d{12})?$/, { message: 'An e-way bill number is 12 digits' })
+    .transform((v) => v || null)
+    .nullable()
+    .default(null),
   notes: z.string().trim().max(4000).default(''),
   lines: z
     .array(

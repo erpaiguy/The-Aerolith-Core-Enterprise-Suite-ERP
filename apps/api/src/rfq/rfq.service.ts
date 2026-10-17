@@ -19,6 +19,7 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { linkedDocuments, rfqVendorTarget } from '../documents/links.js';
 import { dec, fmt, mul } from '../rates/decimal.js';
 import { RatesService } from '../rates/rates.service.js';
+import { mustBeAllowed } from '../procurement/vendor-rules.js';
 import { nextNumber } from '../tender/numbering.js';
 import { audit, event } from '../tender/tender-records.js';
 import type { Patch } from '../tender/tender.service.js';
@@ -111,6 +112,7 @@ export class RfqService {
         number: string;
         title: string;
         kind: RfqKind;
+        category: string | null;
         dueOn: string | null;
         status: RfqStatus;
         terms: string;
@@ -119,7 +121,7 @@ export class RfqService {
         project: { id: string; number: string; name: string } | null;
       }[]
     >`
-      SELECT r.id, r.tender_id AS "tenderId", r.project_id AS "projectId", r.number, r.title, r.kind,
+      SELECT r.id, r.tender_id AS "tenderId", r.project_id AS "projectId", r.number, r.title, r.kind, r.category,
         to_char(r.due_on, 'YYYY-MM-DD') AS "dueOn", r.status, r.terms, r.row_version AS "rowVersion",
         CASE WHEN t.id IS NULL THEN NULL
           ELSE json_build_object('id', t.id, 'number', t.number, 'title', t.title) END AS tender,
@@ -694,6 +696,9 @@ export class RfqService {
           await audit(tx, claims.sub, 'party.create', 'party', partyId, { name, from: 'rfq' });
         }
       }
+      const [{ category } = { category: null }] = await tx<{ category: string | null }[]>`
+        SELECT category FROM tender.rfq WHERE id = ${rfqId}`;
+      await mustBeAllowed(tx, partyId!, category);
       await tx`INSERT INTO tender.rfq_vendor (rfq_id, party_id) VALUES (${rfqId}, ${partyId}) ON CONFLICT DO NOTHING`;
       await this.touch(tx, rfqId, claims);
     });

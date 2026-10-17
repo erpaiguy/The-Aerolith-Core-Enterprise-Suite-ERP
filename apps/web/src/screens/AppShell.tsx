@@ -64,6 +64,7 @@ import {
   UsersRound,
   Wallet,
   Warehouse,
+  CalendarClock,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
@@ -732,7 +733,13 @@ export function AppShell() {
           icon: <HardHat className="size-4" />,
         },
         { to: '/orders', label: 'Orders', icon: <BriefcaseBusiness className="size-4" /> },
+        { to: '/vendors', label: 'Vendor master', icon: <ShieldCheck className="size-4" /> },
         { to: '/rate-contracts', label: 'Rate contracts', icon: <Handshake className="size-4" /> },
+        {
+          to: '/deliveries',
+          label: 'Delivery follow-up',
+          icon: <CalendarClock className="size-4" />,
+        },
         { to: '/receipts', label: 'Goods receipts', icon: <PackageCheck className="size-4" /> },
         { to: '/stores', label: 'Stores', icon: <Warehouse className="size-4" /> },
         {

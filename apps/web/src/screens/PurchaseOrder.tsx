@@ -38,6 +38,7 @@ import {
   type OverBudget,
 } from '../procurement/orders';
 import { OrderReceipts } from '../procurement/OrderReceipts';
+import { DeliveryFollowUp } from '../procurement/DeliveryFollowUp';
 import { WorkOrderSubcontract } from './accounts/Subcontract';
 import { ResourcePicker } from '../procurement/ResourcePicker';
 import { shortDate } from '../schedule/model';
@@ -383,6 +384,7 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
         </Card>
       )}
       {o.kind === 'purchase' && o.inForce && <OrderReceipts o={o} />}
+      {o.kind === 'purchase' && o.inForce && <DeliveryFollowUp orderId={o.id} />}
       {o.kind === 'work' && o.inForce && <WorkOrderSubcontract orderId={o.id} />}
       {o.revisions.length > 1 && (
         <Card title="Revisions" className="print:hidden">

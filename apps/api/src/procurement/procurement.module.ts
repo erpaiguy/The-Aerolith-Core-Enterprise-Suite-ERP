@@ -20,9 +20,21 @@ import { ReceiptController } from './receipt.controller.js';
 import { ReceiptService } from './receipt.service.js';
 import { RequisitionController } from './requisition.controller.js';
 import { RequisitionService } from './requisition.service.js';
+import { DeliveryController } from './delivery.controller.js';
+import { DeliveryService } from './delivery.service.js';
+import { VendorMasterController } from './vendor-master.controller.js';
+import { VendorMasterService } from './vendor-master.service.js';
+import { DocumentsModule } from '../documents/documents.module.js';
 
 @Module({
-  imports: [ProvisioningModule, AuthModule, ProjectModule, ApprovalModule, TenderModule],
+  imports: [
+    ProvisioningModule,
+    AuthModule,
+    ProjectModule,
+    ApprovalModule,
+    TenderModule,
+    DocumentsModule,
+  ],
   controllers: [
     RateContractController,
     RequisitionController,
@@ -32,6 +44,8 @@ import { RequisitionService } from './requisition.service.js';
     ReceiptController,
     InventoryController,
     ProcurementReportController,
+    VendorMasterController,
+    DeliveryController,
   ],
   providers: [
     RequisitionService,
@@ -42,6 +56,8 @@ import { RequisitionService } from './requisition.service.js';
     ProcurementReportService,
     ReconciliationService,
     RateContractService,
+    VendorMasterService,
+    DeliveryService,
   ],
 })
 export class ProcurementModule {}

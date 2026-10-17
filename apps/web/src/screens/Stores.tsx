@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Field,
+  Input,
   PageHeader,
   Select,
   Spinner,
@@ -19,6 +20,7 @@ import { useRun } from '../approvals/model';
 import { describeError } from '../lib/format';
 import { rupees } from '../procurement/OrderLines';
 import type { StoreRow } from '../procurement/inventory';
+import { usePermission } from '../session/permissions';
 import { useSession } from '../session/session';
 
 export function StoresScreen() {
@@ -41,8 +43,98 @@ export function StoresScreen() {
           <StoreTable rows={rows.data} showProject />
         )}
       </Card>
+      <CentralStore />
       <Valuation />
     </div>
+  );
+}
+
+/** A company's central store, not tied to a project (docs/wave8-plan.md step 8e.3). */
+function CentralStore() {
+  const qc = useQueryClient();
+  const may = usePermission('stores.manage');
+  const companies = useQuery({
+    queryKey: ['companies'],
+    queryFn: () =>
+      api.request<{ companies: { id: string; name: string }[] }>('/api/tenant/companies'),
+    select: (r) => r.companies,
+    enabled: may,
+  });
+  const [form, setForm] = useState({ entityId: '', name: '', yard: '', stateCode: '27' });
+  const { run, busy, error } = useRun(() => {
+    void qc.invalidateQueries({ queryKey: ['stores'] });
+    setForm({ ...form, name: '' });
+  });
+  if (!may) return null;
+  const entityId = form.entityId || companies.data?.[0]?.id || '';
+  return (
+    <Card title="Central store">
+      <p className="mb-3 text-sm text-fg-muted">
+        A company store at a yard, not tied to a project: projects send to it and draw from it by
+        transfer.
+      </p>
+      {error && <Alert tone="danger">{error}</Alert>}
+      <form
+        aria-label="New central store"
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run('central', () =>
+            api.request('/api/tenant/stores/central', {
+              method: 'POST',
+              body: {
+                entityId,
+                name: form.name,
+                yard: form.yard,
+                stateCode: form.stateCode || null,
+              },
+            }),
+          );
+        }}
+      >
+        {(companies.data?.length ?? 0) > 1 && (
+          <Field label="Company">
+            <Select
+              value={entityId}
+              onChange={(e) => setForm({ ...form, entityId: e.target.value })}
+            >
+              {companies.data!.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        <Field label="Store name">
+          <Input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+            minLength={2}
+          />
+        </Field>
+        <Field label="Yard">
+          <Input
+            value={form.yard}
+            onChange={(e) => setForm({ ...form, yard: e.target.value })}
+            required
+            minLength={2}
+          />
+        </Field>
+        <Field label="GST state code">
+          <Input
+            value={form.stateCode}
+            className="w-16"
+            pattern="\d{2}"
+            onChange={(e) => setForm({ ...form, stateCode: e.target.value })}
+          />
+        </Field>
+        <Button type="submit" variant="secondary" busy={busy === 'central'}>
+          Add central store
+        </Button>
+      </form>
+    </Card>
   );
 }
 

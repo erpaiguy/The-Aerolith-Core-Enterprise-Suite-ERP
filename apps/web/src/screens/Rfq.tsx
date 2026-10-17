@@ -41,6 +41,7 @@ import type {
 import { formatAmount, formatQty, formatRate, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatDate, formatInr } from '../lib/format';
 import type { RequisitionRow } from '../procurement/model';
+import { useTradeCategories } from './Vendors';
 import { usePermission } from '../session/permissions';
 
 export const RFQ_STATUS: Record<RfqStatus, string> = {
@@ -320,6 +321,7 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
             <Badge tone={STATUS_TONE[r.status]}>{RFQ_STATUS[r.status]}</Badge>
             <span>{KIND[r.kind]}</span>
             {r.dueOn && <span>Quotes due {formatDate(r.dueOn)}</span>}
+            <RfqCategory rfqId={r.id} category={r.category} mayEdit={canEditRfq && open} />
           </span>
         }
         actions={
@@ -2004,5 +2006,51 @@ function Applied({ result }: { result: RfqApplyResult }) {
         )}
       </ul>
     </Alert>
+  );
+}
+
+/** The enquiry's trade category (docs/wave8-plan.md step 8e.1). */
+function RfqCategory({
+  rfqId,
+  category,
+  mayEdit,
+}: {
+  rfqId: string;
+  category: string | null;
+  mayEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const cats = useTradeCategories();
+  const [error, setError] = useState<string | null>(null);
+  const name = cats.data?.find((c) => c.key === category)?.name;
+  if (!mayEdit) return name ? <span>{name}</span> : null;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <select
+        aria-label="Trade category"
+        className="rounded-md border border-line bg-surface px-2 py-0.5 text-sm"
+        value={category ?? ''}
+        onChange={async (e) => {
+          setError(null);
+          try {
+            await api.request(`/api/tenant/rfqs/${rfqId}/category`, {
+              method: 'POST',
+              body: { category: e.target.value || null },
+            });
+            void qc.invalidateQueries({ queryKey: ['rfq', rfqId] });
+          } catch (err) {
+            setError(describeError(err));
+          }
+        }}
+      >
+        <option value="">No trade category</option>
+        {(cats.data ?? []).map((c) => (
+          <option key={c.key} value={c.key}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {error && <span className="text-danger">{error}</span>}
+    </span>
   );
 }

@@ -170,9 +170,9 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8d.4 Geotagged photos and offline site entry
 - [x] 8d.5 Deviation statement
 - [x] 8d exit: full check and browser suite
-- [ ] 8e.1 Vendor master
-- [ ] 8e.2 Delivery follow-up
-- [ ] 8e.3 Receipts and transfers as they really happen
+- [x] 8e.1 Vendor master
+- [x] 8e.2 Delivery follow-up
+- [x] 8e.3 Receipts and transfers as they really happen
 - [ ] 8e.4 Buying with history
 - [ ] 8e.5 Scrap and tools
 - [ ] 8e exit: full check and browser suite

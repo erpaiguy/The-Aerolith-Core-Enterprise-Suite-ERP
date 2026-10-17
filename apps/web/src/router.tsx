@@ -138,6 +138,8 @@ import { IssuePrint, OrderPrint, ReceiptPrint } from './print/PurchaseDocs';
 import { Form16aPrint } from './print/TaxDocs';
 import { HandoverPrint } from './print/QualityDocs';
 import { DeviationStatementPrint } from './print/DeviationStatement';
+import { VendorScreen, VendorsScreen } from './screens/Vendors';
+import { DeliveriesScreen } from './screens/Deliveries';
 import { Form16Print } from './print/Form16';
 import {
   ClientBillPrint,
@@ -631,6 +633,14 @@ const deviationPrintRoute = createRoute({
   component: function DeviationPrintPage() {
     const { projectId } = deviationPrintRoute.useParams();
     return <DeviationStatementPrint projectId={projectId} />;
+  },
+});
+const vendorRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/vendors/$partyId',
+  component: function VendorPage() {
+    const { partyId } = vendorRoute.useParams();
+    return <VendorScreen key={partyId} partyId={partyId} />;
   },
 });
 const form16aPrintRoute = createRoute({
@@ -1220,6 +1230,13 @@ const routeTree = rootRoute.addChildren([
       }),
     }),
     createRoute({ getParentRoute: () => appLayout, path: '/rfqs', component: RfqsScreen }),
+    createRoute({ getParentRoute: () => appLayout, path: '/vendors', component: VendorsScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/deliveries',
+      component: DeliveriesScreen,
+    }),
+    vendorRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/rate-contracts',

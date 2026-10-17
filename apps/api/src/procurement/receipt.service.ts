@@ -35,6 +35,9 @@ export interface ReceiptInput {
   challanDate: string | null;
   invoiceNo: string | null;
   vehicleNo: string | null;
+  /** Who carried it and the e-way bill (step 8e.3). */
+  transporter?: string | null | undefined;
+  ewayBillNo?: string | null | undefined;
   /** The store it goes into; by default the site's only store (made if it has none). */
   storeId: string | null;
   notes: string;
@@ -56,6 +59,8 @@ interface OrderRow {
   status: string;
   acknowledged_on: string | null;
   closed_on_receipt: boolean;
+  /** How far a receipt may run past the order (step 8e.3), e.g. "5.00". */
+  receipt_tolerance_pct: string;
 }
 interface ReceiptRow {
   id: string;
@@ -212,7 +217,10 @@ export class ReceiptService {
         seen.add(l.lineKey);
         const qty = dec(l.qty);
         const rejected = l.hold ? 0n : dec(l.rejected);
-        if (qty > dec(p.outstanding))
+        // Within the order's tolerance (step 8e.3): a weighbridge load may run a little over what is owed.
+        const ceiling =
+          dec(p.ordered) + (dec(p.ordered) * dec(o.receipt_tolerance_pct)) / dec('100');
+        if (qty > ceiling - dec(p.counted))
           throw new ConflictException({
             code: 'over_order',
             message: `${p.description}: ${Number(p.outstanding)} ${p.unit} is still owed, not ${Number(l.qty)}. Amend the order for more.`,
@@ -262,9 +270,10 @@ export class ReceiptService {
       const number = await nextNumber(tx, 'goods_receipt', p!.entity_id, 'GRN', new Date());
       const [r] = await tx<{ id: string }[]>`
         INSERT INTO proc.goods_receipt (project_id, po_id, number, site_id, store_id, received_on, challan_no,
-          challan_date, invoice_no, vehicle_no, notes, created_by, updated_by)
+          challan_date, invoice_no, vehicle_no, transporter, eway_bill_no, notes, created_by, updated_by)
         VALUES (${o.project_id}, ${orderId}, ${number}, ${siteId}, ${storeId}, ${input.receivedOn}, ${input.challanNo},
-          ${input.challanDate}, ${input.invoiceNo}, ${input.vehicleNo}, ${input.notes}, ${claims.sub}, ${claims.sub})
+          ${input.challanDate}, ${input.invoiceNo}, ${input.vehicleNo}, ${input.transporter ?? null},
+          ${input.ewayBillNo ?? null}, ${input.notes}, ${claims.sub}, ${claims.sub})
         RETURNING id`;
       await tx`INSERT INTO proc.grn_line ${tx(lines.map((l) => ({ ...l, receipt_id: r!.id })))}`;
       await emit(tx, 'receipt.posted', {

@@ -117,6 +117,9 @@ export interface Transfer {
   sentOn: string;
   receivedOn: string | null;
   note: string;
+  vehicleNo: string | null;
+  transporter: string | null;
+  ewayBillNo: string | null;
   fromStore: { id: string; name: string; project: string };
   toStore: { id: string; name: string; project: string };
   sentBy: string | null;
@@ -128,6 +131,11 @@ export interface Transfer {
     unit: string;
     qty: string;
     value: string;
+    /** What arrived and what was lost on the road (step 8e.3). */
+    receivedQty: string | null;
+    lostQty: string;
+    lostValue: string;
+    lossReason: string | null;
   }[];
   mayReceive: boolean;
   mayCancel: boolean;

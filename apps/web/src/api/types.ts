@@ -798,6 +798,8 @@ export interface RfqDetail {
   number: string;
   title: string;
   kind: RfqKind;
+  /** Its trade category (step 8e.1): who may be offered it when only approved vendors are. */
+  category: string | null;
   dueOn: string | null;
   status: RfqStatus;
   terms: string;

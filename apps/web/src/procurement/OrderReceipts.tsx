@@ -143,6 +143,8 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
     challanNo: '',
     challanDate: '',
     vehicleNo: '',
+    transporter: '',
+    ewayBillNo: '',
     invoiceNo: '',
   });
   const [lines, setLines] = useState<Record<string, LineIn>>(() =>
@@ -173,6 +175,8 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
               challanNo: head.challanNo.trim(),
               challanDate: head.challanDate || null,
               vehicleNo: head.vehicleNo,
+              transporter: head.transporter,
+              ewayBillNo: head.ewayBillNo,
               invoiceNo: head.invoiceNo,
               lines: chosen.map((l) => {
                 const x = lines[l.lineKey]!;
@@ -267,6 +271,23 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
             maxLength={30}
             className="w-32"
             onChange={(e) => setHead({ ...head, vehicleNo: e.target.value })}
+          />
+        </Field>
+        <Field label="Transporter">
+          <Input
+            value={head.transporter}
+            maxLength={200}
+            onChange={(e) => setHead({ ...head, transporter: e.target.value })}
+          />
+        </Field>
+        <Field label="E-way bill no.">
+          <Input
+            value={head.ewayBillNo}
+            inputMode="numeric"
+            pattern="\d{12}"
+            title="12 digits"
+            className="w-36"
+            onChange={(e) => setHead({ ...head, ewayBillNo: e.target.value })}
           />
         </Field>
         <Field label="Invoice no.">
