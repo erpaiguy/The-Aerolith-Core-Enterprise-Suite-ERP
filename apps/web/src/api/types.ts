@@ -31,6 +31,8 @@ export type LoginResult =
       refreshToken?: string;
       user: SessionUser;
       mustChangePassword: boolean;
+      /** The company requires two-factor sign-in of this user, not yet set up (step 8g.1). */
+      mustSetUpMfa?: boolean;
       licence: { state: LicenceState; featuresUnlocked: boolean };
     }
   | { status: 'mfa_required' }
@@ -38,6 +40,7 @@ export type LoginResult =
 
 export interface Me extends SessionUser {
   mustChangePassword: boolean;
+  mustSetUpMfa?: boolean;
   licence: { state: LicenceState; featuresUnlocked: boolean };
 }
 
@@ -296,6 +299,8 @@ export interface OpenedBid {
   name: string | null;
   us: boolean;
   quotedValue: string | null;
+  /** On a percentage-rate tender (step 8f.2). */
+  quotedPct: string | null;
   qualified: boolean;
   notes: string;
   rank: number | null;

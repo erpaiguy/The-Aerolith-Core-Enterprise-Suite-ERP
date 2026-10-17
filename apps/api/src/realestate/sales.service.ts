@@ -405,17 +405,411 @@ export class SalesService {
     return this.booking(claims, bookingId);
   }
 
-  async cancel(claims: TenantClaims, bookingId: string, on: string) {
+  /**
+   * Cancels a booking (docs/wave8-plan.md step 8f.1): every demand is reversed by a GST credit note (advances, or
+   * the interest or fee income, and the output GST, Dr; the buyer Cr), which leaves the buyer owed all they paid; the
+   * forfeiture is taken from that into income, and the rest refunded now from a bank account, or later.
+   */
+  async cancel(
+    claims: TenantClaims,
+    bookingId: string,
+    input: { on: string; reason?: string; forfeit?: string; refundFromAccountId?: string | null },
+  ) {
     await this.may(claims, 'sales.edit');
     const db = await this.tenants.forTenant(claims.ten);
     const b = await this.bookingRow(db, bookingId);
     await this.projects.access(db, claims, b.project_id);
     if (b.status === 'cancelled')
       throw new ConflictException({ code: 'cancelled', message: 'Already cancelled.' });
+    const [hasDemands] = await db`SELECT 1 FROM re.demand WHERE booking_id = ${bookingId} LIMIT 1`;
+    if (hasDemands) await this.may(claims, 'accounts.post');
+    const { entity_id } = await this.entityOf(db, b.project_id);
     await db.begin(async (tx) => {
-      await tx`UPDATE re.booking SET status = 'cancelled', cancelled_on = ${on} WHERE id = ${bookingId}`;
+      const [locked] = await tx<{ status: string; possession_on: string | null }[]>`
+        SELECT status, possession_on FROM re.booking WHERE id = ${bookingId} FOR UPDATE`;
+      if (locked!.status === 'cancelled')
+        throw new ConflictException({ code: 'cancelled', message: 'Already cancelled.' });
+      if (locked!.possession_on)
+        throw new ConflictException({
+          code: 'handed_over',
+          message: 'The flat is handed over: it is not cancelled now.',
+        });
+      const demands = await tx<
+        { id: string; number: string; kind: string; base: string; cgst: string; sgst: string }[]
+      >`
+        SELECT d.id, d.number, d.kind, d.base::text, d.cgst::text, d.sgst::text FROM re.demand d
+        WHERE d.booking_id = ${bookingId} AND NOT EXISTS (SELECT 1 FROM re.credit_note c WHERE c.demand_id = d.id)
+        ORDER BY d.raised_on, d.number`;
+      const party = await this.ledger.partyLedger(tx, b.party_id);
+      const line = (accountId: string, debit: bigint, credit: bigint, note = ''): LineInput => ({
+        accountId,
+        partyId: null,
+        debit: rupees(debit),
+        credit: rupees(credit),
+        projectId: b.project_id,
+        siteId: null,
+        costCodeId: null,
+        note,
+      });
+      for (const d of demands) {
+        const [base, cgst, sgst] = [p(d.base), p(d.cgst), p(d.sgst)];
+        await tx`SELECT pg_advisory_xact_lock(hashtext('re.credit_note'))`;
+        const [n] = await tx<{ n: number }[]>`SELECT count(*)::int + 1 AS n FROM re.credit_note`;
+        const number = `RCN-${String(n!.n).padStart(3, '0')}`;
+        const income = await this.ledger.roleAccount(
+          tx,
+          entity_id,
+          d.kind === 'interest'
+            ? 'interest_income'
+            : d.kind === 'charge'
+              ? 'transfer_fees'
+              : 'buyer_advances',
+        );
+        const v = await this.ledger.post(
+          tx,
+          claims,
+          {
+            entityId: entity_id,
+            type: 'credit_note',
+            date: input.on,
+            narration: `${number} reversing ${d.number}, ${b.unit} cancelled`,
+            reference: b.number,
+            lines: [
+              line(income, base, 0n, d.number),
+              ...(cgst > 0n
+                ? [line(await this.ledger.roleAccount(tx, entity_id, 'output_cgst'), cgst, 0n)]
+                : []),
+              ...(sgst > 0n
+                ? [line(await this.ledger.roleAccount(tx, entity_id, 'output_sgst'), sgst, 0n)]
+                : []),
+              line(party, 0n, base + cgst + sgst),
+            ],
+          },
+          { kind: 're_credit_note', id: d.id },
+        );
+        await tx`
+          INSERT INTO re.credit_note (number, demand_id, booking_id, issued_on, base, cgst, sgst, voucher_id, created_by)
+          VALUES (${number}, ${d.id}, ${bookingId}, ${input.on}, ${d.base}, ${d.cgst}, ${d.sgst}, ${v.id}, ${claims.sub})`;
+      }
+      // What the buyer paid (cash and their TDS) is now owed back, less the forfeiture.
+      const [h] = await tx<{ held: string }[]>`
+        SELECT coalesce(sum(amount + tds), 0)::text AS held FROM re.receipt WHERE booking_id = ${bookingId}`;
+      const held = p(h!.held);
+      const forfeit = p(input.forfeit ?? '0');
+      if (forfeit > held)
+        throw new BadRequestException({
+          code: 'forfeit_over_paid',
+          message: `The buyer has paid ${rupees(held)}: no more is forfeited.`,
+        });
+      if (forfeit > 0n)
+        await this.ledger.post(
+          tx,
+          claims,
+          {
+            entityId: entity_id,
+            type: 'journal',
+            date: input.on,
+            narration: `Forfeiture on cancelling ${b.number} ${b.unit}`,
+            reference: b.number,
+            lines: [
+              line(party, forfeit, 0n),
+              line(await this.ledger.roleAccount(tx, entity_id, 'forfeiture_income'), 0n, forfeit),
+            ],
+          },
+          { kind: 're_forfeiture', id: bookingId },
+        );
+      await tx`
+        UPDATE re.booking SET status = 'cancelled', cancelled_on = ${input.on}, cancel_reason = ${input.reason ?? ''},
+          forfeited = ${rupees(forfeit)}
+        WHERE id = ${bookingId}`;
       await tx`UPDATE re.unit SET status = 'available', row_version = row_version + 1 WHERE id = ${b.unit_id}`;
-      await audit(tx, claims.sub, 're.cancel', 'booking', bookingId, { on });
+      await audit(tx, claims.sub, 're.cancel', 'booking', bookingId, {
+        on: input.on,
+        forfeit: rupees(forfeit),
+        creditNotes: demands.length,
+      });
+      if (input.refundFromAccountId && held - forfeit > 0n)
+        await this.payRefund(tx, claims, b, entity_id, input.on, input.refundFromAccountId);
+    });
+    return this.booking(claims, bookingId);
+  }
+
+  /** Refunds a cancelled booking what is still owed to the buyer, from a bank account. */
+  async refund(
+    claims: TenantClaims,
+    bookingId: string,
+    input: { on: string; fromAccountId: string },
+  ) {
+    await this.may(claims, 'sales.edit');
+    await this.may(claims, 'accounts.post');
+    const db = await this.tenants.forTenant(claims.ten);
+    const b = await this.bookingRow(db, bookingId);
+    await this.projects.access(db, claims, b.project_id);
+    if (b.status !== 'cancelled')
+      throw new ConflictException({
+        code: 'not_cancelled',
+        message: 'Only a cancelled booking is refunded.',
+      });
+    const { entity_id } = await this.entityOf(db, b.project_id);
+    await db.begin(async (tx) => {
+      await tx`SELECT 1 FROM re.booking WHERE id = ${bookingId} FOR UPDATE`;
+      await this.payRefund(tx, claims, b, entity_id, input.on, input.fromAccountId);
+    });
+    return this.booking(claims, bookingId);
+  }
+
+  private async refundDue(db: Db, bookingId: string) {
+    const [r] = await db<{ due: string }[]>`
+      SELECT (coalesce((SELECT sum(amount + tds) FROM re.receipt WHERE booking_id = b.id), 0)
+        - b.forfeited - b.refunded)::text AS due
+      FROM re.booking b WHERE b.id = ${bookingId}`;
+    return p(r!.due);
+  }
+
+  private async payRefund(
+    tx: TransactionSql,
+    claims: TenantClaims,
+    b: Awaited<ReturnType<SalesService['bookingRow']>>,
+    entityId: string,
+    on: string,
+    fromAccountId: string,
+  ) {
+    const due = await this.refundDue(tx, b.id);
+    if (due <= 0n)
+      throw new ConflictException({ code: 'nothing_due', message: 'Nothing is owed back.' });
+    const [bank] = await tx<{ ok: boolean }[]>`
+      SELECT kind IN ('bank', 'cash') AND NOT is_group AND closed_at IS NULL AS ok FROM acc.account
+      WHERE id = ${fromAccountId}`;
+    if (!bank?.ok)
+      throw new BadRequestException({ code: 'not_a_bank', message: 'Refund from a bank ledger.' });
+    const line = (accountId: string, debit: bigint, credit: bigint): LineInput => ({
+      accountId,
+      partyId: null,
+      debit: rupees(debit),
+      credit: rupees(credit),
+      projectId: b.project_id,
+      siteId: null,
+      costCodeId: null,
+      note: '',
+    });
+    const v = await this.ledger.post(
+      tx,
+      claims,
+      {
+        entityId,
+        type: 'payment',
+        date: on,
+        narration: `Refund on cancelling ${b.number} ${b.unit}`,
+        reference: b.number,
+        lines: [
+          line(await this.ledger.partyLedger(tx, b.party_id), due, 0n),
+          line(fromAccountId, 0n, due),
+        ],
+      },
+      { kind: 're_refund', id: b.id },
+    );
+    await tx`UPDATE re.booking SET refunded = refunded + ${rupees(due)}, refund_voucher_id = ${v.id}
+      WHERE id = ${b.id}`;
+    await audit(tx, claims.sub, 're.refund', 'booking', b.id, { on, amount: rupees(due) });
+  }
+
+  /**
+   * The unit passes to a new buyer (a transfer or nomination): the booking, its demands and receipts stay; the buyer
+   * changes, and the transfer fee, if any, is raised on it with 18% GST.
+   */
+  async transfer(
+    claims: TenantClaims,
+    bookingId: string,
+    input: {
+      on: string;
+      buyer: {
+        name: string;
+        coApplicant: string;
+        phone: string;
+        email: string;
+        pan: string | null;
+        address: string;
+      };
+      fee: string;
+      note: string;
+    },
+  ) {
+    await this.may(claims, 'sales.edit');
+    const db = await this.tenants.forTenant(claims.ten);
+    const b = await this.bookingRow(db, bookingId);
+    await this.projects.access(db, claims, b.project_id);
+    if (b.status === 'cancelled')
+      throw new ConflictException({ code: 'cancelled', message: 'The booking is cancelled.' });
+    const fee = p(input.fee);
+    if (fee > 0n) await this.may(claims, 'accounts.post');
+    const setup = await this.setupRow(db, b.project_id);
+    await db.begin(async (tx) => {
+      const [cur] = await tx<{ buyer_id: string; possession_on: string | null; number: string }[]>`
+        SELECT buyer_id, possession_on, number FROM re.booking WHERE id = ${bookingId} FOR UPDATE`;
+      if (cur!.possession_on)
+        throw new ConflictException({
+          code: 'handed_over',
+          message: 'The flat is handed over: it is sold on by its owner, not transferred here.',
+        });
+      const [to] = await tx<{ id: string }[]>`
+        INSERT INTO re.buyer ${tx({
+          name: input.buyer.name,
+          co_applicant: input.buyer.coApplicant,
+          phone: input.buyer.phone,
+          email: input.buyer.email,
+          pan: input.buyer.pan,
+          address: input.buyer.address,
+        })} RETURNING id`;
+      await tx`UPDATE re.booking SET buyer_id = ${to!.id} WHERE id = ${bookingId}`;
+      await tx`
+        UPDATE platform.party SET name = ${`${b.unit} ${input.buyer.name} (${cur!.number})`.slice(0, 200)},
+          contact_name = ${input.buyer.name}, phone = ${input.buyer.phone || null}, email = ${input.buyer.email || null},
+          pan = ${input.buyer.pan}, address = ${input.buyer.address || null}, updated_by = ${claims.sub},
+          updated_at = now()
+        WHERE id = ${b.party_id}`;
+      let demandId: string | null = null;
+      if (fee > 0n) {
+        const half = (fee * 9n + 50n) / 100n;
+        await this.post(tx, claims, b, setup, {
+          stageId: null,
+          kind: 'charge',
+          raisedOn: input.on,
+          base: fee,
+          cgst: half,
+          sgst: half,
+          what: `Transfer fee to ${input.buyer.name}`,
+        });
+        const [d] = await tx<{ id: string }[]>`
+          SELECT id FROM re.demand WHERE booking_id = ${bookingId} AND kind = 'charge' ORDER BY number DESC LIMIT 1`;
+        demandId = d!.id;
+      }
+      await tx`
+        INSERT INTO re.booking_transfer (booking_id, transferred_on, from_buyer_id, to_buyer_id, fee, demand_id, note,
+          created_by)
+        VALUES (${bookingId}, ${input.on}, ${cur!.buyer_id}, ${to!.id}, ${rupees(fee)}, ${demandId}, ${input.note},
+          ${claims.sub})`;
+      await audit(tx, claims.sub, 're.transfer', 'booking', bookingId, {
+        to: input.buyer.name,
+        fee: input.fee,
+      });
+    });
+    return this.booking(claims, bookingId);
+  }
+
+  /** The sale deed's stamp duty and registration, as registered with the sub-registrar. */
+  async registration(
+    claims: TenantClaims,
+    bookingId: string,
+    input: {
+      stampDuty: string;
+      registrationFee: string;
+      registrationNo: string;
+      registeredOn: string;
+      subRegistrar: string;
+    },
+  ) {
+    await this.may(claims, 'sales.edit');
+    const db = await this.tenants.forTenant(claims.ten);
+    const b = await this.bookingRow(db, bookingId);
+    await this.projects.access(db, claims, b.project_id);
+    if (b.status !== 'agreement')
+      throw new ConflictException({
+        code: 'not_agreement',
+        message: 'Registered once the agreement is signed.',
+      });
+    await db.begin(async (tx) => {
+      await tx`
+        UPDATE re.booking SET stamp_duty = ${input.stampDuty}, registration_fee = ${input.registrationFee},
+          registration_no = ${input.registrationNo}, registered_on = ${input.registeredOn},
+          sub_registrar = ${input.subRegistrar}
+        WHERE id = ${bookingId}`;
+      await audit(tx, claims.sub, 're.registration', 'booking', bookingId, { ...input });
+    });
+    return this.booking(claims, bookingId);
+  }
+
+  /** Possession offered: every stage of the plan not yet demanded falls due now. */
+  async offerPossession(claims: TenantClaims, bookingId: string, on: string) {
+    await this.may(claims, 'sales.edit');
+    await this.may(claims, 'accounts.post');
+    const db = await this.tenants.forTenant(claims.ten);
+    const b = await this.bookingRow(db, bookingId);
+    await this.projects.access(db, claims, b.project_id);
+    if (b.status !== 'agreement')
+      throw new ConflictException({
+        code: 'not_agreement',
+        message: 'Possession follows the agreement.',
+      });
+    const setup = await this.setupRow(db, b.project_id);
+    await db.begin(async (tx) => {
+      const [cur] = await tx<{ offered: string | null }[]>`
+        SELECT possession_offered_on AS offered FROM re.booking WHERE id = ${bookingId} FOR UPDATE`;
+      if (cur!.offered)
+        throw new ConflictException({ code: 'offered', message: 'Possession is already offered.' });
+      const stages = await tx<{ id: string; name: string; pct: string }[]>`
+        SELECT s.id, s.name, s.pct::text FROM re.plan_stage s
+        WHERE s.project_id = ${b.project_id} AND (s.tower_id IS NULL OR s.tower_id = ${b.tower_id})
+          AND NOT EXISTS (SELECT 1 FROM re.demand d WHERE d.booking_id = ${bookingId} AND d.stage_id = s.id)
+        ORDER BY s.position`;
+      for (const s of stages) {
+        const d = demandOf(p(b.value), s.pct, b.gst_pct);
+        await this.post(tx, claims, b, setup, {
+          stageId: s.id,
+          kind: 'stage',
+          raisedOn: on,
+          base: d.base,
+          cgst: d.cgst,
+          sgst: d.sgst,
+          what: `${s.name} (on possession)`,
+        });
+      }
+      await tx`UPDATE re.booking SET possession_offered_on = ${on} WHERE id = ${bookingId}`;
+      await audit(tx, claims.sub, 're.possession_offered', 'booking', bookingId, {
+        on,
+        stages: stages.length,
+      });
+    });
+    return this.booking(claims, bookingId);
+  }
+
+  /** Handed over against the checklist, once nothing is owed; the five-year defect period (RERA s.14(3)) starts. */
+  async handOver(
+    claims: TenantClaims,
+    bookingId: string,
+    input: { on: string; checklist: { item: string; ok: boolean; note: string }[] },
+  ) {
+    await this.may(claims, 'sales.edit');
+    const db = await this.tenants.forTenant(claims.ten);
+    const b = await this.bookingRow(db, bookingId);
+    await this.projects.access(db, claims, b.project_id);
+    const [cur] = await db<{ offered: string | null; on: string | null; open: string }[]>`
+      SELECT to_char(possession_offered_on, 'YYYY-MM-DD') AS offered, to_char(possession_on, 'YYYY-MM-DD') AS on,
+        coalesce((SELECT sum(base + cgst + sgst - paid) FROM re.demand WHERE booking_id = b.id), 0)::text AS open
+      FROM re.booking b WHERE b.id = ${bookingId}`;
+    if (!cur!.offered)
+      throw new ConflictException({ code: 'not_offered', message: 'Offer possession first.' });
+    if (cur!.on)
+      throw new ConflictException({ code: 'handed_over', message: 'Already handed over.' });
+    if (p(cur!.open) > 0n)
+      throw new ConflictException({
+        code: 'dues_outstanding',
+        message: `${cur!.open} is still owed: the flat is handed over once it is paid.`,
+      });
+    const notOk = input.checklist.filter((c) => !c.ok).map((c) => c.item);
+    if (notOk.length)
+      throw new BadRequestException({
+        code: 'checklist_open',
+        message: `Not yet done: ${notOk.join(', ')}.`,
+      });
+    if (input.on < cur!.offered)
+      throw new BadRequestException({
+        code: 'before_offer',
+        message: 'Handed over before it was offered?',
+      });
+    await db.begin(async (tx) => {
+      await tx`UPDATE re.booking SET possession_on = ${input.on}, handover = ${tx.json(input.checklist)}
+        WHERE id = ${bookingId}`;
+      await audit(tx, claims.sub, 're.handover', 'booking', bookingId, { on: input.on });
     });
     return this.booking(claims, bookingId);
   }
@@ -495,7 +889,7 @@ export class SalesService {
     setup: Setup,
     d: {
       stageId: string | null;
-      kind: 'stage' | 'interest';
+      kind: 'stage' | 'interest' | 'charge';
       raisedOn: string;
       base: bigint;
       cgst: bigint;
@@ -521,7 +915,11 @@ export class SalesService {
     const credit = await this.ledger.roleAccount(
       tx,
       entity_id,
-      d.kind === 'interest' ? 'interest_income' : 'buyer_advances',
+      d.kind === 'interest'
+        ? 'interest_income'
+        : d.kind === 'charge'
+          ? 'transfer_fees'
+          : 'buyer_advances',
     );
     const lines: LineInput[] = [
       line(await this.ledger.partyLedger(tx, b.party_id), d.base + d.cgst + d.sgst, 0n),
@@ -747,7 +1145,14 @@ export class SalesService {
         y.name AS buyer, y.co_applicant AS "coApplicant", y.phone, y.email, y.pan, y.address,
         t.name || '-' || u.number AS unit, u.carpet_sqm::text AS "carpetSqm", u.gst_pct::text AS "gstPct",
         u.kind AS "unitKind", u.floor, u.rate_per_sqm::text AS "ratePerSqm", u.parking::text,
-        u.charges::text, t.project_id AS "projectId"
+        u.charges::text, t.project_id AS "projectId",
+        to_char(b.cancelled_on, 'YYYY-MM-DD') AS "cancelledOn", b.cancel_reason AS "cancelReason",
+        b.forfeited::text AS forfeited, b.refunded::text AS refunded,
+        b.stamp_duty::text AS "stampDuty", b.registration_fee::text AS "registrationFee",
+        b.registration_no AS "registrationNo", to_char(b.registered_on, 'YYYY-MM-DD') AS "registeredOn",
+        b.sub_registrar AS "subRegistrar", to_char(b.possession_offered_on, 'YYYY-MM-DD') AS "possessionOfferedOn",
+        to_char(b.possession_on, 'YYYY-MM-DD') AS "possessionOn", b.handover,
+        to_char(b.possession_on + interval '5 years', 'YYYY-MM-DD') AS "defectPeriodEnds"
       FROM re.booking b JOIN re.buyer y ON y.id = b.buyer_id JOIN re.unit u ON u.id = b.unit_id
       JOIN re.tower t ON t.id = u.tower_id WHERE b.id = ${id}`;
     // For the cost sheet and demand letters (docs/wave7-plan.md step 7b.5): the payment plan and the registration.
@@ -770,8 +1175,19 @@ export class SalesService {
       FROM re.receipt WHERE booking_id = ${id} ORDER BY received_on, number`;
     const sum = (xs: Record<string, unknown>[], k: string) =>
       rupees(xs.reduce((a, x) => a + p(x[k] as string), 0n));
+    const creditNotes = await db`
+      SELECT c.number, d.number AS demand, to_char(c.issued_on, 'YYYY-MM-DD') AS "issuedOn", c.base::text,
+        (c.cgst + c.sgst)::text AS gst
+      FROM re.credit_note c JOIN re.demand d ON d.id = c.demand_id WHERE c.booking_id = ${id} ORDER BY c.number`;
+    const transfers = await db`
+      SELECT to_char(x.transferred_on, 'YYYY-MM-DD') AS on, f.name AS "from", t.name AS to, x.fee::text, x.note
+      FROM re.booking_transfer x JOIN re.buyer f ON f.id = x.from_buyer_id JOIN re.buyer t ON t.id = x.to_buyer_id
+      WHERE x.booking_id = ${id} ORDER BY x.created_at`;
     return {
       ...head!,
+      creditNotes,
+      transfers,
+      refundDue: head!.status === 'cancelled' ? rupees(await this.refundDue(db, id)) : '0.00',
       reraNumber: setup.rera_number,
       interestPct: setup.interest_pct,
       plan,

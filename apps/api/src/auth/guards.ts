@@ -67,6 +67,12 @@ export class TenantAuthGuard implements CanActivate {
         message: 'Set a new password to continue.',
       });
     }
+    if (claims.mfa && !meta<boolean>(ALLOW_MCP)) {
+      throw new ForbiddenException({
+        code: 'mfa_setup_required',
+        message: 'Set up two-factor sign-in to continue.',
+      });
+    }
     const roles = meta<string[]>(ROLES);
     if (roles && !roles.includes(claims.role)) throw new ForbiddenException({ code: 'forbidden' });
     if (meta<boolean>(FEATURES) && !featuresUnlocked(claims.lic)) {

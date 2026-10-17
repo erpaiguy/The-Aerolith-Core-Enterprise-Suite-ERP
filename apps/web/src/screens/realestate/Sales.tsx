@@ -66,6 +66,7 @@ interface Booking {
   demands: {
     id: string;
     number: string;
+    kind: 'stage' | 'interest' | 'charge';
     stage: string | null;
     raisedOn: string;
     dueOn: string;
@@ -76,6 +77,21 @@ interface Booking {
   }[];
   receipts: { number: string; receivedOn: string; amount: string; reraShare: string }[];
   totals: { demanded: string; received: string; outstanding: string; interestDue: string };
+  /** After the sale (docs/wave8-plan.md step 8f.1). */
+  cancelledOn: string | null;
+  cancelReason: string;
+  forfeited: string;
+  refunded: string;
+  refundDue: string;
+  creditNotes: { number: string; demand: string; issuedOn: string; base: string; gst: string }[];
+  transfers: { on: string; from: string; to: string; fee: string }[];
+  stampDuty: string | null;
+  registrationNo: string;
+  registeredOn: string | null;
+  subRegistrar: string;
+  possessionOfferedOn: string | null;
+  possessionOn: string | null;
+  defectPeriodEnds: string | null;
 }
 interface Rera {
   required: string;
@@ -568,7 +584,7 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
           {b.demands.map((d) => (
             <tr key={d.id} className={d.overdue ? 'text-danger' : ''}>
               <td>{d.number}</td>
-              <td>{d.stage ?? 'Interest'}</td>
+              <td>{d.stage ?? (d.kind === 'charge' ? 'Transfer fee' : 'Interest')}</td>
               <td>{d.dueOn}</td>
               <td className="text-right tabular-nums">{formatInr(d.total)}</td>
               <td className="text-right tabular-nums">{formatInr(d.open)}</td>
@@ -680,7 +696,278 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
           </div>
         </form>
       )}
+      <AfterSale b={b} act={act} />
     </Card>
+  );
+}
+
+const HANDOVER = [
+  'Keys handed over',
+  'Electricity and water meter readings noted',
+  'Society share certificate and papers given',
+  'Snags inspected with the buyer',
+];
+
+/** Cancellation, transfer, registration, possession and handover of a booking (docs/wave8-plan.md step 8f.1). */
+function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) => Promise<void> }) {
+  const banks = useQuery({
+    queryKey: ['sales', 'banks'],
+    queryFn: () =>
+      api.request<{ accounts: { id: string; code: string; name: string; kind: string }[] }>(
+        '/api/tenant/accounts/chart',
+      ),
+    select: (r) => r.accounts.filter((a) => a.kind === 'bank'),
+  });
+  const [cancel, setCancel] = useState({ reason: '', forfeit: '', bank: '' });
+  const [nominee, setNominee] = useState({ name: '', pan: '', fee: '' });
+  const [reg, setReg] = useState({
+    stampDuty: '',
+    registrationFee: '',
+    registrationNo: '',
+    registeredOn: today(),
+    subRegistrar: '',
+  });
+  const [checks, setChecks] = useState<Record<string, boolean>>({});
+  const live = b.status !== 'cancelled';
+  return (
+    <div className="mt-4 space-y-4 border-t border-line pt-4" aria-label="After the sale">
+      {b.status === 'cancelled' && (
+        <p className="text-sm">
+          Cancelled on {b.cancelledOn}
+          {b.cancelReason && ` (${b.cancelReason})`}: forfeited {formatInr(b.forfeited)}, refunded{' '}
+          {formatInr(b.refunded)}
+          {Number(b.refundDue) > 0 && `, ${formatInr(b.refundDue)} still to refund`}.
+          {b.creditNotes.length > 0 &&
+            ` Credit notes ${b.creditNotes.map((c) => `${c.number} (${c.demand})`).join(', ')}.`}
+        </p>
+      )}
+      {b.transfers.length > 0 && (
+        <p className="text-sm">
+          Transferred:{' '}
+          {b.transfers
+            .map((t) => `${t.on} ${t.from} to ${t.to} (fee ${formatInr(t.fee)})`)
+            .join('; ')}
+          .
+        </p>
+      )}
+      {b.registrationNo && (
+        <p className="text-sm">
+          Sale deed {b.registrationNo} registered {b.registeredOn}
+          {b.subRegistrar && ` at ${b.subRegistrar}`}, stamp duty {formatInr(b.stampDuty ?? '0')}.
+        </p>
+      )}
+      {b.possessionOn && (
+        <p className="text-sm">
+          Handed over on {b.possessionOn}; the defect liability period runs to {b.defectPeriodEnds}{' '}
+          (RERA s.14(3)).
+        </p>
+      )}
+      {b.status === 'cancelled' && Number(b.refundDue) > 0 && (
+        <form
+          aria-label="Refund"
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act('refund', { on: today(), fromAccountId: cancel.bank });
+          }}
+        >
+          <Field label="Refund from">
+            <Select
+              value={cancel.bank}
+              onChange={(e) => setCancel({ ...cancel, bank: e.target.value })}
+              required
+            >
+              <option value="">Choose a bank…</option>
+              {(banks.data ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.code} {a.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Button type="submit">Refund {formatInr(b.refundDue)}</Button>
+        </form>
+      )}
+      {live && b.status === 'agreement' && !b.registrationNo && (
+        <form
+          aria-label="Sale deed registration"
+          className="grid gap-3 sm:grid-cols-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act('registration', reg);
+          }}
+        >
+          <Field label="Stamp duty (₹)">
+            <Input
+              inputMode="decimal"
+              value={reg.stampDuty}
+              onChange={(e) => setReg({ ...reg, stampDuty: e.target.value })}
+              required
+            />
+          </Field>
+          <Field label="Registration fee (₹)">
+            <Input
+              inputMode="decimal"
+              value={reg.registrationFee}
+              onChange={(e) => setReg({ ...reg, registrationFee: e.target.value })}
+              required
+            />
+          </Field>
+          <Field label="Document no.">
+            <Input
+              value={reg.registrationNo}
+              onChange={(e) => setReg({ ...reg, registrationNo: e.target.value })}
+              required
+            />
+          </Field>
+          <Field label="Registered on">
+            <Input
+              type="date"
+              value={reg.registeredOn}
+              onChange={(e) => setReg({ ...reg, registeredOn: e.target.value })}
+            />
+          </Field>
+          <Field label="Sub-registrar">
+            <Input
+              value={reg.subRegistrar}
+              onChange={(e) => setReg({ ...reg, subRegistrar: e.target.value })}
+            />
+          </Field>
+          <div>
+            <Button type="submit" variant="secondary">
+              Record registration
+            </Button>
+          </div>
+        </form>
+      )}
+      {live && b.status === 'agreement' && !b.possessionOfferedOn && (
+        <Button variant="secondary" onClick={() => void act('offer-possession', { on: today() })}>
+          Offer possession (raise the remaining stages)
+        </Button>
+      )}
+      {live && b.possessionOfferedOn && !b.possessionOn && (
+        <form
+          aria-label="Hand over"
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act('hand-over', {
+              on: today(),
+              checklist: HANDOVER.map((item) => ({ item, ok: !!checks[item], note: '' })),
+            });
+          }}
+        >
+          <p className="text-sm">
+            Possession offered on {b.possessionOfferedOn}. Hand over against:
+          </p>
+          {HANDOVER.map((item) => (
+            <label key={item} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!checks[item]}
+                onChange={(e) => setChecks({ ...checks, [item]: e.target.checked })}
+              />
+              {item}
+            </label>
+          ))}
+          <Button type="submit">Hand over</Button>
+        </form>
+      )}
+      {live && !b.possessionOn && (
+        <details>
+          <summary className="cursor-pointer text-sm font-medium">Transfer or cancel</summary>
+          <form
+            aria-label="Transfer to a nominee"
+            className="mt-3 grid gap-3 sm:grid-cols-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void act('transfer', {
+                on: today(),
+                buyer: { name: nominee.name, pan: nominee.pan || null },
+                fee: nominee.fee || '0',
+              });
+            }}
+          >
+            <Field label="New buyer">
+              <Input
+                value={nominee.name}
+                onChange={(e) => setNominee({ ...nominee, name: e.target.value })}
+                required
+                minLength={2}
+              />
+            </Field>
+            <Field label="Their PAN">
+              <Input
+                value={nominee.pan}
+                onChange={(e) => setNominee({ ...nominee, pan: e.target.value.toUpperCase() })}
+                pattern="[A-Z]{5}[0-9]{4}[A-Z]"
+              />
+            </Field>
+            <Field label="Transfer fee (₹, + 18% GST)">
+              <Input
+                inputMode="decimal"
+                value={nominee.fee}
+                onChange={(e) => setNominee({ ...nominee, fee: e.target.value })}
+              />
+            </Field>
+            <div className="flex items-end">
+              <Button type="submit" variant="secondary">
+                Transfer
+              </Button>
+            </div>
+          </form>
+          <form
+            aria-label="Cancel the booking"
+            className="mt-3 grid gap-3 sm:grid-cols-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!window.confirm(`Cancel ${b.number}? Its demands are reversed by credit notes.`))
+                return;
+              void act('cancel', {
+                on: today(),
+                reason: cancel.reason,
+                forfeit: cancel.forfeit || '0',
+                refundFromAccountId: cancel.bank || null,
+              });
+            }}
+          >
+            <Field label="Why cancelled">
+              <Input
+                value={cancel.reason}
+                onChange={(e) => setCancel({ ...cancel, reason: e.target.value })}
+                required
+                minLength={3}
+              />
+            </Field>
+            <Field label="Forfeit (₹)" hint={`of ${formatInr(b.totals.received)} received`}>
+              <Input
+                inputMode="decimal"
+                value={cancel.forfeit}
+                onChange={(e) => setCancel({ ...cancel, forfeit: e.target.value })}
+              />
+            </Field>
+            <Field label="Refund now from">
+              <Select
+                value={cancel.bank}
+                onChange={(e) => setCancel({ ...cancel, bank: e.target.value })}
+              >
+                <option value="">Refund later</option>
+                {(banks.data ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} {a.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="flex items-end">
+              <Button type="submit" variant="ghost">
+                Cancel the booking
+              </Button>
+            </div>
+          </form>
+        </details>
+      )}
+    </div>
   );
 }
 

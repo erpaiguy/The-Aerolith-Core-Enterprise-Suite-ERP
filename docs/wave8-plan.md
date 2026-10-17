@@ -176,10 +176,10 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8e.4 Buying with history
 - [x] 8e.5 Scrap and tools
 - [x] 8e exit: full check and browser suite
-- [ ] 8f.1 Booking life after sale
-- [ ] 8f.2 Schedule-of-rates tendering
+- [x] 8f.1 Booking life after sale
+- [x] 8f.2 Schedule-of-rates tendering
 - [ ] 8f exit: full check and browser suite
-- [ ] 8g.1 Two-factor sign-in for staff
+- [x] 8g.1 Two-factor sign-in for staff
 - [ ] 8g.2 Backup, restore and audit export
 - [ ] 8g.3 Reminders that go out
 - [ ] 8g.4 Finer permissions

@@ -605,6 +605,11 @@ export function AppShell() {
           items: [
             { to: '/resources', label: 'Resources', icon: <Boxes className="size-4" /> },
             {
+              to: '/sor-books',
+              label: 'Schedules of rates',
+              icon: <BookOpen className="size-4" />,
+            },
+            {
               to: '/rate-analyses',
               label: 'Rate analyses',
               icon: <Calculator className="size-4" />,
@@ -1075,6 +1080,12 @@ export function AppShell() {
                 className="rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
               >
                 Account
+              </Link>
+              <Link
+                to="/two-factor"
+                className="rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
+              >
+                Two-factor sign-in
               </Link>
               <button
                 type="button"

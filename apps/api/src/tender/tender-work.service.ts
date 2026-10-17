@@ -86,6 +86,8 @@ export interface BidInput {
   /** A competitor not yet in the party master: found by name, or added as a competitor. */
   name: string | null;
   quotedValue: string | null;
+  /** On a percentage-rate tender (step 8f.2): so many percent above (or, negative, below) the estimate. */
+  quotedPct?: string | null | undefined;
   qualified: boolean;
   notes: string;
 }
@@ -221,10 +223,12 @@ export class TenderWorkService {
           partyId: string | null;
           name: string | null;
           quotedValue: string | null;
+          quotedPct: string | null;
           qualified: boolean;
           notes: string;
         }[]
-      >`SELECT b.id, b.party_id AS "partyId", p.name, b.quoted_value::text AS "quotedValue", b.qualified, b.notes
+      >`SELECT b.id, b.party_id AS "partyId", p.name, b.quoted_value::text AS "quotedValue",
+          b.quoted_pct::text AS "quotedPct", b.qualified, b.notes
         FROM tender.competitor_bid b LEFT JOIN platform.party p ON p.id = b.party_id
         WHERE b.tender_id = ${tenderId} ORDER BY b.quoted_value NULLS LAST, p.name`,
     ]);
@@ -690,16 +694,23 @@ export class TenderWorkService {
       const rows: {
         party_id: string | null;
         quoted_value: string | null;
+        quoted_pct: string | null;
         qualified: boolean;
         notes: string;
       }[] = [];
+      // A percentage bid is worth the estimate moved by its percentage, which ranks it with the rest.
+      const [est] = await tx<{ value: string | null }[]>`
+        SELECT estimated_value::text AS value FROM tender.tender WHERE id = ${tenderId}`;
+      const byPct = (pct: string) =>
+        est?.value ? ((Number(est.value) * (100 + Number(pct))) / 100).toFixed(2) : null;
       for (const b of bids) {
         const partyId = b.us ? null : await this.competitor(tx, claims, b.partyId, b.name);
         if (partyId && rows.some((r) => r.party_id === partyId))
           throw new BadRequestException({ code: 'duplicate_bidder' });
         rows.push({
           party_id: partyId,
-          quoted_value: b.quotedValue,
+          quoted_value: b.quotedValue ?? (b.quotedPct ? byPct(b.quotedPct) : null),
+          quoted_pct: b.quotedPct ?? null,
           qualified: b.qualified,
           notes: b.notes,
         });

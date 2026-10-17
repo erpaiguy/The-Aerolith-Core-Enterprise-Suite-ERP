@@ -15,6 +15,8 @@ export type AccessClaims =
       sid: string;
       /** Must change password before doing anything else. */
       mcp: boolean;
+      /** Must set up two-factor sign-in before doing anything else (step 8g.1). */
+      mfa?: boolean;
       lic: LicenceState;
       iat: number;
       exp: number;

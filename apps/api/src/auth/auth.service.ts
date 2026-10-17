@@ -25,6 +25,7 @@ import {
   type IdentityRow,
 } from './mfa.service.js';
 import { checkPasswordPolicy, hashPassword, verifyPassword } from './password.js';
+import { StaffMfaService } from './staff-mfa.service.js';
 import {
   ACCESS_TTL_SECONDS,
   hmacSecret,
@@ -52,6 +53,10 @@ interface UserRow {
   must_change_password: boolean;
   failed_logins: number;
   locked_until: Date | null;
+  owner_account_id: string | null;
+  totp_secret: string | null;
+  totp_last_step: string | null;
+  mfa_enabled_at: Date | null;
 }
 
 export type LoginResult =
@@ -61,6 +66,8 @@ export type LoginResult =
       refreshToken: string;
       user: { id: string; username: string; displayName: string; role: string };
       mustChangePassword: boolean;
+      /** Two-factor sign-in must be set up before anything else (step 8g.1). */
+      mustSetUpMfa: boolean;
       licence: { state: LicenceState; featuresUnlocked: boolean };
     }
   | { status: 'mfa_required' }
@@ -81,6 +88,7 @@ export class AuthService {
     private readonly tenants: TenantConnections,
     private readonly licensing: LicensingService,
     private readonly mfa: MfaService,
+    private readonly staffMfa: StaffMfaService,
   ) {}
 
   async login(
@@ -143,7 +151,7 @@ export class AuthService {
   private async staffLogin(
     tenantId: string,
     lic: LicenceState,
-    input: { identifier: string; password: string; client: Client },
+    input: { identifier: string; password: string; code?: string | undefined; client: Client },
     now: Date,
   ): Promise<LoginResult> {
     const db = await this.tenants.forTenant(tenantId);
@@ -162,6 +170,17 @@ export class AuthService {
                             THEN now() + make_interval(mins => ${LOCK_MINUTES}) ELSE locked_until END
         WHERE id = ${user.id}`;
       throw invalidCredentials();
+    }
+    // Two-factor sign-in, once the user has set it up (step 8g.1).
+    if (user.mfa_enabled_at) {
+      if (!input.code) return { status: 'mfa_required' };
+      if (!(await this.staffMfa.verify(db, user, input.code, now))) {
+        await db`UPDATE platform."user" SET failed_logins = failed_logins + 1,
+          locked_until = CASE WHEN (failed_logins + 1) % ${LOCK_AFTER_FAILURES} = 0
+                              THEN now() + make_interval(mins => ${LOCK_MINUTES}) ELSE locked_until END
+          WHERE id = ${user.id}`;
+        throw invalidCredentials();
+      }
     }
     await db`UPDATE platform."user" SET failed_logins = 0, locked_until = NULL, last_login_at = ${now} WHERE id = ${user.id}`;
     return this.createSession(db, tenantId, user, input.client, lic, now);
@@ -214,10 +233,19 @@ export class AuthService {
         idle_expires_at = ${new Date(now.getTime() + IDLE_MS[s.client])}
       WHERE id = ${parsed.sessionId} AND refresh_hmac = ${presented} RETURNING 1`;
     if (!rotated) throw new UnauthorizedException({ code: 'invalid_refresh_token' });
+    const mustSetUpMfa = await this.staffMfa.mustEnroll(db, tenantId, s);
     return {
-      accessToken: this.accessToken(tenantId, s, parsed.sessionId, licence.state, now),
+      accessToken: this.accessToken(
+        tenantId,
+        s,
+        parsed.sessionId,
+        licence.state,
+        now,
+        mustSetUpMfa,
+      ),
       refreshToken: next.token,
       mustChangePassword: s.must_change_password,
+      mustSetUpMfa,
       licence: { state: licence.state, featuresUnlocked: featuresUnlocked(licence.state) },
     };
   }
@@ -233,6 +261,7 @@ export class AuthService {
     return {
       ...publicUser(user),
       mustChangePassword: user.must_change_password,
+      mustSetUpMfa: !!claims.mfa,
       licence: { state: claims.lic, featuresUnlocked: featuresUnlocked(claims.lic) },
     };
   }
@@ -382,9 +411,11 @@ export class AuthService {
       VALUES (${id}, ${user.id}, ${client}, ${hmacSecret(refresh.secret, this.config.sessionKey)},
               ${new Date(now.getTime() + IDLE_MS[client])}, ${new Date(now.getTime() + ABSOLUTE_MS)})`;
     await this.audit(db, user.id, 'user.login', user.id, { client });
+    const mustSetUpMfa = await this.staffMfa.mustEnroll(db, tenantId, user);
     return {
       status: 'ok',
-      accessToken: this.accessToken(tenantId, user, id, lic, now),
+      accessToken: this.accessToken(tenantId, user, id, lic, now, mustSetUpMfa),
+      mustSetUpMfa,
       refreshToken: refresh.token,
       user: publicUser(user),
       mustChangePassword: user.must_change_password,
@@ -398,6 +429,7 @@ export class AuthService {
     sessionId: string,
     lic: LicenceState,
     now: Date,
+    mustSetUpMfa = false,
   ): string {
     const iat = Math.floor(now.getTime() / 1000);
     const claims: TenantClaims = {
@@ -408,6 +440,7 @@ export class AuthService {
       role: user.role,
       sid: sessionId,
       mcp: user.must_change_password,
+      ...(mustSetUpMfa ? { mfa: true } : {}),
       lic,
       iat,
       exp: iat + ACCESS_TTL_SECONDS,

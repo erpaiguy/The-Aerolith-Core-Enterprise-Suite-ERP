@@ -10,6 +10,7 @@ import {
 } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { MfaService } from './mfa.service.js';
+import { StaffMfaService } from './staff-mfa.service.js';
 import { OperatorAuthService } from './operator-auth.service.js';
 import { OperatorSessionController } from './operator-session.controller.js';
 import { PermissionsController } from './permissions.controller.js';
@@ -30,6 +31,7 @@ import { UsersService } from './users.service.js';
     AuthService,
     UsersService,
     MfaService,
+    StaffMfaService,
     OperatorAuthService,
     InboxService,
     PermissionsService,

@@ -48,6 +48,8 @@ interface SessionState {
   entitlement: Entitlement | null;
   user: SessionUser | null;
   mustChangePassword: boolean;
+  /** Two-factor sign-in must be set up before anything else (step 8g.1). */
+  mustSetUpMfa: boolean;
   licence: { state: LicenceState; featuresUnlocked: boolean } | null;
   /** Set when the stored licence is no longer usable (revoked, removed device). */
   licenceProblem: string | null;
@@ -57,6 +59,8 @@ interface SessionApi extends SessionState {
   activate(key: string): Promise<void>;
   signedIn(result: Extract<LoginResult, { status: 'ok' }>): Promise<void>;
   passwordChanged(accessToken: string): void;
+  /** Two-factor sign-in was set up: a fresh token without the requirement. */
+  mfaSetUp(): Promise<void>;
   /** The signed-in user changed their name. */
   renamed(displayName: string): void;
   signOut(): Promise<void>;
@@ -93,6 +97,7 @@ const initial: SessionState = {
   entitlement: null,
   user: null,
   mustChangePassword: false,
+  mustSetUpMfa: false,
   licence: null,
   licenceProblem: null,
 };
@@ -185,6 +190,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               status: 'signed_in',
               user: me,
               mustChangePassword: me.mustChangePassword,
+              mustSetUpMfa: !!me.mustSetUpMfa,
               licence: me.licence,
             }
           : { ...base, status: 'signed_out' },
@@ -233,8 +239,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           status: 'signed_in',
           user: result.user,
           mustChangePassword: result.mustChangePassword,
+          mustSetUpMfa: !!result.mustSetUpMfa,
           licence: result.licence,
         }));
+      },
+      async mfaSetUp() {
+        await api.refresh();
+        setState((s) => ({ ...s, mustSetUpMfa: false }));
       },
       passwordChanged(accessToken: string) {
         api.setAccessToken(accessToken);

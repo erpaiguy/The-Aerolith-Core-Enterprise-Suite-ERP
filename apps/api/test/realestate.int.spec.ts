@@ -397,5 +397,129 @@ describe.skipIf(!controlUrl || !adminUrl)('real estate sales and RERA (integrati
     expect(m.rows.map((x) => [x.status, x.party, x.books])).toEqual([
       ['matched', 'Anil Kulkarni', '26176.50'],
     ]);
+
+    // docs/wave8-plan.md step 8f.1. 1202 booked again, ₹3,00,000 paid, then cancelled: the booking demand reversed by
+    // a credit note, ₹50,000 forfeited, ₹2,50,000 refunded from the collection account.
+    type L = B & {
+      status: string;
+      forfeited: string;
+      refunded: string;
+      refundDue: string;
+      creditNotes: { number: string; demand: string; base: string; gst: string }[];
+      transfers: { from: string; to: string; fee: string }[];
+      possessionOfferedOn: string | null;
+      possessionOn: string | null;
+      defectPeriodEnds: string | null;
+      registrationNo: string;
+    };
+    const b3 = await ok<L>(
+      post(
+        `/tenant/sales/units/${u1202}/book`,
+        { buyer: { name: 'Sunita Deshmukh' }, bookedOn: '2026-10-05' },
+        manager,
+      ),
+    );
+    await ok(
+      post(
+        `/tenant/sales/bookings/${b3.id}/receipts`,
+        { on: '2026-10-06', amount: '300000', reference: 'UTR9' },
+        manager,
+      ),
+    );
+    expect(
+      (
+        await post(
+          `/tenant/sales/bookings/${b3.id}/cancel`,
+          { on: '2026-10-08', forfeit: '300001' },
+          manager,
+        )
+      ).json(),
+    ).toMatchObject({ code: 'forfeit_over_paid' });
+    const gone = await ok<L>(
+      post(
+        `/tenant/sales/bookings/${b3.id}/cancel`,
+        {
+          on: '2026-10-08',
+          reason: 'Loan refused',
+          forfeit: '50000',
+          refundFromAccountId: collection,
+        },
+        manager,
+      ),
+    );
+    expect([gone.status, gone.forfeited, gone.refunded, gone.refundDue]).toEqual([
+      'cancelled',
+      '50000.00',
+      '250000.00',
+      '0.00',
+    ]);
+    expect(gone.creditNotes.map((c) => [c.base, c.gst])).toEqual([['600000.00', '30000.00']]);
+    // The buyer's ledger is square: demand and credit note, receipt, forfeiture and refund.
+    const [party] = await db<{ balance: string }[]>`
+      SELECT coalesce(sum(l.debit - l.credit), 0)::text AS balance FROM acc.voucher_line l
+      JOIN acc.account a ON a.id = l.account_id JOIN re.booking k ON k.party_id = a.party_id
+      WHERE k.id = ${b3.id}`;
+    expect(party!.balance).toBe('0.00');
+
+    // 1202 a third time, then transferred to a nominee with a ₹25,000 fee and 18% GST on it.
+    const b4 = await ok<L>(
+      post(
+        `/tenant/sales/units/${u1202}/book`,
+        { buyer: { name: 'Prakash Joshi' }, bookedOn: '2026-10-09' },
+        manager,
+      ),
+    );
+    const moved = await ok<L & { buyer: string }>(
+      post(
+        `/tenant/sales/bookings/${b4.id}/transfer`,
+        { on: '2026-10-10', buyer: { name: 'Meera Joshi', pan: 'ABCPJ1234K' }, fee: '25000' },
+        manager,
+      ),
+    );
+    expect(moved.buyer).toBe('Meera Joshi');
+    expect(moved.transfers.map((x) => [x.from, x.to, x.fee])).toEqual([
+      ['Prakash Joshi', 'Meera Joshi', '25000.00'],
+    ]);
+    expect(moved.demands.find((d) => d.stage === null)).toMatchObject({
+      base: '25000.00',
+      cgst: '2250.00',
+      total: '29500.00',
+    });
+
+    // Anil's 1201: registered, possession offered (the 40% possession stage falls due), handed over once paid.
+    const reg = await ok<L>(
+      post(
+        `/tenant/sales/bookings/${b.id}/registration`,
+        {
+          stampDuty: '498600',
+          registrationFee: '30000',
+          registrationNo: 'WSM-1-4512-2026',
+          registeredOn: '2026-10-15',
+          subRegistrar: 'Washim 1',
+        },
+        manager,
+      ),
+    );
+    expect(reg.registrationNo).toBe('WSM-1-4512-2026');
+    const offered = await ok<L>(
+      post(`/tenant/sales/bookings/${b.id}/offer-possession`, { on: '2026-10-16' }, manager),
+    );
+    expect(offered.demands.at(-1)).toMatchObject({ stage: 'Possession', base: '3324000.00' });
+    const keys = { on: '2026-10-17', checklist: [{ item: 'Keys and society papers', ok: true }] };
+    expect(
+      (await post(`/tenant/sales/bookings/${b.id}/hand-over`, keys, manager)).json(),
+    ).toMatchObject({ code: 'dues_outstanding' });
+    await ok(
+      post(
+        `/tenant/sales/bookings/${b.id}/receipts`,
+        { on: '2026-10-17', amount: offered.totals.outstanding, reference: 'UTR10' },
+        manager,
+      ),
+    );
+    const home = await ok<L>(post(`/tenant/sales/bookings/${b.id}/hand-over`, keys, manager));
+    expect([home.possessionOn, home.defectPeriodEnds]).toEqual(['2026-10-17', '2031-10-17']);
+    expect(
+      (await post(`/tenant/sales/bookings/${b.id}/cancel`, { on: '2026-10-17' }, manager)).json(),
+    ).toMatchObject({ code: 'handed_over' });
   });
 });

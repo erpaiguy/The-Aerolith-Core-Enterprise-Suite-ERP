@@ -34,6 +34,7 @@ import {
   TenantAuthGuard,
 } from './guards.js';
 import { MfaService } from './mfa.service.js';
+import { StaffMfaService } from './staff-mfa.service.js';
 import { OperatorAuthService } from './operator-auth.service.js';
 import { RateLimit } from './rate-limit.js';
 import { UsersService } from './users.service.js';
@@ -81,6 +82,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly mfa: MfaService,
+    private readonly staffMfa: StaffMfaService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -136,6 +138,73 @@ export class AuthController {
   @AllowWhilePasswordChangeRequired()
   me(@Auth() claims: TenantClaims) {
     return this.auth.me(claims);
+  }
+
+  // --- two-factor sign-in for staff (docs/wave8-plan.md step 8g.1) ---
+
+  @Get('two-factor')
+  @UseGuards(TenantAuthGuard)
+  @AllowWhilePasswordChangeRequired()
+  mfaStatus(@Auth() claims: TenantClaims) {
+    return this.staffMfa.status(claims);
+  }
+
+  @Post('two-factor/start')
+  @HttpCode(200)
+  @RateLimit(10)
+  @UseGuards(TenantAuthGuard)
+  @AllowWhilePasswordChangeRequired()
+  mfaStart(@Auth() claims: TenantClaims) {
+    return this.staffMfa.start(claims);
+  }
+
+  @Post('two-factor/confirm')
+  @HttpCode(200)
+  @RateLimit(10)
+  @UseGuards(TenantAuthGuard)
+  @AllowWhilePasswordChangeRequired()
+  mfaConfirm(
+    @Auth() claims: TenantClaims,
+    @Body(
+      new ZodPipe(
+        z.object({
+          code: z
+            .string()
+            .trim()
+            .regex(/^\d{6}$/, 'Six digits'),
+        }),
+      ),
+    )
+    body: { code: string },
+  ) {
+    return this.staffMfa.confirm(claims, body.code);
+  }
+
+  @Post('two-factor/disable')
+  @HttpCode(200)
+  @RateLimit(10)
+  @UseGuards(TenantAuthGuard)
+  mfaDisable(
+    @Auth() claims: TenantClaims,
+    @Body(new ZodPipe(z.object({ code: z.string().trim().min(6).max(20) }))) body: { code: string },
+  ) {
+    return this.staffMfa.disable(claims, body.code);
+  }
+
+  @Post('two-factor/policy')
+  @HttpCode(200)
+  @UseGuards(TenantAuthGuard)
+  mfaPolicy(
+    @Auth() claims: TenantClaims,
+    @Body(new ZodPipe(z.object({ requireMfa: z.boolean() }))) body: { requireMfa: boolean },
+  ) {
+    return this.staffMfa.setPolicy(claims, body.requireMfa);
+  }
+
+  @Get('two-factor/users')
+  @UseGuards(TenantAuthGuard)
+  mfaUsers(@Auth() claims: TenantClaims) {
+    return this.staffMfa.overview(claims);
   }
 
   @Post('change-password')

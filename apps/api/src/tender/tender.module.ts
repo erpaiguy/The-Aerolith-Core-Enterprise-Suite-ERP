@@ -20,9 +20,12 @@ import { TenderWorkService } from './tender-work.service.js';
 import { TenderController } from './tender.controller.js';
 import { TenderService } from './tender.service.js';
 
+import { SorController } from './sor.controller.js';
+import { SorService } from './sor.service.js';
 @Module({
   imports: [ProvisioningModule, AuthModule, RatesModule, PricingModule],
   controllers: [
+    SorController,
     TenderController,
     TenderWorkController,
     BoqController,
@@ -32,6 +35,7 @@ import { TenderService } from './tender.service.js';
     TenderSettingsController,
   ],
   providers: [
+    SorService,
     TenderService,
     TenderWorkService,
     BoqService,

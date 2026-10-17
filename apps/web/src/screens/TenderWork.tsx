@@ -1,5 +1,6 @@
 // Tender management detail on the tender page (docs/wave1-plan.md step 8): pre-bid queries, addenda, EMD and bank
 // guarantees, the submission checklist, the submission itself, the bids read out at the opening and the result.
+import { SorTendering } from './SorTendering';
 import {
   Alert,
   Badge,
@@ -1166,6 +1167,8 @@ interface BidDraft {
   us: boolean;
   name: string;
   value: string;
+  /** % above (or, negative, below) the estimate, on a percentage-rate tender. */
+  pct: string;
   qualified: boolean;
 }
 let nextKey = 1;
@@ -1195,6 +1198,7 @@ function OpeningEditor({
         us: true,
         name: '',
         value: ours?.quotedValue ?? ourValue ?? '',
+        pct: ours?.quotedPct ?? '',
         qualified: ours?.qualified ?? true,
       },
       ...bids
@@ -1204,9 +1208,10 @@ function OpeningEditor({
           us: false,
           name: b.name ?? '',
           value: b.quotedValue ?? '',
+          pct: b.quotedPct ?? '',
           qualified: b.qualified,
         })),
-      { key: nextKey++, us: false, name: '', value: '', qualified: true },
+      { key: nextKey++, us: false, name: '', value: '', pct: '', qualified: true },
     ];
   });
   const { run, busy, error } = useAction(onDone);
@@ -1223,7 +1228,9 @@ function OpeningEditor({
             bids: filled.map((r) => ({
               us: r.us,
               name: r.us ? null : r.name.trim(),
-              quotedValue: money(r.value),
+              // A percentage alone: the server works out the value from the estimate.
+              quotedValue: r.pct.trim() && !r.value.trim() ? null : money(r.value),
+              quotedPct: r.pct.trim() || null,
               qualified: r.qualified,
             })),
           }),
@@ -1236,6 +1243,7 @@ function OpeningEditor({
           <tr>
             <th>Bidder</th>
             <th className="text-right">Quoted (₹)</th>
+            <th className="text-right">or % on estimate</th>
             <th>Qualified</th>
             <th />
           </tr>
@@ -1262,6 +1270,18 @@ function OpeningEditor({
                   inputMode="decimal"
                   value={r.value}
                   onChange={(e) => set(r.key, { value: e.target.value })}
+                />
+              </td>
+              <td>
+                <Input
+                  aria-label={r.us ? 'Our percentage' : `Bidder ${i} percentage`}
+                  className="w-24 text-right"
+                  inputMode="decimal"
+                  placeholder="-4.5"
+                  value={r.pct}
+                  onChange={(e) =>
+                    set(r.key, { pct: e.target.value, value: e.target.value ? '' : r.value })
+                  }
                 />
               </td>
               <td>
@@ -1300,7 +1320,7 @@ function OpeningEditor({
           onClick={() =>
             setRows((rs) => [
               ...rs,
-              { key: nextKey++, us: false, name: '', value: '', qualified: true },
+              { key: nextKey++, us: false, name: '', value: '', pct: '', qualified: true },
             ])
           }
         >
@@ -1336,6 +1356,7 @@ export function SubmissionAndResult({
   const o = work.opening;
   return (
     <div className="space-y-5">
+      <SorTendering tenderId={tender.id} canEdit={canEdit} />
       {tender.status === 'bidding' && (
         <Card title="Ready to submit?">
           <Readiness work={work} />
@@ -1451,6 +1472,9 @@ export function SubmissionAndResult({
                     <th>Rank</th>
                     <th>Bidder</th>
                     <th className="text-right">Quoted</th>
+                    {work.bids.some((b) => b.quotedPct !== null) && (
+                      <th className="text-right">% on estimate</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -1459,6 +1483,13 @@ export function SubmissionAndResult({
                       <td>{b.rank ? `L${b.rank}` : b.qualified ? '-' : 'Disqualified'}</td>
                       <td>{b.us ? 'Us' : b.name}</td>
                       <td className="text-right tabular-nums">{formatInr(b.quotedValue)}</td>
+                      {work.bids.some((x) => x.quotedPct !== null) && (
+                        <td className="text-right tabular-nums">
+                          {b.quotedPct === null
+                            ? ''
+                            : `${Number(b.quotedPct) > 0 ? '+' : ''}${Number(b.quotedPct)}%`}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

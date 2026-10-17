@@ -142,6 +142,8 @@ import { VendorScreen, VendorsScreen } from './screens/Vendors';
 import { DeliveriesScreen } from './screens/Deliveries';
 import { StockAgeingScreen } from './screens/StockAgeing';
 import { ScrapToolsScreen } from './screens/ScrapTools';
+import { SorBooksScreen } from './screens/SorBooks';
+import { TwoFactorScreen } from './screens/TwoFactor';
 import { Form16Print } from './print/Form16';
 import {
   ClientBillPrint,
@@ -187,6 +189,7 @@ function Root() {
     return SIGNED_OUT_PATHS.includes(path) ? <Outlet /> : <Navigate to="/sign-in" replace />;
   }
   if (session.mustChangePassword) return <ChangePasswordScreen forced />;
+  if (session.mustSetUpMfa) return <TwoFactorScreen forced />;
   if (SIGNED_OUT_PATHS.includes(path)) return <Navigate to="/" replace />;
   return <Outlet />;
 }
@@ -1242,6 +1245,12 @@ const routeTree = rootRoute.addChildren([
       getParentRoute: () => appLayout,
       path: '/stock-ageing',
       component: StockAgeingScreen,
+    }),
+    createRoute({ getParentRoute: () => appLayout, path: '/sor-books', component: SorBooksScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/two-factor',
+      component: () => <TwoFactorScreen />,
     }),
     createRoute({
       getParentRoute: () => appLayout,

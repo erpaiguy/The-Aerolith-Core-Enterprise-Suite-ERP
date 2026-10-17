@@ -198,9 +198,124 @@ export class SalesController {
   cancel(
     @Auth() c: TenantClaims,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          on: date,
+          reason: z.string().trim().max(1000).default(''),
+          forfeit: amount.default('0'),
+          refundFromAccountId: z.uuid().nullable().default(null),
+        }),
+      ),
+    )
+    b: { on: string; reason: string; forfeit: string; refundFromAccountId: string | null },
+  ) {
+    return this.sales.cancel(c, id, b);
+  }
+
+  @Post('sales/bookings/:id/refund')
+  @HttpCode(200)
+  @RequiresFeatures()
+  refund(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(z.object({ on: date, fromAccountId: z.uuid() })))
+    b: { on: string; fromAccountId: string },
+  ) {
+    return this.sales.refund(c, id, b);
+  }
+
+  @Post('sales/bookings/:id/transfer')
+  @HttpCode(200)
+  @RequiresFeatures()
+  transfer(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          on: date,
+          buyer: book.shape.buyer,
+          fee: amount.default('0'),
+          note: z.string().trim().max(500).default(''),
+        }),
+      ),
+    )
+    b: {
+      on: string;
+      buyer: z.infer<typeof book>['buyer'];
+      fee: string;
+      note: string;
+    },
+  ) {
+    return this.sales.transfer(c, id, b);
+  }
+
+  @Post('sales/bookings/:id/registration')
+  @HttpCode(200)
+  @RequiresFeatures()
+  registration(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          stampDuty: amount,
+          registrationFee: amount,
+          registrationNo: z.string().trim().min(1).max(60),
+          registeredOn: date,
+          subRegistrar: z.string().trim().max(120).default(''),
+        }),
+      ),
+    )
+    b: {
+      stampDuty: string;
+      registrationFee: string;
+      registrationNo: string;
+      registeredOn: string;
+      subRegistrar: string;
+    },
+  ) {
+    return this.sales.registration(c, id, b);
+  }
+
+  @Post('sales/bookings/:id/offer-possession')
+  @HttpCode(200)
+  @RequiresFeatures()
+  offerPossession(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodPipe(z.object({ on: date }))) b: { on: string },
   ) {
-    return this.sales.cancel(c, id, b.on);
+    return this.sales.offerPossession(c, id, b.on);
+  }
+
+  @Post('sales/bookings/:id/hand-over')
+  @HttpCode(200)
+  @RequiresFeatures()
+  handOver(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          on: date,
+          checklist: z
+            .array(
+              z.object({
+                item: z.string().trim().min(2).max(200),
+                ok: z.boolean(),
+                note: z.string().trim().max(300).default(''),
+              }),
+            )
+            .min(1)
+            .max(60),
+        }),
+      ),
+    )
+    b: { on: string; checklist: { item: string; ok: boolean; note: string }[] },
+  ) {
+    return this.sales.handOver(c, id, b);
   }
 
   @Post('sales/bookings/:id/receipts')

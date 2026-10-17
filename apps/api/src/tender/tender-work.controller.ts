@@ -124,6 +124,12 @@ const bidsBody = z.object({
           partyId: z.uuid().nullable().default(null),
           name: text(200).default(null),
           quotedValue: money.default(null),
+          quotedPct: z
+            .string()
+            .trim()
+            .regex(/^-?\d{1,3}(\.\d{1,2})?$/, 'A percentage, e.g. -4.5')
+            .nullable()
+            .default(null),
           qualified: z.boolean().default(true),
           notes: z.string().trim().max(1000).default(''),
         })
