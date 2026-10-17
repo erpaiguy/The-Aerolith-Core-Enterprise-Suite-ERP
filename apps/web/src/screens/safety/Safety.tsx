@@ -17,6 +17,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
+import { useT } from '../../i18n/i18n';
 import { describeError } from '../../lib/format';
 import { useProjectParam } from '../../lib/project-param';
 
@@ -95,6 +96,7 @@ const local = (v: string) => (v ? new Date(v).toISOString() : '');
 const monthStart = () => `${today().slice(0, 7)}-01`;
 
 export function SafetyScreen() {
+  const t = useT();
   const projects = useQuery({
     queryKey: ['projects', 'all-items'],
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
@@ -104,15 +106,15 @@ export function SafetyScreen() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Safety"
-        subtitle="Incidents, permits to work, toolbox talks and the injury rates."
+        title={t('Safety')}
+        subtitle={t('Incidents, permits to work, toolbox talks and the injury rates.')}
         actions={
           <Select
-            aria-label="Project"
+            aria-label={t('Project')}
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
           >
-            <option value="">Choose a project…</option>
+            <option value="">{t('Choose a project…')}</option>
             {(projects.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.number} {p.name}
@@ -127,6 +129,7 @@ export function SafetyScreen() {
 }
 
 function ProjectSafety({ projectId }: { projectId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ['safety', projectId];
   const r = useQuery({
@@ -179,18 +182,18 @@ function ProjectSafety({ projectId }: { projectId: string }) {
     <>
       {error && <Alert tone="danger">{error}</Alert>}
       <Card
-        title="Man-hours and rates"
+        title={t('Man-hours and rates')}
         actions={
           <div className="flex gap-2">
             <Input
               type="date"
-              aria-label="From"
+              aria-label={t('From')}
               value={period.from}
               onChange={(e) => setPeriod({ ...period, from: e.target.value })}
             />
             <Input
               type="date"
-              aria-label="To"
+              aria-label={t('To')}
               value={period.to}
               onChange={(e) => setPeriod({ ...period, to: e.target.value })}
             />
@@ -203,7 +206,11 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               [
                 [
                   'Man-hours',
-                  `${stats.data.manHours} (staff ${stats.data.staffHours}, labour ${stats.data.labourHours})`,
+                  t('{total} (staff {staff}, labour {labour})', {
+                    total: stats.data.manHours,
+                    staff: stats.data.staffHours,
+                    labour: stats.data.labourHours,
+                  }),
                 ],
                 ['Lost-time injuries', String(stats.data.lostTimeInjuries)],
                 ['Days lost', String(stats.data.daysLost)],
@@ -218,27 +225,27 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               ] as const
             ).map(([k, v]) => (
               <div key={k}>
-                <dt className="text-xs text-fg-muted">{k}</dt>
+                <dt className="text-xs text-fg-muted">{t(k)}</dt>
                 <dd className="font-medium">{v}</dd>
               </div>
             ))}
           </dl>
         )}
         <p className="mt-2 text-xs text-fg-muted">
-          Per million man-hours, from attendance and musters recorded at the project.
+          {t('Per million man-hours, from attendance and musters recorded at the project.')}
         </p>
       </Card>
 
-      <Card title="Incidents">
+      <Card title={t('Incidents')}>
         {d.incidents.length > 0 && (
           <Table minWidth="44rem">
             <thead>
               <tr>
-                <th>No.</th>
-                <th>When</th>
-                <th>Kind</th>
-                <th>What happened</th>
-                <th>Status</th>
+                <th>{t('No.')}</th>
+                <th>{t('When')}</th>
+                <th>{t('Kind')}</th>
+                <th>{t('What happened')}</th>
+                <th>{t('Status')}</th>
                 <th />
               </tr>
             </thead>
@@ -247,18 +254,24 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                 <tr key={i.id} aria-label={i.number}>
                   <td>{i.number}</td>
                   <td>{i.occurredAt}</td>
-                  <td>{label(i.kind)}</td>
+                  <td>{t(label(i.kind))}</td>
                   <td>
                     {i.description}
                     {i.injured && <span className="text-fg-muted"> · {i.injured}</span>}
                     {i.daysLost > 0 && (
-                      <span className="text-fg-muted"> · {i.daysLost} days lost</span>
+                      <span className="text-fg-muted">
+                        {' '}
+                        · {t('{n} days lost', { n: i.daysLost })}
+                      </span>
                     )}
                   </td>
                   <td>
-                    <Badge tone={TONE[i.status] ?? 'neutral'}>{i.status}</Badge>
+                    <Badge tone={TONE[i.status] ?? 'neutral'}>{t(i.status)}</Badge>
                     {i.openActions > 0 && (
-                      <span className="text-xs text-fg-muted"> {i.openActions} actions open</span>
+                      <span className="text-xs text-fg-muted">
+                        {' '}
+                        {t('{n} actions open', { n: i.openActions })}
+                      </span>
                     )}
                   </td>
                   <td>
@@ -268,7 +281,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                         variant="ghost"
                         onClick={() => setOpen(open === i.id ? null : i.id)}
                       >
-                        Investigate
+                        {t('Investigate')}
                       </Button>
                     )}
                   </td>
@@ -289,7 +302,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
           />
         )}
         <form
-          aria-label="Report an incident"
+          aria-label={t('Report an incident')}
           className="mt-3 grid gap-3 sm:grid-cols-6"
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
@@ -300,16 +313,16 @@ function ProjectSafety({ projectId }: { projectId: string }) {
             });
           }}
         >
-          <Field label="Kind">
+          <Field label={t('Kind')}>
             <Select value={inc.kind} onChange={(e) => setInc({ ...inc, kind: e.target.value })}>
               {KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {label(k)}
+                  {t(label(k))}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="When">
+          <Field label={t('When')}>
             <Input
               type="datetime-local"
               value={inc.occurredAt}
@@ -317,13 +330,13 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               required
             />
           </Field>
-          <Field label="Where">
+          <Field label={t('Where')}>
             <Input
               value={inc.location}
               onChange={(e) => setInc({ ...inc, location: e.target.value })}
             />
           </Field>
-          <Field label="What happened">
+          <Field label={t('What happened')}>
             <Input
               value={inc.description}
               onChange={(e) => setInc({ ...inc, description: e.target.value })}
@@ -331,7 +344,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               minLength={3}
             />
           </Field>
-          <Field label="Who was hurt">
+          <Field label={t('Who was hurt')}>
             <Input
               value={inc.injuredName}
               onChange={(e) => setInc({ ...inc, injuredName: e.target.value })}
@@ -339,7 +352,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
           </Field>
           <div className="flex items-end gap-2">
             {(inc.kind === 'lost_time' || inc.kind === 'fatal') && (
-              <Field label="Days lost">
+              <Field label={t('Days lost')}>
                 <Input
                   inputMode="numeric"
                   value={inc.daysLost}
@@ -348,12 +361,12 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                 />
               </Field>
             )}
-            <Button type="submit">Report</Button>
+            <Button type="submit">{t('Report')}</Button>
           </div>
         </form>
       </Card>
 
-      <Card title="Permits to work">
+      <Card title={t('Permits to work')}>
         {d.permits.map((p) => {
           const c = checks[p.id] ?? p.precautions.map(() => false);
           return (
@@ -364,8 +377,9 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               aria-label={p.number}
             >
               <p>
-                <strong>{p.number}</strong> {label(p.kind)} · {p.location}: {p.work} · {p.validFrom}{' '}
-                to {p.validTo} <Badge tone={TONE[p.status] ?? 'neutral'}>{p.status}</Badge>
+                <strong>{p.number}</strong> {t(label(p.kind))} · {p.location}: {p.work} ·{' '}
+                {t('{from} to {to}', { from: p.validFrom, to: p.validTo })}{' '}
+                <Badge tone={TONE[p.status] ?? 'neutral'}>{t(p.status)}</Badge>
               </p>
               {p.status === 'requested' && d.mayManage && (
                 <div className="mt-2 space-y-1">
@@ -387,7 +401,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                     type="button"
                     onClick={() => void call(`/api/tenant/permits/${p.id}/issue`, { confirmed: c })}
                   >
-                    Issue
+                    {t('Issue')}
                   </Button>
                 </div>
               )}
@@ -399,14 +413,14 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                     void call(`/api/tenant/permits/${p.id}/close`, { note: 'Work done' })
                   }
                 >
-                  Close
+                  {t('Close')}
                 </Button>
               )}
             </div>
           );
         })}
         <form
-          aria-label="Ask for a permit"
+          aria-label={t('Ask for a permit')}
           className="grid gap-3 sm:grid-cols-6"
           onSubmit={(e) => {
             e.preventDefault();
@@ -417,16 +431,16 @@ function ProjectSafety({ projectId }: { projectId: string }) {
             });
           }}
         >
-          <Field label="Work at">
+          <Field label={t('Work at')}>
             <Select value={ptw.kind} onChange={(e) => setPtw({ ...ptw, kind: e.target.value })}>
               {PERMITS.map((k) => (
                 <option key={k} value={k}>
-                  {label(k)}
+                  {t(label(k))}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Location">
+          <Field label={t('Location')}>
             <Input
               value={ptw.location}
               onChange={(e) => setPtw({ ...ptw, location: e.target.value })}
@@ -434,7 +448,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               minLength={2}
             />
           </Field>
-          <Field label="Work">
+          <Field label={t('Work')}>
             <Input
               value={ptw.work}
               onChange={(e) => setPtw({ ...ptw, work: e.target.value })}
@@ -442,7 +456,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               minLength={3}
             />
           </Field>
-          <Field label="From">
+          <Field label={t('From')}>
             <Input
               type="datetime-local"
               value={ptw.validFrom}
@@ -450,7 +464,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               required
             />
           </Field>
-          <Field label="To">
+          <Field label={t('To')}>
             <Input
               type="datetime-local"
               value={ptw.validTo}
@@ -459,23 +473,24 @@ function ProjectSafety({ projectId }: { projectId: string }) {
             />
           </Field>
           <div className="flex items-end">
-            <Button type="submit">Ask</Button>
+            <Button type="submit">{t('Ask')}</Button>
           </div>
         </form>
       </Card>
 
-      <Card title="Toolbox talks">
+      <Card title={t('Toolbox talks')}>
         {d.toolboxTalks.length > 0 && (
           <ul className="mb-3 space-y-1 text-sm">
-            {d.toolboxTalks.map((t) => (
-              <li key={t.id}>
-                {t.heldOn} · {t.topic} {t.speaker && `(${t.speaker})`} · {t.attendance} present
+            {d.toolboxTalks.map((tt) => (
+              <li key={tt.id}>
+                {tt.heldOn} · {tt.topic} {tt.speaker && `(${tt.speaker})`} ·{' '}
+                {t('{n} present', { n: tt.attendance })}
               </li>
             ))}
           </ul>
         )}
         <form
-          aria-label="Toolbox talk"
+          aria-label={t('Toolbox talk')}
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -485,7 +500,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
             });
           }}
         >
-          <Field label="Held on">
+          <Field label={t('Held on')}>
             <Input
               type="date"
               value={talk.heldOn}
@@ -493,7 +508,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               required
             />
           </Field>
-          <Field label="Topic">
+          <Field label={t('Topic')}>
             <Input
               value={talk.topic}
               onChange={(e) => setTalk({ ...talk, topic: e.target.value })}
@@ -501,13 +516,13 @@ function ProjectSafety({ projectId }: { projectId: string }) {
               minLength={3}
             />
           </Field>
-          <Field label="Speaker">
+          <Field label={t('Speaker')}>
             <Input
               value={talk.speaker}
               onChange={(e) => setTalk({ ...talk, speaker: e.target.value })}
             />
           </Field>
-          <Field label="Attended">
+          <Field label={t('Attended')}>
             <Input
               inputMode="numeric"
               value={talk.others}
@@ -516,22 +531,22 @@ function ProjectSafety({ projectId }: { projectId: string }) {
             />
           </Field>
           <Button type="submit" variant="secondary">
-            Record
+            {t('Record')}
           </Button>
         </form>
       </Card>
 
-      <Card title="Safety inspections">
+      <Card title={t('Safety inspections')}>
         {d.inspections.length === 0 ? (
           <p className="text-sm text-fg-muted">
-            None yet: fill a checklist whose work type is Safety on the Quality page.
+            {t('None yet: fill a checklist whose work type is Safety on the Quality page.')}
           </p>
         ) : (
           <ul className="space-y-1 text-sm">
             {d.inspections.map((i) => (
               <li key={i.id}>
                 {i.doneOn} · {i.template} · {i.location}{' '}
-                <Badge tone={TONE[i.result] ?? 'neutral'}>{i.result}</Badge>
+                <Badge tone={TONE[i.result] ?? 'neutral'}>{t(i.result)}</Badge>
               </li>
             ))}
           </ul>
@@ -550,6 +565,7 @@ function Investigation({
   mayClose: boolean;
   onChange: () => void;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ['incident', id];
   const i = useQuery({
@@ -572,17 +588,17 @@ function Investigation({
   return (
     <div
       className="mt-3 rounded-md border border-line p-3 text-sm"
-      aria-label={`Investigation of ${d.number}`}
+      aria-label={t('Investigation of {number}', { number: d.number })}
       role="group"
     >
-      {d.rootCause && <p className="mb-2">Root cause: {d.rootCause}</p>}
+      {d.rootCause && <p className="mb-2">{t('Root cause: {cause}', { cause: d.rootCause })}</p>}
       {d.actions.length > 0 && (
         <ul className="mb-2 space-y-1">
           {d.actions.map((a) => (
             <li key={a.id} className="flex items-center gap-2">
               {a.action} {a.owner && `(${a.owner})`}{' '}
               {a.doneOn ? (
-                <Badge tone="success">done {a.doneOn}</Badge>
+                <Badge tone="success">{t('done {date}', { date: a.doneOn })}</Badge>
               ) : (
                 <Button
                   type="button"
@@ -591,7 +607,7 @@ function Investigation({
                     void post(`/api/tenant/incident-actions/${a.id}/done`, { doneOn: today() })
                   }
                 >
-                  Done
+                  {t('Done')}
                 </Button>
               )}
             </li>
@@ -600,7 +616,7 @@ function Investigation({
       )}
       {d.status !== 'closed' && (
         <form
-          aria-label="Investigation"
+          aria-label={t('Investigation')}
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -612,28 +628,28 @@ function Investigation({
             });
           }}
         >
-          <Field label="Root cause">
+          <Field label={t('Root cause')}>
             <Input
               value={f.rootCause}
               placeholder={d.rootCause}
               onChange={(e) => setF({ ...f, rootCause: e.target.value })}
             />
           </Field>
-          <Field label="Action">
+          <Field label={t('Action')}>
             <Input value={f.action} onChange={(e) => setF({ ...f, action: e.target.value })} />
           </Field>
-          <Field label="Owner">
+          <Field label={t('Owner')}>
             <Input value={f.owner} onChange={(e) => setF({ ...f, owner: e.target.value })} />
           </Field>
           <Button type="submit" variant="secondary">
-            Save
+            {t('Save')}
           </Button>
           {mayClose && (
             <Button
               type="button"
               onClick={() => void post(`/api/tenant/incidents/${id}/close`, {})}
             >
-              Close the incident
+              {t('Close the incident')}
             </Button>
           )}
         </form>

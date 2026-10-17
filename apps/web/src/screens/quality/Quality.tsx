@@ -18,6 +18,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
+import { useT } from '../../i18n/i18n';
 import { describeError } from '../../lib/format';
 import { sendOrKeep } from '../../offline';
 import { useProjectParam } from '../../lib/project-param';
@@ -109,6 +110,7 @@ const TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral' | 'accen
 const label = (s: string) => s.replace(/_/g, ' ');
 
 export function QualityScreen() {
+  const t = useT();
   const projects = useQuery({
     queryKey: ['projects', 'all-items'],
     queryFn: () => api.request<{ items: ProjectSummary[] }>('/api/tenant/projects'),
@@ -119,15 +121,15 @@ export function QualityScreen() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Quality"
-        subtitle="Inspections, checklists, tests, NCRs, snags and material approvals."
+        title={t('Quality')}
+        subtitle={t('Inspections, checklists, tests, NCRs, snags and material approvals.')}
         actions={
           <Select
-            aria-label="Project"
+            aria-label={t('Project')}
             value={projectId}
             onChange={(e) => setProjectId(e.target.value)}
           >
-            <option value="">Choose a project…</option>
+            <option value="">{t('Choose a project…')}</option>
             {(projects.data ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.number} {p.name}
@@ -149,6 +151,7 @@ export function QualityScreen() {
 }
 
 function ProjectQuality({ projectId }: { projectId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ['quality', projectId];
   const r = useQuery({
@@ -210,7 +213,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
   if (r.isPending) return <Spinner />;
   if (r.isError) return <Alert tone="danger">{describeError(r.error)}</Alert>;
   const d = r.data;
-  const tpl = (templates.data ?? []).find((t) => t.id === ck.templateId);
+  const tpl = (templates.data ?? []).find((x) => x.id === ck.templateId);
   const recordTest = (e: FormEvent) => {
     e.preventDefault();
     const spec: Record<string, unknown> = {};
@@ -239,8 +242,16 @@ function ProjectQuality({ projectId }: { projectId: string }) {
         results,
       },
       (x) => {
-        const t = x as { number: string; outcome: string; ncr: string | null };
-        setNotice(`${t.number}: ${t.outcome}${t.ncr ? `; ${t.ncr} raised` : ''}.`);
+        const res = x as { number: string; outcome: string; ncr: string | null };
+        setNotice(
+          res.ncr
+            ? t('{number}: {outcome}; {ncr} raised.', {
+                number: res.number,
+                outcome: t(res.outcome),
+                ncr: res.ncr,
+              })
+            : t('{number}: {outcome}.', { number: res.number, outcome: t(res.outcome) }),
+        );
       },
     );
   };
@@ -249,7 +260,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
       {error && <Alert tone="danger">{error}</Alert>}
       {notice && <Alert tone="info">{notice}</Alert>}
       <Card
-        title="Inspection requests"
+        title={t('Inspection requests')}
         actions={
           d.mayManage && (
             <label className="flex items-center gap-2 text-sm">
@@ -262,7 +273,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                   })
                 }
               />
-              Bill only inspected work
+              {t('Bill only inspected work')}
             </label>
           )
         }
@@ -271,12 +282,12 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           <Table minWidth="48rem">
             <thead>
               <tr>
-                <th>No.</th>
-                <th>Item</th>
-                <th>Where</th>
-                <th className="text-right">Qty</th>
-                <th>For</th>
-                <th>Status</th>
+                <th>{t('No.')}</th>
+                <th>{t('Item')}</th>
+                <th>{t('Where')}</th>
+                <th className="text-right">{t('Qty')}</th>
+                <th>{t('For')}</th>
+                <th>{t('Status')}</th>
               </tr>
             </thead>
             <tbody>
@@ -292,12 +303,12 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                     <td className="text-right">{Number(i.qty)}</td>
                     <td>{i.requestedFor}</td>
                     <td>
-                      <Badge tone={TONE[i.status] ?? 'neutral'}>{label(i.status)}</Badge>
+                      <Badge tone={TONE[i.status] ?? 'neutral'}>{t(label(i.status))}</Badge>
                       {i.comments && <div className="text-xs text-fg-muted">{i.comments}</div>}
                       {i.status === 'requested' && d.mayManage && (
                         <div className="mt-1 flex flex-wrap gap-1">
                           <Select
-                            aria-label="Decision"
+                            aria-label={t('Decision')}
                             value={dec.status}
                             onChange={(e) =>
                               setDecision({
@@ -306,13 +317,13 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                               })
                             }
                           >
-                            <option value="approved">Approved</option>
-                            <option value="approved_with_comments">With comments</option>
-                            <option value="rejected">Rejected</option>
+                            <option value="approved">{t('Approved')}</option>
+                            <option value="approved_with_comments">{t('With comments')}</option>
+                            <option value="rejected">{t('Rejected')}</option>
                           </Select>
                           <Input
-                            aria-label="Inspector"
-                            placeholder="Inspector"
+                            aria-label={t('Inspector')}
+                            placeholder={t('Inspector')}
                             value={dec.inspector}
                             onChange={(e) =>
                               setDecision({
@@ -322,8 +333,8 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                             }
                           />
                           <Input
-                            aria-label="Comments"
-                            placeholder="Comments"
+                            aria-label={t('Comments')}
+                            placeholder={t('Comments')}
                             value={dec.comments}
                             onChange={(e) =>
                               setDecision({
@@ -342,7 +353,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                               })
                             }
                           >
-                            Record
+                            {t('Record')}
                           </Button>
                         </div>
                       )}
@@ -354,20 +365,20 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           </Table>
         )}
         <form
-          aria-label="Request an inspection"
+          aria-label={t('Request an inspection')}
           className="mt-3 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             void call(`/api/tenant/projects/${projectId}/inspections`, 'POST', ir);
           }}
         >
-          <Field label="Measured work">
+          <Field label={t('Measured work')}>
             <Select
               value={ir.lineKey}
               onChange={(e) => setIr({ ...ir, lineKey: e.target.value })}
               required
             >
-              <option value="">Choose…</option>
+              <option value="">{t('Choose…')}</option>
               {d.waiting.map((w) => (
                 <option key={w.lineKey} value={w.lineKey}>
                   {w.code} {w.description} ({Number(w.qty)} {w.unit})
@@ -375,42 +386,42 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               ))}
             </Select>
           </Field>
-          <Field label="Location">
+          <Field label={t('Location')}>
             <Input
               value={ir.location}
               onChange={(e) => setIr({ ...ir, location: e.target.value })}
             />
           </Field>
-          <Field label="Activity">
+          <Field label={t('Activity')}>
             <Input
               value={ir.activity}
               onChange={(e) => setIr({ ...ir, activity: e.target.value })}
             />
           </Field>
-          <Field label="For">
+          <Field label={t('For')}>
             <Input
               type="date"
               value={ir.requestedFor}
               onChange={(e) => setIr({ ...ir, requestedFor: e.target.value })}
             />
           </Field>
-          <Button type="submit">Request</Button>
+          <Button type="submit">{t('Request')}</Button>
         </form>
       </Card>
 
-      <Card title="Checklists">
+      <Card title={t('Checklists')}>
         {d.checklists.length > 0 && (
           <ul className="mb-3 space-y-1 text-sm">
             {d.checklists.map((c) => (
               <li key={c.id}>
                 {c.doneOn} · {c.template} · {c.location}{' '}
-                <Badge tone={TONE[c.result] ?? 'neutral'}>{c.result}</Badge>
+                <Badge tone={TONE[c.result] ?? 'neutral'}>{t(c.result)}</Badge>
               </li>
             ))}
           </ul>
         )}
         <form
-          aria-label="Fill a checklist"
+          aria-label={t('Fill a checklist')}
           className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
@@ -432,13 +443,20 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               (sent) => {
                 if (sent.queued) {
                   setNotice(
-                    'Checklist saved on this phone; it will be sent when there is signal (see the Outbox).',
+                    t(
+                      'Checklist saved on this phone; it will be sent when there is signal (see the Outbox).',
+                    ),
                   );
                   return;
                 }
                 const res = sent.result;
                 setNotice(
-                  `Checklist ${res.result}${res.findings.length ? `: ${res.findings.join(' ')}` : '.'}`,
+                  res.findings.length
+                    ? t('Checklist {result}: {findings}', {
+                        result: t(res.result),
+                        findings: res.findings.join(' '),
+                      })
+                    : t('Checklist {result}.', { result: t(res.result) }),
                 );
                 void qc.invalidateQueries({ queryKey: key });
               },
@@ -447,23 +465,23 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           }}
         >
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Checklist">
+            <Field label={t('Checklist')}>
               <Select
                 value={ck.templateId}
                 onChange={(e) => setCk({ ...ck, templateId: e.target.value, answers: [] })}
                 required
               >
-                <option value="">Choose…</option>
+                <option value="">{t('Choose…')}</option>
                 {(templates.data ?? [])
-                  .filter((t) => t.active)
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
+                  .filter((x) => x.active)
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
                     </option>
                   ))}
               </Select>
             </Field>
-            <Field label="Location">
+            <Field label={t('Location')}>
               <Input
                 value={ck.location}
                 onChange={(e) => setCk({ ...ck, location: e.target.value })}
@@ -487,9 +505,9 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                   }}
                 >
                   <option value="">—</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                  <option value="na">N/A</option>
+                  <option value="yes">{t('Yes')}</option>
+                  <option value="no">{t('No')}</option>
+                  <option value="na">{t('N/A')}</option>
                 </Select>
               ) : (
                 <Input
@@ -505,33 +523,33 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               )}
             </div>
           ))}
-          {tpl && <Button type="submit">Save the checklist</Button>}
+          {tpl && <Button type="submit">{t('Save the checklist')}</Button>}
         </form>
       </Card>
 
-      <Card title="Tests">
+      <Card title={t('Tests')}>
         {d.tests.length > 0 && (
           <Table minWidth="36rem">
             <thead>
               <tr>
-                <th>No.</th>
-                <th>Test</th>
-                <th>Sample</th>
-                <th>Tested</th>
-                <th>Result</th>
+                <th>{t('No.')}</th>
+                <th>{t('Test')}</th>
+                <th>{t('Sample')}</th>
+                <th>{t('Tested')}</th>
+                <th>{t('Result')}</th>
               </tr>
             </thead>
             <tbody>
-              {d.tests.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.number}</td>
-                  <td>{t.kind}</td>
-                  <td>{t.sampleRef}</td>
-                  <td>{t.testedOn}</td>
+              {d.tests.map((x) => (
+                <tr key={x.id}>
+                  <td>{x.number}</td>
+                  <td>{t(x.kind)}</td>
+                  <td>{x.sampleRef}</td>
+                  <td>{x.testedOn}</td>
                   <td>
-                    <Badge tone={TONE[t.outcome] ?? 'neutral'}>{t.outcome}</Badge>
-                    {t.findings.length > 0 && (
-                      <div className="text-xs text-fg-muted">{t.findings.join(' ')}</div>
+                    <Badge tone={TONE[x.outcome] ?? 'neutral'}>{t(x.outcome)}</Badge>
+                    {x.findings.length > 0 && (
+                      <div className="text-xs text-fg-muted">{x.findings.join(' ')}</div>
                     )}
                   </td>
                 </tr>
@@ -540,17 +558,17 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           </Table>
         )}
         <form
-          aria-label="Record a test"
+          aria-label={t('Record a test')}
           className="mt-3 flex flex-wrap items-end gap-3"
           onSubmit={recordTest}
         >
-          <Field label="Test">
+          <Field label={t('Test')}>
             <Select value={test.kind} onChange={(e) => setTest({ ...test, kind: e.target.value })}>
-              <option value="cube">Concrete cubes</option>
-              <option value="slump">Slump</option>
+              <option value="cube">{t('Concrete cubes')}</option>
+              <option value="slump">{t('Slump')}</option>
             </Select>
           </Field>
-          <Field label="Sample">
+          <Field label={t('Sample')}>
             <Input
               value={test.sampleRef}
               onChange={(e) => setTest({ ...test, sampleRef: e.target.value })}
@@ -558,14 +576,14 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           </Field>
           {test.kind === 'cube' ? (
             <>
-              <Field label="Grade">
+              <Field label={t('Grade')}>
                 <Input
                   value={test.grade}
                   onChange={(e) => setTest({ ...test, grade: e.target.value })}
                   className="w-20"
                 />
               </Field>
-              <Field label="Age (days)">
+              <Field label={t('Age (days)')}>
                 <Select
                   value={test.age}
                   onChange={(e) => setTest({ ...test, age: e.target.value })}
@@ -574,7 +592,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                   <option value="28">28</option>
                 </Select>
               </Field>
-              <Field label="Three cubes (N/mm²)">
+              <Field label={t('Three cubes (N/mm²)')}>
                 <Input
                   value={test.cubes}
                   placeholder="26.5, 24, 25"
@@ -585,7 +603,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
             </>
           ) : (
             <>
-              <Field label="Specified (mm)">
+              <Field label={t('Specified (mm)')}>
                 <Input
                   inputMode="numeric"
                   value={test.slump}
@@ -593,7 +611,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                   required
                 />
               </Field>
-              <Field label="Measured (mm)">
+              <Field label={t('Measured (mm)')}>
                 <Input
                   inputMode="numeric"
                   value={test.measured}
@@ -603,41 +621,46 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               </Field>
             </>
           )}
-          <Button type="submit">Record</Button>
+          <Button type="submit">{t('Record')}</Button>
         </form>
       </Card>
 
-      <Card title="NCRs">
+      <Card title={t('NCRs')}>
         {d.ncrs.length === 0 ? (
-          <p className="text-sm text-fg-muted">None.</p>
+          <p className="text-sm text-fg-muted">{t('None.')}</p>
         ) : (
           <ul className="space-y-1 text-sm">
             {d.ncrs.map((n) => (
               <li key={n.id} data-testid={`ncr-${n.number}`}>
                 <strong>{n.number}</strong>{' '}
-                <Badge tone={TONE[n.status] ?? 'neutral'}>{label(n.status)}</Badge> {n.description}
+                <Badge tone={TONE[n.status] ?? 'neutral'}>{t(label(n.status))}</Badge>{' '}
+                {n.description}
               </li>
             ))}
           </ul>
         )}
       </Card>
 
-      <Card title="Snags">
+      <Card title={t('Snags')}>
         {d.snags.length > 0 && (
           <ul className="mb-3 space-y-1 text-sm">
             {d.snags.map((s) => (
               <li key={s.id} className="flex items-center gap-2">
                 {s.area}: {s.description}{' '}
-                <Badge tone={TONE[s.status] ?? 'neutral'}>{s.status}</Badge>
+                <Badge tone={TONE[s.status] ?? 'neutral'}>{t(s.status)}</Badge>
                 {s.responsible && <span className="text-fg-muted">{s.responsible}</span>}
                 {s.dueOn && (
                   <span className={s.overdue ? 'text-danger' : 'text-fg-muted'}>
-                    {s.overdue ? 'overdue since' : 'due'} {s.dueOn}
+                    {s.overdue
+                      ? t('overdue since {date}', { date: s.dueOn })
+                      : t('due {date}', { date: s.dueOn })}
                   </span>
                 )}
                 {s.backcharge && (
                   <Badge tone={s.backcharged ? 'success' : 'warning'}>
-                    {s.backcharged ? 'charged' : 'to charge'} ₹{s.backcharge}
+                    {s.backcharged
+                      ? t('charged ₹{amount}', { amount: s.backcharge })
+                      : t('to charge ₹{amount}', { amount: s.backcharge })}
                   </Badge>
                 )}
                 {s.status !== 'closed' && (
@@ -651,7 +674,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                       })
                     }
                   >
-                    {s.status === 'open' ? 'Fixed' : 'Close'}
+                    {s.status === 'open' ? t('Fixed') : t('Close')}
                   </Button>
                 )}
               </li>
@@ -659,7 +682,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           </ul>
         )}
         <form
-          aria-label="New snag"
+          aria-label={t('New snag')}
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -677,14 +700,14 @@ function ProjectQuality({ projectId }: { projectId: string }) {
             );
           }}
         >
-          <Field label="Area">
+          <Field label={t('Area')}>
             <Input
               value={snag.area}
               onChange={(e) => setSnag({ ...snag, area: e.target.value })}
               required
             />
           </Field>
-          <Field label="Snag">
+          <Field label={t('Snag')}>
             <Input
               value={snag.description}
               onChange={(e) => setSnag({ ...snag, description: e.target.value })}
@@ -692,12 +715,12 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               minLength={3}
             />
           </Field>
-          <Field label="Whose to fix">
+          <Field label={t('Whose to fix')}>
             <Select
               value={snag.responsiblePartyId}
               onChange={(e) => setSnag({ ...snag, responsiblePartyId: e.target.value })}
             >
-              <option value="">Our own team</option>
+              <option value="">{t('Our own team')}</option>
               {(vendors.data ?? []).map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
@@ -705,7 +728,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               ))}
             </Select>
           </Field>
-          <Field label="Fix by">
+          <Field label={t('Fix by')}>
             <Input
               type="date"
               value={snag.dueOn}
@@ -713,7 +736,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
             />
           </Field>
           {snag.responsiblePartyId && (
-            <Field label="Back-charge ₹">
+            <Field label={t('Back-charge ₹')}>
               <Input
                 inputMode="decimal"
                 value={snag.backcharge}
@@ -723,7 +746,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
             </Field>
           )}
           <Button type="submit" variant="secondary">
-            Add
+            {t('Add')}
           </Button>
         </form>
       </Card>
@@ -731,21 +754,22 @@ function ProjectQuality({ projectId }: { projectId: string }) {
       <Handovers projectId={projectId} />
       <DefectLiability projectId={projectId} />
 
-      <Card title="Material approvals">
+      <Card title={t('Material approvals')}>
         {d.makeRequired.length > 0 && (
           <p className="mb-2 text-sm text-fg-muted">
-            Ordered only in an approved make:{' '}
-            {d.makeRequired.map((m) => `${m.code} ${m.name}`).join(', ')}.
+            {t('Ordered only in an approved make: {list}.', {
+              list: d.makeRequired.map((m) => `${m.code} ${m.name}`).join(', '),
+            })}
           </p>
         )}
         {d.materialApprovals.length === 0 ? (
-          <p className="text-sm text-fg-muted">None submitted.</p>
+          <p className="text-sm text-fg-muted">{t('None submitted.')}</p>
         ) : (
           <ul className="space-y-1 text-sm">
             {d.materialApprovals.map((a) => (
               <li key={a.id} className="flex items-center gap-2">
                 {a.code} {a.item}: {a.make}{' '}
-                <Badge tone={TONE[a.status] ?? 'neutral'}>{a.status}</Badge>
+                <Badge tone={TONE[a.status] ?? 'neutral'}>{t(a.status)}</Badge>
                 {a.status === 'submitted' && d.mayManage && (
                   <Button
                     type="button"
@@ -756,7 +780,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                       })
                     }
                   >
-                    Approve
+                    {t('Approve')}
                   </Button>
                 )}
               </li>
@@ -781,6 +805,7 @@ interface Handover {
 
 /** Handing an area over (docs/wave8-plan.md step 8d.3): its checklist, and no open snag in it. */
 function Handovers({ projectId }: { projectId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ['handovers', projectId];
   const list = useQuery({
@@ -801,7 +826,7 @@ function Handovers({ projectId }: { projectId: string }) {
     }
   };
   return (
-    <Card title="Handovers">
+    <Card title={t('Handovers')}>
       {error && <Alert tone="danger">{error}</Alert>}
       {(list.data ?? []).length > 0 && (
         <ul className="mb-3 space-y-1 text-sm">
@@ -809,13 +834,18 @@ function Handovers({ projectId }: { projectId: string }) {
             const unticked = h.checklist.filter((c) => !c.ok).length;
             return (
               <li key={h.id} className="flex flex-wrap items-center gap-2">
-                {h.number} {h.area} to {h.handedTo}{' '}
+                {h.number} {t('{area} to {person}', { area: h.area, person: h.handedTo })}{' '}
                 <Badge tone={h.status === 'handed_over' ? 'success' : 'warning'}>
-                  {h.status === 'handed_over' ? `handed over ${h.handedOn}` : label(h.status)}
+                  {h.status === 'handed_over'
+                    ? t('handed over {date}', { date: String(h.handedOn) })
+                    : t(label(h.status))}
                 </Badge>
                 {h.status !== 'handed_over' && (
                   <span className="text-fg-muted">
-                    {unticked} checks open, {h.openSnags} snags open
+                    {t('{checks} checks open, {snags} snags open', {
+                      checks: unticked,
+                      snags: h.openSnags,
+                    })}
                   </span>
                 )}
                 {h.status !== 'handed_over' && (
@@ -826,7 +856,7 @@ function Handovers({ projectId }: { projectId: string }) {
                       void run(`/api/tenant/handovers/${h.id}/hand-over`, { on: today() })
                     }
                   >
-                    Hand over
+                    {t('Hand over')}
                   </Button>
                 )}
                 {h.status !== 'handed_over' && (
@@ -854,7 +884,7 @@ function Handovers({ projectId }: { projectId: string }) {
                     params={{ handoverId: h.id }}
                     className={printLink}
                   >
-                    Certificate
+                    {t('Certificate')}
                   </Link>
                 )}
               </li>
@@ -863,7 +893,7 @@ function Handovers({ projectId }: { projectId: string }) {
         </ul>
       )}
       <form
-        aria-label="New handover"
+        aria-label={t('New handover')}
         className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
@@ -881,14 +911,14 @@ function Handovers({ projectId }: { projectId: string }) {
           }).then((ok) => ok && setForm({ area: '', handedTo: form.handedTo, items: '' }));
         }}
       >
-        <Field label="Area">
+        <Field label={t('Area')}>
           <Input
             value={form.area}
             onChange={(e) => setForm({ ...form, area: e.target.value })}
             required
           />
         </Field>
-        <Field label="Handed to">
+        <Field label={t('Handed to')}>
           <Input
             value={form.handedTo}
             onChange={(e) => setForm({ ...form, handedTo: e.target.value })}
@@ -896,7 +926,7 @@ function Handovers({ projectId }: { projectId: string }) {
             minLength={2}
           />
         </Field>
-        <Field label="Checks, separated by ; (start with + when done)">
+        <Field label={t('Checks, separated by ; (start with + when done)')}>
           <Input
             value={form.items}
             onChange={(e) => setForm({ ...form, items: e.target.value })}
@@ -905,7 +935,7 @@ function Handovers({ projectId }: { projectId: string }) {
           />
         </Field>
         <Button type="submit" variant="secondary">
-          Add handover
+          {t('Add handover')}
         </Button>
       </form>
     </Card>
@@ -939,6 +969,7 @@ interface Dlp {
 
 /** The defect liability period: when each contract's ends, the retention and guarantees it releases, the defects. */
 function DefectLiability({ projectId }: { projectId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ['dlp', projectId];
   const q = useQuery({
@@ -970,13 +1001,16 @@ function DefectLiability({ projectId }: { projectId: string }) {
   };
   const d = q.data;
   return (
-    <Card title="Defect liability">
+    <Card title={t('Defect liability')}>
       {error && <Alert tone="danger">{error}</Alert>}
       {d && (
         <>
           <p className="mb-2 text-sm">
-            Retention held ₹{d.retention.held}, released ₹{d.retention.released}, to recover ₹
-            {d.retention.due}.
+            {t('Retention held ₹{held}, released ₹{released}, to recover ₹{due}.', {
+              held: d.retention.held,
+              released: d.retention.released,
+              due: d.retention.due,
+            })}
           </p>
           {d.contracts.length > 0 && (
             <ul className="mb-3 space-y-1 text-sm">
@@ -984,13 +1018,22 @@ function DefectLiability({ projectId }: { projectId: string }) {
                 <li key={c.id}>
                   {c.reference}:{' '}
                   {c.state === 'not_complete'
-                    ? 'not yet complete'
-                    : `${c.dlpMonths} months ${c.state === 'ended' ? 'ended' : 'ending'} ${c.endsOn}`}
-                  {c.openDefects > 0 && `, ${c.openDefects} defects open`}
+                    ? t('not yet complete')
+                    : t(
+                        c.state === 'ended'
+                          ? '{n} months ended {date}'
+                          : '{n} months ending {date}',
+                        {
+                          n: c.dlpMonths,
+                          date: String(c.endsOn),
+                        },
+                      )}
+                  {c.openDefects > 0 && t(', {n} defects open', { n: c.openDefects })}
                   {c.securities.map((s) => (
                     <span key={s.number} className="text-fg-muted">
                       {' '}
-                      · {label(s.kind)} {s.number} ₹{s.amount} till {s.validUntil}
+                      · {t(label(s.kind))} {s.number}{' '}
+                      {t('₹{amount} till {date}', { amount: s.amount, date: s.validUntil })}
                     </span>
                   ))}
                 </li>
@@ -1004,7 +1047,9 @@ function DefectLiability({ projectId }: { projectId: string }) {
                   {x.reportedOn} {x.area}: {x.description}
                   {x.responsible && <span className="text-fg-muted">{x.responsible}</span>}
                   <Badge tone={x.status === 'fixed' ? 'success' : 'warning'}>
-                    {x.status === 'fixed' ? `fixed ${x.fixedOn}` : x.status}
+                    {x.status === 'fixed'
+                      ? t('fixed {date}', { date: String(x.fixedOn) })
+                      : t(x.status)}
                   </Badge>
                   {x.status === 'open' && (
                     <Button
@@ -1012,7 +1057,7 @@ function DefectLiability({ projectId }: { projectId: string }) {
                       variant="ghost"
                       onClick={() => void run(`/api/tenant/defects/${x.id}/fixed`, { on: today() })}
                     >
-                      Fixed
+                      {t('Fixed')}
                     </Button>
                   )}
                 </li>
@@ -1022,7 +1067,7 @@ function DefectLiability({ projectId }: { projectId: string }) {
         </>
       )}
       <form
-        aria-label="Report a defect"
+        aria-label={t('Report a defect')}
         className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1036,12 +1081,12 @@ function DefectLiability({ projectId }: { projectId: string }) {
           }).then((ok) => ok && setForm({ ...form, description: '' }));
         }}
       >
-        <Field label="Contract">
+        <Field label={t('Contract')}>
           <Select
             value={form.contractId}
             onChange={(e) => setForm({ ...form, contractId: e.target.value })}
           >
-            <option value="">The project</option>
+            <option value="">{t('The project')}</option>
             {(d?.contracts ?? []).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.reference}
@@ -1049,14 +1094,14 @@ function DefectLiability({ projectId }: { projectId: string }) {
             ))}
           </Select>
         </Field>
-        <Field label="Where">
+        <Field label={t('Where')}>
           <Input
             value={form.area}
             onChange={(e) => setForm({ ...form, area: e.target.value })}
             required
           />
         </Field>
-        <Field label="Defect">
+        <Field label={t('Defect')}>
           <Input
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -1064,18 +1109,18 @@ function DefectLiability({ projectId }: { projectId: string }) {
             minLength={3}
           />
         </Field>
-        <Field label="Reported by">
+        <Field label={t('Reported by')}>
           <Input
             value={form.reportedBy}
             onChange={(e) => setForm({ ...form, reportedBy: e.target.value })}
           />
         </Field>
-        <Field label="Whose to fix">
+        <Field label={t('Whose to fix')}>
           <Select
             value={form.responsiblePartyId}
             onChange={(e) => setForm({ ...form, responsiblePartyId: e.target.value })}
           >
-            <option value="">Our own team</option>
+            <option value="">{t('Our own team')}</option>
             {(vendors.data ?? []).map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
@@ -1084,7 +1129,7 @@ function DefectLiability({ projectId }: { projectId: string }) {
           </Select>
         </Field>
         <Button type="submit" variant="secondary">
-          Report
+          {t('Report')}
         </Button>
       </form>
     </Card>
@@ -1092,6 +1137,7 @@ function DefectLiability({ projectId }: { projectId: string }) {
 }
 
 function Templates() {
+  const t = useT();
   const qc = useQueryClient();
   const list = useQuery({
     queryKey: ['qa-templates'],
@@ -1136,22 +1182,30 @@ function Templates() {
     }
   };
   return (
-    <Card title="Checklist templates">
-      <p className="mb-3 text-sm text-fg-muted">Choose a project above to record its quality.</p>
+    <Card title={t('Checklist templates')}>
+      <p className="mb-3 text-sm text-fg-muted">
+        {t('Choose a project above to record its quality.')}
+      </p>
       {list.data && list.data.length > 0 && (
         <ul className="mb-3 space-y-1 text-sm">
-          {list.data.map((t) => (
-            <li key={t.id}>
-              <strong>{t.name}</strong>: {t.items.map((i) => i.text).join('; ')}
+          {list.data.map((x) => (
+            <li key={x.id}>
+              <strong>{x.name}</strong>: {x.items.map((i) => i.text).join('; ')}
             </li>
           ))}
         </ul>
       )}
-      <form aria-label="New checklist template" className="space-y-2" onSubmit={(e) => void add(e)}>
-        <Field label="Name">
+      <form
+        aria-label={t('New checklist template')}
+        className="space-y-2"
+        onSubmit={(e) => void add(e)}
+      >
+        <Field label={t('Name')}>
           <Input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
         </Field>
-        <Field label='Items, one a line ("Cover blocks placed?", "Cover # 40-50", "Remarks (note)")'>
+        <Field
+          label={t('Items, one a line ("Cover blocks placed?", "Cover # 40-50", "Remarks (note)")')}
+        >
           <textarea
             className="h-28 w-full rounded-md border border-line bg-surface p-2 text-sm"
             value={items}
@@ -1159,7 +1213,7 @@ function Templates() {
             required
           />
         </Field>
-        <Button type="submit">Add the template</Button>
+        <Button type="submit">{t('Add the template')}</Button>
       </form>
       {error && <Alert tone="danger">{error}</Alert>}
     </Card>
@@ -1203,6 +1257,7 @@ function unflatten(rows: [string, string][]): Record<string, unknown> {
 
 /** The acceptance values tests are judged against: one version per kind from a date (Quality, for managers). */
 function TestCriteria() {
+  const t = useT();
   const qc = useQueryClient();
   const list = useQuery({
     queryKey: ['test-criteria'],
@@ -1234,25 +1289,26 @@ function TestCriteria() {
     }
   };
   return (
-    <Card title="Test acceptance criteria">
+    <Card title={t('Test acceptance criteria')}>
       <p className="mb-3 text-sm text-fg-muted">
-        Tests are judged against the criteria in force on the day they were tested. A change takes
-        effect from its date; earlier tests keep the old values.
+        {t(
+          'Tests are judged against the criteria in force on the day they were tested. A change takes effect from its date; earlier tests keep the old values.',
+        )}
       </p>
       {list.data && (
         <Table minWidth="36rem">
           <thead>
             <tr>
-              <th>Test</th>
-              <th>From</th>
-              <th>Values</th>
-              <th>Note</th>
+              <th>{t('Test')}</th>
+              <th>{t('From')}</th>
+              <th>{t('Values')}</th>
+              <th>{t('Note')}</th>
             </tr>
           </thead>
-          <tbody aria-label="Test criteria">
+          <tbody aria-label={t('Test criteria')}>
             {list.data.map((c) => (
               <tr key={`${c.kind}-${c.effectiveFrom}`}>
-                <td>{KIND_NAME[c.kind] ?? c.kind}</td>
+                <td>{t(KIND_NAME[c.kind] ?? c.kind)}</td>
                 <td>{c.effectiveFrom}</td>
                 <td className="text-xs">
                   {flatten(c.data)
@@ -1265,9 +1321,13 @@ function TestCriteria() {
           </tbody>
         </Table>
       )}
-      <form aria-label="New criteria" className="mt-4 space-y-3" onSubmit={(e) => void save(e)}>
+      <form
+        aria-label={t('New criteria')}
+        className="mt-4 space-y-3"
+        onSubmit={(e) => void save(e)}
+      >
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Test">
+          <Field label={t('Test')}>
             <Select
               value={kind}
               onChange={(e) => {
@@ -1277,19 +1337,19 @@ function TestCriteria() {
             >
               {KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {KIND_NAME[k]}
+                  {t(KIND_NAME[k]!)}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="In force from">
+          <Field label={t('In force from')}>
             <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} required />
           </Field>
-          <Field label="Note">
+          <Field label={t('Note')}>
             <Input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. IS 456"
+              placeholder={t('e.g. IS 456')}
             />
           </Field>
         </div>
@@ -1309,9 +1369,11 @@ function TestCriteria() {
           ))}
         </div>
         <Button type="submit" disabled={!current.length}>
-          Save criteria
+          {t('Save criteria')}
         </Button>
-        {saved && <Alert tone="success">Saved; tests from that date are judged against it.</Alert>}
+        {saved && (
+          <Alert tone="success">{t('Saved; tests from that date are judged against it.')}</Alert>
+        )}
         {error && <Alert tone="danger">{error}</Alert>}
       </form>
     </Card>
