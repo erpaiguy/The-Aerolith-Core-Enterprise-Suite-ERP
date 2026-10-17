@@ -468,5 +468,52 @@ describe.skipIf(!controlUrl || !adminUrl)('variations (integration)', () => {
     );
     expect((await lines(contract))['V.2']).toBeUndefined();
     expect((await lines(budget))['V.2']).toBeUndefined();
+
+    // The deviation statement (step 8d.5), with a 10% limit: plaster tendered at 400 (480 less VO-001's 80), 450
+    // done, 12.5% over the limit; RCC 105 against 100; the waterproofing an extra item.
+    await ok(
+      post(`/tenant/projects/${projectId}/variations/settings`, { deviationLimitPct: 10 }, manager),
+    );
+    const dev = await ok<{
+      limitPct: number;
+      items: {
+        code: string;
+        tendered: string;
+        executed: string;
+        excessAmount: string;
+        pct: number | null;
+        beyond: string | null;
+      }[];
+      extras: { code: string; executed: string; amount: string; variations: string }[];
+      totals: Record<string, string | number | null>;
+    }>(get(`/tenant/projects/${projectId}/deviation-statement`, manager));
+    expect(dev.limitPct).toBe(10);
+    expect(
+      dev.items.map((i) => [i.code, i.tendered, i.executed, i.excessAmount, i.pct, i.beyond]),
+    ).toEqual([
+      ['A.1', '100.0000', '105.0000', '25000.00', 5, null],
+      ['A.2', '400.0000', '450.0000', '15000.00', 12.5, 'excess'],
+    ]);
+    expect(dev.extras).toEqual([
+      expect.objectContaining({
+        code: 'V.1',
+        executed: '50.0000',
+        amount: '17500.00',
+        variations: 'VO-001',
+      }),
+    ]);
+    expect(dev.totals).toMatchObject({
+      tendered: '620000.00',
+      excess: '40000.00',
+      saving: '0.00',
+      extra: '17500.00',
+      net: '57500.00',
+      beyond: 1,
+    });
+    // The billing switch is left as it was.
+    expect(
+      (await ok<{ billPending: boolean }>(get(`/tenant/projects/${projectId}/variations`, manager)))
+        .billPending,
+    ).toBe(true);
   });
 });

@@ -289,10 +289,23 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
             {(b.terms.escalation?.components.length ?? 0) > 0 && (
               <div className="flex flex-wrap gap-3">
                 {b.terms.escalation!.components.map((c) => (
-                  <Field key={c.key} label={`${c.name} index (base ${c.baseIndex})`}>
+                  <Field
+                    key={c.key}
+                    label={`${c.name} index (base ${c.baseIndex})`}
+                    hint={
+                      b.autoIndices?.[c.key]
+                        ? `From the series: ${Number(b.autoIndices[c.key])}`
+                        : c.seriesKey
+                          ? 'The series lacks a month of this period'
+                          : undefined
+                    }
+                  >
                     <Input
                       className="w-32"
                       value={indices[c.key] ?? ''}
+                      placeholder={
+                        b.autoIndices?.[c.key] ? String(Number(b.autoIndices[c.key])) : ''
+                      }
                       onChange={(e) => setIndices({ ...indices, [c.key]: e.target.value })}
                     />
                   </Field>

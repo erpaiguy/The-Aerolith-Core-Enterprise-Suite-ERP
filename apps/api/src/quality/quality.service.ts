@@ -104,8 +104,13 @@ export class QualityService {
            root_cause AS "rootCause", corrective_action AS "correctiveAction", closing_note AS "closingNote"
          FROM qa.ncr WHERE project_id = ${projectId} ORDER BY number DESC`,
       db`SELECT s.id, s.area, s.description, s.status, s.row_version AS "rowVersion",
-           (SELECT count(*)::int FROM qa.photo f WHERE f.snag_id = s.id) AS photos
-         FROM qa.snag s WHERE s.project_id = ${projectId} ORDER BY s.area, s.created_at`,
+           (SELECT count(*)::int FROM qa.photo f WHERE f.snag_id = s.id) AS photos,
+           pa.name AS responsible, s.responsible_party_id AS "responsiblePartyId",
+           to_char(s.due_on, 'YYYY-MM-DD') AS "dueOn", s.backcharge::text AS backcharge,
+           s.backcharged_bill_id IS NOT NULL AS backcharged,
+           s.status = 'open' AND s.due_on < (now() AT TIME ZONE 'Asia/Kolkata')::date AS overdue
+         FROM qa.snag s LEFT JOIN platform.party pa ON pa.id = s.responsible_party_id
+         WHERE s.project_id = ${projectId} ORDER BY s.area, s.created_at`,
       db`SELECT a.id, r.code, r.name AS item, a.make, a.sample_ref AS "sampleRef", a.status, a.comments,
            to_char(a.decided_on, 'YYYY-MM-DD') AS "decidedOn"
          FROM qa.material_approval a JOIN est.resource r ON r.id = a.resource_id
@@ -615,13 +620,21 @@ export class QualityService {
   async addSnag(
     claims: TenantClaims,
     projectId: string,
-    input: { area: string; description: string },
+    input: {
+      area: string;
+      description: string;
+      /** Who answers for it, by when, and its back-charge if they do not (docs/wave8-plan.md step 8d.3). */
+      responsiblePartyId?: string | null | undefined;
+      dueOn?: string | null | undefined;
+      backcharge?: string | null | undefined;
+    },
   ) {
     const db = await this.tenants.forTenant(claims.ten);
     await this.team(db, claims, projectId);
     const [s] = await db<{ id: string }[]>`
-      INSERT INTO qa.snag (project_id, area, description, created_by)
-      VALUES (${projectId}, ${input.area}, ${input.description}, ${claims.sub}) RETURNING id`;
+      INSERT INTO qa.snag (project_id, area, description, responsible_party_id, due_on, backcharge, created_by)
+      VALUES (${projectId}, ${input.area}, ${input.description}, ${input.responsiblePartyId ?? null},
+        ${input.dueOn ?? null}, ${input.backcharge ?? null}, ${claims.sub}) RETURNING id`;
     return { id: s!.id };
   }
 

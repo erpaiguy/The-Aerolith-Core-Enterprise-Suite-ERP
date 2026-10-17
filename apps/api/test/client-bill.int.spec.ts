@@ -577,4 +577,64 @@ describe.skipIf(!controlUrl || !adminUrl)('client bills (integration)', () => {
     expect(rows.at(-1)).toEqual(['Net payable', 207738]);
     expect(rows[0]).toEqual(['RA bill 2 (certified)']);
   });
+  it('takes escalation indices from the index series averaged over the bill period', async () => {
+    // docs/wave8-plan.md step 8d.1. RA 4 runs from the day after RA 3 (1 October) to 15 October: the WPI for October,
+    // 160, stands as the materials index, unless one is typed on the bill. A month missing gives nothing.
+    const series = await ok<{ key: string }[]>(get('/tenant/accounts/price-indices', manager));
+    expect(series.map((x) => x.key)).toContain('wpi_all');
+    const values = {
+      values: [
+        { month: '2026-09', value: '150' },
+        { month: '2026-10', value: '160' },
+      ],
+    };
+    expect(
+      (await post('/tenant/accounts/price-indices/wpi_all/values', values, worker)).statusCode,
+    ).toBe(403);
+    await ok(post('/tenant/accounts/price-indices/wpi_all/values', values, manager));
+    const p = await ok<{ terms: Record<string, unknown> & { rowVersion: number } }>(
+      get(`/tenant/projects/${projectId}/client-bills`, manager),
+    );
+    await ok(
+      post(
+        `/tenant/projects/${projectId}/bill-terms`,
+        {
+          ...p.terms,
+          escalation: {
+            factor: '0.85',
+            components: [
+              {
+                key: 'materials',
+                name: 'Materials',
+                sharePct: '50',
+                baseIndex: '150',
+                seriesKey: 'wpi_all',
+              },
+              { key: 'labour', name: 'Labour', sharePct: '30', baseIndex: '200' },
+            ],
+          },
+        },
+        manager,
+      ),
+    );
+    await measure('A.1', '2026-10-10', '5');
+    const [open] = await db<{ id: string }[]>`
+      SELECT id FROM acc.client_bill WHERE project_id = ${projectId} AND ra_no = 3`;
+    const ra3 = await bill(open!.id);
+    await ok(
+      post(
+        `/tenant/client-bills/${ra3.id}/certify`,
+        { rowVersion: ra3.rowVersion, certifiedOn: '2026-10-05' },
+        manager,
+      ),
+    );
+    const ra4 = await ok<Bill & { autoIndices: Record<string, string> }>(
+      post(
+        `/tenant/projects/${projectId}/client-bills`,
+        { upto: '2026-10-15', siteId: surat },
+        manager,
+      ),
+    );
+    expect(ra4.autoIndices).toEqual({ materials: '160.0000' });
+  });
 });

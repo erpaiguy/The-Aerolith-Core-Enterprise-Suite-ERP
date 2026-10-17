@@ -2,11 +2,18 @@
 // JPEG small enough to wait in the outbox and travel in one request.
 
 /** The phone's position, or null when it is refused or not to be had within the time. */
-export function here(timeoutMs = 10_000): Promise<{ latitude: number; longitude: number } | null> {
+export function here(
+  timeoutMs = 10_000,
+): Promise<{ latitude: number; longitude: number; accuracy: number | null } | null> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) return Promise.resolve(null);
   return new Promise((resolve) =>
     navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
+      (p) =>
+        resolve({
+          latitude: p.coords.latitude,
+          longitude: p.coords.longitude,
+          accuracy: Number.isFinite(p.coords.accuracy) ? Math.round(p.coords.accuracy) : null,
+        }),
       () => resolve(null),
       { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 60_000 },
     ),

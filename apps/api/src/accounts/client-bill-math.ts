@@ -6,7 +6,27 @@ import { dec, div, fmt, mul, type Dec } from '../rates/decimal.js';
 export interface EscalationTerms {
   /** The share of the work's value the formula applies to (0.85 in CPWD's clause). */
   factor: string;
-  components: { key: string; name: string; sharePct: string; baseIndex: string }[];
+  /**
+   * Each component's share of the work and its base index; `seriesKey` names the index series whose average over the
+   * bill's period stands as its index when none is typed (docs/wave8-plan.md step 8d.1).
+   */
+  components: {
+    key: string;
+    name: string;
+    sharePct: string;
+    baseIndex: string;
+    seriesKey?: string | null;
+  }[];
+  /** Lines left out of the formula: extra items, and those escalated on their own. */
+  excludeLineKeys?: string[];
+  /** Lines escalated on their own index (steel, cement): the line's whole value × (index − base) ÷ base. */
+  items?: {
+    lineKey: string;
+    key: string;
+    name: string;
+    baseIndex: string;
+    seriesKey?: string | null;
+  }[];
 }
 export interface BillTerms {
   gstPct: string;
@@ -36,6 +56,54 @@ const money = (v: Dec) => fmt(v, 2);
 const max0 = (v: Dec) => (v > 0n ? v : 0n);
 const min = (a: Dec, b: Dec) => (a < b ? a : b);
 
+/**
+ * Escalation (CPWD clause 10CC, docs/wave8-plan.md step 8d.1): the formula component by component on the work's value
+ * less the lines left out or escalated on their own (value × factor × share% × (index − base) ÷ base), and each item
+ * escalated on its own index (its value × (index − base) ÷ base); each to the paisa. A component without its index
+ * comes to nothing.
+ */
+export function escalationOf(
+  terms: EscalationTerms | null,
+  lines: { lineKey: string; amount: string }[],
+  indices: Record<string, string>,
+) {
+  if (!terms) return [] as { key: string; name: string; amount: string }[];
+  const apart = new Set([
+    ...(terms.excludeLineKeys ?? []),
+    ...(terms.items ?? []).map((i) => i.lineKey),
+  ]);
+  const escalable = lines
+    .filter((l) => !apart.has(l.lineKey))
+    .reduce((s, l) => s + dec(l.amount), 0n);
+  const change = (index: string | undefined, baseIndex: string) => {
+    const base = dec(baseIndex);
+    if (index === undefined || index === '' || base === 0n) return null;
+    return div(dec(index) - base, base);
+  };
+  const components = terms.components.map((c) => {
+    const ch = change(indices[c.key], c.baseIndex);
+    if (ch === null) return { key: c.key, name: c.name, amount: '0.00' };
+    const v = mul(mul(mul(escalable, dec(terms.factor)), div(dec(c.sharePct), HUNDRED)), ch);
+    return { key: c.key, name: c.name, amount: money(round2(v)) };
+  });
+  const items = (terms.items ?? []).map((i) => {
+    const ch = change(indices[i.key], i.baseIndex);
+    const value = dec(lines.find((l) => l.lineKey === i.lineKey)?.amount ?? '0');
+    return {
+      key: i.key,
+      name: i.name,
+      amount: ch === null ? '0.00' : money(round2(mul(value, ch))),
+    };
+  });
+  return [...components, ...items];
+}
+
+/** The index series each component and item takes its index from, where one is named. */
+export const seriesOf = (terms: EscalationTerms | null) =>
+  [...(terms?.components ?? []), ...(terms?.items ?? [])]
+    .filter((c) => c.seriesKey)
+    .map((c) => ({ key: c.key, seriesKey: c.seriesKey! }));
+
 export function workBill(input: {
   terms: BillTerms;
   lines: LineIn[];
@@ -56,20 +124,7 @@ export function workBill(input: {
     };
   });
   const gross = lines.reduce((s, l) => s + dec(l.amount), 0n);
-
-  // Escalation, component by component: gross × factor × share% × (index − base) ÷ base, each to the paisa.
-  const escalation = (terms.escalation?.components ?? []).map((c) => {
-    const index = input.indices[c.key];
-    const base = dec(c.baseIndex);
-    if (index === undefined || index === '' || base === 0n)
-      return { key: c.key, name: c.name, amount: '0.00' };
-    const change = div(dec(index) - base, base);
-    const v = mul(
-      mul(mul(gross, dec(terms.escalation!.factor)), div(dec(c.sharePct), HUNDRED)),
-      change,
-    );
-    return { key: c.key, name: c.name, amount: money(round2(v)) };
-  });
+  const escalation = escalationOf(terms.escalation, lines, input.indices);
   const escalationTotal = escalation.reduce((s, e) => s + dec(e.amount), 0n);
 
   const taxable = gross + escalationTotal;

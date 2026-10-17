@@ -163,12 +163,12 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8c.3 Statutory payments and returns
 - [x] 8c.4 Payroll gaps
 - [x] 8c.5 Leave to the reporting manager
-- [ ] 8c exit: full check and browser suite
-- [ ] 8d.1 Price escalation (CPWD 10CC)
-- [ ] 8d.2 Look-ahead with constraints
-- [ ] 8d.3 Snags, handover and defect liability
-- [ ] 8d.4 Geotagged photos and offline site entry
-- [ ] 8d.5 Deviation statement
+- [x] 8c exit: full check and browser suite
+- [x] 8d.1 Price escalation (CPWD 10CC)
+- [x] 8d.2 Look-ahead with constraints
+- [x] 8d.3 Snags, handover and defect liability
+- [x] 8d.4 Geotagged photos and offline site entry
+- [x] 8d.5 Deviation statement
 - [ ] 8d exit: full check and browser suite
 - [ ] 8e.1 Vendor master
 - [ ] 8e.2 Delivery follow-up

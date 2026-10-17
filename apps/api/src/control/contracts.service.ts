@@ -113,6 +113,29 @@ export class ContractsService {
           VALUES (${user}, ${kind}, ${title(r.days)}, ${`/contracts?project=${c!.project_id}`}, ${r.at}, ${source})`;
   }
 
+  /**
+   * Reminders before a client contract's defect liability period ends (docs/wave8-plan.md step 8d.3): the period runs
+   * from completion for the contract's months; at its end the retention held and the performance guarantee are due
+   * back, once the defects reported in it are put right.
+   */
+  private async dlpReminder(tx: TransactionSql, contractId: string) {
+    const [c] = await tx<{ kind: string; reference: string; ends: string | null }[]>`
+      SELECT kind, reference,
+        CASE WHEN completion_on IS NULL THEN NULL
+          ELSE to_char(completion_on + make_interval(months => dlp_months), 'YYYY-MM-DD') END AS ends
+      FROM ctl.contract WHERE id = ${contractId}`;
+    await this.remind(
+      tx,
+      `contract-dlp:${contractId}`,
+      contractId,
+      c?.kind === 'client' ? (c.ends ?? null) : null,
+      [60, 30, 7],
+      (days) =>
+        `Defect liability on ${c!.reference} ends in ${days} days, on ${c!.ends}: clear the defects, then claim back the retention and the performance guarantee`,
+      'dlp_end',
+    );
+  }
+
   // --- contracts ---
 
   async create(claims: TenantClaims, projectId: string, input: ContractInput) {
@@ -154,6 +177,7 @@ export class ContractsService {
       await audit(tx, claims.sub, 'contract.create', 'contract', c!.id, {
         reference: input.reference,
       });
+      await this.dlpReminder(tx, c!.id);
       return c!.id;
     });
     return { id, ...(await this.register(claims, projectId)) };
@@ -181,6 +205,7 @@ export class ContractsService {
           message: 'Someone else changed it; reload and try again.',
         });
       await audit(tx, claims.sub, 'contract.update', 'contract', id, {});
+      await this.dlpReminder(tx, id);
     });
     return this.register(claims, c.project_id);
   }
@@ -453,6 +478,7 @@ export class ContractsService {
       await audit(tx, claims.sub, 'contract.eot_decided', 'contract', e.contract_id, {
         days: input.daysGranted,
       });
+      if (input.daysGranted > 0) await this.dlpReminder(tx, e.contract_id);
     });
     return this.register(claims, c.project_id);
   }

@@ -367,6 +367,43 @@ describe.skipIf(!controlUrl || !adminUrl)('daily site reports (integration)', ()
     expect(img.statusCode).toBe(200);
     expect(img.headers['content-type']).toBe('image/jpeg');
     expect(Buffer.compare(img.rawPayload, jpeg)).toBe(0);
+
+    // A photo kept in the outbox with no signal comes in JSON with when and where it was taken (step 8d.4); the
+    // outbox's retry with the same key does not add it twice.
+    const inline = {
+      caption: 'Column C4 shuttering',
+      takenAt: '2026-10-12T09:15:00+05:30',
+      latitude: 18.52043,
+      longitude: 73.856743,
+      accuracyM: 12,
+      photo: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
+    };
+    const key = { ...worker, 'idempotency-key': `dsr-photo-${randomBytes(8).toString('hex')}` };
+    await ok(post(`/tenant/daily-reports/${monday.id}/photos/inline`, inline, key));
+    const again = await ok<Report & { photos: { latitude: number | null; takenAt: string }[] }>(
+      post(`/tenant/daily-reports/${monday.id}/photos/inline`, inline, key),
+    );
+    expect(again.photos).toHaveLength(2);
+    expect(again.photos[1]).toMatchObject({
+      caption: 'Column C4 shuttering',
+      latitude: 18.52043,
+      longitude: 73.856743,
+      accuracyM: 12,
+    });
+    expect(new Date(again.photos[1]!.takenAt).toISOString()).toBe('2026-10-12T03:45:00.000Z');
+    expect(
+      (
+        await post(
+          `/tenant/daily-reports/${monday.id}/photos/inline`,
+          { ...inline, longitude: null },
+          worker,
+        )
+      ).statusCode,
+    ).toBe(400);
+    monday = await ok<Report>(
+      post(`/tenant/daily-reports/${monday.id}/photos/${again.photos[1]!.id}/remove`, {}, worker),
+    );
+    expect(monday.photos).toHaveLength(1);
   });
 
   it('is submitted, acknowledged by the lead, and corrected with a reason', async () => {

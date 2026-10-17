@@ -866,6 +866,11 @@ export function AppShell() {
               icon: <ReceiptText className="size-4" />,
             },
             {
+              to: '/accounts/price-indices',
+              label: 'Price indices',
+              icon: <TrendingUp className="size-4" />,
+            },
+            {
               to: '/accounts/month-end-accruals',
               label: 'Month-end accruals',
               icon: <CalendarCheck className="size-4" />,

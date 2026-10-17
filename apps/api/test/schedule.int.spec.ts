@@ -328,6 +328,80 @@ describe.skipIf(!controlUrl || !adminUrl)('project schedules (integration)', () 
     expect(la.activities.map((x) => [x.code, x.status])).toEqual([['2', 'not_started']]);
   });
 
+  it('keeps a make-ready log, a weekly work plan and its percent plan complete', async () => {
+    // docs/wave8-plan.md step 8d.2. Superstructure (activity 2) waits on drawings and steel.
+    const a = byCode(plan);
+    const sup = String(a['2']!.id);
+    const add = (kind: string, description: string) =>
+      post(
+        `/tenant/programmes/${plan.id}/constraints`,
+        { activityId: sup, kind, description, dueOn: '2026-11-06' },
+        manager,
+      );
+    expect((await add('drawings', 'Slab reinforcement drawings')).statusCode).toBe(200);
+    const log = await ok<{ id: string; kind: string }[]>(
+      add('material', 'Steel for the first slab'),
+    );
+    expect(log.map((c) => c.kind).sort()).toEqual(['drawings', 'material']);
+    const ready = () =>
+      ok<{ activities: { code: string; ready: boolean; open: number }[] }>(
+        get(`/tenant/programmes/${plan.id}/readiness?weeks=1`, manager),
+      );
+    expect((await ready()).activities).toEqual([
+      expect.objectContaining({ code: '2', ready: false, open: 2 }),
+    ]);
+    for (const c of log)
+      await ok(post(`/tenant/constraints/${c.id}/clear`, { on: '2026-11-05' }, manager));
+    expect((await ready()).activities[0]).toMatchObject({ ready: true, open: 0 });
+
+    // The week of 9 November: three commitments; two done, one missed for want of labour.
+    const week = await ok<{ commitments: { id: string; what: string }[] }>(
+      post(
+        `/tenant/programmes/${plan.id}/weekly-plan`,
+        {
+          weekStart: '2026-11-11',
+          items: [
+            { activityId: sup, what: 'Columns, ground floor' },
+            { activityId: sup, what: 'Slab shuttering' },
+            { activityId: null, what: 'Site office shifted' },
+          ],
+        },
+        manager,
+      ),
+    );
+    const [c1, c2, c3] = week.commitments;
+    expect(
+      (
+        await post(
+          `/tenant/programmes/${plan.id}/weekly-plan/close`,
+          { weekStart: '2026-11-09', results: [{ id: c1!.id, done: false }] },
+          manager,
+        )
+      ).json(),
+    ).toMatchObject({ code: 'reason_needed' });
+    const closed = await ok<{ closed: boolean; ppc: number }>(
+      post(
+        `/tenant/programmes/${plan.id}/weekly-plan/close`,
+        {
+          weekStart: '2026-11-09',
+          results: [
+            { id: c1!.id, done: true },
+            { id: c2!.id, done: false, missReason: 'labour', note: 'Carpenters away' },
+            { id: c3!.id, done: true },
+          ],
+        },
+        manager,
+      ),
+    );
+    expect(closed).toMatchObject({ closed: true, ppc: 66.7 });
+    const trend = await ok<{
+      weeks: { weekStart: string; ppc: number }[];
+      reasons: { reason: string; n: number }[];
+    }>(get(`/tenant/programmes/${plan.id}/ppc`, manager));
+    expect(trend.weeks).toEqual([{ weekStart: '2026-11-09', committed: 3, done: 2, ppc: 66.7 }]);
+    expect(trend.reasons).toEqual([{ reason: 'labour', n: 1 }]);
+  });
+
   it('puts resources on activities and adds up what is needed week by week', async () => {
     const mason = await ok<{ id: string }>(
       post('/tenant/resources', { code: 'L-MASON', name: 'Mason', kind: 'labour', unit: 'day' }),

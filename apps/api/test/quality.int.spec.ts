@@ -585,4 +585,114 @@ describe.skipIf(!controlUrl || !adminUrl)('quality (integration)', () => {
       status: 'issued',
     });
   });
+  it('hands an area over once its snags are closed, and keeps defects in the liability period', async () => {
+    // docs/wave8-plan.md step 8d.3. A snag in Flat 202 answers to a subcontractor, with a back-charge.
+    const tiler = (
+      await ok<{ id: string }>(
+        post('/tenant/parties', { name: 'Shree Tiles', isClient: false, isVendor: true }),
+      )
+    ).id;
+    const snag = await ok<{ id: string }>(
+      post(
+        `/tenant/projects/${projectId}/snags`,
+        {
+          area: 'Flat 202',
+          description: 'Bathroom floor slope wrong',
+          responsiblePartyId: tiler,
+          dueOn: '2026-10-20',
+          backcharge: '4500',
+        },
+        manager,
+      ),
+    );
+    const reg = await ok<{ snags: { id: string; responsible: string; backcharge: string }[] }>(
+      get(`/tenant/projects/${projectId}/quality`, manager),
+    );
+    expect(reg.snags.find((x) => x.id === snag.id)).toMatchObject({
+      responsible: 'Shree Tiles',
+      backcharge: '4500.00',
+    });
+
+    // The handover waits on the checklist and on the open snag.
+    const list = await ok<{ id: string; number: string; openSnags: number }[]>(
+      post(
+        `/tenant/projects/${projectId}/handovers`,
+        {
+          area: 'Flat 202',
+          handedTo: 'Owner, Flat 202',
+          checklist: [
+            { item: 'Keys handed', ok: true },
+            { item: 'Meter readings noted', ok: false },
+          ],
+        },
+        manager,
+      ),
+    );
+    const ho = list[0]!;
+    expect([ho.number, ho.openSnags]).toEqual(['HO-001', 1]);
+    expect(
+      (await post(`/tenant/handovers/${ho.id}/hand-over`, { on: '2026-10-25' }, manager)).json(),
+    ).toMatchObject({
+      code: 'checklist_open',
+    });
+    await ok(post(`/tenant/handovers/${ho.id}/check`, { index: 1, ok: true }, manager));
+    expect(
+      (await post(`/tenant/handovers/${ho.id}/hand-over`, { on: '2026-10-25' }, manager)).json(),
+    ).toMatchObject({ code: 'snags_open' });
+    for (const status of ['fixed', 'closed']) {
+      const r = await ok<{ snags: { id: string; rowVersion: number }[] }>(
+        get(`/tenant/projects/${projectId}/quality`, manager),
+      );
+      await ok(
+        put(
+          `/tenant/snags/${snag.id}`,
+          { status, rowVersion: r.snags.find((x) => x.id === snag.id)!.rowVersion },
+          manager,
+        ),
+      );
+    }
+    const done = await ok<{ status: string; handedOn: string }[]>(
+      post(`/tenant/handovers/${ho.id}/hand-over`, { on: '2026-10-25' }, manager),
+    );
+    expect(done[0]).toMatchObject({ status: 'handed_over', handedOn: '2026-10-25' });
+
+    // The defect liability period of the client contract: completed 31 March 2027, 12 months.
+    await ok(
+      post(
+        `/tenant/projects/${projectId}/contracts`,
+        {
+          kind: 'client',
+          reference: 'ZP/W/2026/7',
+          title: 'Hostel',
+          completionOn: '2027-03-31',
+          dlpMonths: 12,
+        },
+        manager,
+      ),
+    );
+    let dlp = await ok<{
+      contracts: { reference: string; endsOn: string; state: string; openDefects: number }[];
+      defects: { id: string; status: string }[];
+    }>(
+      post(
+        `/tenant/projects/${projectId}/defects`,
+        {
+          area: 'Flat 202',
+          description: 'Seepage below the window',
+          reportedOn: '2027-06-10',
+          reportedBy: 'Owner',
+        },
+        manager,
+      ),
+    );
+    expect(dlp.contracts.find((c) => c.reference === 'ZP/W/2026/7')).toMatchObject({
+      endsOn: '2028-03-31',
+      state: 'running',
+      openDefects: 1,
+    });
+    dlp = await ok(
+      post(`/tenant/defects/${dlp.defects[0]!.id}/fixed`, { on: '2027-06-20' }, manager),
+    );
+    expect(dlp.defects.map((d) => d.status)).toEqual(['fixed']);
+  });
 });

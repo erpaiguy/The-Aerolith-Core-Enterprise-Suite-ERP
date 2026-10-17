@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { formatQty, formatRate, type BoqRow } from '../boq/model';
 import { describeError } from '../lib/format';
+import { sendOrKeep } from '../offline';
 import { shortDate } from '../schedule/model';
 
 interface Dim {
@@ -96,11 +97,14 @@ export function MeasurementBook({
       setBusy(false);
     }
   };
+  const [kept, setKept] = useState(0);
+  // With no signal the entry waits in the outbox (its idempotency key keeps it from posting twice) and goes later.
   const record = () =>
-    save(() =>
-      api.request<Book>(`/api/tenant/boqs/${boqId}/lines/${row.id}/progress`, {
-        method: 'POST',
-        body: {
+    save(async () => {
+      const sent = await sendOrKeep<Book>(
+        `Measurement of ${row.code ?? row.description.slice(0, 40)} on ${on}`,
+        `/api/tenant/boqs/${boqId}/lines/${row.id}/progress`,
+        {
           measuredOn: on,
           description,
           ...(mode === 'qty'
@@ -117,8 +121,11 @@ export function MeasurementBook({
                   })),
               }),
         },
-      }),
-    ).then((ok) => {
+      );
+      if (!sent.queued) return sent.result;
+      setKept((n) => n + 1);
+      return book.data as Book;
+    }).then((ok) => {
       if (ok) {
         setQty('');
         setDims([blank()]);
@@ -327,6 +334,12 @@ export function MeasurementBook({
               />
             </Field>
             {error && <Alert tone="danger">{error}</Alert>}
+            {kept > 0 && (
+              <Alert tone="info">
+                No signal: {kept} entr{kept === 1 ? 'y' : 'ies'} kept on this phone, recorded when
+                the signal returns.
+              </Alert>
+            )}
             <Button type="submit" busy={busy} disabled={mode === 'qty' ? !qty.trim() : total === 0}>
               Record
             </Button>

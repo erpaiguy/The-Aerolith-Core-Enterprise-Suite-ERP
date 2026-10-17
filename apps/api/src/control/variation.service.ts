@@ -622,14 +622,149 @@ export class VariationService implements OnModuleInit {
     return this.get(claims, id);
   }
 
-  async setBillPending(claims: TenantClaims, projectId: string, on: boolean) {
+  async setSettings(
+    claims: TenantClaims,
+    projectId: string,
+    input: { billPending?: boolean | undefined; deviationLimitPct?: number | undefined },
+  ) {
     await this.commercial(claims);
     const db = await this.tenants.forTenant(claims.ten);
     await this.projects.access(db, claims, projectId);
     await db`
-      INSERT INTO ctl.variation_settings (project_id, bill_pending, updated_by) VALUES (${projectId}, ${on}, ${claims.sub})
-      ON CONFLICT (project_id) DO UPDATE SET bill_pending = EXCLUDED.bill_pending, updated_at = now(), updated_by = EXCLUDED.updated_by`;
+      INSERT INTO ctl.variation_settings (project_id, bill_pending, deviation_limit_pct, updated_by)
+      VALUES (${projectId}, ${input.billPending ?? false}, ${input.deviationLimitPct ?? 30}, ${claims.sub})
+      ON CONFLICT (project_id) DO UPDATE SET
+        bill_pending = coalesce(${input.billPending ?? null}::boolean, ctl.variation_settings.bill_pending),
+        deviation_limit_pct = coalesce(${input.deviationLimitPct ?? null}::numeric, ctl.variation_settings.deviation_limit_pct),
+        updated_at = now(), updated_by = EXCLUDED.updated_by`;
     return this.register(claims, projectId);
+  }
+
+  /**
+   * The deviation statement (docs/wave8-plan.md step 8d.5): each item of the live contract BOQs with its tendered
+   * quantity (today's less the applied variations' changes), what is measured to date, the excess or saving at the
+   * contract rate and its percentage against the contract's deviation limit; variations' new items as extra items.
+   */
+  async deviation(claims: TenantClaims, projectId: string) {
+    const db = await this.tenants.forTenant(claims.ten);
+    await this.projects.access(db, claims, projectId);
+    const [p] = await db<{ number: string; name: string; entity_id: string; limit: string }[]>`
+      SELECT p.number, p.name, p.entity_id,
+        coalesce((SELECT deviation_limit_pct FROM ctl.variation_settings WHERE project_id = p.id), 30)::text AS limit
+      FROM proj.project p WHERE p.id = ${projectId}`;
+    const rows = await db<
+      {
+        boq: string;
+        code: string;
+        description: string;
+        unit: string;
+        rate: string;
+        tendered: string;
+        executed: string;
+        extra: boolean;
+        variations: string | null;
+      }[]
+    >`
+      WITH changes AS (
+        SELECT v.contract_boq_id AS boq_id, l.line_key,
+          coalesce(sum(coalesce(l.approved_qty, l.qty)) FILTER (WHERE l.kind = 'change'), 0) AS changed,
+          bool_or(l.kind = 'new') AS extra, string_agg(DISTINCT v.number, ', ') AS variations
+        FROM ctl.variation v JOIN ctl.variation_line l ON l.variation_id = v.id
+        WHERE v.project_id = ${projectId} AND v.applied GROUP BY 1, 2
+      ),
+      done AS (
+        SELECT line_key, sum(qty) AS qty FROM proj.measurement WHERE project_id = ${projectId} GROUP BY line_key
+      )
+      SELECT b.name AS boq, coalesce(n.code, '') AS code, t.description, coalesce(n.unit, '') AS unit,
+        coalesce(n.rate, 0)::text AS rate,
+        CASE WHEN c.extra THEN 0 ELSE coalesce(n.qty, 0) - coalesce(c.changed, 0) END::numeric(20,4)::text AS tendered,
+        coalesce(d.qty, 0)::numeric(20,4)::text AS executed, coalesce(c.extra, false) AS extra, c.variations
+      FROM est.boq b
+      JOIN est.boq_node n ON n.boq_id = b.id AND n.node_type = 'item'
+      JOIN est.boq_node_text t ON t.boq_id = n.boq_id AND t.node_id = n.id
+      LEFT JOIN changes c ON c.boq_id = b.id AND c.line_key = n.line_key
+      LEFT JOIN done d ON d.line_key = n.line_key
+      WHERE b.project_id = ${projectId} AND b.kind = 'contract' AND b.archived_at IS NULL
+      ORDER BY b.created_at, n.sort_key`;
+    const limit = Number(p!.limit);
+    const sum = { tendered: 0n, executed: 0n, excess: 0n, saving: 0n, extra: 0n };
+    const items = [];
+    const extras = [];
+    for (const r of rows) {
+      const [rate, tendered, executed] = [r4(r.rate), r4(r.tendered), r4(r.executed)];
+      const done = amount(executed, rate);
+      if (r.extra) {
+        sum.extra += done;
+        extras.push({
+          boq: r.boq,
+          code: r.code,
+          description: r.description,
+          unit: r.unit,
+          rate: r.rate,
+          executed: r.executed,
+          amount: fromCents(done),
+          variations: r.variations ?? '',
+        });
+        continue;
+      }
+      const diff = executed - tendered;
+      const pct =
+        tendered > 0n ? Math.round((Number(diff) / Number(tendered)) * 10_000) / 100 : null;
+      const [excess, saving] = [diff > 0n ? diff : 0n, diff < 0n ? -diff : 0n];
+      const tAmt = amount(tendered, rate);
+      sum.tendered += tAmt;
+      sum.executed += done;
+      sum.excess += amount(excess, rate);
+      sum.saving += amount(saving, rate);
+      items.push({
+        boq: r.boq,
+        code: r.code,
+        description: r.description,
+        unit: r.unit,
+        rate: r.rate,
+        tendered: r.tendered,
+        tenderedAmount: fromCents(tAmt),
+        executed: r.executed,
+        executedAmount: fromCents(done),
+        excess: s4(excess),
+        excessAmount: fromCents(amount(excess, rate)),
+        saving: s4(saving),
+        savingAmount: fromCents(amount(saving, rate)),
+        pct,
+        /** Beyond the limit: an excess needs sanction (and, past it, new rates); a saving is reported. */
+        beyond:
+          pct === null
+            ? excess > 0n
+              ? ('excess' as const)
+              : null
+            : pct > limit
+              ? ('excess' as const)
+              : -pct > limit
+                ? ('saving' as const)
+                : null,
+        variations: r.variations ?? '',
+      });
+    }
+    const net = sum.excess - sum.saving + sum.extra;
+    return {
+      project: { id: projectId, number: p!.number, name: p!.name, entityId: p!.entity_id },
+      limitPct: limit,
+      items,
+      extras,
+      totals: {
+        tendered: fromCents(sum.tendered),
+        executed: fromCents(sum.executed),
+        excess: fromCents(sum.excess),
+        saving: fromCents(sum.saving),
+        extra: fromCents(sum.extra),
+        net: fromCents(net),
+        netPct:
+          sum.tendered > 0n
+            ? Math.round((Number(net) / Number(sum.tendered)) * 10_000) / 100
+            : null,
+        beyond: items.filter((i) => i.beyond).length,
+      },
+    };
   }
 
   async get(claims: TenantClaims, id: string) {
@@ -688,8 +823,8 @@ export class VariationService implements OnModuleInit {
       );
     }
     const open = ['draft', 'pending', 'submitted'];
-    const [s] = await db<{ bill_pending: boolean }[]>`
-      SELECT bill_pending FROM ctl.variation_settings WHERE project_id = ${projectId}`;
+    const [s] = await db<{ bill_pending: boolean; limit: string }[]>`
+      SELECT bill_pending, deviation_limit_pct::text AS limit FROM ctl.variation_settings WHERE project_id = ${projectId}`;
     const boqs = await db<{ id: string; name: string }[]>`
       SELECT id, name FROM est.boq WHERE project_id = ${projectId} AND kind = 'contract' AND archived_at IS NULL ORDER BY created_at`;
     return {
@@ -704,6 +839,7 @@ export class VariationService implements OnModuleInit {
           .reduce((a, v) => a + cents(v.value), 0n),
       ),
       billPending: s?.bill_pending ?? false,
+      deviationLimitPct: Number(s?.limit ?? 30),
       contractBoqs: boqs,
       mayDecide: await this.permissions.can(claims, 'billing.edit'),
     };

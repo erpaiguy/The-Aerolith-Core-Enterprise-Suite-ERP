@@ -2,7 +2,22 @@
 
 export interface EscalationTerms {
   factor: string;
-  components: { key: string; name: string; sharePct: string; baseIndex: string }[];
+  components: {
+    key: string;
+    name: string;
+    sharePct: string;
+    baseIndex: string;
+    /** The index series whose period average stands as the index (docs/wave8-plan.md step 8d.1). */
+    seriesKey?: string | null;
+  }[];
+  excludeLineKeys?: string[];
+  items?: {
+    lineKey: string;
+    key: string;
+    name: string;
+    baseIndex: string;
+    seriesKey?: string | null;
+  }[];
 }
 export interface BillTerms {
   gstPct: string;
@@ -76,6 +91,8 @@ export interface ClientBill {
   statusReason: string | null;
   terms: BillTerms;
   indices: Record<string, string>;
+  /** What the index series give for the bill's period, where a component names one. */
+  autoIndices?: Record<string, string>;
   intra: boolean;
   submitted: Figures | null;
   certified: Figures | null;

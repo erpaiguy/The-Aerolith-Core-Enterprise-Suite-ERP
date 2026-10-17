@@ -121,6 +121,8 @@ import { RecurringScreen } from './screens/accounts/Recurring';
 import { RevenueRecognitionScreen } from './screens/accounts/RevenueRecognition';
 import { MonthEndAccrualsScreen } from './screens/accounts/MonthEndAccruals';
 import { DebitProposalsScreen } from './screens/accounts/DebitProposals';
+import { MakeReadyScreen } from './screens/MakeReady';
+import { PriceIndicesScreen } from './screens/accounts/PriceIndices';
 import { CompanyDashboardScreen } from './screens/CompanyDashboard';
 import { IncrementsScreen } from './screens/payroll/Increments';
 import { AuditScreen } from './screens/Audit';
@@ -134,6 +136,8 @@ import { ImprestScreen } from './registers/Imprest';
 import { LetterheadSample } from './print/Letterhead';
 import { IssuePrint, OrderPrint, ReceiptPrint } from './print/PurchaseDocs';
 import { Form16aPrint } from './print/TaxDocs';
+import { HandoverPrint } from './print/QualityDocs';
+import { DeviationStatementPrint } from './print/DeviationStatement';
 import { Form16Print } from './print/Form16';
 import {
   ClientBillPrint,
@@ -613,6 +617,22 @@ const receiptPrintRoute = createRoute({
     return <ReceiptPrint receiptId={receiptId} />;
   },
 });
+const handoverPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/handovers/$handoverId',
+  component: function HandoverPrintPage() {
+    const { handoverId } = handoverPrintRoute.useParams();
+    return <HandoverPrint handoverId={handoverId} />;
+  },
+});
+const deviationPrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/deviation-statement/$projectId',
+  component: function DeviationPrintPage() {
+    const { projectId } = deviationPrintRoute.useParams();
+    return <DeviationStatementPrint projectId={projectId} />;
+  },
+});
 const form16aPrintRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/print/form-16a/$entityId/$quarter/$partyId',
@@ -742,6 +762,16 @@ const lookaheadRoute = createRoute({
   component: function LookaheadPage() {
     const { planId } = lookaheadRoute.useParams();
     return <LookaheadPrint planId={planId} />;
+  },
+});
+
+/** Look-ahead with constraints and the weekly work plan (docs/wave8-plan.md step 8d.2). */
+const makeReadyRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: '/programmes/$planId/make-ready',
+  component: function MakeReadyPage() {
+    const { planId } = makeReadyRoute.useParams();
+    return <MakeReadyScreen planId={planId} />;
   },
 });
 
@@ -1109,6 +1139,11 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({
       getParentRoute: () => appLayout,
+      path: '/accounts/price-indices',
+      component: PriceIndicesScreen,
+    }),
+    createRoute({
+      getParentRoute: () => appLayout,
       path: '/company-dashboard',
       component: CompanyDashboardScreen,
     }),
@@ -1219,6 +1254,7 @@ const routeTree = rootRoute.addChildren([
       component: TemplatesScreen,
     }),
     dashboardRoute,
+    makeReadyRoute,
     createRoute({
       getParentRoute: () => appLayout,
       path: '/documents',
@@ -1295,6 +1331,8 @@ const routeTree = rootRoute.addChildren([
   receiptPrintRoute,
   issuePrintRoute,
   form16aPrintRoute,
+  handoverPrintRoute,
+  deviationPrintRoute,
   form16PrintRoute,
   clientBillPrintRoute,
   clientReceiptPrintRoute,

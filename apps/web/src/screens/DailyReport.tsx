@@ -38,6 +38,8 @@ import {
   type WorkLine,
 } from '../project/daily';
 import { shortDate } from '../schedule/model';
+import { sendOrKeep } from '../offline';
+import { here, shrink as shrinkToDataUrl } from './labour/proof';
 
 interface Draft {
   weatherAm: Weather | null;
@@ -877,6 +879,7 @@ function Photos({
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queued, setQueued] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const add = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -884,11 +887,42 @@ function Photos({
     setError(null);
     try {
       let next: DailyReport | null = null;
-      for (const f of Array.from(files))
-        next = await api.upload<DailyReport>(
-          `/api/tenant/daily-reports/${r.id}/photos?caption=${encodeURIComponent(caption.trim())}`,
-          await shrink(f),
+      // Where the phone is now and when each picture was taken (the camera's file time), kept with the photo.
+      const at = await here(5_000);
+      for (const f of Array.from(files)) {
+        const meta = {
+          caption: caption.trim(),
+          takenAt: new Date(f.lastModified || Date.now()).toISOString(),
+          latitude: at?.latitude ?? null,
+          longitude: at?.longitude ?? null,
+          accuracyM: at?.accuracy ?? null,
+        };
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          try {
+            const q = new URLSearchParams({ caption: meta.caption, takenAt: meta.takenAt });
+            if (at) {
+              q.set('latitude', String(at.latitude));
+              q.set('longitude', String(at.longitude));
+              if (at.accuracy !== null) q.set('accuracyM', String(at.accuracy));
+            }
+            next = await api.upload<DailyReport>(
+              `/api/tenant/daily-reports/${r.id}/photos?${q.toString()}`,
+              await shrink(f),
+            );
+            continue;
+          } catch (err) {
+            if (!(err instanceof ApiError && err.status === 0)) throw err;
+          }
+        }
+        // No signal: a smaller copy waits in the outbox with its time and place, and goes when the signal returns.
+        const sent = await sendOrKeep<DailyReport>(
+          `Photo for the daily report of ${r.reportDate}`,
+          `/api/tenant/daily-reports/${r.id}/photos/inline`,
+          { ...meta, photo: await shrinkToDataUrl(f, 1280, 0.7) },
         );
+        if (sent.queued) setQueued((n) => n + 1);
+        else next = sent.result;
+      }
       if (next) onChanged(next);
       setCaption('');
     } catch (err) {
@@ -906,7 +940,28 @@ function Photos({
             <li key={p.id} className="space-y-1">
               <Photo reportId={r.id} id={p.id} caption={p.caption} />
               <div className="flex items-start justify-between gap-1 text-xs">
-                <span>{p.caption}</span>
+                <span>
+                  {p.caption}
+                  {(p.takenAt || p.latitude !== null) && (
+                    <span className="block text-fg-muted">
+                      {p.takenAt && formatDateTime(p.takenAt)}
+                      {p.latitude !== null && p.longitude !== null && (
+                        <>
+                          {' · '}
+                          <a
+                            className="underline"
+                            target="_blank"
+                            rel="noreferrer"
+                            href={`https://www.openstreetmap.org/?mlat=${p.latitude}&mlon=${p.longitude}#map=18/${p.latitude}/${p.longitude}`}
+                          >
+                            {p.latitude.toFixed(5)}, {p.longitude.toFixed(5)}
+                          </a>
+                          {p.accuracyM !== null && ` ±${p.accuracyM} m`}
+                        </>
+                      )}
+                    </span>
+                  )}
+                </span>
                 {editing && (
                   <button
                     type="button"
@@ -955,6 +1010,12 @@ function Photos({
         </div>
       )}
       {!editing && r.photos.length === 0 && <p className="text-sm text-fg-muted">None.</p>}
+      {queued > 0 && (
+        <Alert tone="info">
+          No signal: {queued} photo{queued === 1 ? '' : 's'} kept on this phone, sent when the
+          signal returns.
+        </Alert>
+      )}
       {error && <Alert tone="danger">{error}</Alert>}
     </Card>
   );

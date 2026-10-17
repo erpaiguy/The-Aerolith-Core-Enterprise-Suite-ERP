@@ -591,6 +591,13 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
               >
                 <ListChecks className="size-4" aria-hidden /> Look-ahead
               </Link>
+              <Link
+                to="/programmes/$planId/make-ready"
+                params={{ planId }}
+                className="inline-flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3.5 py-2 text-sm font-medium hover:bg-surface-3"
+              >
+                Weekly plan
+              </Link>
             </>
           )}
           {canEditRole && (

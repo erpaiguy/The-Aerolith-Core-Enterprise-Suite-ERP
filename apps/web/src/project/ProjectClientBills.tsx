@@ -189,6 +189,11 @@ function TermsForm({
   onDone: (next: ProjectBills) => void;
   onCancel: () => void;
 }) {
+  const seriesList = useQuery({
+    queryKey: ['price-indices'],
+    queryFn: () =>
+      api.request<{ key: string; name: string }[]>('/api/tenant/accounts/price-indices'),
+  });
   const [f, setF] = useState({
     gstPct: terms.gstPct,
     retentionPct: terms.retentionPct,
@@ -281,7 +286,7 @@ function TermsForm({
           <fieldset
             key={i}
             aria-label={`Component ${i + 1}`}
-            className="grid gap-2 sm:grid-cols-[1fr_7rem_8rem_auto]"
+            className="grid gap-2 sm:grid-cols-[1fr_7rem_8rem_14rem_auto]"
           >
             <Input
               aria-label="Component"
@@ -311,6 +316,18 @@ function TermsForm({
               value={c.baseIndex}
               onChange={(e) => setComponent(i, { baseIndex: e.target.value })}
             />
+            <Select
+              aria-label="Index series"
+              value={c.seriesKey ?? ''}
+              onChange={(e) => setComponent(i, { seriesKey: e.target.value || null })}
+            >
+              <option value="">Typed on each bill</option>
+              {(seriesList.data ?? []).map((x) => (
+                <option key={x.key} value={x.key}>
+                  {x.name}
+                </option>
+              ))}
+            </Select>
             <Button
               type="button"
               variant="ghost"

@@ -131,7 +131,18 @@ export interface DailyReport {
   }[];
   work: WorkLine[];
   hindrances: HindranceLine[];
-  photos: { id: string; caption: string; mime: string; size: number; createdAt: string }[];
+  photos: {
+    id: string;
+    caption: string;
+    mime: string;
+    size: number;
+    createdAt: string;
+    /** When and where it was taken, as the phone gave them (step 8d.4). */
+    takenAt: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    accuracyM: number | null;
+  }[];
   events: {
     kind: 'submitted' | 'acknowledged' | 'corrected';
     comment: string | null;

@@ -10,7 +10,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import type { Sql, TransactionSql } from 'postgres';
 import { indiaToday } from '../approvals/approval.service.js';
 import type { TenantClaims } from '../auth/auth.service.js';
@@ -20,7 +20,7 @@ import { FileTooLargeError } from '../documents/file-store.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit } from '../tender/tender-records.js';
 import { ProjectService } from './project.service.js';
-import { LabourService } from '../labour/labour.service.js';
+import { LabourService, decodePhoto } from '../labour/labour.service.js';
 
 type Db = Sql | TransactionSql;
 export type Weather = 'clear' | 'cloudy' | 'rain' | 'heavy_rain' | 'storm';
@@ -70,6 +70,14 @@ interface ReportRow {
 }
 
 export const PHOTO_MAX = 8 * 1024 * 1024;
+/** When and where a photo was taken, as the phone gave them (step 8d.4). */
+export interface PhotoMeta {
+  caption: string;
+  takenAt: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  accuracyM: number | null;
+}
 const MISSING_DAYS = 14;
 /** Picture formats by their first bytes. */
 export function imageType(head: Buffer): 'image/jpeg' | 'image/png' | 'image/webp' | null {
@@ -374,10 +382,20 @@ export class DailyReportService {
 
   // --- photos ---
 
+  /** A photo sent in the request's JSON, as the outbox keeps it when there is no signal. */
+  addPhotoInline(claims: TenantClaims, reportId: string, input: PhotoMeta & { photo: string }) {
+    const { photo, ...meta } = input;
+    const { bytes } = decodePhoto(photo);
+    return this.addPhoto(claims, reportId, meta, {
+      stream: Readable.from([bytes]),
+      truncated: () => false,
+    });
+  }
+
   async addPhoto(
     claims: TenantClaims,
     reportId: string,
-    caption: string,
+    meta: PhotoMeta,
     file: { stream: Readable; truncated: () => boolean },
   ) {
     const db = await this.tenants.forTenant(claims.ten);
@@ -408,8 +426,10 @@ export class DailyReportService {
     }
     const key = await store.commit(staged);
     await db.begin(async (tx) => {
-      await tx`INSERT INTO proj.dr_photo (report_id, storage_key, mime, size_bytes, caption, created_by)
-        VALUES (${reportId}, ${key}, ${mime}, ${staged.size}, ${caption}, ${claims.sub})`;
+      await tx`INSERT INTO proj.dr_photo (report_id, storage_key, mime, size_bytes, caption, taken_at, latitude,
+          longitude, accuracy_m, created_by)
+        VALUES (${reportId}, ${key}, ${mime}, ${staged.size}, ${meta.caption}, ${meta.takenAt}, ${meta.latitude},
+          ${meta.longitude}, ${meta.accuracyM}, ${claims.sub})`;
       await tx`UPDATE proj.daily_report SET row_version = row_version + 1, updated_at = now(),
         updated_by = ${claims.sub} WHERE id = ${reportId}`;
     });
@@ -478,7 +498,8 @@ export class DailyReportService {
         WHERE w.report_id = ${reportId} ORDER BY w.position`,
         db`SELECT cause, description, hours::text AS hours, account
         FROM proj.dr_hindrance WHERE report_id = ${reportId} ORDER BY position`,
-        db`SELECT id, caption, mime, size_bytes AS "size", created_at AS "createdAt"
+        db`SELECT id, caption, mime, size_bytes AS "size", created_at AS "createdAt", taken_at AS "takenAt",
+          latitude::float8 AS latitude, longitude::float8 AS longitude, accuracy_m AS "accuracyM"
         FROM proj.dr_photo WHERE report_id = ${reportId} AND removed_at IS NULL ORDER BY created_at`,
         db`SELECT e.kind, e.comment, u.display_name AS actor, e.at
         FROM proj.dr_event e LEFT JOIN platform."user" u ON u.id = e.actor_id

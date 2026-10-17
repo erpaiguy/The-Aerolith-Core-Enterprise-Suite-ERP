@@ -32,6 +32,49 @@ const pct = decimal(2, 3).refine((v) => Number(v) >= 0 && Number(v) <= 100, {
 });
 const positive = (places: number) =>
   decimal(places).refine((v) => Number(v) >= 0, { message: 'Not below nothing' });
+/** Price escalation terms (docs/wave8-plan.md step 8d.1), shared with subcontract work orders. */
+export const escalationTerms = z
+  .object({
+    factor: decimal(4, 2).refine((v) => Number(v) > 0 && Number(v) <= 1, {
+      message: 'Above 0, at most 1',
+    }),
+    components: z
+      .array(
+        z.object({
+          key: z.string().regex(/^[a-z][a-z0-9_]{0,29}$/),
+          name: z.string().trim().min(2).max(60),
+          sharePct: pct,
+          baseIndex: decimal(4, 8).refine((v) => Number(v) > 0, { message: 'More than nothing' }),
+          // docs/wave8-plan.md step 8d.1: the index series whose period average stands as the index.
+          seriesKey: z
+            .string()
+            .regex(/^[a-z0-9_]{2,40}$/)
+            .nullable()
+            .default(null),
+        }),
+      )
+      .min(1)
+      .max(10),
+    excludeLineKeys: z.array(z.uuid()).max(500).default([]),
+    items: z
+      .array(
+        z.object({
+          lineKey: z.uuid(),
+          key: z.string().regex(/^[a-z][a-z0-9_]{0,29}$/),
+          name: z.string().trim().min(2).max(60),
+          baseIndex: decimal(4, 8).refine((v) => Number(v) > 0, { message: 'More than nothing' }),
+          seriesKey: z
+            .string()
+            .regex(/^[a-z0-9_]{2,40}$/)
+            .nullable()
+            .default(null),
+        }),
+      )
+      .max(50)
+      .default([]),
+  })
+  .nullable()
+  .default(null);
 const terms = z.object({
   rowVersion: z.number().int().positive().nullable(),
   gstPct: pct.refine((v) => Number(v) <= 28, { message: 'At most 28%' }),
@@ -44,25 +87,7 @@ const terms = z.object({
     .trim()
     .regex(/^[0-9]{4,8}$/, 'A SAC or HSN code: 4 to 8 digits')
     .default('9954'),
-  escalation: z
-    .object({
-      factor: decimal(4, 2).refine((v) => Number(v) > 0 && Number(v) <= 1, {
-        message: 'Above 0, at most 1',
-      }),
-      components: z
-        .array(
-          z.object({
-            key: z.string().regex(/^[a-z][a-z0-9_]{0,29}$/),
-            name: z.string().trim().min(2).max(60),
-            sharePct: pct,
-            baseIndex: decimal(4, 8).refine((v) => Number(v) > 0, { message: 'More than nothing' }),
-          }),
-        )
-        .min(1)
-        .max(10),
-    })
-    .nullable()
-    .default(null),
+  escalation: escalationTerms,
 });
 const create = z.object({ upto: date, siteId: z.uuid().nullable().default(null) });
 const update = z.object({

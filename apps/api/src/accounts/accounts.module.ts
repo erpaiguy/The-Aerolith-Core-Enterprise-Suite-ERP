@@ -17,6 +17,8 @@ import { LedgerController } from './ledger.controller.js';
 import { DebitProposalService } from './debit-proposal.service.js';
 import { GstTdsService } from './gst-tds.service.js';
 import { ItcReversalService } from './itc-reversal.service.js';
+import { PriceIndexController } from './price-index.controller.js';
+import { PriceIndexService } from './price-index.service.js';
 import { MsmeService } from './msme.service.js';
 import { TdsStatementService } from './tds-statements.service.js';
 import { TaxComplianceController } from './tax-compliance.controller.js';
@@ -49,6 +51,7 @@ import { SubcontractService } from './subcontract.service.js';
     FreeIssueController,
     DebitProposalController,
     TaxComplianceController,
+    PriceIndexController,
     RecurringController,
     LedgerController,
     ClientBillController,
@@ -72,6 +75,7 @@ import { SubcontractService } from './subcontract.service.js';
     GstTdsService,
     TdsStatementService,
     MsmeService,
+    PriceIndexService,
     RecurringService,
     CloseService,
     ClientBillService,

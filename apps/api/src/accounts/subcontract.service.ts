@@ -11,6 +11,8 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import type { Sql, TransactionSql } from 'postgres';
+import { escalationOf, type EscalationTerms } from './client-bill-math.js';
+import { PriceIndexService } from './price-index.service.js';
 import { ApprovalService, type Outcome } from '../approvals/approval.service.js';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { PermissionsService } from '../auth/permissions.js';
@@ -38,6 +40,8 @@ export interface SubcontractTerms {
   advanceRecoveryPct: string;
   labourCessPct: string;
   tdsSection: string | null;
+  /** Price escalation, as on the client's bills (docs/wave8-plan.md step 8d.1). */
+  escalation?: EscalationTerms | null;
 }
 const DEFAULT_TERMS: SubcontractTerms = {
   retentionPct: '0',
@@ -48,6 +52,10 @@ const DEFAULT_TERMS: SubcontractTerms = {
 };
 export interface SubcontractFigures {
   gross: string;
+  /** Price escalation on this bill's work, and the value GST and TDS are worked on (gross + escalation). */
+  escalation?: string;
+  escalationLines?: { key: string; name: string; amount: string }[];
+  taxable?: string;
   cgst: string;
   sgst: string;
   igst: string;
@@ -184,7 +192,7 @@ export class SubcontractService implements OnModuleInit {
     const [t] = await db<(SubcontractTerms & { rowVersion: number })[]>`
       SELECT retention_pct::text AS "retentionPct", retention_cap::text AS "retentionCap",
         advance_recovery_pct::text AS "advanceRecoveryPct", labour_cess_pct::text AS "labourCessPct",
-        tds_section AS "tdsSection", row_version AS "rowVersion"
+        tds_section AS "tdsSection", escalation, row_version AS "rowVersion"
       FROM acc.subcontract_terms WHERE order_id = ${orderId}`;
     return t ?? { ...DEFAULT_TERMS, rowVersion: null };
   }
@@ -196,12 +204,14 @@ export class SubcontractService implements OnModuleInit {
       await this.mustBill(tx, claims, o.project_id);
       await tx`
         INSERT INTO acc.subcontract_terms (order_id, retention_pct, retention_cap, advance_recovery_pct, labour_cess_pct,
-          tds_section, updated_by)
+          tds_section, escalation, updated_by)
         VALUES (${orderId}, ${input.retentionPct}, ${input.retentionCap}, ${input.advanceRecoveryPct},
-          ${input.labourCessPct}, ${input.tdsSection}, ${claims.sub})
+          ${input.labourCessPct}, ${input.tdsSection},
+          ${input.escalation ? tx.json(JSON.parse(JSON.stringify(input.escalation))) : null}, ${claims.sub})
         ON CONFLICT (order_id) DO UPDATE SET retention_pct = EXCLUDED.retention_pct,
           retention_cap = EXCLUDED.retention_cap, advance_recovery_pct = EXCLUDED.advance_recovery_pct,
-          labour_cess_pct = EXCLUDED.labour_cess_pct, tds_section = EXCLUDED.tds_section, updated_at = now(),
+          labour_cess_pct = EXCLUDED.labour_cess_pct, tds_section = EXCLUDED.tds_section,
+          escalation = EXCLUDED.escalation, updated_at = now(),
           updated_by = EXCLUDED.updated_by, row_version = acc.subcontract_terms.row_version + 1`;
       await audit(tx, claims.sub, 'subcontract.terms', 'purchase_order', orderId, { ...input });
     });
@@ -535,6 +545,8 @@ export class SubcontractService implements OnModuleInit {
    */
   private async figures(db: Db, b: BillRow, o: Order): Promise<SubcontractFigures> {
     let [gross, cgst, sgst, igst] = [0n, 0n, 0n, 0n];
+    const worked: { lineKey: string; amount: string }[] = [];
+    let topGst = '0';
     for (const l of await this.lines(db, b.id)) {
       const qty = dec(l.cumQty) - dec(l.prevQty);
       if (qty < 0n)
@@ -544,14 +556,42 @@ export class SubcontractService implements OnModuleInit {
         });
       const amount = r2(mul(qty, dec(l.rate)));
       gross += amount;
+      worked.push({ lineKey: l.lineKey, amount: money(amount) });
+      if (dec(l.gstPct) > dec(topGst)) topGst = l.gstPct;
       if (o.supply === 'intra') {
         const half = r2(mul(amount, div(dec(l.gstPct), dec('200'))));
         cgst += half;
         sgst += half;
       } else if (o.supply === 'inter') igst += r2(mul(amount, div(dec(l.gstPct), dec('100'))));
     }
-    const total = gross + cgst + sgst + igst;
     const t = b.terms;
+    // Price escalation on the bill's work, by the order's terms and the series over the bill's period; taxed at the
+    // order's highest GST rate.
+    const [prev] = await db<{ from: string }[]>`
+      SELECT to_char(upto + 1, 'YYYY-MM-DD') AS from FROM acc.subcontract_bill
+      WHERE order_id = ${b.order_id} AND ra_no = ${b.ra_no - 1} AND status <> 'cancelled'`;
+    const escalationLines = t.escalation
+      ? escalationOf(
+          t.escalation,
+          worked,
+          await PriceIndexService.averages(
+            db,
+            t.escalation,
+            prev?.from ?? `${b.upto.slice(0, 7)}-01`,
+            b.upto,
+          ),
+        )
+      : [];
+    const escalation = escalationLines.reduce((s, e) => s + dec(e.amount), 0n);
+    if (escalation !== 0n) {
+      if (o.supply === 'intra') {
+        const half = r2(mul(escalation, div(dec(topGst), dec('200'))));
+        cgst += half;
+        sgst += half;
+      } else if (o.supply === 'inter') igst += r2(mul(escalation, div(dec(topGst), dec('100'))));
+    }
+    const taxable = gross + escalation;
+    const total = taxable + cgst + sgst + igst;
     let retention = pct(gross, t.retentionPct);
     if (t.retentionCap !== null) {
       const [held] = await db<{ v: string }[]>`
@@ -575,7 +615,7 @@ export class SubcontractService implements OnModuleInit {
       tds = workTds({
         section: s,
         pan: o.pan ?? o.gstin?.slice(2, 12) ?? null,
-        taxable: money(gross),
+        taxable: money(taxable),
         priorTaxable: prior!.taxable,
         priorTaxed: prior!.taxed,
       });
@@ -585,6 +625,9 @@ export class SubcontractService implements OnModuleInit {
     const advance = min(pct(gross, t.advanceRecoveryPct), left, payable > 0n ? payable : 0n);
     return {
       gross: money(gross),
+      escalation: money(escalation),
+      escalationLines,
+      taxable: money(taxable),
       cgst: money(cgst),
       sgst: money(sgst),
       igst: money(igst),
@@ -641,6 +684,14 @@ export class SubcontractService implements OnModuleInit {
         b.status === 'certified'
           ? []
           : await LabourService.unverified(db, o.party_id, String((h as { upto: string }).upto)),
+      // Snags with a back-charge on this subcontractor, not yet charged (docs/wave8-plan.md step 8d.3).
+      snagBackcharges:
+        b.status === 'draft'
+          ? await db`
+              SELECT id, area, description, backcharge::text FROM qa.snag
+              WHERE project_id = ${o.project_id} AND responsible_party_id = ${o.party_id} AND backcharge IS NOT NULL
+                AND backcharged_bill_id IS NULL ORDER BY created_at`
+          : [],
       labourHolds:
         b.status === 'draft'
           ? await LabourService.complianceReasons(
@@ -828,7 +879,7 @@ export class SubcontractService implements OnModuleInit {
         status, tds_section, tds_rate, tds_base, taxable, cgst, sgst, igst, total, tds, payable, narration, source,
         created_by, updated_by)
       VALUES (${o.entity_id}, ${o.party_id}, ${o.id}, ${o.project_id}, ${billNo}, ${b.upto}, ${b.upto}, ${o.supply},
-        'held', ${f.tdsSection}, ${f.tdsRate}, ${f.tdsBase}, ${f.gross}, ${f.cgst}, ${f.sgst}, ${f.igst}, ${f.total},
+        'held', ${f.tdsSection}, ${f.tdsRate}, ${f.tdsBase}, ${f.taxable ?? f.gross}, ${f.cgst}, ${f.sgst}, ${f.igst}, ${f.total},
         ${f.tds}, ${f.payable}, ${`RA ${b.ra_no} to ${b.upto}`}, 'subcontract', ${claims.sub}, ${claims.sub})
       RETURNING id`;
     const cost = await this.ledger.roleAccount(tx, o.entity_id, 'subcontract_cost');
@@ -858,6 +909,20 @@ export class SubcontractService implements OnModuleInit {
         VALUES (${vb!.id}, ${++position}, ${l.lineKey}, ${cost}, ${o.project_id}, ${l.description}, ${l.unit},
           ${fmt(qty, 4)}, ${l.rate}, ${gstPct}, ${money(amount)}, ${money(gst)})`;
       if (amount !== 0n) lines.push(lineOf(cost, money(amount), '0', l.description));
+    }
+    // Price escalation as a line of its own (docs/wave8-plan.md step 8d.1).
+    if (f.escalation && dec(f.escalation) !== 0n) {
+      await tx`INSERT INTO acc.vendor_bill_line (bill_id, position, line_key, account_id, project_id, description, unit,
+          qty, rate, gst_pct, amount, gst)
+        VALUES (${vb!.id}, ${position + 1}, NULL, ${cost}, ${o.project_id}, 'Price escalation', NULL, 1,
+          ${dec(f.escalation) > 0n ? f.escalation : '0'}, 0, ${f.escalation}, 0)`;
+      // Indices that fell bring the cost down.
+      const esc = dec(f.escalation);
+      lines.push(
+        esc > 0n
+          ? lineOf(cost, f.escalation, '0', 'Price escalation')
+          : lineOf(cost, '0', money(-esc), 'Price escalation (indices fell)'),
+      );
     }
     const role = (r: Role) => this.ledger.roleAccount(tx, o.entity_id, r);
     const nz = (v: string) => dec(v) !== 0n;

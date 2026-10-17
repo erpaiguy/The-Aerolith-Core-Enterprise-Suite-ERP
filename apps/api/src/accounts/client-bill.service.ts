@@ -20,6 +20,7 @@ import { nextNumber } from '../tender/numbering.js';
 import { emit } from '../integrations/events.js';
 import { audit } from '../tender/tender-records.js';
 import { fromDb } from './accounts-rules.js';
+import { PriceIndexService } from './price-index.service.js';
 import { workBill, type BillFigures, type BillTerms } from './client-bill-math.js';
 import { LedgerService } from './ledger.service.js';
 
@@ -413,9 +414,24 @@ export class ClientBillService implements OnModuleInit {
   }
 
   /** The bill's figures, on what was billed or (`certified`) on what was certified. */
+  /** The indices the series give for the bill's period: the day after the last bill to this one's date. */
+  private async autoIndices(db: Db, b: BillRow) {
+    const [prev] = await db<{ from: string }[]>`
+      SELECT to_char(upto + 1, 'YYYY-MM-DD') AS from FROM acc.client_bill
+      WHERE project_id = ${b.project_id} AND ra_no = ${b.ra_no - 1} AND status <> 'cancelled'`;
+    return PriceIndexService.averages(
+      db,
+      b.terms.escalation,
+      prev?.from ?? `${b.upto.slice(0, 7)}-01`,
+      b.upto,
+    );
+  }
+
   private async figures(db: Db, b: BillRow, certified: boolean): Promise<BillFigures> {
     const lines = await this.lines(db, b.id);
     const others = await this.deductions(db, b.id);
+    // An index typed on the bill stands; else the series' average over the period (docs/wave8-plan.md step 8d.1).
+    const indices = { ...(await this.autoIndices(db, b)), ...b.indices };
     return workBill({
       terms: b.terms,
       lines: lines.map((l) => ({
@@ -424,7 +440,7 @@ export class ClientBillService implements OnModuleInit {
         prevQty: l.prevQty,
         cumQty: certified ? (l.certQty ?? l.cumQty) : l.cumQty,
       })),
-      indices: b.indices,
+      indices,
       others,
       prior: await this.prior(db, b.project_id, b.ra_no),
       intra: b.intra,
@@ -451,6 +467,7 @@ export class ClientBillService implements OnModuleInit {
       JOIN platform.entity e ON e.id = b.entity_id LEFT JOIN platform.party c ON c.id = p.client_id
       WHERE b.id = ${id}`;
     const working = b.status === 'draft' ? await this.figures(db, b, false) : null;
+    const autoIndices = b.status === 'draft' ? await this.autoIndices(db, b) : {};
     const receipts = await db<
       { id: string; receivedOn: string; amount: string; voucher: string }[]
     >`
@@ -462,6 +479,7 @@ export class ClientBillService implements OnModuleInit {
       lines: await this.lines(db, id),
       deductions: await this.deductions(db, id),
       figures: working,
+      autoIndices,
       receipts,
       approval: await this.approvals.latestFor(db, claims, CLIENT_BILL, id),
       mayEdit: may && b.status === 'draft',
@@ -492,7 +510,11 @@ export class ClientBillService implements OnModuleInit {
           code: 'stale',
           message: 'Someone else changed this bill. Reload.',
         });
-      const keys = new Set((b.terms.escalation?.components ?? []).map((c) => c.key));
+      const keys = new Set(
+        [...(b.terms.escalation?.components ?? []), ...(b.terms.escalation?.items ?? [])].map(
+          (c) => c.key,
+        ),
+      );
       for (const k of Object.keys(input.indices))
         if (!keys.has(k))
           throw new BadRequestException({

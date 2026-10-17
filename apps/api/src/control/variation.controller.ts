@@ -85,9 +85,24 @@ export class VariationController {
   settings(
     @Auth() c: TenantClaims,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodPipe(z.object({ billPending: z.boolean() }))) b: { billPending: boolean },
+    @Body(
+      new ZodPipe(
+        z
+          .object({
+            billPending: z.boolean().optional(),
+            deviationLimitPct: z.number().min(0).max(1000).optional(),
+          })
+          .refine((x) => x.billPending !== undefined || x.deviationLimitPct !== undefined),
+      ),
+    )
+    b: { billPending?: boolean | undefined; deviationLimitPct?: number | undefined },
   ) {
-    return this.variations.setBillPending(c, id, b.billPending);
+    return this.variations.setSettings(c, id, b);
+  }
+
+  @Get('projects/:id/deviation-statement')
+  deviation(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.variations.deviation(c, id);
   }
 
   @Get('variations/:id')

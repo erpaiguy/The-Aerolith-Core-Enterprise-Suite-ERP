@@ -372,10 +372,25 @@ export class QualityController {
         z.object({
           area: z.string().trim().min(1).max(120),
           description: z.string().trim().min(3).max(1000),
+          responsiblePartyId: z.uuid().nullable().default(null),
+          dueOn: z.iso.date().nullable().default(null),
+          backcharge: z
+            .string()
+            .trim()
+            .regex(/^\d{1,12}(\.\d{1,2})?$/)
+            .refine((v) => Number(v) > 0, { message: 'More than nothing' })
+            .nullable()
+            .default(null),
         }),
       ),
     )
-    b: { area: string; description: string },
+    b: {
+      area: string;
+      description: string;
+      responsiblePartyId: string | null;
+      dueOn: string | null;
+      backcharge: string | null;
+    },
   ) {
     return this.quality.addSnag(c, id, b);
   }

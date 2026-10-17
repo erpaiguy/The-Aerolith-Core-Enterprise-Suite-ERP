@@ -13,6 +13,7 @@ import {
   Table,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
@@ -20,6 +21,7 @@ import { today } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
 import { useProjectParam } from '../../lib/project-param';
 import { useFocusForm, useNewParam } from '../../lib/new-param';
+import { printLink } from '../../print/Letterhead';
 
 interface Register {
   variations: {
@@ -35,6 +37,7 @@ interface Register {
   totals: Record<string, { count: number; value: string }>;
   atRisk: string;
   billPending: boolean;
+  deviationLimitPct: number;
   mayDecide: boolean;
 }
 interface Variation {
@@ -234,6 +237,41 @@ function ProjectVariations({ projectId }: { projectId: string }) {
             The contract lets variations be billed while the client&apos;s approval is pending
           </label>
         )}
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          <Link
+            to="/print/deviation-statement/$projectId"
+            params={{ projectId }}
+            className={printLink}
+          >
+            Deviation statement
+          </Link>
+          {d.mayDecide && (
+            <label className="flex items-center gap-2">
+              Deviation limit %
+              <input
+                type="number"
+                min={0}
+                max={1000}
+                step="0.01"
+                className="w-20 rounded-md border border-line bg-surface px-2 py-1"
+                defaultValue={d.deviationLimitPct}
+                onBlur={async (e) => {
+                  const v = Number(e.target.value);
+                  if (!Number.isFinite(v) || v === d.deviationLimitPct) return;
+                  try {
+                    await api.request(`/api/tenant/projects/${projectId}/variations/settings`, {
+                      method: 'POST',
+                      body: { deviationLimitPct: v },
+                    });
+                    refresh();
+                  } catch (err) {
+                    setError(describeError(err));
+                  }
+                }}
+              />
+            </label>
+          )}
+        </div>
       </Card>
 
       {open && <Detail key={open} id={open} mayDecide={d.mayDecide} onChange={refresh} />}

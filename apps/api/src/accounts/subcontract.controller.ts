@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { escalationTerms } from './client-bill.controller.js';
 import type { TenantClaims } from '../auth/auth.service.js';
 import { Auth, RequiresFeatures, TenantAuthGuard } from '../auth/guards.js';
 import { ZodPipe } from '../common/zod.pipe.js';
@@ -32,6 +33,7 @@ const terms = z.object({
     .refine((v) => Number(v) <= 10, { message: 'At most 10%' })
     .default('1'),
   tdsSection: z.enum(['194C', '194J']).nullable().default('194C'),
+  escalation: escalationTerms,
 });
 const measure = z.object({
   lineKey: z.uuid(),

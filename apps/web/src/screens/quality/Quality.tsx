@@ -13,6 +13,7 @@ import {
   Table,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
@@ -20,6 +21,7 @@ import { today } from '../../accounts/model';
 import { describeError } from '../../lib/format';
 import { sendOrKeep } from '../../offline';
 import { useProjectParam } from '../../lib/project-param';
+import { printLink } from '../../print/Letterhead';
 
 interface Register {
   holdUninspected: boolean;
@@ -62,7 +64,18 @@ interface Register {
     rootCause: string;
     correctiveAction: string;
   }[];
-  snags: { id: string; area: string; description: string; status: string; rowVersion: number }[];
+  snags: {
+    id: string;
+    area: string;
+    description: string;
+    status: string;
+    rowVersion: number;
+    responsible: string | null;
+    dueOn: string | null;
+    backcharge: string | null;
+    backcharged: boolean;
+    overdue: boolean;
+  }[];
   materialApprovals: { id: string; code: string; item: string; make: string; status: string }[];
   makeRequired: { id: string; code: string; name: string }[];
   mayManage: boolean;
@@ -183,7 +196,17 @@ function ProjectQuality({ projectId }: { projectId: string }) {
     slump: '',
     measured: '',
   });
-  const [snag, setSnag] = useState({ area: '', description: '' });
+  const [snag, setSnag] = useState({
+    area: '',
+    description: '',
+    responsiblePartyId: '',
+    dueOn: '',
+    backcharge: '',
+  });
+  const vendors = useQuery({
+    queryKey: ['parties', 'vendor'],
+    queryFn: () => api.request<{ id: string; name: string }[]>('/api/tenant/parties?kind=vendor'),
+  });
   if (r.isPending) return <Spinner />;
   if (r.isError) return <Alert tone="danger">{describeError(r.error)}</Alert>;
   const d = r.data;
@@ -606,6 +629,17 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               <li key={s.id} className="flex items-center gap-2">
                 {s.area}: {s.description}{' '}
                 <Badge tone={TONE[s.status] ?? 'neutral'}>{s.status}</Badge>
+                {s.responsible && <span className="text-fg-muted">{s.responsible}</span>}
+                {s.dueOn && (
+                  <span className={s.overdue ? 'text-danger' : 'text-fg-muted'}>
+                    {s.overdue ? 'overdue since' : 'due'} {s.dueOn}
+                  </span>
+                )}
+                {s.backcharge && (
+                  <Badge tone={s.backcharged ? 'success' : 'warning'}>
+                    {s.backcharged ? 'charged' : 'to charge'} ₹{s.backcharge}
+                  </Badge>
+                )}
                 {s.status !== 'closed' && (
                   <Button
                     type="button"
@@ -629,8 +663,17 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void call(`/api/tenant/projects/${projectId}/snags`, 'POST', snag, () =>
-              setSnag({ area: snag.area, description: '' }),
+            void call(
+              `/api/tenant/projects/${projectId}/snags`,
+              'POST',
+              {
+                area: snag.area,
+                description: snag.description,
+                responsiblePartyId: snag.responsiblePartyId || null,
+                dueOn: snag.dueOn || null,
+                backcharge: snag.backcharge || null,
+              },
+              () => setSnag({ ...snag, description: '', backcharge: '' }),
             );
           }}
         >
@@ -649,11 +692,44 @@ function ProjectQuality({ projectId }: { projectId: string }) {
               minLength={3}
             />
           </Field>
+          <Field label="Whose to fix">
+            <Select
+              value={snag.responsiblePartyId}
+              onChange={(e) => setSnag({ ...snag, responsiblePartyId: e.target.value })}
+            >
+              <option value="">Our own team</option>
+              {(vendors.data ?? []).map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Fix by">
+            <Input
+              type="date"
+              value={snag.dueOn}
+              onChange={(e) => setSnag({ ...snag, dueOn: e.target.value })}
+            />
+          </Field>
+          {snag.responsiblePartyId && (
+            <Field label="Back-charge ₹">
+              <Input
+                inputMode="decimal"
+                value={snag.backcharge}
+                onChange={(e) => setSnag({ ...snag, backcharge: e.target.value })}
+                pattern="\d+(\.\d{1,2})?"
+              />
+            </Field>
+          )}
           <Button type="submit" variant="secondary">
             Add
           </Button>
         </form>
       </Card>
+
+      <Handovers projectId={projectId} />
+      <DefectLiability projectId={projectId} />
 
       <Card title="Material approvals">
         {d.makeRequired.length > 0 && (
@@ -689,6 +765,329 @@ function ProjectQuality({ projectId }: { projectId: string }) {
         )}
       </Card>
     </>
+  );
+}
+
+interface Handover {
+  id: string;
+  number: string;
+  area: string;
+  handedTo: string;
+  checklist: { item: string; ok: boolean; note: string }[];
+  status: string;
+  handedOn: string | null;
+  openSnags: number;
+}
+
+/** Handing an area over (docs/wave8-plan.md step 8d.3): its checklist, and no open snag in it. */
+function Handovers({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const key = ['handovers', projectId];
+  const list = useQuery({
+    queryKey: key,
+    queryFn: () => api.request<Handover[]>(`/api/tenant/projects/${projectId}/handovers`),
+  });
+  const [form, setForm] = useState({ area: '', handedTo: '', items: '' });
+  const [error, setError] = useState<string | null>(null);
+  const run = async (path: string, body: object) => {
+    setError(null);
+    try {
+      await api.request(path, { method: 'POST', body });
+      void qc.invalidateQueries({ queryKey: key });
+      return true;
+    } catch (err) {
+      setError(describeError(err));
+      return false;
+    }
+  };
+  return (
+    <Card title="Handovers">
+      {error && <Alert tone="danger">{error}</Alert>}
+      {(list.data ?? []).length > 0 && (
+        <ul className="mb-3 space-y-1 text-sm">
+          {(list.data ?? []).map((h) => {
+            const unticked = h.checklist.filter((c) => !c.ok).length;
+            return (
+              <li key={h.id} className="flex flex-wrap items-center gap-2">
+                {h.number} {h.area} to {h.handedTo}{' '}
+                <Badge tone={h.status === 'handed_over' ? 'success' : 'warning'}>
+                  {h.status === 'handed_over' ? `handed over ${h.handedOn}` : label(h.status)}
+                </Badge>
+                {h.status !== 'handed_over' && (
+                  <span className="text-fg-muted">
+                    {unticked} checks open, {h.openSnags} snags open
+                  </span>
+                )}
+                {h.status !== 'handed_over' && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      void run(`/api/tenant/handovers/${h.id}/hand-over`, { on: today() })
+                    }
+                  >
+                    Hand over
+                  </Button>
+                )}
+                {h.status !== 'handed_over' && (
+                  <span className="flex w-full flex-wrap gap-3 pl-4">
+                    {h.checklist.map((c, k) => (
+                      <label key={k} className="flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={c.ok}
+                          onChange={(e) =>
+                            void run(`/api/tenant/handovers/${h.id}/check`, {
+                              index: k,
+                              ok: e.target.checked,
+                            })
+                          }
+                        />
+                        {c.item}
+                      </label>
+                    ))}
+                  </span>
+                )}
+                {h.status === 'handed_over' && (
+                  <Link
+                    to="/print/handovers/$handoverId"
+                    params={{ handoverId: h.id }}
+                    className={printLink}
+                  >
+                    Certificate
+                  </Link>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <form
+        aria-label="New handover"
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run(`/api/tenant/projects/${projectId}/handovers`, {
+            area: form.area,
+            handedTo: form.handedTo,
+            checklist: form.items
+              .split(/\n|;/)
+              .map((x) => x.trim())
+              .filter(Boolean)
+              .map((item) => {
+                const ok = item.startsWith('+');
+                return { item: ok ? item.slice(1).trim() : item, ok, note: '' };
+              }),
+          }).then((ok) => ok && setForm({ area: '', handedTo: form.handedTo, items: '' }));
+        }}
+      >
+        <Field label="Area">
+          <Input
+            value={form.area}
+            onChange={(e) => setForm({ ...form, area: e.target.value })}
+            required
+          />
+        </Field>
+        <Field label="Handed to">
+          <Input
+            value={form.handedTo}
+            onChange={(e) => setForm({ ...form, handedTo: e.target.value })}
+            required
+            minLength={2}
+          />
+        </Field>
+        <Field label="Checks, separated by ; (start with + when done)">
+          <Input
+            value={form.items}
+            onChange={(e) => setForm({ ...form, items: e.target.value })}
+            required
+            minLength={2}
+          />
+        </Field>
+        <Button type="submit" variant="secondary">
+          Add handover
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+interface Dlp {
+  retention: { held: string; released: string; due: string };
+  contracts: {
+    id: string;
+    reference: string;
+    completionOn: string | null;
+    endsOn: string | null;
+    dlpMonths: number;
+    state: 'not_complete' | 'running' | 'ended';
+    securities: { kind: string; number: string; amount: string; validUntil: string }[];
+    openDefects: number;
+  }[];
+  defects: {
+    id: string;
+    contractId: string | null;
+    area: string;
+    description: string;
+    reportedOn: string;
+    reportedBy: string;
+    responsible: string | null;
+    status: string;
+    fixedOn: string | null;
+  }[];
+}
+
+/** The defect liability period: when each contract's ends, the retention and guarantees it releases, the defects. */
+function DefectLiability({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const key = ['dlp', projectId];
+  const q = useQuery({
+    queryKey: key,
+    queryFn: () => api.request<Dlp>(`/api/tenant/projects/${projectId}/dlp`),
+  });
+  const vendors = useQuery({
+    queryKey: ['parties', 'vendor'],
+    queryFn: () => api.request<{ id: string; name: string }[]>('/api/tenant/parties?kind=vendor'),
+  });
+  const [form, setForm] = useState({
+    contractId: '',
+    area: '',
+    description: '',
+    reportedBy: '',
+    responsiblePartyId: '',
+  });
+  const [error, setError] = useState<string | null>(null);
+  const run = async (path: string, body: object) => {
+    setError(null);
+    try {
+      await api.request(path, { method: 'POST', body });
+      void qc.invalidateQueries({ queryKey: key });
+      return true;
+    } catch (err) {
+      setError(describeError(err));
+      return false;
+    }
+  };
+  const d = q.data;
+  return (
+    <Card title="Defect liability">
+      {error && <Alert tone="danger">{error}</Alert>}
+      {d && (
+        <>
+          <p className="mb-2 text-sm">
+            Retention held ₹{d.retention.held}, released ₹{d.retention.released}, to recover ₹
+            {d.retention.due}.
+          </p>
+          {d.contracts.length > 0 && (
+            <ul className="mb-3 space-y-1 text-sm">
+              {d.contracts.map((c) => (
+                <li key={c.id}>
+                  {c.reference}:{' '}
+                  {c.state === 'not_complete'
+                    ? 'not yet complete'
+                    : `${c.dlpMonths} months ${c.state === 'ended' ? 'ended' : 'ending'} ${c.endsOn}`}
+                  {c.openDefects > 0 && `, ${c.openDefects} defects open`}
+                  {c.securities.map((s) => (
+                    <span key={s.number} className="text-fg-muted">
+                      {' '}
+                      · {label(s.kind)} {s.number} ₹{s.amount} till {s.validUntil}
+                    </span>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+          {d.defects.length > 0 && (
+            <ul className="mb-3 space-y-1 text-sm">
+              {d.defects.map((x) => (
+                <li key={x.id} className="flex flex-wrap items-center gap-2">
+                  {x.reportedOn} {x.area}: {x.description}
+                  {x.responsible && <span className="text-fg-muted">{x.responsible}</span>}
+                  <Badge tone={x.status === 'fixed' ? 'success' : 'warning'}>
+                    {x.status === 'fixed' ? `fixed ${x.fixedOn}` : x.status}
+                  </Badge>
+                  {x.status === 'open' && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => void run(`/api/tenant/defects/${x.id}/fixed`, { on: today() })}
+                    >
+                      Fixed
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      <form
+        aria-label="Report a defect"
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void run(`/api/tenant/projects/${projectId}/defects`, {
+            contractId: form.contractId || null,
+            area: form.area,
+            description: form.description,
+            reportedOn: today(),
+            reportedBy: form.reportedBy,
+            responsiblePartyId: form.responsiblePartyId || null,
+          }).then((ok) => ok && setForm({ ...form, description: '' }));
+        }}
+      >
+        <Field label="Contract">
+          <Select
+            value={form.contractId}
+            onChange={(e) => setForm({ ...form, contractId: e.target.value })}
+          >
+            <option value="">The project</option>
+            {(d?.contracts ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.reference}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Where">
+          <Input
+            value={form.area}
+            onChange={(e) => setForm({ ...form, area: e.target.value })}
+            required
+          />
+        </Field>
+        <Field label="Defect">
+          <Input
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            required
+            minLength={3}
+          />
+        </Field>
+        <Field label="Reported by">
+          <Input
+            value={form.reportedBy}
+            onChange={(e) => setForm({ ...form, reportedBy: e.target.value })}
+          />
+        </Field>
+        <Field label="Whose to fix">
+          <Select
+            value={form.responsiblePartyId}
+            onChange={(e) => setForm({ ...form, responsiblePartyId: e.target.value })}
+          >
+            <option value="">Our own team</option>
+            {(vendors.data ?? []).map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Button type="submit" variant="secondary">
+          Report
+        </Button>
+      </form>
+    </Card>
   );
 }
 

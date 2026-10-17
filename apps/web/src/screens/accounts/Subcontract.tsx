@@ -124,6 +124,8 @@ interface ScBill {
   /** A labour contractor's months not yet verified as paid (step 13). */
   unverifiedWages?: { month: string; site: string; status: string }[];
   labourHolds?: string[];
+  /** Snags with a back-charge on this subcontractor, not yet on a bill (step 8d.3). */
+  snagBackcharges?: { id: string; area: string; description: string; backcharge: string }[];
   rowVersion: number;
   vendorBill: { id: string; billNo: string; voucher: string | null } | null;
   project: { id: string; number: string; name: string };
@@ -612,6 +614,37 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
       )}
       {(b.labourHolds?.length ?? 0) > 0 && (
         <Alert tone="danger">Held for contract labour compliance: {b.labourHolds!.join(' ')}</Alert>
+      )}
+      {(b.snagBackcharges?.length ?? 0) > 0 && (
+        <Alert tone="warning">
+          Snags to back-charge:{' '}
+          {b
+            .snagBackcharges!.map((x) => `${x.area}: ${x.description} (₹${x.backcharge})`)
+            .join('; ')}
+          .{' '}
+          <Button
+            type="button"
+            variant="secondary"
+            busy={busy === 'snags'}
+            onClick={async () => {
+              setBusy('snags');
+              setError(null);
+              try {
+                await api.request(`/api/tenant/subcontract-bills/${b.id}/snag-backcharges`, {
+                  method: 'POST',
+                  body: {},
+                });
+                onChanged(await api.request<ScBill>(`/api/tenant/subcontract-bills/${b.id}`));
+              } catch (err) {
+                setError(describeError(err));
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            Charge snags
+          </Button>
+        </Alert>
       )}
       {error && <Alert tone="danger">{error}</Alert>}
       <Card title="Items">

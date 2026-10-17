@@ -122,7 +122,20 @@ const acknowledge = z.object({
 const correct = z.object({ reason: z.string().trim().min(3).max(2000) });
 const list = z.object({ siteId: z.uuid().optional() });
 const summary = z.object({ from: date, to: date });
-const photoQuery = z.object({ caption: z.string().trim().max(300).default('') });
+// When and where the photo was taken (step 8d.4); a position comes with both coordinates or neither.
+const photoMeta = z
+  .object({
+    caption: z.string().trim().max(300).default(''),
+    takenAt: z.iso.datetime({ offset: true }).nullable().default(null),
+    latitude: z.coerce.number().min(-90).max(90).nullable().default(null),
+    longitude: z.coerce.number().min(-180).max(180).nullable().default(null),
+    accuracyM: z.coerce.number().int().min(0).max(100_000).nullable().default(null),
+  })
+  .refine((m) => (m.latitude === null) === (m.longitude === null), {
+    message: 'Give both coordinates or neither',
+  });
+const photoQuery = photoMeta;
+const photoInline = photoMeta.and(z.object({ photo: z.string().max(900_000) }));
 
 /** Daily site reports (docs/wave2b-plan.md step 7). Kept to each project's team by the service. */
 @Controller('tenant')
@@ -230,10 +243,23 @@ export class DailyReportController {
       limits: { fileSize: 8 * 1024 * 1024 + 1, files: 1, fields: 0, parts: 1 },
     });
     if (!file) throw new BadRequestException({ code: 'no_file', message: 'No photo was sent.' });
-    return this.reports.addPhoto(c, id, q.caption, {
+    return this.reports.addPhoto(c, id, q, {
       stream: file.file,
       truncated: () => file.file.truncated,
     });
+  }
+
+  /** The same photo in JSON (a data URL of at most 600 KB), so the app's outbox can keep it with no signal. */
+  @Post('daily-reports/:id/photos/inline')
+  @Idempotent()
+  @HttpCode(200)
+  @RequiresFeatures()
+  addPhotoInline(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(photoInline)) b: z.infer<typeof photoInline>,
+  ) {
+    return this.reports.addPhotoInline(c, id, b);
   }
 
   @Get('daily-reports/:id/photos/:photoId')
