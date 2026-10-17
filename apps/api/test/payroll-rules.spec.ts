@@ -2,6 +2,10 @@
 // of the ceiling, ESI rounded up, Maharashtra's professional tax, income tax under both regimes, and a month's TDS.
 import { describe, expect, it } from 'vitest';
 import {
+  bonus,
+  declaredDeductions,
+  instalment,
+  overtimePay,
   esi,
   esiPeriodStart,
   incomeTax,
@@ -144,5 +148,43 @@ describe('payroll rules', () => {
       yearTax: 161200,
       tds: 22967,
     });
+  });
+});
+
+describe('payroll gaps (docs/wave8-plan.md step 8c.4)', () => {
+  it('pays overtime at twice the hourly rate on wages', () => {
+    // ₹31,200 over 30 days of 8 hours = ₹130 an hour; doubled for 6 hours = ₹1,560.
+    expect(overtimePay(31200, 30, 6)).toBe(1560);
+  });
+
+  it('takes the EMI, or what is left', () => {
+    expect([instalment(5000, 12000), instalment(5000, 3000), instalment(5000, 0)]).toEqual([
+      5000, 3000, 0,
+    ]);
+  });
+
+  it('works the bonus on wages within the ceilings', () => {
+    // Twelve months: eight at ₹15,000 (eligible, counted on ₹7,000), four at ₹22,000 (not). 8.33% of ₹56,000.
+    const months = [
+      ...Array.from({ length: 8 }, () => ({ wages: 15000, days: 30 })),
+      ...Array.from({ length: 4 }, () => ({ wages: 22000, days: 30 })),
+    ];
+    expect(bonus(months, 8.33)).toEqual({ eligibleMonths: 8, base: 56000, bonus: 4665 });
+    expect(bonus([{ wages: 10000, days: 20 }], 8.33).bonus).toBe(0);
+  });
+
+  it('counts declarations, proofs once verified, within each cap', () => {
+    const rows = [
+      { section: '80C', declared: 120000, proved: null },
+      { section: '80C', declared: 60000, proved: null },
+      { section: '80D', declared: 25000, proved: null },
+    ];
+    expect(declaredDeductions(rows)).toBe(175000); // 80C capped at ₹1.5 lakh
+    expect(
+      declaredDeductions([
+        { section: '80C', declared: 150000, proved: 90000 },
+        { section: '80D', declared: 25000, proved: null },
+      ]),
+    ).toBe(90000);
   });
 });

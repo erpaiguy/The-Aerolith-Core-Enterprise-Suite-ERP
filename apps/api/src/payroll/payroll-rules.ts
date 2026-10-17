@@ -190,3 +190,66 @@ export const financialYearStart = (month: string) => {
   const [y, m] = [Number(month.slice(0, 4)), Number(month.slice(5, 7))];
   return `${m >= 4 ? y : y - 1}-04`;
 };
+
+// --- payroll gaps (docs/wave8-plan.md step 8c.4) ---
+
+/** Overtime at twice the ordinary rate (Factories Act section 59): the month's wages over the month's days of 8 hours. */
+export function overtimePay(monthlyWages: number, daysInMonth: number, hours: number) {
+  return round2((monthlyWages / (daysInMonth * 8)) * 2 * hours);
+}
+
+/** This month's instalment: the EMI, or what is left of the loan if less. */
+export const instalment = (emi: number, left: number) => round2(Math.max(0, Math.min(emi, left)));
+
+/**
+ * Bonus under the Payment of Bonus Act for a year: for each month the salary (basic and DA, the wages) was within
+ * ₹21,000, the bonus is the percentage of that month's wages, counted on no more than ₹7,000 (or the minimum wage,
+ * if higher). Nothing for someone who worked under 30 days. [Guessing] The CA confirms the year's ceilings.
+ */
+export function bonus(
+  months: { wages: number; days: number }[],
+  pct: number,
+  calcCeiling = 7000,
+  eligibility = 21000,
+) {
+  const worked = months.reduce((s, m) => s + m.days, 0);
+  if (worked < 30) return { eligibleMonths: 0, base: 0, bonus: 0 };
+  const eligible = months.filter((m) => m.wages <= eligibility);
+  const base = eligible.reduce((s, m) => s + Math.min(m.wages, calcCeiling), 0);
+  return {
+    eligibleMonths: eligible.length,
+    base: round2(base),
+    bonus: Math.round((base * pct) / 100),
+  };
+}
+
+/** Section caps on what the old regime deducts, per year. [Guessing] The CA confirms the year's limits. */
+export const DECLARATION_CAPS: Record<string, number | null> = {
+  '80C': 150000,
+  '80CCD1B': 50000,
+  '80D': 75000,
+  '24b': 200000,
+  HRA: null,
+  '80E': null,
+  '80G': null,
+  other: null,
+};
+
+/**
+ * What a year's declarations deduct: verified proofs once any are verified, else what was declared; each section
+ * within its cap.
+ */
+export function declaredDeductions(
+  rows: { section: string; declared: number; proved: number | null }[],
+) {
+  const useProofs = rows.some((r) => r.proved !== null);
+  const by = new Map<string, number>();
+  for (const r of rows)
+    by.set(r.section, (by.get(r.section) ?? 0) + (useProofs ? (r.proved ?? 0) : r.declared));
+  let total = 0;
+  for (const [section, v] of by) {
+    const cap = DECLARATION_CAPS[section] ?? null;
+    total += cap === null ? v : Math.min(v, cap);
+  }
+  return round2(total);
+}

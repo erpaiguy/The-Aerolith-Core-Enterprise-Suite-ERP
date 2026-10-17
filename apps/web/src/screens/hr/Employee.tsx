@@ -1,5 +1,6 @@
 // An employee (docs/wave3-plan.md step 11): the record (PAN and bank shown in full only to HR), where they have worked,
 // their leave; and a site's attendance register for the project's team.
+import { EmployeePayCard } from '../payroll/EmployeePay';
 import {
   Alert,
   Badge,
@@ -222,6 +223,7 @@ export function EmployeeScreen({ employeeId }: { employeeId: string }) {
       </Card>
       <Deployments employee={d} mayEdit={mayEdit} />
       <SalaryCard employeeId={d.id} />
+      <EmployeePayCard employeeId={d.id} />
       {mayEdit ? (
         <Card title="Letters">
           <div className="flex flex-wrap gap-2">

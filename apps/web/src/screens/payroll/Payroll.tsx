@@ -1,6 +1,7 @@
 // Payroll (docs/wave3-plan.md step 12a): the monthly runs, the compliance rules and pay components; a run worked,
 // adjusted, approved, posted and paid with the bank's file; payslips to print; an employee's salary.
 import { StatutoryDues } from './Statutory';
+import { BonusCard } from './EmployeePay';
 import {
   Alert,
   Badge,
@@ -139,7 +140,12 @@ export function PayrollScreen() {
             ))}
           </div>
           {tab === 'Runs' && <Runs entityId={entityId} />}
-          {tab === 'Year' && <YearForm entityId={entityId} />}
+          {tab === 'Year' && (
+            <>
+              <YearForm entityId={entityId} />
+              <BonusCard entityId={entityId} />
+            </>
+          )}
           {tab === 'Rules' && <Rules />}
           {tab === 'Components' && <Components />}
         </>

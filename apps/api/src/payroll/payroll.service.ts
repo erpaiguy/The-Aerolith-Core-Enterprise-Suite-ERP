@@ -38,6 +38,9 @@ import {
   type PtRule,
   type TaxRule,
   type WagesRule,
+  declaredDeductions,
+  instalment,
+  overtimePay,
 } from './payroll-rules.js';
 
 type Db = Sql | TransactionSql;
@@ -571,13 +574,51 @@ export class PayrollService implements OnModuleInit {
             inWages: j.in_wages,
             taxable: j.taxable,
           });
-        const deductions = mine
+        // Overtime approved for the month (docs/wave8-plan.md step 8c.4), at twice the hourly rate on wages.
+        const [ot] = await tx<{ hours: string }[]>`
+          SELECT coalesce(sum(hours), 0)::text AS hours FROM pay.overtime
+          WHERE employee_id = ${a.employeeId} AND day BETWEEN ${`${month}-01`} AND ${end}`;
+        if (Number(ot!.hours) > 0) {
+          const monthlyWages = sal.lines
+            .filter((l) => l.component.in_wages)
+            .reduce((t, l) => t + l.full, 0);
+          const amount = overtimePay(monthlyWages, days, Number(ot!.hours));
+          earnings.push({
+            code: 'OT',
+            name: `Overtime, ${Number(ot!.hours)} hours`,
+            full: amount,
+            amount,
+            oneOff: true,
+            inWages: false,
+            taxable: true,
+          });
+        }
+        const deductions: { code: string; name: string; amount: number; loanId?: string }[] = mine
           .filter((j) => j.kind === 'deduction')
           .map((j) => ({
             code: j.code,
             name: j.note ? `${j.name}: ${j.note}` : j.name,
             amount: Number(j.amount),
           }));
+        // Loans and advances: this month's instalment of each, until it is recovered.
+        const loans = await tx<{ id: string; kind: string; emi: string; left: string }[]>`
+          SELECT l.id, l.kind, l.emi::text AS emi,
+            (l.principal - coalesce((SELECT sum((d->>'amount')::numeric) FROM pay.run_line x
+              JOIN pay.run r ON r.id = x.run_id, jsonb_array_elements(x.deductions) d
+              WHERE x.employee_id = l.employee_id AND r.id <> ${runId} AND r.status IN ('approved', 'posted', 'paid')
+                AND d->>'loanId' = l.id::text), 0))::text AS left
+          FROM pay.loan l WHERE l.employee_id = ${a.employeeId} AND l.first_month <= ${`${month}-01`}
+          ORDER BY l.given_on`;
+        for (const l of loans) {
+          const amount = instalment(Number(l.emi), Number(l.left));
+          if (amount > 0)
+            deductions.push({
+              code: 'LOAN',
+              name: l.kind === 'loan' ? 'Loan instalment' : 'Salary advance recovered',
+              amount,
+              loanId: l.id,
+            });
+        }
         const gross = earnings.reduce((s, e) => s + e.amount, 0);
         const regular = earnings.filter((e) => !e.oneOff);
         const wages = wagesRule
@@ -620,6 +661,19 @@ export class PayrollService implements OnModuleInit {
           WHERE l.employee_id = ${a.employeeId} AND r.status IN ('approved', 'posted', 'paid')
             AND r.month >= ${fyStart} AND r.month < ${`${month}-01`}`;
         const regime = taxRule[sal.salary.regime];
+        // Old regime: the year's declarations (proofs once verified), or the salary's figure where none is made.
+        const decl = await tx<{ section: string; declared: string; proved: string | null }[]>`
+          SELECT section, declared::text, proved::text FROM pay.tax_declaration
+          WHERE employee_id = ${a.employeeId} AND fy_start = ${Number(fyStart.slice(0, 4))}`;
+        const oldDeductions = decl.length
+          ? declaredDeductions(
+              decl.map((d) => ({
+                section: d.section,
+                declared: Number(d.declared),
+                proved: d.proved === null ? null : Number(d.proved),
+              })),
+            )
+          : Number(sal.salary.old_deductions);
         const taxableRegular = regular.filter((e) => e.taxable).reduce((s, e) => s + e.amount, 0);
         const taxableFull = regular.filter((e) => e.taxable).reduce((s, e) => s + e.full, 0);
         const oneOff = earnings
@@ -633,7 +687,7 @@ export class PayrollService implements OnModuleInit {
           oneOff,
           monthsLeft: monthsLeftInYear(month),
           tdsSoFar: Number(prior!.tds),
-          deductions: sal.salary.regime === 'old' ? Number(sal.salary.old_deductions) : 0,
+          deductions: sal.salary.regime === 'old' ? oldDeductions : 0,
         });
         const net =
           gross -

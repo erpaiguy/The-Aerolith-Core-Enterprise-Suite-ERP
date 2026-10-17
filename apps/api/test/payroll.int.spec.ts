@@ -639,6 +639,89 @@ describe.skipIf(!controlUrl || !adminUrl)('payroll (integration)', () => {
     ).toMatchObject({ code: 'settled' });
   });
 
+  it("pays October's overtime, recovers a loan, counts declarations and works the bonus", async () => {
+    // docs/wave8-plan.md step 8c.4. Raju: 4 hours' overtime on 5 October; a ₹6,000 advance recovered at ₹2,000 a
+    // month from October. Meena (old regime): ₹1.8 lakh declared under 80C, counted at the ₹1.5 lakh cap.
+    await ok(
+      post(`/tenant/payroll/employees/${raju}/overtime`, {
+        day: '2026-10-05',
+        hours: 4,
+        reason: 'Slab casting',
+      }),
+    );
+    expect(
+      (
+        await post(`/tenant/payroll/employees/${raju}/overtime`, { day: '2026-10-05', hours: 2 })
+      ).json(),
+    ).toMatchObject({ code: 'overtime_exists' });
+    const loans = await ok<{ principal: string; voucher: string }[]>(
+      post(`/tenant/payroll/employees/${raju}/loans`, {
+        kind: 'advance',
+        principal: '6000',
+        emi: '2000',
+        firstMonth: '2026-10',
+        givenOn: '2026-10-02',
+        bankAccountId: bank,
+      }),
+    );
+    expect(loans[0]).toMatchObject({ principal: '6000.00', voucher: expect.stringMatching(/^PV/) });
+    await ok(
+      post(`/tenant/payroll/employees/${meena}/declarations`, {
+        fyStart: 2026,
+        section: '80C',
+        description: 'PPF',
+        declared: '120000',
+      }),
+    );
+    const decl = await ok<{ counted: string; rows: { id: string }[] }>(
+      post(`/tenant/payroll/employees/${meena}/declarations`, {
+        fyStart: 2026,
+        section: '80C',
+        description: 'Life insurance',
+        declared: '60000',
+      }),
+    );
+    expect(decl.counted).toBe('150000.00');
+    // The PPF proof shows ₹90,000: once a proof is verified, proofs count.
+    expect(
+      (
+        await ok<{ counted: string }>(
+          post(`/tenant/payroll/declarations/${decl.rows[1]!.id}/verify`, { proved: '90000' }),
+        )
+      ).counted,
+    ).toBe('90000.00');
+
+    const run = await ok<{ id: string }>(
+      post('/tenant/payroll/runs', { entityId, month: '2026-10' }),
+    );
+    const detail = await ok<{
+      lines: {
+        code: string;
+        earnings: { code: string; amount: number }[];
+        deductions: { code: string; amount: number }[];
+      }[];
+    }>(get(`/tenant/payroll/runs/${run.id}`));
+    const rajuLine = detail.lines.find((l) => l.code === 'E002')!;
+    expect(rajuLine.earnings.find((e) => e.code === 'OT')!.amount).toBeGreaterThan(0);
+    expect(rajuLine.deductions.find((d) => d.code === 'LOAN')).toMatchObject({ amount: 2000 });
+    // Overtime of a month whose run is submitted cannot change.
+    await ok(post(`/tenant/payroll/runs/${run.id}/submit`, {}));
+    expect(
+      (
+        await post(`/tenant/payroll/employees/${raju}/overtime`, { day: '2026-10-06', hours: 1 })
+      ).json(),
+    ).toMatchObject({ code: 'month_run' });
+
+    // The bonus for 2026-27 at 8.33%, from the runs; above 20% is refused.
+    const b = await ok<{ employees: { code: string; bonus: number }[] }>(
+      get(`/tenant/payroll/bonus?entityId=${entityId}&year=2026&pct=8.33`),
+    );
+    expect(b.employees.map((e) => e.code)).toContain('E002');
+    expect(
+      (await get(`/tenant/payroll/bonus?entityId=${entityId}&year=2026&pct=25`)).json(),
+    ).toMatchObject({ code: 'bad_pct' });
+  });
+
   it('revises salaries in bulk from an increment sheet, all or none', async () => {
     // docs/wave7-plan.md step 7c.7.
     interface Sheet {
