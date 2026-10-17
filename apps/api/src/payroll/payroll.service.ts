@@ -128,6 +128,19 @@ export class PayrollService implements OnModuleInit {
       });
   }
 
+  /** Reading payroll: the payroll permission, or the one to see it without changing it (step 8g.4). */
+  private async mustSee(claims: TenantClaims) {
+    if (
+      !(await this.permissions.can(claims, 'payroll.run')) &&
+      !(await this.permissions.can(claims, 'payroll.view'))
+    )
+      throw new ForbiddenException({
+        code: 'forbidden',
+        permission: 'payroll.view',
+        message: 'Seeing payroll needs the payroll permission.',
+      });
+  }
+
   private async decided(tx: TransactionSql, id: string, outcome: Outcome) {
     await tx`UPDATE pay.run SET status = ${outcome === 'approved' ? 'approved' : 'draft'},
       row_version = row_version + 1 WHERE id = ${id} AND status = 'pending'`;
@@ -136,7 +149,7 @@ export class PayrollService implements OnModuleInit {
   // --- the rules ---
 
   async rules(claims: TenantClaims) {
-    await this.must(claims);
+    await this.mustSee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     return db`
       SELECT id, kind, state_code AS "stateCode", to_char(effective_from, 'YYYY-MM-DD') AS "effectiveFrom", data, note
@@ -238,7 +251,7 @@ export class PayrollService implements OnModuleInit {
   }
 
   async salaries(claims: TenantClaims, employeeId: string) {
-    await this.must(claims);
+    await this.mustSee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     await this.hr.employee(db, employeeId);
     return db`
@@ -313,7 +326,7 @@ export class PayrollService implements OnModuleInit {
 
   /** Everyone in service on the day, with the salary in force then and its monthly gross. */
   async incrementSheet(claims: TenantClaims, entityId: string, from: string) {
-    await this.must(claims);
+    await this.mustSee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     const people = await db<
       { id: string; code: string; name: string; designation: string | null }[]
@@ -457,7 +470,7 @@ export class PayrollService implements OnModuleInit {
   }
 
   async list(claims: TenantClaims, entityId: string) {
-    await this.must(claims);
+    await this.mustSee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     return db`
       SELECT r.id, to_char(r.month, 'YYYY-MM') AS month, r.status, count(l.employee_id)::int AS employees,
@@ -732,7 +745,7 @@ export class PayrollService implements OnModuleInit {
   }
 
   async get(claims: TenantClaims, runId: string) {
-    await this.must(claims);
+    await this.mustSee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     const x = await this.run(db, runId);
     const lines = await db`
@@ -1036,7 +1049,7 @@ export class PayrollService implements OnModuleInit {
   async payslip(claims: TenantClaims, runId: string, employeeId: string) {
     const db = await this.tenants.forTenant(claims.ten);
     const own = (await this.hr.self(db, claims))?.id === employeeId;
-    if (!own) await this.must(claims);
+    if (!own) await this.mustSee(claims);
     const x = await this.run(db, runId);
     if (own && x.status === 'draft') throw new NotFoundException({ code: 'payslip_not_found' });
     const [l] = await db`

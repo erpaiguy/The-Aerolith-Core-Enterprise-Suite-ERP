@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { Sql, TransactionSql } from 'postgres';
 import type { TenantClaims } from '../auth/auth.service.js';
+import { PermissionsService } from '../auth/permissions.js';
+import { mask } from '../hr/hr-rules.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { TenderSettingsService } from './tender-settings.service.js';
 import { RevisionService } from '../boq/revision.service.js';
@@ -155,6 +157,7 @@ export class TenderService {
     private readonly tenants: TenantConnections,
     private readonly revisions: RevisionService,
     private readonly settings: TenderSettingsService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   // --- parties ---
@@ -179,9 +182,17 @@ export class TenderService {
             : opts.kind === 'competitor'
               ? db`AND is_competitor`
               : db``;
-    return db`SELECT ${db.unsafe(PARTY_COLUMNS)} FROM platform.party WHERE deleted_at IS NULL ${kind}
+    const rows = await db<Record<string, unknown>[]>`
+      SELECT ${db.unsafe(PARTY_COLUMNS)} FROM platform.party WHERE deleted_at IS NULL ${kind}
       ${pattern ? db`AND (name ILIKE ${pattern} OR gstin ILIKE ${pattern} OR contact_name ILIKE ${pattern})` : db``}
       ORDER BY lower(name) LIMIT 500`;
+    // Bank account numbers in full only to those who keep parties or read the books (step 8g.4).
+    if (
+      !(await this.permissions.can(claims, 'tender.edit')) &&
+      !(await this.permissions.can(claims, 'accounts.view'))
+    )
+      for (const r of rows) r.bankAccountNo = mask(r.bankAccountNo as string | null);
+    return rows;
   }
 
   async createParty(claims: TenantClaims, input: PartyInput) {

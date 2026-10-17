@@ -37,6 +37,8 @@ const envSchema = z.object({
   DOCUMENT_DIR: z.string().min(1).optional(),
   DOCUMENT_MAX_MB: z.coerce.number().int().positive().max(2048).default(200),
   DOCUMENT_JANITOR: z.enum(['on', 'off']).optional(),
+  BACKUP_DIR: z.string().min(1).optional(),
+  BACKUP_WORKER: z.enum(['on', 'off']).optional(),
   CLAMD_HOST: z.string().min(1).optional(),
   CLAMD_PORT: z.coerce.number().int().positive().max(65535).default(3310),
   RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
@@ -77,6 +79,8 @@ export interface AppConfig {
   supabase: { apiUrl: string; clientId: string; clientSecret: string; redirectUri: string } | null;
   tenantDbRegion: string;
   provisioningWorker: boolean;
+  /** Tenant backups (docs/wave8-plan.md step 8g.2): where the files go, and the nightly loop. */
+  backup: { dir: string; worker: boolean };
   /** Runs scheduled report exports (docs/wave6-plan.md step 3). */
   reportsWorker: boolean;
   /** Sends webhook deliveries (docs/wave6-plan.md step 6). */
@@ -201,6 +205,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     importDir: e.IMPORT_DIR ?? join(tmpdir(), 'aerolith-imports'),
     importMaxBytes: e.IMPORT_MAX_MB * 1024 * 1024,
     documents: documentsConfig(e),
+    backup: {
+      dir: e.BACKUP_DIR ?? join(process.cwd(), '.backups'),
+      worker: (e.BACKUP_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
+    },
     rateLimitScale: e.RATE_LIMIT_SCALE,
     trustProxy: e.TRUST_PROXY === 'true',
     corsOrigins: e.CORS_ORIGINS.split(',')

@@ -23,6 +23,7 @@ export type Permission =
   | 'dsr.acknowledge'
   | 'hr.view'
   | 'hr.edit'
+  | 'payroll.view'
   | 'payroll.run'
   | 'labour.manage'
   | 'quality.manage'
@@ -30,6 +31,7 @@ export type Permission =
   | 'attendance.mark'
   | 'cost.forecast'
   | 'crm.edit'
+  | 'sales.view'
   | 'sales.edit'
   | 'portal.manage';
 

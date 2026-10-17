@@ -18,6 +18,7 @@ import type { TenantClaims } from '../auth/auth.service.js';
 import { PermissionsService } from '../auth/permissions.js';
 import { ProjectService } from '../project/project.service.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
+import { mask } from '../hr/hr-rules.js';
 import { audit } from '../tender/tender-records.js';
 import {
   agreementValue,
@@ -82,6 +83,19 @@ export class SalesService {
       });
   }
 
+  /** Seeing sales (step 8g.4): the permission to see them, or to sell. */
+  private async maySee(claims: TenantClaims) {
+    if (
+      !(await this.permissions.can(claims, 'sales.view')) &&
+      !(await this.permissions.can(claims, 'sales.edit'))
+    )
+      throw new ForbiddenException({
+        code: 'forbidden',
+        permission: 'sales.view',
+        message: 'Seeing sales needs the permission to see them.',
+      });
+  }
+
   private async setupRow(db: Db, projectId: string): Promise<Setup> {
     const [s] = await db<Setup[]>`
       SELECT project_id, rera_number, to_char(registered_on, 'YYYY-MM-DD') AS registered_on,
@@ -113,6 +127,7 @@ export class SalesService {
   // --- setup, towers, units, plan ---
 
   async overview(claims: TenantClaims, projectId: string) {
+    await this.maySee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     await this.projects.access(db, claims, projectId);
     const setup = await this.setupRow(db, projectId);
@@ -1135,6 +1150,7 @@ export class SalesService {
   }
 
   async booking(claims: TenantClaims, id: string) {
+    await this.maySee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     const b = await this.bookingRow(db, id);
     await this.projects.access(db, claims, b.project_id);
@@ -1155,6 +1171,12 @@ export class SalesService {
         to_char(b.possession_on + interval '5 years', 'YYYY-MM-DD') AS "defectPeriodEnds"
       FROM re.booking b JOIN re.buyer y ON y.id = b.buyer_id JOIN re.unit u ON u.id = b.unit_id
       JOIN re.tower t ON t.id = u.tower_id WHERE b.id = ${id}`;
+    // The buyer's PAN, phone and email in full only to those who sell (step 8g.4).
+    if (head && !(await this.permissions.can(claims, 'sales.edit'))) {
+      head.pan = mask(head.pan as string | null);
+      head.phone = mask(head.phone as string | null);
+      head.email = head.email ? String(head.email).replace(/^(.).*(@.*)$/, '$1•••$2') : head.email;
+    }
     // For the cost sheet and demand letters (docs/wave7-plan.md step 7b.5): the payment plan and the registration.
     const plan = await db`
       SELECT s.position, s.name, s.pct::text, s.trigger, to_char(s.reached_on, 'YYYY-MM-DD') AS "reachedOn"
@@ -1204,6 +1226,7 @@ export class SalesService {
   }
 
   async bookings(claims: TenantClaims, projectId: string) {
+    await this.maySee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     await this.projects.access(db, claims, projectId);
     return db`
@@ -1221,6 +1244,7 @@ export class SalesService {
   // --- the designated account ---
 
   async rera(claims: TenantClaims, projectId: string) {
+    await this.maySee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     await this.projects.access(db, claims, projectId);
     const [x] = await db<
@@ -1354,6 +1378,7 @@ export class SalesService {
 
   /** The figures for MahaRERA's quarterly update, for the quarter ending on `upto`. */
   async quarter(claims: TenantClaims, projectId: string, upto: string) {
+    await this.maySee(claims);
     const db = await this.tenants.forTenant(claims.ten);
     await this.projects.access(db, claims, projectId);
     const m = Number(upto.slice(5, 7));

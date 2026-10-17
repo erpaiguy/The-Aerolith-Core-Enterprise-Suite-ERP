@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AccessProfilesService } from './access-profiles.service.js';
 import { InboxController } from '../inbox/inbox.controller.js';
 import { InboxService } from '../inbox/inbox.service.js';
 import { LicensingModule } from '../licensing/licensing.module.js';
@@ -36,7 +37,8 @@ import { UsersService } from './users.service.js';
     InboxService,
     PermissionsService,
     PermissionGuard,
+    AccessProfilesService,
   ],
-  exports: [OperatorAuthService, PermissionsService, PermissionGuard],
+  exports: [OperatorAuthService, PermissionsService, PermissionGuard, InboxService],
 })
 export class AuthModule {}

@@ -1,5 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { errorMessage } from '../lib/format';
 import { useSession } from '../session/session';
@@ -311,6 +312,85 @@ export function YourNameCard() {
       <Button type="submit" busy={busy} disabled={name.trim().length < 2}>
         Save name
       </Button>
+    </form>
+  );
+}
+
+/** The morning email digest (docs/wave8-plan.md step 8g.3): the person's address, on or off, and today's preview. */
+export function DigestCard() {
+  const data = useQuery({
+    queryKey: ['digest'],
+    queryFn: () =>
+      api.request<{
+        email: string | null;
+        enabled: boolean;
+        preview: { title: string; lines: string[]; more: number }[];
+      }>('/api/tenant/me/digest'),
+  });
+  const qc = useQueryClient();
+  const [email, setEmail] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [saved, setSaved] = useState(false);
+  const { error, busy, run } = useSubmit();
+  const d = data.data;
+  const shownEmail = email ?? d?.email ?? '';
+  const shownEnabled = enabled ?? d?.enabled ?? true;
+  return (
+    <form
+      className="mx-auto mb-6 w-full max-w-sm space-y-3 rounded-lg border border-line bg-surface p-5"
+      aria-label="Morning email"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setSaved(false);
+        void run(async () => {
+          const r = await api.request('/api/tenant/me/digest', {
+            method: 'POST',
+            body: { email: shownEmail, enabled: shownEnabled },
+          });
+          qc.setQueryData(['digest'], r);
+          setEmail(null);
+          setEnabled(null);
+          setSaved(true);
+        });
+      }}
+    >
+      <h2 className="font-semibold">Morning email</h2>
+      <p className="text-sm text-fg-muted">
+        Each morning there is something for you: what is overdue, due this week, waiting on you, and
+        guarantees, insurance, permits and documents about to lapse.
+      </p>
+      <Field label="Email address">
+        <Input type="email" value={shownEmail} onChange={(e) => setEmail(e.target.value)} />
+      </Field>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={shownEnabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
+        Send me the morning email
+      </label>
+      {error && <Alert tone="danger">{error}</Alert>}
+      {saved && <Alert tone="success">Saved.</Alert>}
+      <Button type="submit" busy={busy}>
+        Save
+      </Button>
+      {d && d.preview.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-fg-muted">What it would say today</summary>
+          {d.preview.map((s) => (
+            <div key={s.title} className="mt-2">
+              <p className="font-medium">{s.title}</p>
+              <ul className="list-disc pl-5">
+                {s.lines.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+                {s.more > 0 && <li>and {s.more} more</li>}
+              </ul>
+            </div>
+          ))}
+        </details>
+      )}
     </form>
   );
 }

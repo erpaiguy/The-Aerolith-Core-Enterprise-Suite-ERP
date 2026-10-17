@@ -875,6 +875,7 @@ export function PayslipScreen({ runId, employeeId }: { runId: string; employeeId
 export function SalaryCard({ employeeId }: { employeeId: string }) {
   const qc = useQueryClient();
   const may = usePermission('payroll.run');
+  const see = usePermission('payroll.view') || may;
   const key = ['salary', employeeId];
   const salaries = useQuery({
     queryKey: key,
@@ -896,7 +897,7 @@ export function SalaryCard({ employeeId }: { employeeId: string }) {
           }[];
         }[]
       >(`/api/tenant/payroll/employees/${employeeId}/salary`),
-    enabled: may,
+    enabled: see,
   });
   const components = useComponents();
   const [f, setF] = useState({
@@ -908,7 +909,7 @@ export function SalaryCard({ employeeId }: { employeeId: string }) {
   });
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  if (!may) return null;
+  if (!see) return null;
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -953,62 +954,64 @@ export function SalaryCard({ employeeId }: { employeeId: string }) {
       ) : (
         <p className="mb-3 text-sm text-fg-muted">No salary yet.</p>
       )}
-      <form
-        aria-label="New salary"
-        className="grid gap-3 sm:grid-cols-4"
-        onSubmit={(e) => void save(e)}
-      >
-        <Field label="From">
-          <Input
-            type="date"
-            value={f.from}
-            onChange={(e) => setF({ ...f, from: e.target.value })}
-            required
-          />
-        </Field>
-        {earnings.map((c) => (
-          <Field key={c.id} label={`${c.name} ₹ a month`}>
+      {may && (
+        <form
+          aria-label="New salary"
+          className="grid gap-3 sm:grid-cols-4"
+          onSubmit={(e) => void save(e)}
+        >
+          <Field label="From">
             <Input
-              inputMode="decimal"
-              value={amounts[c.id] ?? ''}
-              onChange={(e) => setAmounts({ ...amounts, [c.id]: e.target.value })}
+              type="date"
+              value={f.from}
+              onChange={(e) => setF({ ...f, from: e.target.value })}
+              required
             />
           </Field>
-        ))}
-        <Field label="PF">
-          <Select value={f.pfMode} onChange={(e) => setF({ ...f, pfMode: e.target.value })}>
-            <option value="ceiling">On wages up to the ceiling</option>
-            <option value="actual">On actual wages</option>
-            <option value="none">Not a member</option>
-          </Select>
-        </Field>
-        <Field label="Tax regime">
-          <Select value={f.regime} onChange={(e) => setF({ ...f, regime: e.target.value })}>
-            <option value="new">New</option>
-            <option value="old">Old</option>
-          </Select>
-        </Field>
-        {f.regime === 'old' && (
-          <Field label="Declared deductions ₹ a year">
-            <Input
-              inputMode="decimal"
-              value={f.oldDeductions}
-              onChange={(e) => setF({ ...f, oldDeductions: e.target.value })}
-            />
+          {earnings.map((c) => (
+            <Field key={c.id} label={`${c.name} ₹ a month`}>
+              <Input
+                inputMode="decimal"
+                value={amounts[c.id] ?? ''}
+                onChange={(e) => setAmounts({ ...amounts, [c.id]: e.target.value })}
+              />
+            </Field>
+          ))}
+          <Field label="PF">
+            <Select value={f.pfMode} onChange={(e) => setF({ ...f, pfMode: e.target.value })}>
+              <option value="ceiling">On wages up to the ceiling</option>
+              <option value="actual">On actual wages</option>
+              <option value="none">Not a member</option>
+            </Select>
           </Field>
-        )}
-        <label className="flex items-center gap-1 pb-2 text-sm">
-          <input
-            type="checkbox"
-            checked={f.esi}
-            onChange={(e) => setF({ ...f, esi: e.target.checked })}
-          />
-          ESI when within its ceiling
-        </label>
-        <div className="flex items-end">
-          <Button type="submit">Save the salary</Button>
-        </div>
-      </form>
+          <Field label="Tax regime">
+            <Select value={f.regime} onChange={(e) => setF({ ...f, regime: e.target.value })}>
+              <option value="new">New</option>
+              <option value="old">Old</option>
+            </Select>
+          </Field>
+          {f.regime === 'old' && (
+            <Field label="Declared deductions ₹ a year">
+              <Input
+                inputMode="decimal"
+                value={f.oldDeductions}
+                onChange={(e) => setF({ ...f, oldDeductions: e.target.value })}
+              />
+            </Field>
+          )}
+          <label className="flex items-center gap-1 pb-2 text-sm">
+            <input
+              type="checkbox"
+              checked={f.esi}
+              onChange={(e) => setF({ ...f, esi: e.target.checked })}
+            />
+            ESI when within its ceiling
+          </label>
+          <div className="flex items-end">
+            <Button type="submit">Save the salary</Button>
+          </div>
+        </form>
+      )}
       {error && <Alert tone="danger">{error}</Alert>}
     </Card>
   );

@@ -1,6 +1,7 @@
 // Admin-configurable permissions per role (owner decision, Wave 1). Admins can always do everything; managers and
 // workers get the defaults below unless the tenant admin changed them (platform.role_permission). A designation (HR,
-// docs/wave3-plan.md step 11) may add permissions to its holders' role, never take any away.
+// docs/wave3-plan.md step 11) may add permissions to its holders' role, never take any away. An access profile (a
+// custom role, docs/wave8-plan.md step 8g.4) replaces a manager's or worker's role permissions with its own.
 import {
   CanActivate,
   ForbiddenException,
@@ -97,6 +98,10 @@ export const PERMISSIONS = {
       'Keep the employee records (with PAN and bank in full), designations, holiday calendars, deployments and leave types',
     defaults: { manager: false, worker: false },
   },
+  'payroll.view': {
+    label: 'See salaries, pay rules and payroll runs without changing or paying them',
+    defaults: { manager: false, worker: false },
+  },
   'payroll.run': {
     label: 'Run payroll: rules, pay components, salaries, the monthly run, posting and paying it',
     defaults: { manager: false, worker: false },
@@ -127,6 +132,11 @@ export const PERMISSIONS = {
   },
   'crm.edit': {
     label: 'Keep leads, contacts and interactions; convert leads to tenders',
+    defaults: { manager: true, worker: false },
+  },
+  'sales.view': {
+    label:
+      "See a project's sales: units, bookings, buyers (PAN and phone in full only with the sales permission), demands",
     defaults: { manager: true, worker: false },
   },
   'sales.edit': {
@@ -161,7 +171,33 @@ export class PermissionsService {
     { at: number; byUser: Map<string, Permission[]> }
   >();
 
+  private readonly profileCache = new Map<
+    string,
+    { at: number; byUser: Map<string, Permission[]> }
+  >();
+
   constructor(private readonly tenants: TenantConnections) {}
+
+  /** The users with an access profile, and its permissions. */
+  private async profiles(tenantId: string, now = Date.now()) {
+    const hit = this.profileCache.get(tenantId);
+    if (hit && now - hit.at < CACHE_MS) return hit.byUser;
+    const db = await this.tenants.forTenant(tenantId);
+    const rows = await db<{ id: string; permissions: string[] }[]>`
+      SELECT u.id, p.permissions FROM platform."user" u
+      JOIN platform.access_profile p ON p.id = u.access_profile_id`;
+    const byUser = new Map(rows.map((r) => [r.id, r.permissions.filter(isPermission)]));
+    this.profileCache.set(tenantId, { at: now, byUser });
+    return byUser;
+  }
+
+  /** What a manager or worker has before their designation: their profile's permissions, else their role's. */
+  private async base(claims: TenantClaims): Promise<(p: Permission) => boolean> {
+    const profile = (await this.profiles(claims.ten)).get(claims.sub);
+    if (profile) return (p) => profile.includes(p);
+    const g = (await this.grants(claims.ten))[claims.role as ConfigurableRole];
+    return (p) => g[p];
+  }
 
   async grants(tenantId: string, now = Date.now()): Promise<Grants> {
     const hit = this.cache.get(tenantId);
@@ -204,20 +240,21 @@ export class PermissionsService {
   /** Designations or employees changed: read them afresh. */
   forget(tenantId: string) {
     this.extraCache.delete(tenantId);
+    this.profileCache.delete(tenantId);
   }
 
   async can(claims: TenantClaims, p: Permission): Promise<boolean> {
     if (claims.role === 'admin') return true;
-    if ((await this.grants(claims.ten))[claims.role][p]) return true;
+    if ((await this.base(claims))(p)) return true;
     return (await this.extras(claims.ten)).get(claims.sub)?.includes(p) ?? false;
   }
 
   async mine(claims: TenantClaims): Promise<Permission[]> {
     const all = Object.keys(PERMISSIONS) as Permission[];
     if (claims.role === 'admin') return all;
-    const g = (await this.grants(claims.ten))[claims.role];
+    const has = await this.base(claims);
     const extra = (await this.extras(claims.ten)).get(claims.sub) ?? [];
-    return all.filter((p) => g[p] || extra.includes(p));
+    return all.filter((p) => has(p) || extra.includes(p));
   }
 
   async set(claims: TenantClaims, role: ConfigurableRole, p: Permission, granted: boolean) {

@@ -40,6 +40,7 @@ import {
   Handshake,
   Inbox as InboxIcon,
   Plug,
+  DatabaseBackup,
   Plus,
   Home,
   ChartPie,
@@ -73,6 +74,7 @@ import { api } from '../api/client';
 import { usePermission } from '../session/permissions';
 import type { Inbox, ProjectSummary } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
+import { LANGUAGES, useLanguage, type Lang } from '../i18n/i18n';
 import { useSession } from '../session/session';
 import { usePending } from '../offline';
 import { Badge, Select } from '@aerolith/ui';
@@ -537,6 +539,10 @@ export function AppShell() {
   const mayPeople = usePermission('hr.view');
   const mayMark = usePermission('attendance.mark');
   const mayPayroll = usePermission('payroll.run');
+  const seePayroll = usePermission('payroll.view') || mayPayroll;
+  const viewSales = usePermission('sales.view');
+  const editSales = usePermission('sales.edit');
+  const seeSales = viewSales || editSales;
   const mayLabour = usePermission('labour.manage');
   const signedIn = session.status === 'signed_in';
   const inbox = useQuery({
@@ -566,7 +572,12 @@ export function AppShell() {
         },
         { to: '/crm', label: 'CRM', icon: <Handshake className="size-4" /> },
         { to: '/clients', label: 'Parties', icon: <Contact className="size-4" /> },
-        { to: '/sales', label: 'Sales and RERA', icon: <Home className="size-4" /> },
+        {
+          to: '/sales',
+          label: 'Sales and RERA',
+          icon: <Home className="size-4" />,
+          show: seeSales,
+        },
         {
           to: '/portal-users',
           label: 'Portal users',
@@ -784,7 +795,7 @@ export function AppShell() {
           to: '/payroll',
           label: 'Payroll',
           icon: <Banknote className="size-4" />,
-          show: mayPayroll,
+          show: seePayroll,
         },
         {
           to: '/payroll/increments',
@@ -958,6 +969,11 @@ export function AppShell() {
         },
         { to: '/settings/companies', label: 'Companies', icon: <Landmark className="size-4" /> },
         { to: '/settings/integrations', label: 'Integrations', icon: <Plug className="size-4" /> },
+        {
+          to: '/backups',
+          label: 'Backups and audit export',
+          icon: <DatabaseBackup className="size-4" />,
+        },
         { to: '/settings/imports', label: 'Imports', icon: <FileBarChart className="size-4" /> },
         { to: '/settings/audit', label: 'Audit trail', icon: <History className="size-4" /> },
       ],
@@ -1075,6 +1091,7 @@ export function AppShell() {
               <SearchPalette screens={screens} />
               <NewMenu projectId={projectId} />
               <OutboxChip />
+              <LanguagePicker />
               <Link
                 to="/account/password"
                 className="rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
@@ -1118,5 +1135,24 @@ function OutboxChip() {
     >
       <Badge tone={refused ? 'danger' : 'warning'}>Outbox {pending.length}</Badge>
     </Link>
+  );
+}
+
+/** The language of the site screens (docs/wave8-plan.md step 8g.5), kept on this device. */
+function LanguagePicker() {
+  const { lang, setLang } = useLanguage();
+  return (
+    <select
+      aria-label="Language"
+      value={lang}
+      onChange={(e) => setLang(e.target.value as Lang)}
+      className="rounded-md border border-line bg-surface px-1.5 py-1 text-sm text-fg-muted"
+    >
+      {LANGUAGES.map((l) => (
+        <option key={l.code} value={l.code}>
+          {l.label}
+        </option>
+      ))}
+    </select>
   );
 }

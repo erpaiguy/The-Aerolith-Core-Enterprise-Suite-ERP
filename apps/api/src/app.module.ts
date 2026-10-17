@@ -6,7 +6,9 @@ import { LabourModule } from './labour/labour.module.js';
 import { QualityModule } from './quality/quality.module.js';
 import { SafetyModule } from './safety/safety.module.js';
 import { ControlModule } from './control/control.module.js';
+import { BackupModule } from './backup/backup.module.js';
 import { BiModule } from './bi/bi.module.js';
+import { DigestModule } from './inbox/digest.module.js';
 import { PortalModule } from './portal/portal.module.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
 import { IdempotencyInterceptor } from './common/idempotency.js';
@@ -63,6 +65,8 @@ import { TenderModule } from './tender/tender.module.js';
     CrmModule,
     RealEstateModule,
     BiModule,
+    BackupModule,
+    DigestModule,
     PortalModule,
     IntegrationsModule,
     ProcurementModule,

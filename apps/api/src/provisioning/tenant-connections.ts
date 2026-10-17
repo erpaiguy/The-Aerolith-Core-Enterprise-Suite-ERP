@@ -79,6 +79,28 @@ export class TenantConnections implements OnApplicationShutdown {
     }
   }
 
+  /**
+   * A short-lived connection as the owner role, for work the app role may not do: reading every table for a backup
+   * (docs/wave8-plan.md step 8g.2). Closed when `fn` settles.
+   */
+  async withOwner<T>(tenantId: string, fn: (sql: Sql) => Promise<T>): Promise<T> {
+    const [row] = await this.control<{ migrator_url_secret: string | null }[]>`
+      SELECT migrator_url_secret FROM core.tenant_db WHERE tenant_id = ${tenantId} AND status = 'ready'`;
+    if (!row?.migrator_url_secret)
+      throw new ServiceUnavailableException({ code: 'tenant_db_not_ready' });
+    const db = postgres(open(row.migrator_url_secret, this.config.controlPlaneEncKey), {
+      max: 1,
+      connect_timeout: 10,
+      prepare: false,
+      onnotice: () => {},
+    });
+    try {
+      return await fn(db);
+    } finally {
+      await db.end({ timeout: 5 });
+    }
+  }
+
   get openPools(): number {
     return this.pools.size;
   }

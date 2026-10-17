@@ -12,6 +12,7 @@
     "lint": "eslint src test",
     "test": "vitest run",
     "migrate:control": "node --env-file-if-exists=.env dist/cli/migrate-control.js",
+    "restore:backup": "node dist/cli/restore-backup.js",
     "secrets:generate": "node dist/cli/generate-secrets.js",
     "operator:create": "node --env-file-if-exists=.env dist/cli/create-operator.js",
     "operator:reset": "node --env-file-if-exists=.env dist/cli/reset-operator.js",

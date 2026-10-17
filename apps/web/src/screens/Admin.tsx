@@ -3,7 +3,7 @@ import { Copy } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import type { ResetRequest, TenantUser } from '../api/types';
-import { errorMessage, formatDateTime } from '../lib/format';
+import { describeError, errorMessage, formatDateTime } from '../lib/format';
 import { useSession } from '../session/session';
 import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
 
@@ -381,7 +381,231 @@ export function UsersScreen() {
         )}
       </Card>
       <RolePermissions readOnly={Boolean(readOnly)} />
+      <AccessProfiles users={users.data ?? []} readOnly={Boolean(readOnly)} />
     </div>
+  );
+}
+
+interface Profile {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  rowVersion: number;
+  users: { id: string; name: string; role: string }[];
+}
+
+/**
+ * Access profiles: custom roles (docs/wave8-plan.md step 8g.4). A named set of permissions given to managers or
+ * workers in place of their role's; admins can always do everything.
+ */
+function AccessProfiles({ users, readOnly }: { users: TenantUser[]; readOnly: boolean }) {
+  const qc = useQueryClient();
+  const profiles = useQuery({
+    queryKey: ['access-profiles'],
+    queryFn: () => api.request<Profile[]>('/api/tenant/permissions/profiles'),
+  });
+  const matrix = useQuery({
+    queryKey: ['permissions'],
+    queryFn: () => api.request<PermissionMatrix>('/api/tenant/permissions'),
+  });
+  const [editing, setEditing] = useState<Profile | null>(null);
+  const [form, setForm] = useState({ name: '', description: '', permissions: [] as string[] });
+  const [assign, setAssign] = useState({ userId: '', profileId: '' });
+  const [error, setError] = useState<string | null>(null);
+  const done = (r: unknown) => {
+    qc.setQueryData(['access-profiles'], r);
+    void qc.invalidateQueries({ queryKey: ['my-permissions'] });
+  };
+  const run = async (fn: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      done(await fn());
+      return true;
+    } catch (err) {
+      setError(describeError(err));
+      return false;
+    }
+  };
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    const ok = await run(() =>
+      editing
+        ? api.request(`/api/tenant/permissions/profiles/${editing.id}`, {
+            method: 'POST',
+            body: { ...form, rowVersion: editing.rowVersion },
+          })
+        : api.request('/api/tenant/permissions/profiles', { method: 'POST', body: form }),
+    );
+    if (ok) {
+      setEditing(null);
+      setForm({ name: '', description: '', permissions: [] });
+    }
+  };
+  const all = matrix.data?.permissions ?? [];
+  const staff = users.filter((u) => u.role !== 'admin' && u.status === 'active');
+  return (
+    <Card title="Access profiles (custom roles)">
+      <p className="mb-3 text-sm text-fg-muted">
+        A profile replaces a manager's or worker's role permissions with exactly the ones ticked
+        here (a designation can still add to them). Admins are never limited.
+      </p>
+      {error && <Alert tone="danger">{error}</Alert>}
+      {profiles.isPending ? (
+        <Spinner />
+      ) : (
+        <ul className="mb-4 space-y-2" aria-label="Access profiles">
+          {(profiles.data ?? []).map((p) => (
+            <li key={p.id} className="rounded-md border border-line p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-medium">{p.name}</span>{' '}
+                  <Badge>{p.permissions.length} permissions</Badge>
+                  {p.description && <p className="text-fg-muted">{p.description}</p>}
+                  <p className="text-fg-muted">
+                    {p.users.length ? p.users.map((u) => u.name).join(', ') : 'Nobody has it yet.'}
+                  </p>
+                </div>
+                {!readOnly && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(p);
+                        setForm({
+                          name: p.name,
+                          description: p.description,
+                          permissions: p.permissions,
+                        });
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        void run(() =>
+                          api.request(`/api/tenant/permissions/profiles/${p.id}/delete`, {
+                            method: 'POST',
+                          }),
+                        )
+                      }
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!readOnly && (
+        <>
+          <form onSubmit={(e) => void save(e)} className="space-y-3" aria-label="Access profile">
+            <h3 className="font-medium">{editing ? `Edit ${editing.name}` : 'New profile'}</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Name">
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                  minLength={2}
+                />
+              </Field>
+              <Field label="What it is for">
+                <Input
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              </Field>
+            </div>
+            <fieldset className="grid gap-1 text-sm sm:grid-cols-2">
+              <legend className="mb-1 font-medium">Permissions</legend>
+              {all.map((p) => (
+                <label key={p.key} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={form.permissions.includes(p.key)}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        permissions: e.target.checked
+                          ? [...form.permissions, p.key]
+                          : form.permissions.filter((x) => x !== p.key),
+                      })
+                    }
+                  />
+                  <span>{p.label}</span>
+                </label>
+              ))}
+            </fieldset>
+            <div className="flex gap-2">
+              <Button type="submit">{editing ? 'Save the profile' : 'Add the profile'}</Button>
+              {editing && (
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => {
+                    setEditing(null);
+                    setForm({ name: '', description: '', permissions: [] });
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </form>
+          <form
+            className="mt-5 flex flex-wrap items-end gap-3"
+            aria-label="Give a profile"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(() =>
+                api.request('/api/tenant/permissions/profiles/assign', {
+                  method: 'POST',
+                  body: { userId: assign.userId, profileId: assign.profileId || null },
+                }),
+              );
+            }}
+          >
+            <Field label="Person">
+              <select
+                className="rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
+                value={assign.userId}
+                onChange={(e) => setAssign({ ...assign, userId: e.target.value })}
+                required
+              >
+                <option value="">Choose…</option>
+                {staff.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.displayName} ({u.role})
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Profile">
+              <select
+                className="rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
+                value={assign.profileId}
+                onChange={(e) => setAssign({ ...assign, profileId: e.target.value })}
+              >
+                <option value="">Their role's permissions</option>
+                {(profiles.data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Button type="submit" variant="secondary" disabled={!assign.userId}>
+              Give
+            </Button>
+          </form>
+        </>
+      )}
+    </Card>
   );
 }
 

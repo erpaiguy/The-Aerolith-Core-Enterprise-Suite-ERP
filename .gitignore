@@ -20,6 +20,8 @@ tests/e2e/.mail/
 
 # Tender documents in development (DOCUMENT_DIR unset)
 .documents/
+# Tenant backups in development (BACKUP_DIR unset)
+.backups/
 
 # Generated third-party notices for the desktop installer (tools/notices.mjs)
 apps/desktop/notices/

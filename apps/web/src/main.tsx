@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { ApiError } from './api/client';
 import { startOutbox } from './offline';
 import { router } from './router';
+import { LanguageProvider } from './i18n/i18n';
 import { SessionProvider } from './session/session';
 import './styles.css';
 
@@ -35,7 +36,9 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
-        <RouterProvider router={router} />
+        <LanguageProvider>
+          <RouterProvider router={router} />
+        </LanguageProvider>
       </SessionProvider>
     </QueryClientProvider>
   </StrictMode>,

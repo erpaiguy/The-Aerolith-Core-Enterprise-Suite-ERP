@@ -17,6 +17,7 @@ import {
   ForgotScreen,
   SetPasswordScreen,
   YourNameCard,
+  DigestCard,
 } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
 import { BoqScreen } from './screens/Boq';
@@ -144,6 +145,7 @@ import { StockAgeingScreen } from './screens/StockAgeing';
 import { ScrapToolsScreen } from './screens/ScrapTools';
 import { SorBooksScreen } from './screens/SorBooks';
 import { TwoFactorScreen } from './screens/TwoFactor';
+import { BackupsScreen } from './screens/Backups';
 import { Form16Print } from './print/Form16';
 import {
   ClientBillPrint,
@@ -1247,6 +1249,7 @@ const routeTree = rootRoute.addChildren([
       component: StockAgeingScreen,
     }),
     createRoute({ getParentRoute: () => appLayout, path: '/sor-books', component: SorBooksScreen }),
+    createRoute({ getParentRoute: () => appLayout, path: '/backups', component: BackupsScreen }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/two-factor',
@@ -1361,6 +1364,7 @@ const routeTree = rootRoute.addChildren([
       component: () => (
         <>
           <YourNameCard />
+          <DigestCard />
           <ChangePasswordScreen forced={false} />
         </>
       ),

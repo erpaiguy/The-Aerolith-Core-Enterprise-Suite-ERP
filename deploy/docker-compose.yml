@@ -43,9 +43,11 @@ services:
       TRUST_PROXY: 'true'
       # Tender documents of tenants on this Postgres. Back this volume up with the database (docs/deployment-docker.md).
       DOCUMENT_DIR: /app/documents
+      BACKUP_DIR: /app/backups
     volumes:
       - mail-outbox:/app/.mail-outbox
       - documents:/app/documents
+      - backups:/app/backups
 
   web:
     build:
@@ -69,3 +71,4 @@ volumes:
   pgdata:
   mail-outbox:
   documents:
+  backups:

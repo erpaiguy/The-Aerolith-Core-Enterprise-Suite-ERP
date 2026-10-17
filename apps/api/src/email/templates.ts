@@ -47,6 +47,7 @@ type Block =
   | { p: string }
   | { button: { label: string; href: string } }
   | { code: string }
+  | { list: string[] }
   | { small: string };
 
 function compose(ctx: RenderContext, subject: string, blocks: Block[]): RenderedEmail {
@@ -59,7 +60,9 @@ function compose(ctx: RenderContext, subject: string, blocks: Block[]): Rendered
           ? `${b.button.label}:\n${b.button.href}`
           : 'code' in b
             ? `    ${b.code}`
-            : b.small,
+            : 'list' in b
+              ? b.list.map((x) => `  - ${x}`).join('\n')
+              : b.small,
     ),
     '',
     '--',
@@ -71,6 +74,8 @@ function compose(ctx: RenderContext, subject: string, blocks: Block[]): Rendered
         return `<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#16191f">${esc(b.p)}</p>`;
       if ('small' in b)
         return `<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#4d5562">${esc(b.small)}</p>`;
+      if ('list' in b)
+        return `<ul style="margin:0 0 16px;padding-left:20px;font-size:14px;line-height:1.5;color:#16191f">${b.list.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
       if ('code' in b)
         return `<p style="margin:0 0 16px;padding:12px 16px;background:#f0f2f5;border-radius:6px;font-family:Consolas,Menlo,monospace;font-size:17px;letter-spacing:1px;color:#16191f">${esc(b.code)}</p>`;
       return `<p style="margin:0 0 20px"><a href="${esc(b.button.href)}" style="display:inline-block;padding:11px 20px;background:#c2410c;color:#ffffff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600">${esc(b.button.label)}</a></p>
@@ -145,6 +150,30 @@ export function renderEmail(input: TemplateInput, ctx: RenderContext): RenderedE
           ...(str(d.reason) ? [{ p: str(d.reason) }] : []),
         ],
       );
+    case 'daily_digest': {
+      // Built by the digest (docs/wave8-plan.md step 8g.3): sections of plain lines, already worded.
+      const sections = Array.isArray(d.sections)
+        ? (d.sections as { title?: unknown; lines?: unknown; more?: unknown }[])
+        : [];
+      return compose(ctx, `Your day: ${str(d.summary) || 'reminders'}`, [
+        {
+          p: `Good morning${str(d.name) ? `, ${str(d.name)}` : ''}. Here is what needs you at ${str(d.company) || 'work'} today.`,
+        },
+        ...sections.flatMap((x): Block[] => [
+          { p: str(x.title) },
+          {
+            list: (Array.isArray(x.lines) ? x.lines : [])
+              .map(str)
+              .concat(typeof x.more === 'number' && x.more > 0 ? [`and ${x.more} more`] : []),
+          },
+        ]),
+        { button: { label: `Open ${ctx.productName}`, href: ctx.websiteUrl } },
+        {
+          small:
+            'You get this email each morning there is something for you. Turn it off under Account.',
+        },
+      ]);
+    }
     case 'test':
       return compose(ctx, `${ctx.productName} test email`, [
         {
