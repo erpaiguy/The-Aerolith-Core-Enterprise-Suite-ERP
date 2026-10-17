@@ -500,7 +500,7 @@ function ReceiptForm(p: {
           <Field label="TDS deducted ₹">
             <Input value={p.tds} onChange={(e) => p.setTds(e.target.value)} inputMode="decimal" />
           </Field>
-          <Field label="GST TDS deducted ₹" hint="2% by a government client (section 51)">
+          <Field label="GST TDS, section 51 ₹" hint="2% by a government client (section 51)">
             <Input
               value={p.gstTds}
               onChange={(e) => p.setGstTds(e.target.value)}

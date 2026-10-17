@@ -77,6 +77,67 @@ export class StatutoryController {
     return this.statutory.yearForm(c, q.entityId, q.year);
   }
 
+  /** Statutory dues and challans of a run (docs/wave8-plan.md step 8c.3). */
+  @Get('runs/:id/statutory')
+  statutoryDues(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.statutory.statutory(c, id);
+  }
+
+  @Post('runs/:id/statutory')
+  @HttpCode(200)
+  @RequiresFeatures()
+  payStatutory(
+    @Auth() c: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          kind: z.enum(['pf', 'esi', 'pt', 'lwf']),
+          reference: z.string().trim().min(3).max(40),
+          amount: z
+            .union([z.string().trim(), z.number()])
+            .transform((v) => String(v).replace(/,/g, ''))
+            .refine((v) => /^\d{1,12}(\.\d{1,2})?$/.test(v) && Number(v) > 0, {
+              message: 'An amount',
+            }),
+          paidOn: z.iso.date(),
+          bankAccountId: z.uuid(),
+        }),
+      ),
+    )
+    b: {
+      kind: 'pf' | 'esi' | 'pt' | 'lwf';
+      reference: string;
+      amount: string;
+      paidOn: string;
+      bankAccountId: string;
+    },
+  ) {
+    return this.statutory.payStatutory(c, id, b);
+  }
+
+  @Get('runs/:id/pt-return')
+  ptReturn(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
+    return this.statutory.ptReturn(c, id);
+  }
+
+  @Get('form-16')
+  form16(
+    @Auth() c: TenantClaims,
+    @Query(
+      new ZodPipe(
+        z.object({
+          entityId: z.uuid(),
+          year: z.coerce.number().int().min(2000).max(2100),
+          employeeId: z.uuid(),
+        }),
+      ),
+    )
+    q: { entityId: string; year: number; employeeId: string },
+  ) {
+    return this.statutory.form16(c, q.entityId, q.year, q.employeeId);
+  }
+
   @Get('employees/:id/settlement')
   settlement(@Auth() c: TenantClaims, @Param('id', ParseUUIDPipe) id: string) {
     return this.statutory.settlement(c, id);

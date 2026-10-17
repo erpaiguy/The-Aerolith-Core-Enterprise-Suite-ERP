@@ -9,6 +9,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import type { Sql, TransactionSql } from 'postgres';
 import { fromDb } from '../accounts/accounts-rules.js';
@@ -231,6 +232,189 @@ export class StatutoryService {
     return {
       financialYear: `${fyStartYear}-${String((fyStartYear + 1) % 100).padStart(2, '0')}`,
       employees: out,
+    };
+  }
+
+  // --- statutory payments and returns (docs/wave8-plan.md step 8c.3) ---
+
+  /** What a run owes under each head, as its voucher credited it, and the challans that paid it. */
+  private async dues(db: Db, runId: string) {
+    const [d] = await db<{ pf: string; esi: string; pt: string; lwf: string }[]>`
+      SELECT
+        coalesce(sum(coalesce((pf->>'employee')::numeric, 0) + coalesce((pf->>'eps')::numeric, 0)
+          + coalesce((pf->>'employerEpf')::numeric, 0) + coalesce((pf->>'edli')::numeric, 0)
+          + coalesce((pf->>'admin')::numeric, 0)), 0)::numeric(20,2)::text AS pf,
+        coalesce(sum(esi_employee + esi_employer), 0)::numeric(20,2)::text AS esi,
+        coalesce(sum(pt), 0)::numeric(20,2)::text AS pt,
+        coalesce(sum(lwf_employee + lwf_employer), 0)::numeric(20,2)::text AS lwf
+      FROM pay.run_line WHERE run_id = ${runId}`;
+    const paid = await db<{ kind: 'pf' | 'esi' | 'pt' | 'lwf'; amount: string }[]>`
+      SELECT kind, sum(amount)::numeric(20,2)::text AS amount FROM pay.statutory_challan WHERE run_id = ${runId}
+      GROUP BY kind`;
+    const challans = await db`
+      SELECT c.id, c.kind, c.reference, c.amount::text, to_char(c.paid_on, 'YYYY-MM-DD') AS "paidOn", v.number AS voucher
+      FROM pay.statutory_challan c JOIN acc.voucher v ON v.id = c.voucher_id WHERE c.run_id = ${runId}
+      ORDER BY c.paid_on, c.kind`;
+    return {
+      heads: (['pf', 'esi', 'pt', 'lwf'] as const).map((k) => {
+        const p = paid.find((x) => x.kind === k)?.amount ?? '0.00';
+        return { kind: k, due: d![k], paid: p, left: (Number(d![k]) - Number(p)).toFixed(2) };
+      }),
+      challans,
+    };
+  }
+
+  async statutory(claims: TenantClaims, runId: string) {
+    await this.must(claims);
+    const db = await this.tenants.forTenant(claims.ten);
+    const r = await this.approvedRun(db, runId);
+    return { runId, month: r.month, ...(await this.dues(db, runId)) };
+  }
+
+  /** A challan for one head of a run: its payable Dr, the bank Cr. */
+  async payStatutory(
+    claims: TenantClaims,
+    runId: string,
+    input: {
+      kind: 'pf' | 'esi' | 'pt' | 'lwf';
+      reference: string;
+      amount: string;
+      paidOn: string;
+      bankAccountId: string;
+    },
+  ) {
+    await this.must(claims);
+    const db = await this.tenants.forTenant(claims.ten);
+    await db
+      .begin(async (tx) => {
+        const [r] = await tx<{ month: string; status: string; entity_id: string }[]>`
+          SELECT to_char(month, 'YYYY-MM') AS month, status, entity_id FROM pay.run WHERE id = ${runId} FOR UPDATE`;
+        if (!r) throw new NotFoundException({ code: 'run_not_found' });
+        if (!['posted', 'paid'].includes(r.status))
+          throw new ConflictException({
+            code: 'not_posted',
+            message: 'Post the run before paying its dues.',
+          });
+        const head = (await this.dues(tx, runId)).heads.find((h) => h.kind === input.kind)!;
+        if (Number(input.amount) > Number(head.left) + 0.005)
+          throw new BadRequestException({
+            code: 'over_due',
+            message: `₹${head.left} of ${input.kind.toUpperCase()} is left to pay for ${r.month}.`,
+          });
+        const [bank] = await tx<{ ok: boolean }[]>`
+          SELECT kind IN ('bank', 'cash') AND NOT is_group AND closed_at IS NULL AS ok FROM acc.account
+          WHERE id = ${input.bankAccountId}`;
+        if (!bank?.ok)
+          throw new BadRequestException({ code: 'not_a_bank', message: 'Pay from a bank ledger.' });
+        const role = (
+          { pf: 'pf_payable', esi: 'esi_payable', pt: 'pt_payable', lwf: 'lwf_payable' } as const
+        )[input.kind];
+        const line = (accountId: string, debit: string, credit: string): LineInput => ({
+          accountId,
+          partyId: null,
+          debit,
+          credit,
+          projectId: null,
+          siteId: null,
+          costCodeId: null,
+          note: `${input.kind.toUpperCase()} ${r.month}`,
+        });
+        const id = randomUUID();
+        const v = await this.ledger.post(
+          tx,
+          claims,
+          {
+            entityId: r.entity_id,
+            type: 'payment',
+            date: input.paidOn,
+            narration: `${input.kind.toUpperCase()} for ${r.month}: ${input.reference}`,
+            reference: input.reference,
+            lines: [
+              line(await this.ledger.roleAccount(tx, r.entity_id, role), input.amount, '0'),
+              line(input.bankAccountId, '0', input.amount),
+            ],
+          },
+          { kind: 'statutory_challan', id },
+        );
+        await tx`
+          INSERT INTO pay.statutory_challan (id, run_id, kind, reference, amount, paid_on, bank_account_id, voucher_id,
+            created_by)
+          VALUES (${id}, ${runId}, ${input.kind}, ${input.reference}, ${input.amount}, ${input.paidOn},
+            ${input.bankAccountId}, ${v!.id}, ${claims.sub})`;
+        await audit(tx, claims.sub, 'payroll.statutory_challan', 'pay_run', runId, { ...input });
+      })
+      .catch((err: unknown) => {
+        if ((err as { code?: string }).code === '23505')
+          throw new ConflictException({
+            code: 'challan_exists',
+            message: 'This challan is already entered.',
+          });
+        return fromDb(err);
+      });
+    return this.statutory(claims, runId);
+  }
+
+  /**
+   * The Maharashtra professional tax return (Form III) for a month: employees by the tax each bore, and the total.
+   * [Guessing] The slabs are whatever the run's rules deducted; the return form is the state's to confirm.
+   */
+  async ptReturn(claims: TenantClaims, runId: string) {
+    await this.must(claims);
+    const db = await this.tenants.forTenant(claims.ten);
+    const r = await this.approvedRun(db, runId);
+    const slabs = await db<{ rate: string; employees: number; gross: string; tax: string }[]>`
+      SELECT l.pt::numeric(20,2)::text AS rate, count(*)::int AS employees,
+        sum(l.gross)::numeric(20,2)::text AS gross, sum(l.pt)::numeric(20,2)::text AS tax
+      FROM pay.run_line l WHERE l.run_id = ${runId} GROUP BY l.pt ORDER BY l.pt`;
+    const [e] = await db<{ name: string; legal_name: string | null }[]>`
+      SELECT name, legal_name FROM platform.entity WHERE id = ${r.entity_id}`;
+    return {
+      month: r.month,
+      employer: e!.legal_name ?? e!.name,
+      slabs,
+      employees: slabs.reduce((t, x) => t + x.employees, 0),
+      tax: slabs.reduce((t, x) => t + Number(x.tax), 0).toFixed(2),
+      paid: (await this.dues(db, runId)).heads.find((h) => h.kind === 'pt')!.paid,
+    };
+  }
+
+  /**
+   * Form 16 Part B (Form 130 under the Income-tax Act, 2025) and Form 12BA for an employee's year: the salary, the
+   * deductions, the tax deducted by quarter with the challans that deposited it. No perquisites are paid through
+   * payroll, so 12BA states none.
+   */
+  async form16(claims: TenantClaims, entityId: string, fyStartYear: number, employeeId: string) {
+    const year = await this.yearForm(claims, entityId, fyStartYear);
+    const emp = year.employees.find((x) => x.employeeId === employeeId);
+    if (!emp)
+      throw new NotFoundException({
+        code: 'no_salary',
+        message: 'This employee had no salary in the year.',
+      });
+    const db = await this.tenants.forTenant(claims.ten);
+    const [e] = await db<
+      {
+        name: string;
+        legal_name: string | null;
+        tan: string | null;
+        pan: string | null;
+        address: string | null;
+      }[]
+    >`SELECT name, legal_name, tan, pan, address FROM platform.entity WHERE id = ${entityId}`;
+    const challans = await db`
+      SELECT to_char(r.month, 'YYYY-MM') AS month, l.tds::text AS tds, c.bsr_code AS "bsrCode", c.challan_no AS "challanNo",
+        to_char(c.deposited_on, 'YYYY-MM-DD') AS "depositedOn"
+      FROM pay.run_line l JOIN pay.run r ON r.id = l.run_id
+      LEFT JOIN acc.tds_salary_challan_line s ON s.run_id = r.id LEFT JOIN acc.tds_challan c ON c.id = s.challan_id
+      WHERE l.employee_id = ${employeeId} AND r.entity_id = ${entityId} AND l.tds > 0
+        AND r.month BETWEEN ${`${fyStartYear}-04-01`} AND ${`${fyStartYear + 1}-03-01`}
+      ORDER BY r.month`;
+    return {
+      financialYear: year.financialYear,
+      employer: { name: e!.legal_name ?? e!.name, tan: e!.tan, pan: e!.pan, address: e!.address },
+      employee: emp,
+      challans,
+      perquisites: [],
     };
   }
 

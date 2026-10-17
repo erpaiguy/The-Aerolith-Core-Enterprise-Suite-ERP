@@ -134,6 +134,7 @@ import { ImprestScreen } from './registers/Imprest';
 import { LetterheadSample } from './print/Letterhead';
 import { IssuePrint, OrderPrint, ReceiptPrint } from './print/PurchaseDocs';
 import { Form16aPrint } from './print/TaxDocs';
+import { Form16Print } from './print/Form16';
 import {
   ClientBillPrint,
   ClientReceiptPrint,
@@ -618,6 +619,14 @@ const form16aPrintRoute = createRoute({
   component: function Form16aPrintPage() {
     const { entityId, quarter, partyId } = form16aPrintRoute.useParams();
     return <Form16aPrint entityId={entityId} quarter={quarter} partyId={partyId} />;
+  },
+});
+const form16PrintRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/print/form-16/$entityId/$year/$employeeId',
+  component: function Form16PrintPage() {
+    const { entityId, year, employeeId } = form16PrintRoute.useParams();
+    return <Form16Print entityId={entityId} year={year} employeeId={employeeId} />;
   },
 });
 const issuePrintRoute = createRoute({
@@ -1286,6 +1295,7 @@ const routeTree = rootRoute.addChildren([
   receiptPrintRoute,
   issuePrintRoute,
   form16aPrintRoute,
+  form16PrintRoute,
   clientBillPrintRoute,
   clientReceiptPrintRoute,
   paymentAdvicePrintRoute,

@@ -1,5 +1,6 @@
 // Payroll (docs/wave3-plan.md step 12a): the monthly runs, the compliance rules and pay components; a run worked,
 // adjusted, approved, posted and paid with the bank's file; payslips to print; an employee's salary.
+import { StatutoryDues } from './Statutory';
 import {
   Alert,
   Badge,
@@ -556,6 +557,9 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
         }
       />
       {error && <Alert tone="danger">{error}</Alert>}
+      {(r.status === 'posted' || r.status === 'paid') && (
+        <StatutoryDues runId={runId} banks={banks} />
+      )}
       <Card title="Totals">
         <dl className="grid gap-3 text-sm sm:grid-cols-4" data-testid="run-totals">
           {(
@@ -1108,7 +1112,14 @@ function YearForm({ entityId }: { entityId: string }) {
             {y.data.employees.map((e) => (
               <tr key={e.employeeId}>
                 <td>
-                  {e.code} {e.name}
+                  <Link
+                    to="/print/form-16/$entityId/$year/$employeeId"
+                    params={{ entityId, year: String(year), employeeId: e.employeeId }}
+                    target="_blank"
+                    className="hover:underline"
+                  >
+                    {e.code} {e.name}
+                  </Link>
                 </td>
                 <td>{e.pan ?? '—'}</td>
                 <td>{e.regime}</td>

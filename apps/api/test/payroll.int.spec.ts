@@ -534,6 +534,48 @@ describe.skipIf(!controlUrl || !adminUrl)('payroll (integration)', () => {
     ).toMatchObject({ code: 'tan_missing' });
   });
 
+  it("pays the run's PF, ESI and PT by challan, and gives the PT return and Form 16", async () => {
+    // docs/wave8-plan.md step 8c.3.
+    interface Dues {
+      heads: { kind: string; due: string; paid: string; left: string }[];
+      challans: { kind: string; reference: string; voucher: string }[];
+    }
+    const url = `/tenant/payroll/runs/${runId}/statutory`;
+    let d = await ok<Dues>(get(url));
+    const due = (k: string) => d.heads.find((h) => h.kind === k)!;
+    expect(Number(due('pf').due)).toBeGreaterThan(0);
+    const pay = (kind: string, reference: string, amount: string) =>
+      post(url, { kind, reference, amount, paidOn: '2026-10-12', bankAccountId: bank });
+    d = await ok<Dues>(pay('pf', '1234567890123', due('pf').due));
+    expect(due('pf')).toMatchObject({ left: '0.00' });
+    expect(d.challans[0]).toMatchObject({ kind: 'pf', voucher: expect.stringMatching(/^PV/) });
+    expect((await pay('pf', '1234567890124', '1')).json()).toMatchObject({ code: 'over_due' });
+    if (Number(due('esi').due) > 0) {
+      expect((await pay('esi', '1234567890123', due('esi').due)).statusCode).toBe(200);
+      expect((await pay('esi', '1234567890123', '1')).json()).toMatchObject({
+        code: 'challan_exists',
+      });
+    }
+    // The PT return: everyone in the run by the tax they bore.
+    const pt = await ok<{ employees: number; tax: string; slabs: { rate: string }[] }>(
+      get(`/tenant/payroll/runs/${runId}/pt-return`),
+    );
+    expect(pt.employees).toBe(3);
+    expect(pt.tax).toBe(due('pt').due);
+    // Form 16 Part B for Suresh: ₹19,500 deducted, deposited by challan 00077.
+    const f = await ok<{
+      employee: { tds: string; taxableIncome: string };
+      challans: { tds: string; challanNo: string | null }[];
+      perquisites: unknown[];
+    }>(get(`/tenant/payroll/form-16?entityId=${entityId}&year=2026&employeeId=${suresh}`));
+    expect([f.employee.tds, f.employee.taxableIncome, f.perquisites]).toEqual([
+      '19500.00',
+      '175000.00',
+      [],
+    ]);
+    expect(f.challans.map((c) => [c.tds, c.challanNo])).toEqual([['19500.00', '00077']]);
+  });
+
   it("settles Suresh's full and final after six years", async () => {
     // Earned leave: 5 days brought forward and 11 accrued by September (15 a year, monthly): 16.
     const el = (
