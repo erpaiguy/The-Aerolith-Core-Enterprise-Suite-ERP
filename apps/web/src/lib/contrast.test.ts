@@ -46,12 +46,9 @@ describe.each([
   ['light', light],
   ['dark', dark],
 ])('the %s theme', (_, t) => {
-  it.each(TEXT.flatMap((fg) => SURFACES.map((bg) => [fg, bg])))(
-    '%s text on %s is AA',
-    (fg, bg) => {
-      expect(ratio(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(4.5);
-    },
-  );
+  it.each(TEXT.flatMap((fg) => SURFACES.map((bg) => [fg, bg])))('%s text on %s is AA', (fg, bg) => {
+    expect(ratio(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(4.5);
+  });
   it.each(BADGES)('a %s badge is AA', (tone) => {
     expect(ratio(t[tone]!, tint(t[tone]!, t.surface!, 0.15))).toBeGreaterThanOrEqual(4.5);
   });
