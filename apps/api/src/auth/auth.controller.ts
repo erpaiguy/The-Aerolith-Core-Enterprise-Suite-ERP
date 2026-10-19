@@ -320,6 +320,30 @@ export class TenantUsersController {
     return this.users.changeRole(claims, id, body.role);
   }
 
+  @Post('users/:id/email')
+  @HttpCode(200)
+  @Roles('admin')
+  setEmail(
+    @Auth() claims: TenantClaims,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(
+      new ZodPipe(
+        z.object({
+          email: z
+            .string()
+            .trim()
+            .max(254)
+            .refine((v) => v === '' || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), {
+              message: 'An email address',
+            }),
+        }),
+      ),
+    )
+    body: { email: string },
+  ) {
+    return this.users.setEmail(claims, id, body.email || null);
+  }
+
   /** The admin renames anyone; everyone else uses `me/name`. */
   @Post('users/:id/name')
   @HttpCode(200)

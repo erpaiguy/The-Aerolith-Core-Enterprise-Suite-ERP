@@ -21,6 +21,7 @@ import { BackupService, backupDue } from '../src/backup/backup.service.js';
 import { renderEmail } from '../src/email/templates.js';
 import { DigestService } from '../src/inbox/digest.service.js';
 import { DEFAULT_CRITERIA } from '../src/tender/tender-rules.js';
+import { ROLES } from '../src/accounts/accounts-rules.js';
 import { TenantConnections } from '../src/provisioning/tenant-connections.js';
 import { readyTenant } from './helpers/tenant.js';
 import { unzip } from './helpers/zip.js';
@@ -498,5 +499,37 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8g: platform (integration)', () 
     await ok(
       post('/tenant/permissions', { role: 'manager', permission: 'payroll.view', granted: false }),
     );
+  });
+
+  it('every account role resolves to an account in a new company (debug D-5)', async () => {
+    const db = await app.get(TenantConnections).forTenant(t.tenantId);
+    const keys = (
+      await db<{ system_key: string }[]>`
+      SELECT system_key FROM acc.account WHERE system_key IS NOT NULL`
+    ).map((r) => r.system_key);
+    const missing = Object.entries(ROLES)
+      .filter(([, r]) => !keys.includes(r.key))
+      .map(([role]) => role);
+    expect(missing).toEqual([]);
+  });
+
+  it('the admin sets a staff email for the morning email (debug D-12)', async () => {
+    const users = await ok<{ id: string; username: string; email: string | null }[]>(
+      get('/tenant/users'),
+    );
+    const suresh = users.find((u) => u.username === 'suresh')!;
+    expect(
+      (await post(`/tenant/users/${suresh.id}/email`, { email: 'x@y.in' }, manager)).statusCode,
+    ).toBe(403);
+    expect(
+      (await post(`/tenant/users/${suresh.id}/email`, { email: 'not an email' })).statusCode,
+    ).toBe(400);
+    await ok(post(`/tenant/users/${suresh.id}/email`, { email: ' Suresh.Patil@Example.in ' }));
+    const after = await ok<{ id: string; email: string | null }[]>(get('/tenant/users'));
+    expect(after.find((u) => u.id === suresh.id)!.email).toBe('suresh.patil@example.in');
+    expect((await ok<{ email: string | null }>(get('/tenant/me/digest', manager))).email).toBe(
+      'suresh.patil@example.in',
+    );
+    await ok(post(`/tenant/users/${suresh.id}/email`, { email: '' }));
   });
 });

@@ -80,6 +80,7 @@ export interface TenantUser {
   id: string;
   username: string;
   displayName: string;
+  email: string | null;
   role: Role;
   status: 'active' | 'deactivated';
   mustChangePassword: boolean;

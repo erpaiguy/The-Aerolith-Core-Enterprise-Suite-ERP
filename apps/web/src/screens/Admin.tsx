@@ -287,6 +287,7 @@ export function UsersScreen() {
               <thead>
                 <tr className="border-b border-line text-left text-fg-muted">
                   <th className="py-2 pr-3 font-medium">User</th>
+                  <th className="py-2 pr-3 font-medium">Email</th>
                   <th className="py-2 pr-3 font-medium">Role</th>
                   <th className="py-2 pr-3 font-medium">Last sign-in</th>
                   <th className="py-2 font-medium" />
@@ -328,6 +329,9 @@ export function UsersScreen() {
                         </button>
                       )}
                       <div className="text-xs text-fg-muted">{u.username}</div>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <EmailCell user={u} readOnly={Boolean(readOnly)} />
                     </td>
                     <td className="py-2.5 pr-3">
                       {u.role === 'admin' ? (
@@ -682,6 +686,44 @@ export function ResetRequestsScreen() {
         Check with the person before issuing a password: anyone who knows a username can send a
         request.
       </p>
+    </div>
+  );
+}
+
+/** The address the morning email goes to (docs/debug-log.md D-12); saved when the field is left. */
+function EmailCell({ user, readOnly }: { user: TenantUser; readOnly: boolean }) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState(user.email ?? '');
+  const [error, setError] = useState<string | null>(null);
+  if (readOnly) return <span className="text-fg-muted">{user.email ?? '—'}</span>;
+  const save = async () => {
+    if (value.trim().toLowerCase() === (user.email ?? '')) return;
+    setError(null);
+    try {
+      await api.request(`/api/tenant/users/${user.id}/email`, {
+        method: 'POST',
+        body: { email: value.trim() },
+      });
+      void qc.invalidateQueries({ queryKey: ['users'] });
+    } catch (err) {
+      setError(describeError(err));
+    }
+  };
+  return (
+    <div>
+      <Input
+        type="email"
+        aria-label={`Email of ${user.username}`}
+        placeholder="name@company.in"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void save();
+        }}
+        className="w-56"
+      />
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

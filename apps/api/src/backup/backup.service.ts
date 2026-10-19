@@ -32,6 +32,7 @@ import { OWNER_GROUP } from '../provisioning/bootstrap.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit } from '../tender/tender-records.js';
 import { dumpDatabase, qname, restoreDatabase } from './dump.js';
+import { exclusively, LOOP_LOCK } from '../common/loop-lock.js';
 
 const HOUR = 3_600_000;
 /** A backup still "running" after this long died with its process. */
@@ -303,12 +304,14 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      const tenants = await this.control<{ tenant_id: string }[]>`
-        SELECT tenant_id FROM core.tenant_db WHERE status = 'ready'`;
-      for (const { tenant_id } of tenants)
-        await this.runDue(tenant_id, new Date()).catch((err: unknown) =>
-          this.log.warn(`Backup failed for ${tenant_id}: ${(err as Error).message}`),
-        );
+      await exclusively(this.control, LOOP_LOCK.backups, async () => {
+        const tenants = await this.control<{ tenant_id: string }[]>`
+          SELECT tenant_id FROM core.tenant_db WHERE status = 'ready'`;
+        for (const { tenant_id } of tenants)
+          await this.runDue(tenant_id, new Date()).catch((err: unknown) =>
+            this.log.warn(`Backup failed for ${tenant_id}: ${(err as Error).message}`),
+          );
+      });
     } finally {
       this.running = false;
     }

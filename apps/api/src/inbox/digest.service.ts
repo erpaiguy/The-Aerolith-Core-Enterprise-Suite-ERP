@@ -18,6 +18,7 @@ import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { CONTROL_DB } from '../db/db.module.js';
 import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { InboxService } from './inbox.service.js';
+import { exclusively, LOOP_LOCK } from '../common/loop-lock.js';
 
 const HOUR = 3_600_000;
 const SEND_FROM_HOUR = 7;
@@ -257,12 +258,14 @@ export class DigestService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      const tenants = await this.control<{ tenant_id: string }[]>`
-        SELECT tenant_id FROM core.tenant_db WHERE status = 'ready'`;
-      for (const { tenant_id } of tenants)
-        await this.runDue(tenant_id, new Date()).catch((err: unknown) =>
-          this.log.warn(`Digest failed for ${tenant_id}: ${(err as Error).message}`),
-        );
+      await exclusively(this.control, LOOP_LOCK.digest, async () => {
+        const tenants = await this.control<{ tenant_id: string }[]>`
+          SELECT tenant_id FROM core.tenant_db WHERE status = 'ready'`;
+        for (const { tenant_id } of tenants)
+          await this.runDue(tenant_id, new Date()).catch((err: unknown) =>
+            this.log.warn(`Digest failed for ${tenant_id}: ${(err as Error).message}`),
+          );
+      });
     } finally {
       this.running = false;
     }

@@ -27,7 +27,7 @@ export class UsersService {
 
   async list(claims: TenantClaims) {
     const db = await this.tenants.forTenant(claims.ten);
-    return db`SELECT id, username, display_name AS "displayName", role, status, must_change_password AS "mustChangePassword",
+    return db`SELECT id, username, display_name AS "displayName", email, role, status, must_change_password AS "mustChangePassword",
         last_login_at AS "lastLoginAt", created_at AS "createdAt"
       FROM platform."user" ORDER BY role = 'admin' DESC, lower(username)`;
   }
@@ -125,6 +125,22 @@ export class UsersService {
         });
       }
       return { id: userId, displayName };
+    });
+  }
+
+  /** The admin sets anyone's email address (for the morning email, docs/debug-log.md D-12); null clears it. */
+  async setEmail(claims: TenantClaims, userId: string, email: string | null) {
+    const db = await this.tenants.forTenant(claims.ten);
+    return db.begin(async (tx) => {
+      const [u] = await tx<{ email: string | null }[]>`
+        SELECT email FROM platform."user" WHERE id = ${userId} FOR UPDATE`;
+      if (!u) throw new NotFoundException({ code: 'user_not_found' });
+      const next = email?.trim().toLowerCase() || null;
+      if (u.email !== next) {
+        await tx`UPDATE platform."user" SET email = ${next}, updated_at = now() WHERE id = ${userId}`;
+        await this.audit(tx, claims.sub, 'user.email', userId, { from: u.email, to: next });
+      }
+      return { id: userId, email: next };
     });
   }
 

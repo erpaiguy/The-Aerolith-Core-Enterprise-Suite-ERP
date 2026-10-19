@@ -21,6 +21,7 @@ import { TenantConnections } from '../provisioning/tenant-connections.js';
 import { audit } from '../tender/tender-records.js';
 import { aggName, build, SpecError, type Spec } from './query.js';
 import { VIEWS } from './views.js';
+import { exclusively, LOOP_LOCK } from '../common/loop-lock.js';
 
 type Row = Record<string, unknown>;
 const ON_SCREEN = 10_000;
@@ -353,12 +354,14 @@ export class BiService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      const tenants = await this.control<{ tenant_id: string }[]>`
-        SELECT tenant_id FROM core.tenant_db WHERE status = 'ready'`;
-      for (const { tenant_id } of tenants)
-        await this.runDue(tenant_id, new Date()).catch((err: unknown) =>
-          this.log.warn(`Scheduled reports failed for ${tenant_id}: ${(err as Error).message}`),
-        );
+      await exclusively(this.control, LOOP_LOCK.reports, async () => {
+        const tenants = await this.control<{ tenant_id: string }[]>`
+          SELECT tenant_id FROM core.tenant_db WHERE status = 'ready'`;
+        for (const { tenant_id } of tenants)
+          await this.runDue(tenant_id, new Date()).catch((err: unknown) =>
+            this.log.warn(`Scheduled reports failed for ${tenant_id}: ${(err as Error).message}`),
+          );
+      });
     } finally {
       this.running = false;
     }
