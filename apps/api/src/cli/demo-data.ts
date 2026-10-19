@@ -7,7 +7,7 @@ import type { Seeder } from './demo-seed.js';
 import { type Ctx, as, step } from './demo/ctx.js';
 import { seedHistory } from './demo/history.js';
 import { STAFF } from './demo/plan.js';
-import { addDays, money, rupees } from './demo/util.js';
+import { OVER_BUDGET_REASON, addDays, money, rupees } from './demo/util.js';
 
 type H = Record<string, string>;
 const DEMO_PORTAL_PASSWORD = 'Portal-Demo-2026';
@@ -86,7 +86,7 @@ export async function seedCompany(
       );
       const po = await s.post<{ id: string }>(
         `/tenant/order-revisions/${o.open.id}/submit`,
-        { rowVersion: o.open.rowVersion },
+        { rowVersion: o.open.rowVersion, overBudgetReason: OVER_BUDGET_REASON },
         as(c, 'imran'),
       );
       paths.push(`/orders/${po.id}`);
@@ -229,7 +229,7 @@ export async function seedCompany(
       );
       await s.post(
         `/tenant/order-revisions/${o.open.id}/submit`,
-        { rowVersion: o.open.rowVersion },
+        { rowVersion: o.open.rowVersion, overBudgetReason: OVER_BUDGET_REASON },
         as(c, 'imran'),
       );
     });

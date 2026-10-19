@@ -19,6 +19,7 @@ import {
 } from './plan.js';
 import {
   type Day,
+  OVER_BUDGET_REASON,
   addDays,
   addMonths,
   diffDays,
@@ -917,7 +918,7 @@ async function workOrder(c: Ctx, ps: ProjectState, k: string) {
     inForce: { lines: { lineKey: string; description: string }[] };
   }>(
     `/tenant/order-revisions/${o.open.id}/submit`,
-    { rowVersion: o.open.rowVersion },
+    { rowVersion: o.open.rowVersion, overBudgetReason: OVER_BUDGET_REASON },
     as(c, 'suresh'),
   );
   const byCode: Record<string, string> = {};

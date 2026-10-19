@@ -548,5 +548,35 @@ export class Labour {
         );
       bump(this.c, 'wage sheets');
     }
+    // Each contractor pays the month's PF and ESI by the 15th and shows the challans, or their bills are held.
+    const challanOn = addDays(passOn, 9);
+    if (challanOn > this.c.today) return;
+    const contractors = new Set(
+      [...this.musters].filter((x) => x.endsWith(`|${month}`)).map((x) => x.split('|')[0]!),
+    );
+    const h = as(this.c, challanOn >= '2024-04-16' ? 'pooja' : 'suresh');
+    for (const k of contractors)
+      this.c.sched.at(challanOn, 30, 'contractor challans', async () => {
+        const partyId = this.c.party[k]!;
+        const c = await this.c.s.get<{
+          dues: { month: string; kind: 'pf' | 'esi'; due: string; paid: string }[];
+        }>(`/tenant/labour/contractors/${partyId}/compliance?on=${lastOfMonth(`${month}-01`)}`, h);
+        for (const d of c.dues.filter((x) => x.month === month)) {
+          const owed = Number(d.due) - Number(d.paid);
+          if (owed <= 0) continue;
+          await this.c.s.post(
+            `/tenant/labour/contractors/${partyId}/challans`,
+            {
+              month,
+              kind: d.kind,
+              reference: `${k.toUpperCase()}/${d.kind.toUpperCase()}/${month}`,
+              amount: owed.toFixed(2),
+              paidOn: addDays(challanOn, -1),
+            },
+            h,
+          );
+          bump(this.c, 'contractor challans');
+        }
+      });
   }
 }

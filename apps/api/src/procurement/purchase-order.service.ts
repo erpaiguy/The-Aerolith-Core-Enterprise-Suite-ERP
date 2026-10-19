@@ -636,7 +636,14 @@ export class PurchaseOrderService implements OnModuleInit {
             .map((x) =>
               x.notInBudget
                 ? `${x.name} (not in the budget)`
-                : `${x.name} by ${Number(x.overQty)} ${x.unit}`,
+                : `${x.name} by ${[
+                    Number(x.overQty) > 0 ? `${Number(x.overQty)} ${x.unit}` : null,
+                    Number(x.overAmount) > 0
+                      ? `₹${Number(x.overAmount).toLocaleString('en-IN')}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' and ')}`,
             )
             .join(', ')}. Give a reason to put it up.`,
           over,

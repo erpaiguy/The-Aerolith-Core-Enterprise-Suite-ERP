@@ -73,3 +73,6 @@ export const sCurve = (x: number): number => {
   const t = Math.max(0, Math.min(1, x));
   return t * t * (3 - 2 * t);
 };
+
+/** What a site engineer writes when an order goes beyond the material budget (ignored when it does not). */
+export const OVER_BUDGET_REASON = 'Rates have moved since the budget; site needs it now.';

@@ -6,7 +6,17 @@ import { type Ctx, type ProjectState, as, bump, step } from './ctx.js';
 import { type Labour, isWorkDay, siteTeam } from './people.js';
 import { itemDone, workValue } from './projects.js';
 import { ANALYSES, BOQ_ITEMS, MACHINES, OFFICE_ASSETS, PARTIES, RESOURCES } from './plan.js';
-import { type Day, addDays, diffDays, lastOfMonth, minDay, money, qty4, weekday } from './util.js';
+import {
+  type Day,
+  OVER_BUDGET_REASON,
+  addDays,
+  diffDays,
+  lastOfMonth,
+  minDay,
+  money,
+  qty4,
+  weekday,
+} from './util.js';
 
 const live = (ps: ProjectState, d: Day) =>
   ps.status === 'active' && d >= ps.plan.start && d <= ps.end;
@@ -542,7 +552,11 @@ export class Site {
               gstPct: string;
             }[];
           };
-        }>(`/tenant/order-revisions/${o.open.id}/submit`, { rowVersion: o.open.rowVersion }, imran),
+        }>(
+          `/tenant/order-revisions/${o.open.id}/submit`,
+          { rowVersion: o.open.rowVersion, overBudgetReason: OVER_BUDGET_REASON },
+          imran,
+        ),
       );
       if (!po) continue;
       bump(c, 'purchase orders');
