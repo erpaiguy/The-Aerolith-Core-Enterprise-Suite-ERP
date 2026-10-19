@@ -1,9 +1,17 @@
 // Wave 1 step 12 (part 2) in a real browser: the tender dashboard's headline numbers and charts, a tile of one's own
 // added and kept, a tile opening the report behind it, the estimation dashboard, and the Excel download.
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { expect, test } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { signInNewAdmin } from './helpers.js';
+
+// The ECharts version the web app ships, so the notice check follows upgrades.
+const echartsVersion = (
+  createRequire(import.meta.url)('../../../apps/web/package.json') as {
+    dependencies: Record<string, string>;
+  }
+).dependencies.echarts;
 
 const shot = (name: string) => ({ path: `screenshots/${name}.png`, fullPage: true });
 const local = (d: Date) =>
@@ -100,8 +108,8 @@ test('an estimator reads the dashboards, adds a tile and drills into the pipelin
   // The third-party licences travel with the app, ECharts' Apache NOTICE included.
   await page.getByRole('link', { name: 'Third-party licences' }).click();
   const licences = page.getByLabel('Third-party licences');
-  await expect(licences).toContainText('echarts 6.0.0');
-  await expect(licences).toContainText('Copyright 2017-2025 The Apache Software Foundation');
+  await expect(licences).toContainText(`echarts ${echartsVersion}`);
+  await expect(licences).toContainText(/Copyright 2017-\d{4} The Apache Software Foundation/);
   await page.goBack();
   // Printing leaves the menus off the paper.
   await page.emulateMedia({ media: 'print' });

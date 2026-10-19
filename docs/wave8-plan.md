@@ -184,7 +184,7 @@ The source of truth for where the work stands. A scheduled check-in resumes from
 - [x] 8g.3 Reminders that go out
 - [x] 8g.4 Finer permissions
 - [x] 8g.5 Marathi and Hindi for site screens
-- [ ] 8 exit: full check, browser suite, demo reseed and crawl; notify the owner
+- [x] 8 exit: full check, browser suite, demo reseed and crawl; notify the owner (API 624 tests, browser 79 of 79, reseed 0 failed steps, crawl and flows 19 of 19; docs/debug-log.md)
 - [ ] Debug pass: run everything, log every failure, error and fault in docs/debug-log.md; show the owner
 - [ ] Debug fixes: clear each logged item (fix or recommendation), log the action taken against it
 - [ ] Wave 9: build as its own Progress list in docs/wave9-plan.md, then notify the owner and delete the routine

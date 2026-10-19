@@ -13,7 +13,7 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | --- | --- |
 | Full check (typecheck, lint, unit and integration tests, every package) at `d26a58f` | Green: API 620 tests, web 36, owner 3, shared 19, desktop 4, bench 3 |
 | Production builds (API, web, owner console) | Green |
-| Browser suite (79 end-to-end flows) at `d26a58f` | 79 passed |
+| Browser suite (79 end-to-end flows) at `d26a58f` | 79 passed; after the upgrades 78, then 79 once D-21 was fixed |
 | Demo reseed, crawl of every screen as every person, demo flows | First run: 172 failed seed steps, 1 flow failed (D-17, D-18). After the fixes: 0 failed steps, 19 of 19 passed |
 | Dependency audit (`pnpm audit --prod`) | 3 moderate advisories (D-1 to D-3); none after the upgrades |
 | Code hygiene scan (TODO/FIXME, `any`, `@ts-ignore`, lint suppressions) | Clean: no TODOs, no `any`, no `@ts-ignore`; 2 justified lint suppressions |
@@ -44,6 +44,7 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-18 | Demo data and purchase | The causes of D-17. 124 subcontract bills held for labour compliance, because the seeder never recorded the contractors' PF and ESI challans (the 8c rule was working). 47 purchase orders refused as over budget, because the seeder gave no reason (the 8a.4 rule was working). Seen while tracing it, an app fault: an order over budget on amount only was reported as "Fly-ash bricks by 0 nos". [Certain] | Medium | Fixed (`02ae9a1`): the seeder records each month's challans by the 15th and gives a reason on orders; the message names the quantity, the ₹ amount, or both |
 | D-19 | Tests | The nightly-backup test used the real clock, so it failed whenever it ran between midnight and 02:00 IST. [Certain] | Low | Fixed: the test runs at a fixed 03:30 IST |
 | D-20 | Tests | The FIFO stores test provisions a second company inside the test with the default 5-second limit; under the full run's load it timed out (623 of 624 passed). Every other test that provisions a company allows 90 seconds. [Certain] | Low | Fixed: 90 seconds, like the rest |
+| D-21 | Tests | After the ECharts upgrade the dashboards browser test failed: it expected the licence notice to say `echarts 6.0.0` and ECharts' 2025 copyright line, and the notice rightly said 6.1.0 and 2026. [Certain] | Low | Fixed: the test reads the version from the web app's `package.json` and accepts any copyright end year; 79 of 79 |
 
 ## Actions taken
 
@@ -59,6 +60,7 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-17, D-18 | The over-budget message names what is over; the demo seeder records contractor challans and gives budget reasons. | Reseed: 0 failed steps; crawl and flows 19 of 19 |
 | D-19 | The backup test uses a fixed clock. | Passes at any hour |
 | D-20 | The FIFO test gets the 90-second limit the other provisioning tests have. | `test/inventory.int.spec.ts` 6 of 6 |
+| D-21 | The licence-notice check follows the shipped ECharts version. | `tests/e2e/tests/dashboards.spec.ts` passes |
 | D-9, D-11, D-13, D-16 | Left for the owner: see each row. | — |
 
 ## Recommendations
