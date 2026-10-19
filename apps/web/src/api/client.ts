@@ -1,6 +1,7 @@
 // HTTP client. The access token lives in memory only. When it expires (401) the client refreshes once — concurrent
 // requests share that single refresh — and retries. Browser refresh tokens are an HttpOnly cookie the page cannot
 // read; the desktop keeps its refresh token in the OS keychain via the preload bridge.
+import { showErrorDialog } from '@aerolith/ui';
 import { apiBase, clientKind, desktop } from '../platform';
 
 export class ApiError extends Error {
@@ -8,6 +9,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string | undefined,
     readonly body: Record<string, unknown>,
+    /** The server's reference for this request, to quote to support. */
+    readonly ref: string | null = null,
   ) {
     super(typeof body.message === 'string' ? body.message : (code ?? `HTTP ${status}`));
   }
@@ -146,7 +149,22 @@ export class ApiClient {
     } catch {
       // empty or non-JSON body
     }
-    return new ApiError(res.status, typeof body.code === 'string' ? body.code : undefined, body);
+    const err = new ApiError(
+      res.status,
+      typeof body.code === 'string' ? body.code : undefined,
+      body,
+      res.headers.get('x-request-id'),
+    );
+    // A fault on the server is not the person's to fix: say so where it cannot be missed, with the reference.
+    if (res.status >= 500 && res.status !== 503)
+      showErrorDialog({
+        title: 'Something went wrong on the server',
+        message: 'What you asked for was not done. Nothing you entered was lost from this screen.',
+        advice:
+          'Try again in a minute. If it happens again, send the reference below to your administrator or support.',
+        reference: err.ref ?? undefined,
+      });
+    return err;
   }
 }
 

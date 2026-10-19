@@ -73,6 +73,9 @@ export function describeError(err: unknown): string {
       return first.path ? `${labelFor(first.path)}: ${first.message}` : first.message;
   }
   if (!(err instanceof ApiError)) return errorMessage('network_error');
+  // A server fault: the dialog has already said so; the line on the screen carries the reference too.
+  if (err.status >= 500 && err.status !== 503)
+    return `Something went wrong on the server${err.ref ? ` (reference ${err.ref})` : ''}. Try again in a minute.`;
   // A project's records are seen by its team (and those who see every project): to anyone else they do not exist.
   if (err.status === 404 && typeof err.body.message !== 'string')
     return "This isn't here, or it belongs to a project you are not on. Ask the project's lead to add you to its team.";

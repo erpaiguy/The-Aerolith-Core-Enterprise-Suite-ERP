@@ -1,6 +1,9 @@
 // Shared HTTP setup for the server and the tests, so tests exercise the same prefix and CORS rules as production.
+import { randomBytes } from 'node:crypto';
 import multipart from '@fastify/multipart';
+import { Logger } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { CLIENT_HEADER } from './auth/cookie.js';
 import { APP_CONFIG, type AppConfig } from './config/config.js';
 
@@ -13,6 +16,7 @@ export function configureApp(app: NestFastifyApplication): NestFastifyApplicatio
     origin: config.corsOrigins,
     credentials: false,
     allowedHeaders: ['authorization', 'content-type', CLIENT_HEADER],
+    exposedHeaders: [REQUEST_ID_HEADER, 'content-disposition'],
     methods: ['GET', 'POST'],
     maxAge: 600,
   });
@@ -20,5 +24,29 @@ export function configureApp(app: NestFastifyApplication): NestFastifyApplicatio
   void app.register(multipart, {
     limits: { fileSize: config.importMaxBytes, files: 1, fields: 10, parts: 20 },
   });
+  requestIds(app.getHttpAdapter().getInstance() as FastifyInstance);
   return app;
+}
+
+/** Sent on every response; the error dialog shows it so a person can quote it to support (docs/wave9-plan.md 9a.2). */
+export const REQUEST_ID_HEADER = 'x-request-id';
+const refs = new WeakMap<FastifyRequest, string>();
+/** The request's reference: 10 letters and digits, unambiguous to read out over the phone. */
+export const requestRef = (req: FastifyRequest) => refs.get(req);
+
+function requestIds(fastify: FastifyInstance) {
+  const log = new Logger('Request');
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  fastify.addHook('onRequest', (req, reply, done) => {
+    const ref = [...randomBytes(10)].map((b) => alphabet[b % alphabet.length]).join('');
+    refs.set(req, ref);
+    void reply.header(REQUEST_ID_HEADER, ref);
+    done();
+  });
+  // Server faults are logged with the reference the person was shown, next to the stack Nest logs.
+  fastify.addHook('onResponse', (req, reply, done) => {
+    if (reply.statusCode >= 500)
+      log.error(`${refs.get(req)} ${req.method} ${req.url.split('?')[0]} -> ${reply.statusCode}`);
+    done();
+  });
 }

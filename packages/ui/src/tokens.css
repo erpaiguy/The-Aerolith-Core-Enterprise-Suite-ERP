@@ -1,21 +1,27 @@
 /* Shared design tokens for the Aerolith apps. Import after 'tailwindcss'. */
-/* Design tokens. Light by default; dark follows the OS unless data-theme forces one. */
+/* One scale for colour, radius, elevation, type and motion (docs/wave9-plan.md step 9a.1). Light by default; dark
+   follows the OS unless data-theme forces one. Every text colour meets WCAG AA (4.5:1) on every surface it is used on,
+   badges included: apps/web/src/lib/contrast.test.ts reads this file and fails if one does not. */
 :root {
   --canvas: #f5f6f8;
   --surface: #ffffff;
   --surface-2: #f0f2f5;
   --surface-3: #e4e7ec;
   --line: #d9dde3;
+  --line-strong: #b8bec8;
   --fg: #16191f;
   --fg-muted: #4d5562;
-  --fg-subtle: #7b8494;
-  --accent: #c2410c; /* terracotta: construction without the hi-vis cliché */
-  --accent-hover: #a8380a;
+  --fg-subtle: #646c7a;
+  --accent: #b23c0b; /* terracotta: construction without the hi-vis cliché */
+  --accent-hover: #963209;
   --accent-fg: #ffffff;
-  --info: #2563eb;
-  --success: #15803d;
-  --warning: #b45309;
-  --danger: #c0262d;
+  --info: #1d5bd8;
+  --success: #137336;
+  --warning: #9a4a08;
+  --danger: #b9232a;
+  --danger-fg: #ffffff;
+  --overlay: rgb(15 17 21 / 0.45);
+  --shadow-color: 220 15% 20%;
   color-scheme: light;
 }
 
@@ -26,9 +32,10 @@
     --surface-2: #1f232b;
     --surface-3: #2a2f39;
     --line: #2f3540;
+    --line-strong: #444c59;
     --fg: #e8eaee;
     --fg-muted: #a7aebb;
-    --fg-subtle: #7d8594;
+    --fg-subtle: #8d95a3;
     --accent: #f0743e;
     --accent-hover: #f58a5a;
     --accent-fg: #1a0d06;
@@ -36,6 +43,9 @@
     --success: #4ccb7a;
     --warning: #f0a54a;
     --danger: #ff6b70;
+    --danger-fg: #1a0506;
+    --overlay: rgb(0 0 0 / 0.6);
+    --shadow-color: 220 40% 2%;
     color-scheme: dark;
   }
 }
@@ -46,9 +56,10 @@
   --surface-2: #1f232b;
   --surface-3: #2a2f39;
   --line: #2f3540;
+  --line-strong: #444c59;
   --fg: #e8eaee;
   --fg-muted: #a7aebb;
-  --fg-subtle: #7d8594;
+  --fg-subtle: #8d95a3;
   --accent: #f0743e;
   --accent-hover: #f58a5a;
   --accent-fg: #1a0d06;
@@ -56,6 +67,9 @@
   --success: #4ccb7a;
   --warning: #f0a54a;
   --danger: #ff6b70;
+  --danger-fg: #1a0506;
+  --overlay: rgb(0 0 0 / 0.6);
+  --shadow-color: 220 40% 2%;
   color-scheme: dark;
 }
 
@@ -65,6 +79,7 @@
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-subtle: var(--fg-subtle);
@@ -75,7 +90,61 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --color-danger-fg: var(--danger-fg);
+  --color-overlay: var(--overlay);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Devanagari', sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, monospace;
+
+  /* Radius: controls and badges sm, cards and menus md, dialogs lg. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+
+  /* Elevation: raised (cards on hover), overlay (menus, popovers, toasts), modal (dialogs). */
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.08);
+  --shadow-md: 0 2px 4px hsl(var(--shadow-color) / 0.08), 0 4px 12px hsl(var(--shadow-color) / 0.1);
+  --shadow-lg:
+    0 8px 16px hsl(var(--shadow-color) / 0.12), 0 16px 40px hsl(var(--shadow-color) / 0.18);
+
+  /* Type: 12 / 14 / 16 / 18 / 20 / 24; body text is sm (14px), page titles xl. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+
+  /* Motion: short, and none for those who ask for none (below). */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-enter: aerolith-enter 160ms var(--ease-out);
+}
+
+@keyframes aerolith-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 body {
@@ -83,4 +152,14 @@ body {
   color: var(--fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Every focusable thing shows where the keyboard is (step 9a.8). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: var(--overlay);
 }

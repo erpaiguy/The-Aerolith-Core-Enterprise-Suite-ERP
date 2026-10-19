@@ -1,3 +1,4 @@
+import { ConfirmProvider, ErrorDialogHost, Toaster } from '@aerolith/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
@@ -37,7 +38,11 @@ createRoot(root).render(
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
         <LanguageProvider>
-          <RouterProvider router={router} />
+          <ConfirmProvider>
+            <RouterProvider router={router} />
+            <Toaster />
+            <ErrorDialogHost />
+          </ConfirmProvider>
         </LanguageProvider>
       </SessionProvider>
     </QueryClientProvider>
