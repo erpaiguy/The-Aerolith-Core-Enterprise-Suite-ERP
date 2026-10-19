@@ -1,7 +1,8 @@
 // Marathi and Hindi for the screens site staff use (docs/wave8-plan.md step 8g.5): the daily report, muster, stores,
 // quality and safety. No library: the English text is the key, each language a dictionary of the strings it has, and
 // anything missing stays English. The choice is kept on the device (a site phone is one person's), defaulting to
-// English. Numbers, dates, codes and names are never translated.
+// English. Numbers, dates, codes and names are never translated. Where one English word means two things, the key
+// carries its sense after `@@` ('Issue@@permit', 'Issue@@material'); only the part before it is ever shown in English.
 import {
   createContext,
   useCallback,
@@ -34,12 +35,18 @@ function stored(): Lang {
 const fill = (s: string, vars?: Record<string, string | number>) =>
   vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 
+/** The English shown for a key: without its `@@sense`. */
+const englishOf = (key: string) => {
+  const at = key.indexOf('@@');
+  return at < 0 ? key : key.slice(0, at);
+};
+
 export type T = (english: string, vars?: Record<string, string | number>) => string;
 
 const Ctx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: T }>({
   lang: 'en',
   setLang: () => {},
-  t: fill,
+  t: (key, vars) => fill(englishOf(key), vars),
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -57,7 +64,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
   const value = useMemo(() => {
     const dict = lang === 'en' ? null : DICTIONARIES[lang];
-    const t: T = (english, vars) => fill(dict?.[english] ?? english, vars);
+    const t: T = (key, vars) => fill(dict?.[key] ?? englishOf(key), vars);
     return { lang, setLang, t };
   }, [lang, setLang]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

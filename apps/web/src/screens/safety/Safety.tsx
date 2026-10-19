@@ -401,7 +401,7 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                     type="button"
                     onClick={() => void call(`/api/tenant/permits/${p.id}/issue`, { confirmed: c })}
                   >
-                    {t('Issue')}
+                    {t('Issue@@permit')}
                   </Button>
                 </div>
               )}

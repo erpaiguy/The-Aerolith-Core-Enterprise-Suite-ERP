@@ -91,7 +91,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
           <div className="flex flex-wrap gap-2">
             {s.mayIssue && inStock.length > 0 && (
               <Button onClick={() => setForm(form === 'issue' ? null : 'issue')}>
-                <PackageMinus className="size-4" aria-hidden /> {t('Issue')}
+                <PackageMinus className="size-4" aria-hidden /> {t('Issue@@material')}
               </Button>
             )}
             {s.mayManage && inStock.length > 0 && (
@@ -471,7 +471,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
     <Card title={t('Issue to work')}>
       <form
         className="space-y-3"
-        aria-label={t('Issue')}
+        aria-label={t('Issue@@material')}
         onSubmit={(e) => {
           e.preventDefault();
           void run('issue', async () => {
@@ -604,7 +604,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
             busy={busy === 'issue'}
             disabled={!head.wbsCode || !head.issuedTo.trim() || lines.length === 0}
           >
-            {t('Issue')}
+            {t('Issue@@material')}
           </Button>
           <Button type="button" variant="ghost" onClick={onCancel}>
             {t('Cancel')}
@@ -674,7 +674,7 @@ function TransferForm({
       >
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-80">
-            <Field label={t('To')}>
+            <Field label={t('To@@destination')}>
               <Select value={to} onChange={(e) => setTo(e.target.value)}>
                 <option value="">{t('Choose a store')}</option>
                 {stores.data

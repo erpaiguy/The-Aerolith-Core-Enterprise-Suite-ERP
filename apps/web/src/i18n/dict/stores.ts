@@ -10,7 +10,6 @@ export const stores: AreaDict = {
     Cancelled: 'रद्द केली',
     '{n} held for inspection': 'तपासणीसाठी {n} थांबवले',
     Received: 'मिळाले',
-    Print: 'प्रिंट करा',
     'Why is the receipt cancelled?': 'पावती का रद्द केली?',
     'Cancel receipt': 'पावती रद्द करा',
     'Cancelled: {reason}. What it recorded is owed again on the order.':
@@ -65,7 +64,6 @@ export const stores: AreaDict = {
     Yard: 'यार्ड',
     'GST state code': 'GST राज्य कोड',
     'Add central store': 'मध्यवर्ती भांडार जोडा',
-    'None yet.': 'अजून काही नाही.',
     Materials: 'साहित्य',
     Value: 'किंमत',
     '{n} below reorder': '{n} रिऑर्डर पातळीखाली',
@@ -81,7 +79,7 @@ export const stores: AreaDict = {
     // One store
     'At {site} · {value} in stock · {method}': '{site} येथे · {value} चा स्टॉक · {method}',
     'weighted average': 'भारित सरासरी',
-    Issue: 'इश्यू करा',
+    'Issue@@material': 'इश्यू करा',
     Transfer: 'ट्रान्सफर',
     'Stock take {n}': 'स्टॉक मोजणी {n}',
     'Stock take': 'स्टॉक मोजणी',
@@ -131,7 +129,7 @@ export const stores: AreaDict = {
     'Saved on this phone; it will be sent when there is signal (see the Outbox).':
       'या फोनवर जतन केले; नेटवर्क आल्यावर पाठवले जाईल (आउटबॉक्स पहा).',
     'Transfer to another store': 'दुसऱ्या भांडारात ट्रान्सफर',
-    To: 'कुठे',
+    'To@@destination': 'कुठे',
     'Choose a store': 'भांडार निवडा',
     'Vehicle no.': 'वाहन क्र.',
     Transporter: 'ट्रान्सपोर्टर',
@@ -148,7 +146,6 @@ export const stores: AreaDict = {
     Cancelled: 'रद्द',
     '{n} held for inspection': 'जाँच के लिए {n} रोके गए',
     Received: 'प्राप्त',
-    Print: 'प्रिंट करें',
     'Why is the receipt cancelled?': 'रसीद क्यों रद्द की जा रही है?',
     'Cancel receipt': 'रसीद रद्द करें',
     'Cancelled: {reason}. What it recorded is owed again on the order.':
@@ -202,7 +199,6 @@ export const stores: AreaDict = {
     Yard: 'यार्ड',
     'GST state code': 'GST राज्य कोड',
     'Add central store': 'केंद्रीय भंडार जोड़ें',
-    'None yet.': 'अभी कुछ नहीं।',
     Materials: 'सामग्री',
     Value: 'मूल्य',
     '{n} below reorder': '{n} रीऑर्डर स्तर से नीचे',
@@ -218,7 +214,7 @@ export const stores: AreaDict = {
     // One store
     'At {site} · {value} in stock · {method}': '{site} पर · {value} का स्टॉक · {method}',
     'weighted average': 'भारित औसत',
-    Issue: 'जारी करें',
+    'Issue@@material': 'जारी करें',
     Transfer: 'ट्रांसफर',
     'Stock take {n}': 'स्टॉक गिनती {n}',
     'Stock take': 'स्टॉक गिनती',
@@ -268,7 +264,7 @@ export const stores: AreaDict = {
     'Saved on this phone; it will be sent when there is signal (see the Outbox).':
       'इस फ़ोन पर सहेजा गया; नेटवर्क मिलने पर भेजा जाएगा (आउटबॉक्स देखें)।',
     'Transfer to another store': 'दूसरे भंडार में ट्रांसफर',
-    To: 'कहाँ',
+    'To@@destination': 'कहाँ',
     'Choose a store': 'भंडार चुनें',
     'Vehicle no.': 'वाहन नं.',
     Transporter: 'ट्रांसपोर्टर',

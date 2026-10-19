@@ -308,7 +308,7 @@ function Weekly({ s }: { s: Summary }) {
             <thead>
               <tr>
                 <th>{t('Cause')}</th>
-                <th>{t('Account')}</th>
+                <th>{t('On whose account')}</th>
                 <th className="text-right">{t('Hours')}</th>
                 <th className="text-right">{t('Days')}</th>
               </tr>
