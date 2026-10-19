@@ -52,4 +52,36 @@ owner marks it reviewed in settings.
 
 ## Progress
 
-Not started: begins after the Wave 8 debug pass.
+Each line is ticked when built, tested (unit, integration where it touches the server, and the browser suite for
+anything a person sees), committed and pushed.
+
+- [ ] 9a.1 Design tokens and components: one spacing, type, colour (light and dark, contrast-checked), radius and
+      elevation scale in `@aerolith/ui`; buttons, inputs, selects, tabs, cards, tables and badges on it
+- [ ] 9a.2 Feedback that is seen: toasts for success and failure; a confirm dialog for every destructive or
+      irreversible action; error dialogs that say what went wrong, what to do and a reference to quote; empty states
+- [ ] 9a.3 Sign-in and sign-out: welcome toast (who, which company, last sign-in), signed-out confirmation, warning
+      before an idle session ends with the choice to stay
+- [ ] 9a.4 Leaving the app: the desktop app asks before closing and warns of unsent site entries or unsaved forms;
+      the browser warns on unsaved changes
+- [ ] 9a.5 Menus, bars and grids: favourites and recent pages in the sidebar; a status bar (company, year,
+      connection and outbox, version, new release); data grids with column choice, resize, reorder, freeze, density,
+      saved views and Excel export, remembered per person
+- [ ] 9a.6 Charts: one style across dashboards (colour-blind-safe palette, legends, units, full-figure tooltips), a
+      table view of every chart, drill-down
+- [ ] 9a.7 Process flows: the stage strip on documents that move (requisition to payment, measurement to receipt,
+      booking to possession) with links to the documents before and after
+- [ ] 9a.8 Accessibility: keyboard reach, focus order and visible focus, labels; an automated check in the browser
+      suite
+- [ ] 9a exit: full check and browser suite
+- [ ] 9b.1 Settings: one settings area (profile, password and two-factor, notifications, language, theme, formats;
+      company settings for admins)
+- [ ] 9b.2 Help: per-screen help, a searchable help centre, keyboard shortcuts, what's new, a support request with
+      diagnostics
+- [ ] 9b.3 Legal pages: privacy policy, terms of service, terms and conditions, licence terms (drafts, marked for a
+      lawyer's review); accepted at first sign-in, versioned, with who accepted which version and when
+- [ ] 9b.4 Updates: a signed release manifest the installation checks; automatic or manual updates in settings; the
+      desktop app installs on restart; a new-release notice in the status bar and on the sign-in screen
+- [ ] 9b.5 Hardening: headers and content security policy reviewed, rate limits, dependency audit in CI, structured
+      logs with request IDs, health and readiness, connection limits, load test, backup restore drill
+- [ ] 9b.6 Release engineering: version numbers, changelog, signed installers, release checklist
+- [ ] 9b exit and Wave 9 exit: full check, browser suite, demo reseed and crawl; report to the owner
