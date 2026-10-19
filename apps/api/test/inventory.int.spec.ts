@@ -517,7 +517,7 @@ describe.skipIf(!controlUrl || !adminUrl)('inventory (integration)', () => {
     const i2 = await issue('40');
     expect(i2.lines[0]!.value).toBe('16165.00');
     expect(await balance(store, as)).toEqual({ CEM: [20, 8210] });
-  });
+  }, 90_000);
 
   it('recovers cement issued to a subcontractor beyond what the certified work allows', async () => {
     // docs/wave8-plan.md step 8a.3. 100 bags into the site's store; a plastering work order of 100 sqm measured.

@@ -43,6 +43,7 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-17 | Demo crawl | First reseed at the Wave 8 head: every screen opened cleanly for every person (14 crawls), but 1 of 5 demo flows failed (no order for the vendor to acknowledge) and the seeder logged 172 failed steps, against 1 at the end of Wave 7. [Certain] | Medium | Fixed: see D-18; after it, 0 failed seed steps and 19 of 19 crawls and flows passed |
 | D-18 | Demo data and purchase | The causes of D-17. 124 subcontract bills held for labour compliance, because the seeder never recorded the contractors' PF and ESI challans (the 8c rule was working). 47 purchase orders refused as over budget, because the seeder gave no reason (the 8a.4 rule was working). Seen while tracing it, an app fault: an order over budget on amount only was reported as "Fly-ash bricks by 0 nos". [Certain] | Medium | Fixed (`02ae9a1`): the seeder records each month's challans by the 15th and gives a reason on orders; the message names the quantity, the ₹ amount, or both |
 | D-19 | Tests | The nightly-backup test used the real clock, so it failed whenever it ran between midnight and 02:00 IST. [Certain] | Low | Fixed: the test runs at a fixed 03:30 IST |
+| D-20 | Tests | The FIFO stores test provisions a second company inside the test with the default 5-second limit; under the full run's load it timed out (623 of 624 passed). Every other test that provisions a company allows 90 seconds. [Certain] | Low | Fixed: 90 seconds, like the rest |
 
 ## Actions taken
 
@@ -57,6 +58,7 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-12 | Admins set a staff member's email on the Admin screen (`POST /api/tenant/users/:id/email`). | `test/wave8g.int.spec.ts` |
 | D-17, D-18 | The over-budget message names what is over; the demo seeder records contractor challans and gives budget reasons. | Reseed: 0 failed steps; crawl and flows 19 of 19 |
 | D-19 | The backup test uses a fixed clock. | Passes at any hour |
+| D-20 | The FIFO test gets the 90-second limit the other provisioning tests have. | `test/inventory.int.spec.ts` 6 of 6 |
 | D-9, D-11, D-13, D-16 | Left for the owner: see each row. | — |
 
 ## Recommendations
