@@ -276,7 +276,8 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 8g: platform (integration)', () 
 
     // Nightly: due after 02:00 IST, taken and checked, and only one kept.
     await ok(post('/tenant/backups/settings', { enabled: true, hour: 2, keep: 1 }));
-    expect(await svc.runDue(t.tenantId, new Date())).toBe(true);
+    // A fixed 03:30 IST, so the test does not depend on the hour it runs at.
+    expect(await svc.runDue(t.tenantId, new Date('2026-10-17T22:00:00Z'))).toBe(true);
     const after = await ok<Overview>(get('/tenant/backups'));
     expect(after.backups.map((x) => [x.trigger, x.status, x.checkOk])).toEqual([
       ['schedule', 'done', true],

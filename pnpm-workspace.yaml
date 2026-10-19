@@ -8,6 +8,8 @@ packages:
 # neither; the import tests prove ExcelJS's streaming reader works with it (docs/dependencies.md).
 overrides:
   exceljs>unzipper: 0.12.5
+  # ExcelJS 4.4.0 asks for uuid 8, below 11.1.1's fix for GHSA-w5hq-g745-h8pq; it only calls v4(), which 11 keeps.
+  exceljs>uuid: 11.1.1
 
 # pdfjs-dist offers @napi-rs/canvas (a native binary) for rendering pages in Node. The API only reads text from PDFs and
 # the browser renders thumbnails with its own canvas, so it is never installed.
