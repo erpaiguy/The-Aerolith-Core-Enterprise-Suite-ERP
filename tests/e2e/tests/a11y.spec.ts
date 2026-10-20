@@ -56,6 +56,8 @@ async function audit(page: Page, name: string, info: TestInfo): Promise<string[]
 }
 
 test('the main screens have no serious accessibility problems', async ({ page }, info) => {
+  // Sixteen screens, each loaded and audited: more than the default two minutes.
+  test.setTimeout(360_000);
   await signInNewAdmin(
     page,
     `a11y-${Date.now()}@akola-infra.in`,
@@ -73,7 +75,8 @@ test('the main screens have no serious accessibility problems', async ({ page },
   await page.goto('/');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await page.getByRole('heading', { name: 'Sign in' }).waitFor();
-  await page.waitForLoadState('networkidle');
+  // Not 'networkidle': a request cut short by signing out can stay open, and the screen is already drawn.
+  await page.waitForTimeout(1_000);
   problems.push(...(await audit(page, 'sign-in', info)));
 
   expect(problems, problems.join('\n')).toEqual([]);
