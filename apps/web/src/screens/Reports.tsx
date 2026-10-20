@@ -27,8 +27,12 @@ import { describeError, formatDate, formatDateTime } from '../lib/format';
 import { usePermission } from '../session/permissions';
 import { VERTICALS } from './TenderForm';
 import { STATUS_LABEL } from './Tenders';
+import { numberLocale } from '../lib/locale';
 
-const INR2 = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const INR2 = new Intl.NumberFormat(numberLocale(), {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 /** ₹ amounts with paise, as reports show them. */
 export const money = (v: string | null | undefined) =>
   v === null || v === undefined || v === '' ? '' : INR2.format(Number(v));
@@ -349,13 +353,13 @@ function CostSummaryBody({ s }: { s: CostSummary }) {
 
       <Section title="Items">
         <p>
-          {s.counts.items.toLocaleString('en-IN')} items: {s.counts.priced.toLocaleString('en-IN')}{' '}
-          priced,{' '}
+          {s.counts.items.toLocaleString(numberLocale())} items:{' '}
+          {s.counts.priced.toLocaleString(numberLocale())} priced,{' '}
           <span className={s.counts.unpriced ? 'font-semibold text-red-700' : ''}>
-            {s.counts.unpriced.toLocaleString('en-IN')} not priced
+            {s.counts.unpriced.toLocaleString(numberLocale())} not priced
           </span>
-          , {s.counts.noQty.toLocaleString('en-IN')} without quantity;{' '}
-          {s.counts.analysed.toLocaleString('en-IN')} linked to a rate analysis.
+          , {s.counts.noQty.toLocaleString(numberLocale())} without quantity;{' '}
+          {s.counts.analysed.toLocaleString(numberLocale())} linked to a rate analysis.
         </p>
         {(s.kinds.provisional.items > 0 ||
           s.kinds.rateOnly.items > 0 ||

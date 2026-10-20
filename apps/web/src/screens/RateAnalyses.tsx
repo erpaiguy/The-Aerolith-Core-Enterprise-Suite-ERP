@@ -29,6 +29,7 @@ import { formatAmount, formatQty, formatRate } from '../boq/model';
 import { describeError } from '../lib/format';
 import { usePermission } from '../session/permissions';
 import { kindLabel, today } from './Resources';
+import { numberLocale } from '../lib/locale';
 
 const PAGE = 50;
 
@@ -146,7 +147,7 @@ export function RateAnalysesScreen() {
             <div className="mt-3 flex items-center justify-between text-sm text-fg-muted">
               <span>
                 {offset + 1}–{offset + list.data.items.length} of{' '}
-                {list.data.total.toLocaleString('en-IN')}
+                {list.data.total.toLocaleString(numberLocale())}
               </span>
               <span className="flex gap-2">
                 <Button

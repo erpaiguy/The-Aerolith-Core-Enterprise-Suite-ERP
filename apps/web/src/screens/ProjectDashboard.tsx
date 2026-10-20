@@ -26,6 +26,7 @@ import { describeError, formatInr, formatInrShort } from '../lib/format';
 import { shortDate } from '../schedule/model';
 import type { Done } from './Progress';
 import { printLink } from '../print/Letterhead';
+import { numberLocale } from '../lib/locale';
 
 export interface ProjectDashboard {
   asOf: string;
@@ -105,7 +106,7 @@ export interface ProjectDashboard {
 }
 
 const pct = (n: number | null | undefined) =>
-  n === null || n === undefined ? '-' : `${n.toLocaleString('en-IN')}%`;
+  n === null || n === undefined ? '-' : `${n.toLocaleString(numberLocale())}%`;
 const slip = (n: number | null) =>
   n === null ? '' : n === 0 ? 'on time' : n > 0 ? `+${n} d` : `${n} d`;
 const MONTH = new Intl.DateTimeFormat('en-IN', {

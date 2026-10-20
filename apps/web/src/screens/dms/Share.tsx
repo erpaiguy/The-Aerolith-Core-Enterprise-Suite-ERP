@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, saveFile } from '../../api/client';
 import { describeError } from '../../lib/format';
+import { numberLocale } from '../../lib/locale';
 
 interface View {
   project: string;
@@ -112,7 +113,7 @@ export function ShareScreen({ tenant, token }: { tenant: string; token: string }
               </dl>
               {q.data.notes && <p className="mt-2 whitespace-pre-wrap text-sm">{q.data.notes}</p>}
               <p className="mt-2 text-xs text-fg-muted">
-                This link works until {new Date(q.data.expiresAt).toLocaleString('en-IN')}.
+                This link works until {new Date(q.data.expiresAt).toLocaleString(numberLocale())}.
               </p>
             </Card>
             {error && <Alert tone="danger">{error}</Alert>}

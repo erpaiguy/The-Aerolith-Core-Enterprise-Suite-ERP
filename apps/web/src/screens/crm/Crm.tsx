@@ -21,6 +21,7 @@ import { useState } from 'react';
 import { api } from '../../api/client';
 import { describeError, formatInr } from '../../lib/format';
 import { useFocusForm, useNewParam } from '../../lib/new-param';
+import { numberLocale } from '../../lib/locale';
 
 const STAGES = [
   'new',
@@ -519,7 +520,7 @@ function LeadCard({
           <li key={x.id} className="border-l-2 border-line pl-2">
             <span className="font-medium">{words(x.kind)}</span>{' '}
             <span className="text-fg-muted">
-              {new Date(x.happenedAt).toLocaleString('en-IN')} · {x.by}
+              {new Date(x.happenedAt).toLocaleString(numberLocale())} · {x.by}
             </span>
             <p className="whitespace-pre-wrap">{x.summary}</p>
             {x.followUpOn && (

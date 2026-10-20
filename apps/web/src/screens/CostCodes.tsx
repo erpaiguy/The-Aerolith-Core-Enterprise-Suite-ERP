@@ -22,6 +22,7 @@ import { api } from '../api/client';
 import type { CostCode, CostKind } from '../api/types';
 import { describeError } from '../lib/format';
 import { usePermission } from '../session/permissions';
+import { numberLocale } from '../lib/locale';
 
 export const COST_KIND_LABEL: Record<CostKind, string> = {
   material: 'Material',
@@ -136,7 +137,9 @@ export function CostCodesScreen() {
                       {c.name} {!c.active && <Badge tone="neutral">Retired</Badge>}
                     </td>
                     <td className="whitespace-nowrap">{COST_KIND_LABEL[c.kind]}</td>
-                    <td className="text-right tabular-nums">{c.lines.toLocaleString('en-IN')}</td>
+                    <td className="text-right tabular-nums">
+                      {c.lines.toLocaleString(numberLocale())}
+                    </td>
                     <td className="whitespace-nowrap text-right">
                       {canEdit && (
                         <>

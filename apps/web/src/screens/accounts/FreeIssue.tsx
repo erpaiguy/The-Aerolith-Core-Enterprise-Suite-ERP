@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { api } from '../../api/client';
 import { describeError, formatInr } from '../../lib/format';
 import { ResourcePicker } from '../../procurement/ResourcePicker';
+import { numberLocale } from '../../lib/locale';
 
 interface Row {
   resource: { id: string; code: string; name: string; unit: string };
@@ -37,7 +38,7 @@ interface ForOrder {
   lines: { lineKey: string; description: string; unit: string }[];
   rows: Row[];
 }
-const n = (v: string) => Number(v).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const n = (v: string) => Number(v).toLocaleString(numberLocale(), { maximumFractionDigits: 3 });
 const right = 'text-right';
 
 function Rows({ rows }: { rows: Row[] }) {

@@ -6,6 +6,7 @@ import { api } from '../api/client';
 import { Particulars, PrintSheet, PrintTable } from './Letterhead';
 import { formatInr } from './money';
 import { Loading, Signatures } from './PurchaseDocs';
+import { numberLocale } from '../lib/locale';
 
 interface Statement {
   project: { id: string; number: string; name: string; entityId: string };
@@ -49,7 +50,7 @@ interface Statement {
   };
 }
 const right = 'text-right';
-const q = (v: string) => (Number(v) === 0 ? '' : Number(v).toLocaleString('en-IN'));
+const q = (v: string) => (Number(v) === 0 ? '' : Number(v).toLocaleString(numberLocale()));
 const amt = (v: string) => (Number(v) === 0 ? '' : formatInr(v));
 
 export function DeviationStatementPrint({ projectId }: { projectId: string }) {
@@ -97,7 +98,7 @@ export function DeviationStatementPrint({ projectId }: { projectId: string }) {
               <td>{i.code}</td>
               <td>{i.description}</td>
               <td>{i.unit}</td>
-              <td className={right}>{Number(i.rate).toLocaleString('en-IN')}</td>
+              <td className={right}>{Number(i.rate).toLocaleString(numberLocale())}</td>
               <td className={right}>{q(i.tendered)}</td>
               <td className={right}>{amt(i.tenderedAmount)}</td>
               <td className={right}>{q(i.executed)}</td>
@@ -151,7 +152,7 @@ export function DeviationStatementPrint({ projectId }: { projectId: string }) {
                   <td>{x.code}</td>
                   <td>{x.description}</td>
                   <td>{x.unit}</td>
-                  <td className={right}>{Number(x.rate).toLocaleString('en-IN')}</td>
+                  <td className={right}>{Number(x.rate).toLocaleString(numberLocale())}</td>
                   <td className={right}>{q(x.executed)}</td>
                   <td className={right}>{amt(x.amount)}</td>
                   <td>{x.variations}</td>

@@ -22,6 +22,7 @@ import { api } from '../api/client';
 import type { Party, Resource } from '../api/types';
 import { describeError, formatInr } from '../lib/format';
 import { shortDate } from '../schedule/model';
+import { numberLocale } from '../lib/locale';
 
 interface Contract {
   id: string;
@@ -45,7 +46,7 @@ interface List {
   contracts: Contract[];
   mayEdit: boolean;
 }
-const q = (v: string) => Number(v).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const q = (v: string) => Number(v).toLocaleString(numberLocale(), { maximumFractionDigits: 3 });
 
 export function RateContractsScreen() {
   const qc = useQueryClient();

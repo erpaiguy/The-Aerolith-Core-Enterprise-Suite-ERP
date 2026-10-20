@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { today } from '../accounts/model';
 import { describeError } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 interface Late {
   id: string;
@@ -104,8 +105,8 @@ export function DeliveriesScreen() {
                   <td className="text-sm">
                     {o.late.map((x, k) => (
                       <div key={k}>
-                        {x.description}: {Number(x.short).toLocaleString('en-IN')} {x.unit} due{' '}
-                        {x.dueOn}
+                        {x.description}: {Number(x.short).toLocaleString(numberLocale())} {x.unit}{' '}
+                        due {x.dueOn}
                       </div>
                     ))}
                   </td>

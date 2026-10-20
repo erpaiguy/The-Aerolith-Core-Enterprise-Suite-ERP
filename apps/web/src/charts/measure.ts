@@ -2,10 +2,11 @@
 // tooltips and tables (₹ in Indian grouping) and short on axes (₹ L, ₹ Cr); percentages with %; anything else with
 // its unit (tenders, man-days, hours).
 import { formatInr, formatInrShort } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 export type Measure = 'money' | 'pct' | { unit: string };
 
-const num = (v: number) => v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const num = (v: number) => v.toLocaleString(numberLocale(), { maximumFractionDigits: 2 });
 
 /** The unit as a column heading or axis name shows it: ₹, %, or the unit itself. */
 export const unitOf = (m: Measure): string => (m === 'money' ? '₹' : m === 'pct' ? '%' : m.unit);

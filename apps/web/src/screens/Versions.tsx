@@ -25,6 +25,7 @@ import type { BoqVersions, VersionChange, VersionCompare } from '../api/types';
 import { formatAmount, formatQty, formatRate, type BoqHeader } from '../boq/model';
 import { describeError, formatDateTime, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
+import { numberLocale } from '../lib/locale';
 
 const STATUS_LABEL = { draft: 'draft', submitted: 'submitted', locked: 'locked' } as const;
 
@@ -240,9 +241,9 @@ function Compare({ boqId, data }: { boqId: string; data: BoqVersions }) {
       ) : (
         <div className="space-y-4" data-testid="compare">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label="Added" value={q.data.summary.added.toLocaleString('en-IN')} />
-            <Stat label="Removed" value={q.data.summary.removed.toLocaleString('en-IN')} />
-            <Stat label="Changed" value={q.data.summary.changed.toLocaleString('en-IN')} />
+            <Stat label="Added" value={q.data.summary.added.toLocaleString(numberLocale())} />
+            <Stat label="Removed" value={q.data.summary.removed.toLocaleString(numberLocale())} />
+            <Stat label="Changed" value={q.data.summary.changed.toLocaleString(numberLocale())} />
             <Stat
               label={`Value ${formatInr(q.data.from.total)} → ${formatInr(q.data.to.total)}`}
               value={`${delta > 0 ? '+' : ''}${formatInr(q.data.summary.itemsDelta)}`}

@@ -32,6 +32,7 @@ import type {
 } from '../api/types';
 import { formatAmount } from '../boq/model';
 import { describeError, formatInr } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 const KINDS: { value: MarkupKind; label: string }[] = [
   { value: 'overhead', label: 'Overheads' },
@@ -106,7 +107,7 @@ export function versusEstimate(
   const n = Number(pct);
   if (n === 0) return { text: 'at the estimate', tone: 'neutral' };
   return {
-    text: `${Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })} % ${n > 0 ? 'above' : 'below'} the estimate`,
+    text: `${Math.abs(n).toLocaleString(numberLocale(), { maximumFractionDigits: 2 })} % ${n > 0 ? 'above' : 'below'} the estimate`,
     tone: n > 0 ? 'warning' : 'success',
   };
 }
@@ -543,22 +544,22 @@ export function BoqPricingScreen({ boqId }: { boqId: string }) {
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="BOQ total (base)" value={formatInr(s.boq.base)} />
-        <Stat label="Items" value={s.counts.items.toLocaleString('en-IN')} />
+        <Stat label="Items" value={s.counts.items.toLocaleString(numberLocale())} />
         <Stat
           label="Items without a rate"
-          value={s.counts.unpriced.toLocaleString('en-IN')}
+          value={s.counts.unpriced.toLocaleString(numberLocale())}
           tone={s.counts.unpriced ? 'danger' : undefined}
         />
         <Stat
           label="Items without a quantity"
-          value={s.counts.noQty.toLocaleString('en-IN')}
+          value={s.counts.noQty.toLocaleString(numberLocale())}
           tone={s.counts.noQty ? 'warning' : undefined}
         />
       </div>
       {s.counts.unpriced > 0 && (
         <Alert tone="warning">
-          {s.counts.unpriced.toLocaleString('en-IN')} items have a quantity but no rate: they count
-          as nothing in every scenario below.
+          {s.counts.unpriced.toLocaleString(numberLocale())} items have a quantity but no rate: they
+          count as nothing in every scenario below.
         </Alert>
       )}
 

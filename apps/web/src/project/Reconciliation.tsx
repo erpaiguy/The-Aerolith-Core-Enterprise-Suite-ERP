@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError, formatInr } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 interface Rec {
   rows: {
@@ -17,7 +18,7 @@ interface Rec {
     items: number;
   }[];
 }
-const q3 = (v: string) => Number(v).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+const q3 = (v: string) => Number(v).toLocaleString(numberLocale(), { maximumFractionDigits: 3 });
 
 export function MaterialReconciliation({ projectId }: { projectId: string }) {
   const [from, setFrom] = useState('');

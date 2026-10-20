@@ -53,6 +53,7 @@ import { MeasurementBook } from '../project/MeasurementBook';
 import { BOQ_KIND_LABEL, formatAmount, type BoqHeader, type BoqRow } from '../boq/model';
 import { describeError, formatInr } from '../lib/format';
 import { usePermission } from '../session/permissions';
+import { numberLocale } from '../lib/locale';
 
 /** Sections (outline) or search results; clicking one opens the grid at that line. */
 function SidePanel({ boqId, onJump }: { boqId: string; onJump: (key: string) => void }) {
@@ -284,8 +285,8 @@ export function BoqScreen({ boqId }: { boqId: string }) {
               <Badge tone="neutral">{BOQ_KIND_LABEL[h.kind]}</Badge>
             )}
             <span>
-              {h.itemCount.toLocaleString('en-IN')} items · {h.nodeCount.toLocaleString('en-IN')}{' '}
-              lines
+              {h.itemCount.toLocaleString(numberLocale())} items ·{' '}
+              {h.nodeCount.toLocaleString(numberLocale())} lines
             </span>
             <span aria-live="polite" className="text-xs">
               {saving > 0 ? 'Saving…' : canEdit ? 'All changes saved' : 'Read only'}
@@ -518,7 +519,7 @@ function RatesBar({
         text:
           r.linked === 0
             ? 'No items take their rate from an analysis yet.'
-            : `${r.changed.toLocaleString('en-IN')} of ${r.linked.toLocaleString('en-IN')} linked items re-priced.`,
+            : `${r.changed.toLocaleString(numberLocale())} of ${r.linked.toLocaleString(numberLocale())} linked items re-priced.`,
       });
       if (r.changed > 0) onRefreshed();
     } catch (err) {
@@ -832,7 +833,7 @@ export function TenderBoqs({ tenderId, canEdit }: { tenderId: string; canEdit: b
               <span className="shrink-0 text-right">
                 <span className="tabular-nums">{formatInr(b.total)}</span>
                 <span className="block text-xs text-fg-muted">
-                  {b.itemCount.toLocaleString('en-IN')} items
+                  {b.itemCount.toLocaleString(numberLocale())} items
                 </span>
               </span>
             </li>

@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 const SCOPES: [string, string][] = [
   ['reports:read', 'Read the report views'],
@@ -29,7 +30,7 @@ const EVENTS: [string, string][] = [
   ['bill.certified', 'Bill certified'],
   ['portal.submission', 'Sent from a portal'],
 ];
-const when = (s: string | null) => (s ? new Date(s).toLocaleString('en-IN') : '—');
+const when = (s: string | null) => (s ? new Date(s).toLocaleString(numberLocale()) : '—');
 
 interface Key {
   id: string;

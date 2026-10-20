@@ -12,6 +12,7 @@ import {
 } from '@aerolith/ui';
 import { useState } from 'react';
 import { outbox, usePending } from '../offline';
+import { numberLocale } from '../lib/locale';
 
 export function OutboxScreen() {
   const items = usePending();
@@ -51,7 +52,9 @@ export function OutboxScreen() {
           {items.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{p.label}</span>
-              <span className="text-fg-muted">{new Date(p.createdAt).toLocaleString('en-IN')}</span>
+              <span className="text-fg-muted">
+                {new Date(p.createdAt).toLocaleString(numberLocale())}
+              </span>
               {p.error ? (
                 <>
                   <Badge tone="danger">refused: {p.error}</Badge>

@@ -1,5 +1,6 @@
+import { numberLocale } from '../lib/locale';
 // Amounts on printed documents always show the paise (₹4,720.00), as a bill or advice should; the screens may round.
-const INR = new Intl.NumberFormat('en-IN', {
+const INR = new Intl.NumberFormat(numberLocale(), {
   style: 'currency',
   currency: 'INR',
   minimumFractionDigits: 2,

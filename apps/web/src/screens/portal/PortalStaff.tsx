@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { api, saveFile } from '../../api/client';
 import { describeError } from '../../lib/format';
 import { useSession } from '../../session/session';
+import { numberLocale } from '../../lib/locale';
 
 type Kind = 'vendor' | 'subcontractor' | 'client';
 const KINDS: [Kind, string][] = [
@@ -200,7 +201,9 @@ export function PortalUsersScreen() {
                       {u.status}
                     </Badge>
                   </td>
-                  <td>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN') : '—'}</td>
+                  <td>
+                    {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString(numberLocale()) : '—'}
+                  </td>
                   <td className="space-x-1 whitespace-nowrap">
                     {u.status !== 'deactivated' && (
                       <>
@@ -366,7 +369,7 @@ export function PortalSubmissionsScreen() {
                   <Payload s={s} />
                 </p>
                 <p className="mt-1 text-xs text-fg-muted">
-                  Sent by {s.submittedBy} on {new Date(s.createdAt).toLocaleString('en-IN')}
+                  Sent by {s.submittedBy} on {new Date(s.createdAt).toLocaleString(numberLocale())}
                   {s.decidedBy && `; ${s.status} by ${s.decidedBy}`} {s.reason && `: ${s.reason}`}
                 </p>
                 {s.fileName && (

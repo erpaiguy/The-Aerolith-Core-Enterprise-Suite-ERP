@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 interface Position {
   line: number;
@@ -11,7 +12,7 @@ interface Position {
   total: number;
 }
 
-const n = (v: number) => v.toLocaleString('en-IN');
+const n = (v: number) => v.toLocaleString(numberLocale());
 
 export function PositionBar({
   boqId,

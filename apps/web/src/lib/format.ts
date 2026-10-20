@@ -1,4 +1,5 @@
 import { ApiError } from '../api/client';
+import { dateText, numberLocale } from './locale';
 
 /**
  * Calendar days from today to the date, in the user's time zone: something due on the 19th, seen on the 9th, is
@@ -9,16 +10,15 @@ export function daysUntil(iso: string, now = new Date()): number {
   return Math.round((day(new Date(iso)) - day(now)) / 86_400_000);
 }
 
+/** A date as the person chose in Settings (20 Oct 2026 by default). A bare YYYY-MM-DD is that calendar day. */
 export const formatDate = (iso: string): string =>
-  new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  dateText(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00`) : new Date(iso));
 
-export const formatDateTime = (iso: string): string =>
-  new Date(iso).toLocaleString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+/** Date and time: 20 Oct 2026, 03:45 pm. */
+export const formatDateTime = (iso: string): string => {
+  const d = new Date(iso);
+  return `${dateText(d)}, ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
+};
 
 /** Turns API error codes into sentences people can act on. */
 export function errorMessage(
@@ -90,7 +90,7 @@ export function describeError(err: unknown): string {
 const labelFor = (path: string) =>
   path.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
 
-const INR = new Intl.NumberFormat('en-IN', {
+const INR = new Intl.NumberFormat(numberLocale(), {
   style: 'currency',
   currency: 'INR',
   maximumFractionDigits: 0,

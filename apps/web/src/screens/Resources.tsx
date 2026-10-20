@@ -29,6 +29,7 @@ import {
 import { formatRate } from '../boq/model';
 import { describeError, formatDate } from '../lib/format';
 import { usePermission } from '../session/permissions';
+import { numberLocale } from '../lib/locale';
 
 export const today = () => new Date().toISOString().slice(0, 10);
 export const kindLabel = (k: ResourceKind) => RESOURCE_KINDS.find((x) => x.value === k)!.label;
@@ -627,7 +628,7 @@ export function ResourcesScreen() {
               <div className="mt-3 flex items-center justify-between text-sm text-fg-muted">
                 <span>
                   {offset + 1}–{offset + list.data.items.length} of{' '}
-                  {list.data.total.toLocaleString('en-IN')}
+                  {list.data.total.toLocaleString(numberLocale())}
                 </span>
                 <span className="flex gap-2">
                   <Button

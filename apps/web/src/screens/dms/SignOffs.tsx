@@ -22,6 +22,7 @@ import { api, saveFile } from '../../api/client';
 import type { DocVault, ProjectDetail, ProjectSummary } from '../../api/types';
 import { describeError } from '../../lib/format';
 import { PdfPage, usePdf, type Box } from './MarkupViewer';
+import { numberLocale } from '../../lib/locale';
 
 interface Detail {
   id: string;
@@ -280,7 +281,10 @@ function SignOff({
           <li key={g.id} aria-label={`Signer ${g.position}`}>
             {g.position}. {g.name}: <Badge tone={tone(g.status)}>{g.status}</Badge>
             {g.actedAt && (
-              <span className="text-fg-muted"> {new Date(g.actedAt).toLocaleString('en-IN')}</span>
+              <span className="text-fg-muted">
+                {' '}
+                {new Date(g.actedAt).toLocaleString(numberLocale())}
+              </span>
             )}
             {g.reason && <span className="text-fg-muted"> · {g.reason}</span>}
           </li>

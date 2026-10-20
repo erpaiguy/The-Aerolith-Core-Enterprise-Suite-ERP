@@ -69,6 +69,7 @@ import {
   type ProgrammeSummary,
 } from '../schedule/model';
 import { usePermission } from '../session/permissions';
+import { numberLocale } from '../lib/locale';
 
 const today = () => {
   const d = new Date();
@@ -1396,8 +1397,8 @@ function ActivityLines({
               <span className="font-mono text-xs">{l.code}</span>
               <span className="min-w-0 flex-1 truncate">{l.description}</span>
               <span className="whitespace-nowrap text-xs tabular-nums text-fg-muted">
-                {Number(l.done).toLocaleString('en-IN')} /{' '}
-                {Number(l.qty ?? 0).toLocaleString('en-IN')} {l.unit}
+                {Number(l.done).toLocaleString(numberLocale())} /{' '}
+                {Number(l.qty ?? 0).toLocaleString(numberLocale())} {l.unit}
               </span>
               {canEdit && (
                 <Button
@@ -1523,7 +1524,7 @@ function ActivityResources({
               <span className="font-mono text-xs">{r.code}</span>
               <span className="min-w-0 flex-1 truncate">{r.name}</span>
               <span className="tabular-nums">
-                {Number(r.unitsPerDay).toLocaleString('en-IN')} {r.unit}
+                {Number(r.unitsPerDay).toLocaleString(numberLocale())} {r.unit}
               </span>
               {canEdit && (
                 <Button
@@ -1837,7 +1838,7 @@ interface ResourceLoadView {
   }[];
 }
 
-const formatUnits = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const formatUnits = (n: number) => n.toLocaleString(numberLocale(), { maximumFractionDigits: 2 });
 
 function CalendarsPanel({
   plan,

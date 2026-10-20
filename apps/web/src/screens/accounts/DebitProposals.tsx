@@ -20,6 +20,7 @@ import { api } from '../../api/client';
 import { useCompany } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
 import { CompanyPicker } from './Vouchers';
+import { numberLocale } from '../../lib/locale';
 
 interface Proposals {
   proposals: {
@@ -134,7 +135,7 @@ export function DebitProposalsScreen() {
                       <div className="text-xs text-fg-muted">{p.reason}</div>
                     </td>
                     <td className={right}>
-                      {Number(p.qty).toLocaleString('en-IN')} {p.unit}
+                      {Number(p.qty).toLocaleString(numberLocale())} {p.unit}
                     </td>
                     <td className={right}>{formatInr(p.rate)}</td>
                     <td className={right}>

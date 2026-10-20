@@ -2,6 +2,7 @@ import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-route
 import { useQuery } from '@tanstack/react-query';
 import {
   BadgeCheck,
+  Settings,
   ChevronRight,
   Banknote,
   Bell,
@@ -1099,16 +1100,10 @@ export function AppShell() {
               <OutboxChip />
               <LanguagePicker />
               <Link
-                to="/account/password"
-                className="rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
+                to="/settings"
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
               >
-                Account
-              </Link>
-              <Link
-                to="/two-factor"
-                className="rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
-              >
-                Two-factor sign-in
+                <Settings className="size-4" aria-hidden /> Settings
               </Link>
               <SignOutButton />
             </div>

@@ -13,6 +13,7 @@ import { ORDER_KIND, type Order, type Receipt } from '../procurement/orders';
 import { shortDate } from '../schedule/model';
 import { Particulars, PrintSheet, PrintTable } from './Letterhead';
 import { rupeesInWords } from './words';
+import { numberLocale } from '../lib/locale';
 
 /** The company a project's documents go out under. */
 export const useProjectEntity = (projectId: string | undefined) =>
@@ -34,7 +35,7 @@ export function Loading({ q }: { q: { isPending: boolean; isError: boolean; erro
   );
 }
 
-const num = (v: string) => Number(v).toLocaleString('en-IN', { maximumFractionDigits: 4 });
+const num = (v: string) => Number(v).toLocaleString(numberLocale(), { maximumFractionDigits: 4 });
 const right = 'text-right';
 
 export function OrderPrint({ orderId }: { orderId: string }) {

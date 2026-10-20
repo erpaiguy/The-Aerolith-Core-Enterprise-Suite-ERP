@@ -2,6 +2,7 @@
 // requisitions, comparative statements and orders. Shown only to those who buy (the server refuses the rest).
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { numberLocale } from '../lib/locale';
 
 interface History {
   resourceId: string;
@@ -17,7 +18,8 @@ interface History {
   changePct: number | null;
   trend: { month: string; rate: string }[];
 }
-const inr = (v: string) => `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const inr = (v: string) =>
+  `₹${Number(v).toLocaleString(numberLocale(), { maximumFractionDigits: 2 })}`;
 
 export function useLastRates(resourceIds: (string | null | undefined)[]) {
   const ids = [...new Set(resourceIds.filter((x): x is string => !!x))].sort();

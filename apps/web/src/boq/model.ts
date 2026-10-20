@@ -1,3 +1,4 @@
+import { numberLocale } from '../lib/locale';
 // Pure BOQ grid logic: types, number entry and display, and the sliding window of loaded rows.
 // The grid never holds the whole BOQ (docs/03-architecture.md §13): it keeps a contiguous slice in tree order and
 // extends or trims it as the user scrolls.
@@ -169,7 +170,7 @@ export function evaluate(expr: string): number | null {
 }
 
 const grouped = (min: number, max: number) =>
-  new Intl.NumberFormat('en-IN', { minimumFractionDigits: min, maximumFractionDigits: max });
+  new Intl.NumberFormat(numberLocale(), { minimumFractionDigits: min, maximumFractionDigits: max });
 const QTY = grouped(0, 4);
 const RATE = grouped(2, 4);
 const AMOUNT = grouped(2, 2);

@@ -21,12 +21,13 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { saveFile } from '../../api/client';
 import { describeError } from '../../lib/format';
 import { PortalClient, type PortalSession } from './portalClient';
+import { numberLocale } from '../../lib/locale';
 
 const today = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
 const rupees = (v: string | null | undefined) =>
   v == null || v === ''
     ? '—'
-    : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    : `₹${Number(v).toLocaleString(numberLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const trimQty = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v);
 
 const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {

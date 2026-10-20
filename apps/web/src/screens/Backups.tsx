@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, saveFile } from '../api/client';
 import { describeError, formatDateTime } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 interface Backup {
   id: string;
@@ -192,7 +193,7 @@ export function BackupsScreen() {
                         <td>{b.trigger === 'schedule' ? 'Nightly' : (b.takenBy ?? '—')}</td>
                         <td>{b.status === 'done' ? size(b.bytes) : '—'}</td>
                         <td className="text-right tabular-nums">
-                          {b.rows ? Number(b.rows).toLocaleString('en-IN') : '—'}
+                          {b.rows ? Number(b.rows).toLocaleString(numberLocale()) : '—'}
                         </td>
                         <td>
                           {b.status === 'failed' ? (

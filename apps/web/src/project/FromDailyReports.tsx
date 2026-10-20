@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
 import { shortDate } from '../schedule/model';
+import { numberLocale } from '../lib/locale';
 
 interface Proposal {
   month: string;
@@ -26,7 +27,7 @@ interface Proposal {
   mayAccept: boolean;
 }
 const n = (v: string | null) =>
-  v === null ? '-' : Number(v).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+  v === null ? '-' : Number(v).toLocaleString(numberLocale(), { maximumFractionDigits: 3 });
 const lastMonth = () => {
   const d = new Date();
   d.setUTCDate(1);

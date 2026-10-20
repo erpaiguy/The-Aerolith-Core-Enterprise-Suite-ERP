@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
 import { KIND_LABEL, type ItemKind } from './model';
+import { numberLocale } from '../lib/locale';
 
 type Action = 'scale' | 'rate' | 'unit' | 'item_kind' | 'clear_rates';
 const ACTIONS: Record<Action, string> = {
@@ -85,7 +86,8 @@ export function BulkEditDialog({
     >
       {result ? (
         <Alert tone="success">
-          {result.changed.toLocaleString('en-IN')} item{result.changed === 1 ? '' : 's'} changed.
+          {result.changed.toLocaleString(numberLocale())} item{result.changed === 1 ? '' : 's'}{' '}
+          changed.
         </Alert>
       ) : (
         <div className="space-y-4">

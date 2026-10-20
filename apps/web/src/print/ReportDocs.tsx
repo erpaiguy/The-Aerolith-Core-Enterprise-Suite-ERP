@@ -10,6 +10,7 @@ import type { ProjectDashboard } from '../screens/ProjectDashboard';
 import { shortDate } from '../schedule/model';
 import { Particulars, PrintSheet, PrintTable } from './Letterhead';
 import { Loading } from './PurchaseDocs';
+import { numberLocale } from '../lib/locale';
 
 interface Tile {
   project: { id: string; number: string; name: string };
@@ -33,7 +34,8 @@ interface CompanyCash {
 }
 
 const right = 'text-right';
-const pct = (v: string | null) => (v === null ? '—' : `${Number(v).toLocaleString('en-IN')}%`);
+const pct = (v: string | null) =>
+  v === null ? '—' : `${Number(v).toLocaleString(numberLocale())}%`;
 const idx = (v: string | null) => v ?? '—';
 
 export function MisPackPrint() {

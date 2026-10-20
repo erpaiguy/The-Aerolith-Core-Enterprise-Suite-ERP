@@ -11,6 +11,7 @@ import type { ProjectDetail } from '../api/types';
 import { describeError } from '../lib/format';
 import { rupees } from '../procurement/OrderLines';
 import { shortDate } from '../schedule/model';
+import { numberLocale } from '../lib/locale';
 
 type Stage = 'not_asked' | 'asked' | 'part_ordered' | 'ordered' | 'part_received' | 'received';
 const STAGE: Record<Stage, string> = {
@@ -99,7 +100,7 @@ interface Suppliers {
 }
 
 /** A quantity without trailing zeros: "145.0000" → "145". */
-const qty = (v: string | null) => (v === null ? '-' : Number(v).toLocaleString('en-IN'));
+const qty = (v: string | null) => (v === null ? '-' : Number(v).toLocaleString(numberLocale()));
 const pct = (v: string | null) => (v === null ? '-' : `${v}%`);
 
 function Report<T>({

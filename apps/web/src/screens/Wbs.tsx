@@ -23,6 +23,7 @@ import { api } from '../api/client';
 import type { ProjectBoq, ProjectBreakdown, ProjectDetail, WbsNode } from '../api/types';
 import { describeError, formatInr } from '../lib/format';
 import { COST_KIND_LABEL } from './CostCodes';
+import { numberLocale } from '../lib/locale';
 
 const post = <T,>(url: string, body: object = {}) =>
   api.request<T>(`/api/tenant/${url}`, { method: 'POST', body });
@@ -83,10 +84,10 @@ export function WbsScreen({ projectId }: { projectId: string }) {
       {error && <Alert tone="danger">{error}</Alert>}
       {contractItems > 0 && (
         <p className="text-sm text-fg-muted" data-testid="coverage">
-          Of {contractItems.toLocaleString('en-IN')} contract items,{' '}
-          {d.unmapped.wbs.contract.lines.toLocaleString('en-IN')} have no WBS element and{' '}
-          {d.unmapped.costCode.contract.lines.toLocaleString('en-IN')} no cost code. Map them in the
-          BOQ: select lines (Shift+click), then <strong>Map</strong>.
+          Of {contractItems.toLocaleString(numberLocale())} contract items,{' '}
+          {d.unmapped.wbs.contract.lines.toLocaleString(numberLocale())} have no WBS element and{' '}
+          {d.unmapped.costCode.contract.lines.toLocaleString(numberLocale())} no cost code. Map them
+          in the BOQ: select lines (Shift+click), then <strong>Map</strong>.
         </p>
       )}
       {d.wbs.length === 0 && canEdit && live.length > 0 && (
@@ -154,7 +155,7 @@ export function WbsScreen({ projectId }: { projectId: string }) {
                       {formatInr(n.margin)}
                     </td>
                     <td className="text-right tabular-nums">
-                      {n.contractLines.toLocaleString('en-IN')}
+                      {n.contractLines.toLocaleString(numberLocale())}
                     </td>
                     {canEdit && (
                       <td className="whitespace-nowrap text-right">
@@ -292,7 +293,9 @@ function Unmapped({
       <td className="text-right tabular-nums">{formatInr(u.budget.amount)}</td>
       <td className="text-right tabular-nums">{formatInr(margin.toFixed(2))}</td>
       {!kindColumn && (
-        <td className="text-right tabular-nums">{u.contract.lines.toLocaleString('en-IN')}</td>
+        <td className="text-right tabular-nums">
+          {u.contract.lines.toLocaleString(numberLocale())}
+        </td>
       )}
       {!kindColumn && cols > 5 && <td />}
     </tr>

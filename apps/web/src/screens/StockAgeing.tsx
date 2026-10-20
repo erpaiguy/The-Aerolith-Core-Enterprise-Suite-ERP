@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
 import { rupees } from '../procurement/OrderLines';
+import { numberLocale } from '../lib/locale';
 
 const BUCKETS = ['0-30', '31-90', '91-180', 'over 180'] as const;
 interface Ageing {
@@ -116,7 +117,7 @@ export function StockAgeingScreen() {
                           {r.name}
                         </td>
                         <td className="whitespace-nowrap text-right tabular-nums">
-                          {Number(r.qty).toLocaleString('en-IN')} {r.unit}
+                          {Number(r.qty).toLocaleString(numberLocale())} {r.unit}
                           <div className="text-xs text-fg-muted">{rupees(r.value)}</div>
                         </td>
                         {BUCKETS.map((b) => (

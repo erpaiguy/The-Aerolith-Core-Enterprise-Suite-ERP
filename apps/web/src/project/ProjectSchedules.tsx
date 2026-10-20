@@ -10,6 +10,7 @@ import type { ProjectDetail } from '../api/types';
 import { describeError } from '../lib/format';
 import { shortDate, type ProgrammeDetail } from '../schedule/model';
 import { usePermission } from '../session/permissions';
+import { numberLocale } from '../lib/locale';
 
 interface ScheduleSummary {
   id: string;
@@ -179,7 +180,7 @@ export function ProjectSchedules({ project: p }: { project: ProjectDetail }) {
                     {s.name}
                   </Link>
                   <div className="text-xs text-fg-muted">
-                    {s.activityCount.toLocaleString('en-IN')} activities
+                    {s.activityCount.toLocaleString(numberLocale())} activities
                     {s.archivedAt ? ' · archived' : ''}
                   </div>
                 </td>

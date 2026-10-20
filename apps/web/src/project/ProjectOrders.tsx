@@ -12,6 +12,7 @@ import { describeError } from '../lib/format';
 import type { Order, OrderKind, OrderRow } from '../procurement/orders';
 import { OrderTable } from '../screens/Orders';
 import { usePermission } from '../session/permissions';
+import { numberLocale } from '../lib/locale';
 
 export function ProjectOrders({ project: p }: { project: ProjectDetail }) {
   const navigate = useNavigate();
@@ -227,7 +228,7 @@ function FromRequisitions({
                 />
                 <span className="font-mono text-xs">{l.number}</span>
                 <span>
-                  {l.description}: {Number(l.qty).toLocaleString('en-IN')} {l.unit}
+                  {l.description}: {Number(l.qty).toLocaleString(numberLocale())} {l.unit}
                 </span>
                 {l.neededBy ? <span className="text-xs text-fg-muted">by {l.neededBy}</span> : null}
               </label>

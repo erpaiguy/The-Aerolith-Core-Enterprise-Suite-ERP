@@ -7,6 +7,7 @@ import { shortDate } from '../schedule/model';
 import { Particulars, PrintSheet, PrintTable } from './Letterhead';
 import { Loading, useProjectEntity } from './PurchaseDocs';
 import { rupeesInWords } from './words';
+import { numberLocale } from '../lib/locale';
 
 interface Booking {
   id: string;
@@ -70,7 +71,7 @@ const useBooking = (id: string) =>
     queryFn: () => api.request<Booking>(`/api/tenant/sales/bookings/${id}`),
   });
 const sqft = (sqm: string) =>
-  (Number(sqm) * 10.7639).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  (Number(sqm) * 10.7639).toLocaleString(numberLocale(), { maximumFractionDigits: 0 });
 const right = 'text-right';
 
 function Buyer({ b }: { b: Booking }) {
@@ -115,7 +116,7 @@ export function CostSheetPrint({ bookingId }: { bookingId: string }) {
             ['Unit', `${b.unit} (${b.unitKind}, floor ${b.floor})`],
             [
               'Carpet area',
-              `${Number(b.carpetSqm).toLocaleString('en-IN')} sq m (${sqft(b.carpetSqm)} sq ft)`,
+              `${Number(b.carpetSqm).toLocaleString(numberLocale())} sq m (${sqft(b.carpetSqm)} sq ft)`,
             ],
             [
               'Agreement',
@@ -132,7 +133,7 @@ export function CostSheetPrint({ bookingId }: { bookingId: string }) {
           <tbody>
             <tr>
               <td>
-                Carpet area {Number(b.carpetSqm).toLocaleString('en-IN')} sq m at{' '}
+                Carpet area {Number(b.carpetSqm).toLocaleString(numberLocale())} sq m at{' '}
                 {formatInr(b.ratePerSqm)} per sq m
               </td>
               <td className={right}>{formatInr(String(base))}</td>

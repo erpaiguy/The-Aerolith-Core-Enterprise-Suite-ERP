@@ -20,6 +20,7 @@ import { api } from '../api/client';
 import type { ProjectDetail } from '../api/types';
 import { describeError } from '../lib/format';
 import { dayNo, shortDate } from '../schedule/model';
+import { numberLocale } from '../lib/locale';
 
 interface Roll {
   activities: number;
@@ -295,7 +296,7 @@ export function MacroScreen({ projectId }: { projectId: string }) {
   );
 }
 
-const pct = (n: number | null) => (n === null ? '-' : `${n.toLocaleString('en-IN')}%`);
+const pct = (n: number | null) => (n === null ? '-' : `${n.toLocaleString(numberLocale())}%`);
 
 function Total({ label, children }: { label: string; children: ReactNode }) {
   return (

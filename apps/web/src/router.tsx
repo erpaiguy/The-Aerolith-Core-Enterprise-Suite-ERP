@@ -21,6 +21,7 @@ import {
 } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
 import { LegalGate, LegalPage } from './legal/Legal';
+import { SettingsScreen } from './screens/Settings';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
 import { DocumentsScreen } from './screens/Documents';
@@ -1265,6 +1266,7 @@ const routeTree = rootRoute.addChildren([
     }),
     createRoute({ getParentRoute: () => appLayout, path: '/sor-books', component: SorBooksScreen }),
     createRoute({ getParentRoute: () => appLayout, path: '/backups', component: BackupsScreen }),
+    createRoute({ getParentRoute: () => appLayout, path: '/settings', component: SettingsScreen }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/two-factor',

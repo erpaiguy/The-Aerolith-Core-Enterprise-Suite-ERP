@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 interface FollowUp {
   deliverBy: string | null;
@@ -40,7 +41,7 @@ const TONE: Record<string, 'success' | 'danger' | 'warning' | 'neutral'> = {
   due: 'neutral',
   overdue: 'danger',
 };
-const n = (v: string) => Number(v).toLocaleString('en-IN');
+const n = (v: string) => Number(v).toLocaleString(numberLocale());
 
 export function DeliveryFollowUp({ orderId }: { orderId: string }) {
   const qc = useQueryClient();

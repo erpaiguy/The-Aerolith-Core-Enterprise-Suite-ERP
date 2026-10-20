@@ -25,6 +25,7 @@ import type {
   ImportStructure,
 } from '../api/types';
 import { describeError, formatInr } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 const RUNNING: ImportJob['status'][] = ['scanning', 'validating', 'importing'];
 /** Jobs that are over: the wizard starts afresh with a file picker. */
@@ -199,7 +200,7 @@ function SettingsForm({
             >
               {job.sheets.map((s, i) => (
                 <option key={i} value={i} disabled={s.rows === 0}>
-                  {s.name} ({s.rows.toLocaleString('en-IN')} rows)
+                  {s.name} ({s.rows.toLocaleString(numberLocale())} rows)
                 </option>
               ))}
             </Select>
@@ -274,7 +275,7 @@ function SettingsForm({
           <h3 className="mb-1 text-sm font-medium">
             First rows of {sheet.name}{' '}
             <span className="font-normal text-fg-muted">
-              ({sheet.rows.toLocaleString('en-IN')} rows in all)
+              ({sheet.rows.toLocaleString(numberLocale())} rows in all)
             </span>
           </h3>
           <div className="max-h-72 overflow-auto rounded border border-line">
@@ -337,36 +338,36 @@ function RevisionSummary({ r }: { r: ImportRevision }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
         <Stat
           label="Matched"
-          value={(r.matchedByCode + r.matchedByDescription).toLocaleString('en-IN')}
+          value={(r.matchedByCode + r.matchedByDescription).toLocaleString(numberLocale())}
         />
-        <Stat label="Changed" value={r.changed.toLocaleString('en-IN')} />
-        <Stat label="Moved" value={r.moved.toLocaleString('en-IN')} />
-        <Stat label="Added" value={r.added.toLocaleString('en-IN')} />
+        <Stat label="Changed" value={r.changed.toLocaleString(numberLocale())} />
+        <Stat label="Moved" value={r.moved.toLocaleString(numberLocale())} />
+        <Stat label="Added" value={r.added.toLocaleString(numberLocale())} />
         <Stat
           label="Removed"
-          value={r.removed.toLocaleString('en-IN')}
+          value={r.removed.toLocaleString(numberLocale())}
           tone={r.removed > 0 ? 'warning' : undefined}
         />
         <Stat label="Total after" value={formatInr(r.total)} />
       </div>
       <ul className="list-disc space-y-0.5 pl-5 text-sm text-fg-muted">
         <li>
-          Lines are matched by item code ({r.matchedByCode.toLocaleString('en-IN')}), then by
-          description ({r.matchedByDescription.toLocaleString('en-IN')}). A line matched wrongly
-          shows as removed and added.
+          Lines are matched by item code ({r.matchedByCode.toLocaleString(numberLocale())}), then by
+          description ({r.matchedByDescription.toLocaleString(numberLocale())}). A line matched
+          wrongly shows as removed and added.
         </li>
         {r.ratesKept > 0 && (
           <li>
-            {r.ratesKept.toLocaleString('en-IN')} items have no rate in the file and keep this
-            BOQ&apos;s rate
+            {r.ratesKept.toLocaleString(numberLocale())} items have no rate in the file and keep
+            this BOQ&apos;s rate
             {r.ratesFromFile > 0 &&
-              `; ${r.ratesFromFile.toLocaleString('en-IN')} take the file's rate`}
+              `; ${r.ratesFromFile.toLocaleString(numberLocale())} take the file's rate`}
             .
           </li>
         )}
         {r.measuredOverridden > 0 && (
           <li className="text-warning">
-            {r.measuredOverridden.toLocaleString('en-IN')} measured items get the file&apos;s
+            {r.measuredOverridden.toLocaleString(numberLocale())} measured items get the file&apos;s
             quantity; their measurement sheets are kept but no longer set the quantity.
           </li>
         )}
@@ -425,20 +426,21 @@ function Summary({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Stat
           label={s.revision ? 'Lines in the file' : 'Lines to import'}
-          value={s.lines.toLocaleString('en-IN')}
+          value={s.lines.toLocaleString(numberLocale())}
         />
-        <Stat label="Sections" value={s.counts.sections.toLocaleString('en-IN')} />
-        <Stat label="Items" value={s.counts.items.toLocaleString('en-IN')} />
+        <Stat label="Sections" value={s.counts.sections.toLocaleString(numberLocale())} />
+        <Stat label="Items" value={s.counts.items.toLocaleString(numberLocale())} />
         <Stat label={s.revision ? "File's total" : 'Total'} value={formatInr(s.total)} />
         <Stat
           label="Errors · warnings"
-          value={`${errors.toLocaleString('en-IN')} · ${s.counts.warnings.toLocaleString('en-IN')}`}
+          value={`${errors.toLocaleString(numberLocale())} · ${s.counts.warnings.toLocaleString(numberLocale())}`}
           tone={errors > 0 ? 'danger' : s.counts.warnings > 0 ? 'warning' : undefined}
         />
       </div>
       {s.counts.unitsNormalised > 0 && (
         <p className="text-sm text-fg-muted">
-          {s.counts.unitsNormalised.toLocaleString('en-IN')} units will be written the standard way.
+          {s.counts.unitsNormalised.toLocaleString(numberLocale())} units will be written the
+          standard way.
         </p>
       )}
       {s.unknownUnits.length > 0 && (
@@ -453,7 +455,7 @@ function Summary({
             <h3 className="text-sm font-medium">
               Issues
               {s.moreIssues > 0 &&
-                ` (first ${s.issues.length} of ${(s.issues.length + s.moreIssues).toLocaleString('en-IN')})`}
+                ` (first ${s.issues.length} of ${(s.issues.length + s.moreIssues).toLocaleString(numberLocale())})`}
             </h3>
             <Button variant="ghost" busy={busy} onClick={() => void report()}>
               <Download className="size-4" aria-hidden /> Download all issues
@@ -516,7 +518,7 @@ export function useImportFinished(job: ImportJob | null | undefined, onImported:
       toast.success(
         job.summary?.revision
           ? 'Revised BOQ applied'
-          : `${job.summary?.lines.toLocaleString('en-IN') ?? 'All'} lines imported`,
+          : `${job.summary?.lines.toLocaleString(numberLocale()) ?? 'All'} lines imported`,
       );
       onImported();
     }
@@ -598,7 +600,7 @@ export function ImportWizard({
     body = (
       <div className="space-y-3">
         <Progress
-          label={`Importing ${job.summary?.lines.toLocaleString('en-IN') ?? ''} lines`}
+          label={`Importing ${job.summary?.lines.toLocaleString(numberLocale()) ?? ''} lines`}
           value={job.progress}
         />
         <p className="text-sm text-fg-muted">
@@ -656,7 +658,7 @@ export function ImportWizard({
               >
                 {job.summary.revision
                   ? 'Apply the revision'
-                  : `Import ${job.summary.lines.toLocaleString('en-IN')} lines`}
+                  : `Import ${job.summary.lines.toLocaleString(numberLocale())} lines`}
               </Button>
             </div>
           </>

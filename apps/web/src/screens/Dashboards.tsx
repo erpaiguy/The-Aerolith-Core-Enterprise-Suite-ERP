@@ -36,6 +36,7 @@ import {
 import { PART_LABEL } from './Reports';
 import { VERTICALS } from './TenderForm';
 import { STATUS_LABEL } from './Tenders';
+import { numberLocale } from '../lib/locale';
 
 type Data = TenderDashboardData | EstimationDashboardData;
 
@@ -51,7 +52,7 @@ const tileValue = (t: DashboardTile) =>
       ? formatInrShort(t.value)
       : t.kind === 'pct'
         ? `${t.value} %`
-        : Number(t.value).toLocaleString('en-IN');
+        : Number(t.value).toLocaleString(numberLocale());
 
 export function DashboardScreen({ name }: { name: DashboardName }) {
   const router = useRouter();

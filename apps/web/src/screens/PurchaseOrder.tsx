@@ -47,6 +47,7 @@ import { ResourcePicker } from '../procurement/ResourcePicker';
 import { shortDate } from '../schedule/model';
 import { printLink } from '../print/Letterhead';
 import { PurchaseFlow } from './shell/FlowStrip';
+import { numberLocale } from '../lib/locale';
 
 const trimZeros = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v);
 
@@ -278,7 +279,7 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
                 .map((x) =>
                   x.notInBudget
                     ? `${x.name} (not in the budget)`
-                    : `${x.name} by ${Number(x.overQty).toLocaleString('en-IN')} ${x.unit}`,
+                    : `${x.name} by ${Number(x.overQty).toLocaleString(numberLocale())} ${x.unit}`,
                 )
                 .join('; ')}
               . Say why to put it up: the project's lead can, or it goes to an approver.

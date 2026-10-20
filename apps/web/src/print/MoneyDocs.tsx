@@ -9,10 +9,13 @@ import { shortDate } from '../schedule/model';
 import { Particulars, PrintDesk, PrintSheet, PrintTable, useEntityByName } from './Letterhead';
 import { Loading, Signatures } from './PurchaseDocs';
 import { rupeesInWords } from './words';
+import { numberLocale } from '../lib/locale';
 
 const right = 'text-right';
 const num = (v: string | null) =>
-  v === null || v === '' ? '' : Number(v).toLocaleString('en-IN', { maximumFractionDigits: 3 });
+  v === null || v === ''
+    ? ''
+    : Number(v).toLocaleString(numberLocale(), { maximumFractionDigits: 3 });
 
 export function ClientBillPrint({ billId }: { billId: string }) {
   const bill = useQuery({

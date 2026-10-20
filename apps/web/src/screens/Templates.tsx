@@ -23,6 +23,7 @@ import type { BoqTemplate } from '../api/types';
 import { describeError, formatDate } from '../lib/format';
 import { usePermission } from '../session/permissions';
 import { VERTICALS } from './TenderForm';
+import { numberLocale } from '../lib/locale';
 
 export function SaveTemplateDialog({
   boqId,
@@ -190,8 +191,9 @@ export function TemplatesScreen() {
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{t.name}</div>
                   <div className="text-xs text-fg-muted">
-                    {t.lineCount.toLocaleString('en-IN')} lines,{' '}
-                    {t.itemCount.toLocaleString('en-IN')} items · saved {formatDate(t.updatedAt)}
+                    {t.lineCount.toLocaleString(numberLocale())} lines,{' '}
+                    {t.itemCount.toLocaleString(numberLocale())} items · saved{' '}
+                    {formatDate(t.updatedAt)}
                     {t.createdBy ? ` by ${t.createdBy}` : ''}
                     {t.description ? ` · ${t.description}` : ''}
                   </div>

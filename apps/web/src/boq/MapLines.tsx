@@ -8,6 +8,7 @@ import { api } from '../api/client';
 import type { CostCode, ProjectDetail, WbsNode } from '../api/types';
 import type { BoqRow } from './model';
 import { describeError } from '../lib/format';
+import { numberLocale } from '../lib/locale';
 
 const KEEP = '';
 const CLEAR = 'none';
@@ -111,7 +112,7 @@ export function MapLinesDialog({
     >
       {changed !== null ? (
         <Alert tone="success">
-          {changed.toLocaleString('en-IN')} item{changed === 1 ? '' : 's'} mapped.
+          {changed.toLocaleString(numberLocale())} item{changed === 1 ? '' : 's'} mapped.
         </Alert>
       ) : (
         <div className="space-y-4">

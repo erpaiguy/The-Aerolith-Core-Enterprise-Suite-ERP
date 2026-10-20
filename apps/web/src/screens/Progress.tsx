@@ -11,6 +11,7 @@ import type { ProjectDetail } from '../api/types';
 import { describeError, formatInr } from '../lib/format';
 import { shortDate } from '../schedule/model';
 import { FromDailyReports } from '../project/FromDailyReports';
+import { numberLocale } from '../lib/locale';
 
 export interface Done {
   value: string;
@@ -37,7 +38,7 @@ export interface ProgressReport {
 }
 
 const indiaToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
-const pct = (n: number | null) => (n === null ? '-' : `${n.toLocaleString('en-IN')}%`);
+const pct = (n: number | null) => (n === null ? '-' : `${n.toLocaleString(numberLocale())}%`);
 
 export function ProgressScreen({ projectId }: { projectId: string }) {
   const [to, setTo] = useState(indiaToday());

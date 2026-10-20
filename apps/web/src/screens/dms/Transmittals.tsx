@@ -26,6 +26,7 @@ import { useProjectParam } from '../../lib/project-param';
 import { useFocusForm, useNewParam } from '../../lib/new-param';
 import { printLink } from '../../print/Letterhead';
 import { Link } from '@tanstack/react-router';
+import { numberLocale } from '../../lib/locale';
 
 type Tab = 'transmittals' | 'rfis' | 'submittals';
 type Call = <T>(path: string, body: object, done?: string) => Promise<T | null>;
@@ -465,7 +466,7 @@ function Transmittal({ id, projectId, call }: { id: string; projectId: string; c
       )}
       {!link && live && (
         <p className="mt-2 text-xs text-fg-muted">
-          A link is live until {new Date(live.expiresAt).toLocaleString('en-IN')}.
+          A link is live until {new Date(live.expiresAt).toLocaleString(numberLocale())}.
         </p>
       )}
       {(t.status === 'issued' || t.status === 'acknowledged') && (
@@ -500,7 +501,7 @@ function Transmittal({ id, projectId, call }: { id: string; projectId: string; c
         <ul className="mt-3 text-xs text-fg-muted" aria-label="Link activity">
           {t.events.map((e, i) => (
             <li key={i}>
-              {new Date(e.at).toLocaleString('en-IN')} · {e.kind} {e.detail}
+              {new Date(e.at).toLocaleString(numberLocale())} · {e.kind} {e.detail}
             </li>
           ))}
         </ul>
