@@ -52,6 +52,8 @@ jobs:
         run: pnpm case:check
       - name: Licence gate (docs/licensing-policy.md)
         run: pnpm licenses:check
+      - name: One product version (docs/release.md)
+        run: node tools/release/version.mjs --check
       - name: Known vulnerabilities in shipped dependencies (docs/hardening.md)
         run: pnpm audit --prod --audit-level moderate
 

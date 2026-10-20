@@ -1,0 +1,86 @@
+# A release (docs/release.md): pushing a tag v1.2.0 runs the checks, builds the Windows installer, writes the release
+# manifest with each installer's SHA-256, signs it with the release key, and publishes all of it as a GitHub release.
+# Installations check that manifest (UPDATE_MANIFEST_URL) against their public key. No paid service is used; code
+# signing of the installer is applied when the certificate secrets are present.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The tag matches the product version
+        shell: bash
+        run: |
+          node tools/release/version.mjs --check
+          test "v$(node tools/release/version.mjs)" = "${GITHUB_REF_NAME}"
+      - run: pnpm turbo run build --filter=@aerolith/web --filter=@aerolith/desktop
+      - name: Desktop app settings for this release
+        shell: bash
+        env:
+          API_URL: ${{ vars.DESKTOP_API_URL }}
+          RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
+        run: |
+          node -e "require('fs').writeFileSync('apps/desktop/resources/app-config.json', JSON.stringify({apiBaseUrl: process.env.API_URL, releasePublicKey: process.env.RELEASE_PUBLIC_KEY || null}))"
+      - name: Installer (signed when WIN_CSC_LINK is set)
+        working-directory: apps/desktop
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: pnpm dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: apps/desktop/release/AerolithCore-Setup-*.exe
+
+  publish:
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: release
+      - name: Release notes and manifest
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          V=$(node tools/release/version.mjs)
+          node tools/release/changelog.mjs "$V" > release/notes.md
+          EXE=$(cd release && ls AerolithCore-Setup-*.exe)
+          node -e "
+            const fs=require('fs');
+            const notes=fs.readFileSync('release/notes.md','utf8').split('\n').filter(l=>l.startsWith('- ')).map(l=>l.slice(2)).slice(0,40);
+            fs.writeFileSync('release/manifest.json', JSON.stringify({
+              version: '$V', date: new Date().toISOString().slice(0,10), notes,
+              desktop: { windows: { url: 'https://github.com/$REPO/releases/download/v$V/$EXE', file: '$EXE' } }
+            }, null, 2));"
+      - name: Sign the manifest
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: node tools/release/sign-manifest.mjs release/manifest.json > release/manifest.signed.json
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node tools/release/version.mjs)
+          mv release/manifest.signed.json release/latest.json
+          gh release create "v$V" --title "Aerolith Core $V" --notes-file release/notes.md \
+            release/AerolithCore-Setup-*.exe release/latest.json

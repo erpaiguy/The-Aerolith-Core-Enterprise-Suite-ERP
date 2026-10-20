@@ -313,9 +313,12 @@ function ServerUpdates() {
         {s?.available && s.latest && (
           <Alert tone={s.required ? 'warning' : 'info'}>
             Version {s.latest.version} is out{s.required ? ' and fixes something important' : ''}.
-            To update the server, run on it:{' '}
-            <code className="font-mono">docker compose pull &amp;&amp; docker compose up -d</code>{' '}
-            (a backup is taken first if you follow docs/release.md).
+            To update the server, follow the steps in docs/release.md (“Updating a server”): a
+            backup, then{' '}
+            <code className="font-mono">
+              git checkout v{s.latest.version} &amp;&amp; docker compose up -d --build
+            </code>
+            .
           </Alert>
         )}
         {s?.problem && <Alert tone="warning">{s.problem}</Alert>}

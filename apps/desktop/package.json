@@ -1,6 +1,6 @@
 {
   "name": "@aerolith/desktop",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "license": "UNLICENSED",
   "description": "Aerolith Core desktop app (Electron shell around the web UI)",
