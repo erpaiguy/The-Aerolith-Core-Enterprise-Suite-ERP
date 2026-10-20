@@ -1,6 +1,14 @@
 // The first-run journey of a new tenant, in a real browser against the real API and databases.
 import { expect, test } from '@playwright/test';
-import { createTenant, licenceKeyIn, linkIn, timeStep, totp, waitForEmail } from './helpers.js';
+import {
+  acceptTerms,
+  createTenant,
+  licenceKeyIn,
+  linkIn,
+  timeStep,
+  totp,
+  waitForEmail,
+} from './helpers.js';
 
 const ADMIN = 'admin@sharma-builders.in';
 const ADMIN_PASSWORD = 'Monsoon-Slab-Pour-7';
@@ -57,6 +65,10 @@ test('admin activates, secures the account, adds a worker; the worker sets a pas
   await page.getByRole('button', { name: /continue to sign in/ }).click();
   await page.getByLabel('Authenticator code').fill(totp(secret, step + 1));
   await page.getByRole('button', { name: 'Verify' }).click();
+  // The admin accepts all four documents for the company (step 9b.3).
+  await expect(page.getByRole('heading', { name: 'Before you start' })).toBeVisible();
+  await page.screenshot(shot('04a-accept-terms'));
+  expect(await acceptTerms(page)).toBe(4);
   await expect(page.getByRole('heading', { name: /Good (morning|day), admin$/ })).toBeVisible();
   await expect(page.getByText('Trial ends')).toBeVisible();
   await page.screenshot(shot('04-admin-home'));
@@ -83,6 +95,8 @@ test('admin activates, secures the account, adds a worker; the worker sets a pas
   await page.getByLabel('New password', { exact: true }).fill('Tower-Crane-Lift-31');
   await page.getByLabel('Repeat new password').fill('Tower-Crane-Lift-31');
   await page.getByRole('button', { name: 'Save password' }).click();
+  // Staff accept the terms of service and the privacy policy for themselves.
+  expect(await acceptTerms(page)).toBe(2);
   await expect(page.getByRole('heading', { name: /Good (morning|day), Suresh/ })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Users', exact: true })).toHaveCount(0);
 

@@ -2,6 +2,7 @@
 // vendor quotes and acknowledges, the subcontractor sends an invoice, the manager accepts what came from the portals,
 // the client answers the transmittal, the sales manager raises a milestone. Run after crawl.spec.ts: it changes data.
 import { loadDemo } from './load.js';
+import { acceptTerms } from '../tests/helpers.js';
 import { expect, test, type Browser } from '@playwright/test';
 
 const demo = loadDemo();
@@ -28,7 +29,7 @@ async function staff(browser: Browser, name: string) {
   await page.getByLabel('Username or admin email').fill(u.username);
   await page.getByLabel('Password').fill(u.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.getByRole('link', { name: 'Home' }).waitFor();
+  await acceptTerms(page);
   return page;
 }
 

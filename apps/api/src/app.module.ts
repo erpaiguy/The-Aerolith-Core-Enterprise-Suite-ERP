@@ -10,6 +10,7 @@ import { BackupModule } from './backup/backup.module.js';
 import { BiModule } from './bi/bi.module.js';
 import { DigestModule } from './inbox/digest.module.js';
 import { PrefsModule } from './prefs/prefs.module.js';
+import { LegalModule } from './legal/legal.module.js';
 import { PortalModule } from './portal/portal.module.js';
 import { IntegrationsModule } from './integrations/integrations.module.js';
 import { IdempotencyInterceptor } from './common/idempotency.js';
@@ -69,6 +70,7 @@ import { TenderModule } from './tender/tender.module.js';
     BackupModule,
     DigestModule,
     PrefsModule,
+    LegalModule,
     PortalModule,
     IntegrationsModule,
     ProcurementModule,

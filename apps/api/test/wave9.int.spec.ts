@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap.js';
 import { migrate } from '../src/db/migrate.js';
+import { TenantConnections } from '../src/provisioning/tenant-connections.js';
 import { readyTenant } from './helpers/tenant.js';
 
 const controlUrl = process.env.TEST_CONTROL_DATABASE_URL;
@@ -115,5 +116,65 @@ describe.skipIf(!controlUrl || !adminUrl)('wave 9: interface and readiness (inte
     expect(
       (await post('/tenant/me/prefs/grid.big', { value: 'x'.repeat(70_000) })).statusCode,
     ).toBe(400);
+  });
+
+  it('asks each person to accept what applies to them, keeps who accepted which version, and the lawyer’s review (step 9b.3)', async () => {
+    type State = {
+      documents: {
+        key: string;
+        version: string;
+        mustAccept: boolean;
+        acceptedAt: string | null;
+        reviewed: { by: string } | null;
+      }[];
+    };
+    const must = (s: State) => s.documents.filter((d) => d.mustAccept).map((d) => d.key);
+    expect(must((await get('/tenant/legal', worker)).json<State>())).toEqual([
+      'terms-of-service',
+      'privacy-policy',
+    ]);
+    expect(must((await get('/tenant/legal')).json<State>())).toHaveLength(4);
+    // Staff accept for themselves only; the company's terms are for an admin.
+    expect(
+      (await post('/tenant/legal/accept', { documents: ['licence-terms'] }, worker)).statusCode,
+    ).toBe(400);
+    const after = (
+      await post(
+        '/tenant/legal/accept',
+        { documents: ['terms-of-service', 'privacy-policy'] },
+        worker,
+      )
+    ).json<State>();
+    expect(must(after)).toEqual([]);
+    expect(after.documents[0]!.acceptedAt).toBeTruthy();
+    // Accepting again changes nothing; the record cannot be changed or removed by the app.
+    await post('/tenant/legal/accept', { documents: ['terms-of-service'] }, worker);
+    const db = await app.get(TenantConnections).forTenant(t.tenantId);
+    await expect(db`UPDATE platform.legal_acceptance SET version = '2000-01-01'`).rejects.toThrow(
+      /permission denied/,
+    );
+    await expect(db`DELETE FROM platform.legal_acceptance`).rejects.toThrow(/permission denied/);
+    // Admins see who accepted which version; staff do not.
+    expect((await get('/tenant/legal/acceptances', worker)).statusCode).toBe(403);
+    const list = (await get('/tenant/legal/acceptances')).json<
+      { username: string; document: string }[]
+    >();
+    expect(list.map((a) => `${a.username} ${a.document}`).sort()).toEqual([
+      'raju privacy-policy',
+      'raju terms-of-service',
+    ]);
+    // The lawyer reviewed the privacy policy: the page stops saying it is a draft; then taken back.
+    const reviewed = (
+      await post('/tenant/legal/review', { document: 'privacy-policy', reviewed: true })
+    ).json<State>();
+    expect(reviewed.documents.find((d) => d.key === 'privacy-policy')!.reviewed).toBeTruthy();
+    expect(
+      (await post('/tenant/legal/review', { document: 'privacy-policy', reviewed: true }, worker))
+        .statusCode,
+    ).toBe(403);
+    const back = (
+      await post('/tenant/legal/review', { document: 'privacy-policy', reviewed: false })
+    ).json<State>();
+    expect(back.documents.find((d) => d.key === 'privacy-policy')!.reviewed).toBeNull();
   });
 });

@@ -196,6 +196,7 @@ export async function signInNewAdmin(
   await page.getByRole('button', { name: /continue to sign in/ }).click();
   await page.getByLabel('Authenticator code').fill(totp(secret, step + 1));
   await page.getByRole('button', { name: 'Verify' }).click();
+  await acceptTerms(page);
   await page.getByRole('link', { name: 'Home' }).waitFor();
 }
 
@@ -221,7 +222,24 @@ export async function signInStaff(
   await page.getByLabel('New password', { exact: true }).fill(newPassword);
   await page.getByLabel('Repeat new password').fill(newPassword);
   await page.getByRole('button', { name: 'Save password' }).click();
+  await acceptTerms(page);
   await page.getByRole('link', { name: 'Home' }).waitFor();
+}
+
+/**
+ * The legal documents asked at a person's first sign-in (docs/wave9-plan.md step 9b.3): ticks each one and accepts.
+ * Returns how many there were (none when this person accepted them before).
+ */
+export async function acceptTerms(page: Page): Promise<number> {
+  const home = page.getByRole('link', { name: 'Home' });
+  const ask = page.getByRole('heading', { name: 'Before you start' });
+  await home.or(ask).first().waitFor({ timeout: 30_000 });
+  if (!(await ask.isVisible())) return 0;
+  const boxes = await page.getByRole('checkbox').all();
+  for (const box of boxes) await box.check();
+  await page.getByRole('button', { name: 'Accept and continue' }).click();
+  await home.waitFor();
+  return boxes.length;
 }
 
 /**

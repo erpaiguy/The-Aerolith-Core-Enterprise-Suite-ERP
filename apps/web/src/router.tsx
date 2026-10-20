@@ -20,6 +20,7 @@ import {
   DigestCard,
 } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
+import { LegalGate, LegalPage } from './legal/Legal';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
 import { DocumentsScreen } from './screens/Documents';
@@ -181,6 +182,7 @@ function Root() {
   if (
     PUBLIC_PATHS.includes(path) ||
     path.startsWith('/share/') ||
+    path.startsWith('/legal/') ||
     path.startsWith('/check/') ||
     path.startsWith('/portal/')
   )
@@ -193,7 +195,11 @@ function Root() {
   if (session.mustChangePassword) return <ChangePasswordScreen forced />;
   if (session.mustSetUpMfa) return <TwoFactorScreen forced />;
   if (SIGNED_OUT_PATHS.includes(path)) return <Navigate to="/" replace />;
-  return <Outlet />;
+  return (
+    <LegalGate>
+      <Outlet />
+    </LegalGate>
+  );
 }
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -202,6 +208,15 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
 }
 
 const rootRoute = createRootRoute({ component: Root });
+
+const legalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/legal/$key',
+  component: function Legal() {
+    const { key } = legalRoute.useParams();
+    return <LegalPage key={key} docKey={key} />;
+  },
+});
 const appLayout = createRoute({ getParentRoute: () => rootRoute, id: 'app', component: AppShell });
 
 const tenderRoute = createRoute({
@@ -1403,6 +1418,7 @@ const routeTree = rootRoute.addChildren([
   checkRoute,
   createRoute({ getParentRoute: () => rootRoute, path: '/sign-in', component: SignInScreen }),
   createRoute({ getParentRoute: () => rootRoute, path: '/licences', component: LicencesScreen }),
+  legalRoute,
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/forgot',

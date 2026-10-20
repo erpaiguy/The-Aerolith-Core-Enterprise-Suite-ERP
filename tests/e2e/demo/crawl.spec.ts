@@ -2,6 +2,7 @@
 // fails on anything broken: an uncaught error in the page, a request the server answered with 4xx or 5xx, or a red
 // error banner. Reads the seeded sign-ins with load.ts.
 import { appendFileSync } from 'node:fs';
+import { acceptTerms } from '../tests/helpers.js';
 import { loadDemo } from './load.js';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { timeStep, totp } from '../tests/helpers.js';
@@ -83,7 +84,7 @@ async function signIn(
     await page.getByLabel('Authenticator code').fill(totp(secret, timeStep()));
     await page.getByRole('button', { name: 'Verify' }).click();
   }
-  await page.getByRole('link', { name: 'Home' }).waitFor({ timeout: 30_000 });
+  await acceptTerms(page);
   return { page, context, at: (p: string) => (current = p) };
 }
 
