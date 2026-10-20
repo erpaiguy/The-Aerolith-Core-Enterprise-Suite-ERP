@@ -12,11 +12,11 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.1",
     "@types/mailparser": "^3.9.0",
     "@types/node": "^22.20.0",
     "exceljs": "4.4.0",
-    "mailparser": "^3.9.36",
+    "mailparser": "^3.9.40",
     "postgres": "^3.4.9"
   }
 }
