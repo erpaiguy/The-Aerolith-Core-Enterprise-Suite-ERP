@@ -89,6 +89,21 @@ describe('ApiClient', () => {
     expect(lost).toHaveBeenCalledOnce();
   });
 
+  it('reads every response it drops, so the browser does not hold the request open (D-26)', async () => {
+    const responses: Response[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const res =
+        String(url) === '/api/auth/refresh'
+          ? json(400, { code: 'no_refresh_token' })
+          : json(401, { code: 'invalid_token' });
+      responses.push(res);
+      return res;
+    });
+    const client = new ApiClient(fetchImpl as typeof fetch);
+    await expect(client.request('/api/x')).rejects.toMatchObject({ status: 401 });
+    expect(responses.map((r) => r.bodyUsed)).toEqual([true, true]);
+  });
+
   it('turns network failures into a network_error', async () => {
     const client = new ApiClient((async () => {
       throw new TypeError('Failed to fetch');

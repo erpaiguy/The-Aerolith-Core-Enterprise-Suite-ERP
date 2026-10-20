@@ -58,6 +58,11 @@ export function clearRecentRequests(): void {
   recent.length = 0;
 }
 
+/** Reads and drops a response nobody will look at, so the browser counts the request as finished. */
+async function drain(res: Response): Promise<void> {
+  await res.arrayBuffer().catch(() => undefined);
+}
+
 export class ApiClient {
   private accessToken: string | null = null;
   private refreshing: Promise<RefreshResult | null> | null = null;
@@ -113,6 +118,7 @@ export class ApiClient {
         this.onSessionLost();
         return res;
       }
+      await drain(res);
       res = await this.send(path, init, auth);
     }
     // Something was saved: what was typed is no longer at risk (step 9a.4).
@@ -138,6 +144,7 @@ export class ApiClient {
     }
     const res = await this.send('/api/auth/refresh', { method: 'POST', body }, false);
     if (!res.ok) {
+      await drain(res);
       this.accessToken = null;
       if (bridge && (res.status === 401 || res.status === 403)) await bridge.setRefreshToken(null);
       return null;
