@@ -17,4 +17,14 @@ contextBridge.exposeInMainWorld('aerolithDesktop', {
   getRefreshToken: (): Promise<string | null> => ipcRenderer.invoke('aerolith:refresh-token:get'),
   setRefreshToken: (token: string | null): Promise<void> =>
     ipcRenderer.invoke('aerolith:refresh-token:set', token),
+  /** While on, closing the window asks the UI first (step 9a.4). */
+  setCloseGuard: (on: boolean): Promise<void> => ipcRenderer.invoke('aerolith:close-guard', on),
+  /** Called when the window is asked to close; answer with answerClose. Returns a function that stops listening. */
+  onCloseRequested: (f: () => void): (() => void) => {
+    const listener = () => f();
+    ipcRenderer.on('aerolith:close-requested', listener);
+    return () => ipcRenderer.removeListener('aerolith:close-requested', listener);
+  },
+  answerClose: (close: boolean): Promise<void> =>
+    ipcRenderer.invoke('aerolith:close-answer', close),
 });

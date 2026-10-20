@@ -6,7 +6,7 @@
 //   section totals shown are always the stored ones.
 // - Structural changes (move, indent, delete) re-open the window around the affected line.
 import { SUBTREE_END } from '@aerolith/shared';
-import { Alert, Button } from '@aerolith/ui';
+import { Alert, Button, toast, useConfirm } from '@aerolith/ui';
 import {
   Calculator,
   ChevronDown,
@@ -167,7 +167,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
   editingRef.current = editing;
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<BoqRow | null>(null);
+  const confirm = useConfirm();
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
   const [loaded, setLoaded] = useState(false);
@@ -489,8 +489,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
     );
   };
 
-  const remove = (row: BoqRow) => {
-    setConfirmDelete(null);
+  const remove = (row: BoqRow, announce = false) => {
     const offset = offsetOf(row.id);
     void enqueue(
       () => {
@@ -501,8 +500,23 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
         undoStack.current = undoStack.current.filter((u) => u.id !== row.id);
         const rowsNow = await open({ key: row.sortKey, offset });
         setActive(rowsNow[0] ? { id: rowsNow[0].id, col: active?.col ?? 'description' } : null);
+        if (announce) toast.success(`${row.type === 'section' ? 'Section' : 'Line'} deleted`);
       },
     );
+  };
+  const askDelete = async (row: BoqRow) => {
+    const name = row.description || row.code || 'this line';
+    const under = row.type === 'section' && row.childCount > 0;
+    if (
+      await confirm({
+        title: `Delete “${name}”${under ? ' and everything under it' : ''}?`,
+        body: 'This cannot be undone.',
+        confirmLabel: under ? 'Delete the section' : 'Delete the line',
+        cancelLabel: 'Keep',
+        tone: 'danger',
+      })
+    )
+      remove(row, true);
   };
 
   const undo = () => {
@@ -648,7 +662,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
     }
     if (mod && e.key === 'Delete' && canEdit && activeRow) {
       e.preventDefault();
-      setConfirmDelete(activeRow);
+      void askDelete(activeRow);
       return;
     }
     if (mod && e.key === 'Home') {
@@ -947,7 +961,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
           </Button>
           <Button
             variant="ghost"
-            onClick={() => activeRow && setConfirmDelete(activeRow)}
+            onClick={() => activeRow && void askDelete(activeRow)}
             disabled={!activeRow}
             title="Delete line (Ctrl+Delete)"
             aria-label="Delete line"
@@ -1097,25 +1111,7 @@ export const BoqGrid = forwardRef<GridHandle, Props>(function BoqGrid(
           </Button>
         </div>
       )}
-      {confirmDelete && (
-        <Alert tone="warning">
-          <div className="flex flex-wrap items-center gap-3">
-            <span>
-              Delete “{confirmDelete.description || confirmDelete.code || 'this line'}”
-              {confirmDelete.type === 'section' && confirmDelete.childCount > 0
-                ? ' and everything under it'
-                : ''}
-              ? This cannot be undone.
-            </span>
-            <Button variant="danger" onClick={() => remove(confirmDelete)}>
-              Delete
-            </Button>
-            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
-              Keep
-            </Button>
-          </div>
-        </Alert>
-      )}
+
       {error && (
         <Alert tone="danger">
           <span className="mr-3">{error}</span>

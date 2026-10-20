@@ -1,8 +1,8 @@
 // Measurement sheet of one BOQ item (docs/04-features.md E4): rows of nos × length × breadth × height, blank
 // dimensions skipped, deductions subtracted. The item's quantity becomes the total. Rows can be pasted from Excel.
-import { Alert, Button, Input, Spinner } from '@aerolith/ui';
+import { Alert, Button, Dialog, Input, Spinner, toast } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ClipboardEvent } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
@@ -178,6 +178,7 @@ export function MeasurementSheet({
         { method: 'POST', body: { rowVersion: currentVersion(), rows: body } },
       );
       onSaved(res.rows, res.header);
+      toast.success(filled.length === 0 ? 'Measurement sheet removed' : 'Measurements saved');
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -186,29 +187,40 @@ export function MeasurementSheet({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-auto bg-black/30 p-4 pt-16"
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+    <Dialog
+      open
+      onClose={onClose}
+      title="Measurement sheet"
+      size="xl"
+      description={
+        <>
+          {item.code && <span className="font-mono">{item.code} </span>}
+          {item.description || 'Item'} {item.unit && `(${item.unit})`}
+        </>
+      }
+      footer={
+        canEdit &&
+        !saved.isPending &&
+        !saved.isError &&
+        rows !== null && (
+          <>
+            <Button variant="secondary" onClick={() => setRows([...rows, blank()])}>
+              <Plus className="size-4" aria-hidden /> Row
+            </Button>
+            <span className="flex-1" />
+            {saved.data && saved.data.length > 0 && (
+              <Button variant="ghost" busy={busy} onClick={() => setRows([])}>
+                Clear sheet
+              </Button>
+            )}
+            <Button busy={busy} disabled={problems.length > 0} onClick={() => void save()}>
+              {filled.length === 0 ? 'Save (no sheet)' : 'Save and use total'}
+            </Button>
+          </>
+        )
+      }
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Measurement sheet"
-        className="w-full max-w-4xl rounded-lg border border-line bg-surface p-4 shadow-xl"
-        onPaste={canEdit ? paste : undefined}
-      >
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="font-semibold">Measurement sheet</h2>
-            <p className="text-sm text-fg-muted">
-              {item.code && <span className="font-mono">{item.code} </span>}
-              {item.description || 'Item'} {item.unit && `(${item.unit})`}
-            </p>
-          </div>
-          <Button variant="ghost" aria-label="Close" onClick={onClose}>
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
+      <div onPaste={canEdit ? paste : undefined}>
         {saved.isPending || rows === null ? (
           <Spinner />
         ) : saved.isError ? (
@@ -316,25 +328,9 @@ export function MeasurementSheet({
                 <Alert tone="danger">{error}</Alert>
               </div>
             )}
-            {canEdit && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button variant="secondary" onClick={() => setRows([...rows, blank()])}>
-                  <Plus className="size-4" aria-hidden /> Row
-                </Button>
-                <span className="flex-1" />
-                {saved.data && saved.data.length > 0 && (
-                  <Button variant="ghost" busy={busy} onClick={() => setRows([])}>
-                    Clear sheet
-                  </Button>
-                )}
-                <Button busy={busy} disabled={problems.length > 0} onClick={() => void save()}>
-                  {filled.length === 0 ? 'Save (no sheet)' : 'Save and use total'}
-                </Button>
-              </div>
-            )}
           </>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

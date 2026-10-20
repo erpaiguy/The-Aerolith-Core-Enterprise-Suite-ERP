@@ -1,8 +1,8 @@
 // The BOQ's exchange rates (docs/wave1-plan.md step 13): rupees for one unit of each currency items are priced in.
 // Changing a rate re-prices those items; type "USD 1200" in an item's rate to price it in a currency.
-import { Alert, Button, Field, Input } from '@aerolith/ui';
+import { Alert, Button, Dialog, Field, Input, toast, useConfirm } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Trash2, X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError, formatDateTime } from '../lib/format';
@@ -28,6 +28,7 @@ export function CurrenciesDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const list = useQuery({
     queryKey: ['boq-currencies', boqId],
     queryFn: () => api.request<Currency[]>(`/api/tenant/boqs/${boqId}/currencies`),
@@ -62,6 +63,15 @@ export function CurrenciesDialog({
     }
   };
   const remove = async (c: string) => {
+    if (
+      !(await confirm({
+        title: `Remove ${c}?`,
+        body: 'No item is priced in it. Its exchange rate is forgotten.',
+        confirmLabel: `Remove ${c}`,
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
@@ -70,27 +80,14 @@ export function CurrenciesDialog({
           method: 'POST',
         }),
       );
+      toast.success(`${c} removed`);
     } catch (err) {
       setError(describeError(err));
     }
   };
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-24"
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Currencies"
-        className="w-full max-w-lg space-y-4 rounded-lg border border-line bg-surface p-5 shadow-xl"
-      >
-        <div className="flex items-start justify-between">
-          <h2 className="font-semibold">Currencies</h2>
-          <Button variant="ghost" aria-label="Close" onClick={onClose}>
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
+    <Dialog open onClose={onClose} title="Currencies">
+      <div className="space-y-4">
         <p className="text-sm text-fg-muted">
           Price an item in another currency by typing it with its rate, for example{' '}
           <span className="font-mono">USD 1200</span>. Its rupee rate is that at the exchange rate
@@ -169,6 +166,6 @@ export function CurrenciesDialog({
         {note && <Alert tone="success">{note}</Alert>}
         {error && <Alert tone="danger">{error}</Alert>}
       </div>
-    </div>
+    </Dialog>
   );
 }

@@ -1,6 +1,6 @@
 // Company dashboard (docs/wave7-plan.md step 7d.9): one company at a glance: order book, revenue this year against
 // plan, margin by project, cash and guarantees, receivables over 90 days, tenders due and safety incidents.
-import { Alert, Badge, Card, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import { Alert, Badge, Card, EmptyState, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
@@ -145,7 +145,9 @@ export function CompanyDashboardScreen() {
             </Card>
             <Card title="Order book">
               {q.data.orderBook.projects.length === 0 ? (
-                <p className="text-sm text-fg-muted">No running project with a contract value.</p>
+                <EmptyState title="No running project with a contract value.">
+                  A project appears here once it is running and its contract value is set.
+                </EmptyState>
               ) : (
                 <Table minWidth="30rem">
                   <thead>
@@ -173,7 +175,9 @@ export function CompanyDashboardScreen() {
             </Card>
             <Card title="Margin by project">
               {q.data.margin.length === 0 ? (
-                <p className="text-sm text-fg-muted">Nothing booked to a project yet.</p>
+                <EmptyState title="Nothing booked to a project yet.">
+                  Margins appear once bills and costs are posted against projects.
+                </EmptyState>
               ) : (
                 <Table minWidth="30rem">
                   <thead>
@@ -276,7 +280,7 @@ export function CompanyDashboardScreen() {
             </Card>
             <Card title="Safety, last 90 days">
               {q.data.incidents.total === 0 ? (
-                <p className="text-sm text-fg-muted">No incident reported.</p>
+                <EmptyState title="No incident reported." />
               ) : (
                 <ul className="divide-y divide-line text-sm" aria-label="Incidents">
                   {q.data.incidents.kinds.map((i) => (

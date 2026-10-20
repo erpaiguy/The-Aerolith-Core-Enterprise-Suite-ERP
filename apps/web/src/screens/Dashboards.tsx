@@ -2,7 +2,7 @@
 // dashboard and the estimation dashboard. Three fixed headline numbers each, then the tiles each user adds from a
 // catalogue (saved per user), then charts. Clicking a tile or a bar opens what it counts. Every view says when it
 // was made; Excel downloads the figures and printing makes the PDF.
-import { Alert, Button, Card, Field, Select, Spinner, cx } from '@aerolith/ui';
+import { Alert, Button, Card, EmptyState, Field, Select, Spinner, cx, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
 import {
@@ -82,6 +82,7 @@ export function DashboardScreen({ name }: { name: DashboardName }) {
       });
       await qc.invalidateQueries({ queryKey: ['dashboard', name] });
       setEditing(null);
+      toast.success('Your tiles saved');
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -310,7 +311,7 @@ function TilePicker({
         them.
       </p>
       {keys.length === 0 ? (
-        <p className="mb-3 text-sm text-fg-muted">No tiles added yet.</p>
+        <EmptyState title="No tiles added yet.">Choose a tile below and add it.</EmptyState>
       ) : (
         <ol
           className="mb-3 divide-y divide-line rounded-md border border-line"
@@ -549,7 +550,7 @@ function TenderCharts({ d, go }: { d: TenderDashboardData; go: (to: string) => v
       </Panel>
       <Panel title="Next 30 days">
         {c.upcoming.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing due.</p>
+          <EmptyState title="Nothing due." />
         ) : (
           <ul className="divide-y divide-line text-sm" aria-label="Next 30 days">
             {c.upcoming.map((u, i) => (
@@ -577,7 +578,7 @@ function TenderCharts({ d, go }: { d: TenderDashboardData; go: (to: string) => v
       </Panel>
       <Panel title="Enquiries awaiting quotes">
         {c.rfqs.length === 0 ? (
-          <p className="text-sm text-fg-muted">No enquiry is out.</p>
+          <EmptyState title="No enquiry is out." />
         ) : (
           <table className="w-full text-sm" aria-label="Open RFQs">
             <thead>
@@ -711,7 +712,7 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
         note="The tender's owner is the estimator. Click for their open tenders."
       >
         {c.estimators.length === 0 ? (
-          <p className="text-sm text-fg-muted">No BOQ is in progress.</p>
+          <EmptyState title="No BOQ is in progress." />
         ) : (
           <EChart
             label="BOQs in progress and items not priced, by estimator"
@@ -725,7 +726,7 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
       </Panel>
       <Panel title="Largest BOQs in progress" note="Click a BOQ to open it.">
         {c.topBoqs.length === 0 ? (
-          <p className="text-sm text-fg-muted">No BOQ is in progress.</p>
+          <EmptyState title="No BOQ is in progress." />
         ) : (
           <EChart
             label="The ten largest BOQs in progress by value"
@@ -740,7 +741,7 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
         note="Each item split in the proportions of its rate analysis on its BOQ's rate date."
       >
         {Number(c.breakdown.total) === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing is priced yet.</p>
+          <EmptyState title="Nothing is priced yet." />
         ) : (
           <>
             <EChart
@@ -769,7 +770,7 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
         note="BOQs with frozen versions: the first frozen value against today's."
       >
         {c.revisions.length === 0 ? (
-          <p className="text-sm text-fg-muted">No BOQ has been frozen yet.</p>
+          <EmptyState title="No BOQ has been frozen yet." />
         ) : (
           <table className="w-full text-sm" aria-label="Revisions">
             <thead>
@@ -809,7 +810,7 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
       </Panel>
       <Panel title="Resource rates changed in 30 days">
         {c.rateChanges.length === 0 ? (
-          <p className="text-sm text-fg-muted">No rate entered in the last 30 days.</p>
+          <EmptyState title="No rate entered in the last 30 days." />
         ) : (
           <table className="w-full text-sm" aria-label="Rate changes">
             <thead>

@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { errorMessage } from '../lib/format';
 import { useSession } from '../session/session';
-import { Alert, AuthLayout, Button, Field, Input } from '@aerolith/ui';
+import { Alert, AuthLayout, Button, Field, Input, toast } from '@aerolith/ui';
 
 /** First run on a device: the licence key unlocks features (docs/03-architecture.md §6). */
 export function ActivateScreen() {
@@ -27,6 +27,7 @@ export function ActivateScreen() {
     setError(null);
     try {
       await session.activate(parsed.formatted);
+      toast.success('Device activated');
     } catch (err) {
       setError(errorMessage(err instanceof ApiError ? err.code : undefined));
     } finally {

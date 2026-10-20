@@ -131,6 +131,19 @@ export const dailyReport: AreaDict = {
     Hours: 'तास',
     Days: 'दिवस',
     'Hindrances by cause': 'कारणानुसार अडथळे',
+    // Feedback (wave 9a.2)
+    'Report submitted': 'अहवाल सादर केला',
+    'Report acknowledged': 'अहवालाची पोच दिली',
+    'Report sent back for correction': 'अहवाल दुरुस्तीसाठी परत पाठवला',
+    'Photo added': 'फोटो जोडला',
+    '{n} photos added': '{n} फोटो जोडले',
+    'Remove this photo?': 'हा फोटो काढायचा?',
+    'It is taken off the report.': 'तो अहवालातून काढला जाईल.',
+    'Remove the photo': 'फोटो काढा',
+    'Keep it': 'ठेवा',
+    'Photo removed': 'फोटो काढला',
+    "Each site's report for the day is started from Today at the site.":
+      'प्रत्येक साइटचा दिवसाचा अहवाल "आज साइटवर" बटणाने सुरू होतो.',
   },
   hi: {
     // Report screen
@@ -261,5 +274,18 @@ export const dailyReport: AreaDict = {
     Hours: 'घंटे',
     Days: 'दिन',
     'Hindrances by cause': 'कारण अनुसार रुकावटें',
+    // Feedback (wave 9a.2)
+    'Report submitted': 'रिपोर्ट जमा की',
+    'Report acknowledged': 'रिपोर्ट की पावती दी',
+    'Report sent back for correction': 'रिपोर्ट सुधार के लिए लौटाई',
+    'Photo added': 'फ़ोटो जोड़ा',
+    '{n} photos added': '{n} फ़ोटो जोड़े',
+    'Remove this photo?': 'यह फ़ोटो हटाएँ?',
+    'It is taken off the report.': 'इसे रिपोर्ट से हटा दिया जाएगा।',
+    'Remove the photo': 'फ़ोटो हटाएँ',
+    'Keep it': 'रखें',
+    'Photo removed': 'फ़ोटो हटाया',
+    "Each site's report for the day is started from Today at the site.":
+      'हर साइट की दिन की रिपोर्ट "आज साइट पर" बटन से शुरू होती है।',
   },
 };

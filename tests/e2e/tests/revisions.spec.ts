@@ -109,6 +109,7 @@ test('an estimator freezes the submitted BOQ, revises it and compares the versio
   await page.getByLabel('BOQ name').fill('Civil copy');
   await page.getByRole('button', { name: 'Create' }).click();
   await page.getByRole('button', { name: 'Archive' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Archive the BOQ' }).click();
   await expect(page.getByText('This BOQ is archived')).toBeVisible();
   await expect(page.getByText('Read only', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: /Gram panchayat office, Seloo/ }).click();

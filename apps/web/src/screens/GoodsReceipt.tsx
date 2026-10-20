@@ -1,7 +1,19 @@
 // A goods receipt (docs/wave2b-plan.md step 5): what came against a purchase order, on which challan, at which site;
 // each line accepted at the gate or held for inspection; the held ones inspected; the rejected ones returned to the
 // supplier. Cancelled (with a reason) when made in error, unless something from it already went back.
-import { Alert, Badge, Button, Card, Field, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Printer } from 'lucide-react';
@@ -49,8 +61,9 @@ export function GoodsReceiptScreen({ receiptId }: { receiptId: string }) {
 
 function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) => void }) {
   const t = useT();
+  const confirm = useConfirm();
   const { run, busy, error } = useRun(() => undefined);
-  const call = (k: string, path: string, body: object) =>
+  const call = (k: string, path: string, body: object, done: string) =>
     run(k, async () =>
       onChanged(
         await api.request<Receipt>(`/api/tenant/receipts/${r.id}/${path}`, {
@@ -58,7 +71,7 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
           body,
         }),
       ),
-    );
+    ).then((ok) => ok && toast.success(done));
   const held = r.lines.filter((l) => l.inspection === 'hold');
   const toReturn = r.lines.filter((l) => Number(l.rejected) > Number(l.returned));
   return (
@@ -104,7 +117,12 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
                 onClick={() => {
                   const reason = window.prompt(t('Why is the receipt cancelled?'));
                   if (reason && reason.trim().length >= 3)
-                    void call('cancel', 'cancel', { reason: reason.trim() });
+                    void call(
+                      'cancel',
+                      'cancel',
+                      { reason: reason.trim() },
+                      t('Receipt {n} cancelled', { n: r.number }),
+                    );
                 }}
               >
                 {t('Cancel receipt')}
@@ -252,14 +270,28 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
         <InspectForm
           lines={held}
           busy={busy === 'inspect'}
-          onSubmit={(lines) => void call('inspect', 'inspect', { lines })}
+          onSubmit={(lines) => void call('inspect', 'inspect', { lines }, t('Inspection recorded'))}
         />
       )}
       {r.mayReturn && (
         <ReturnForm
           lines={toReturn}
           busy={busy === 'return'}
-          onSubmit={(body) => void call('return', 'returns', body)}
+          onSubmit={async (body) => {
+            if (
+              !(await confirm({
+                title: t('Return the goods to {vendor}?', { vendor: r.vendor.name }),
+                body: t(
+                  'A return note is made against this receipt and the order owes them again.',
+                ),
+                confirmLabel: t('Return the goods'),
+                cancelLabel: t('Keep it'),
+                tone: 'danger',
+              }))
+            )
+              return;
+            await call('return', 'returns', body, t('Goods returned to the supplier'));
+          }}
         />
       )}
       {r.returns.length > 0 && (

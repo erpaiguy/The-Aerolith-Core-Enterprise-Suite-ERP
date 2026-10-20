@@ -1,6 +1,6 @@
 // Deliveries across projects (docs/wave8-plan.md step 8e.2): what is overdue, with the last date the supplier
 // promised, and the lead time from requisition to order to receipt, by supplier.
-import { Alert, Card, Field, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import { Alert, Card, EmptyState, Field, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -77,7 +77,9 @@ export function DeliveriesScreen() {
         ) : late.isError ? (
           <Alert tone="danger">{describeError(late.error)}</Alert>
         ) : late.data.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing overdue.</p>
+          <EmptyState title="Nothing overdue.">
+            Orders whose delivery date has passed with goods still to come appear here.
+          </EmptyState>
         ) : (
           <Table minWidth="48rem">
             <thead>

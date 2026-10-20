@@ -1,6 +1,17 @@
 // Bulk imports (docs/wave7-plan.md step 7c.8): parties, employees, contract workers or resources from an Excel sheet,
 // checked row by row first, then saved; rows that cannot be saved are listed with the reason.
-import { Alert, Badge, Button, Card, Field, Input, PageHeader, Select, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { useCompany } from '../accounts/model';
@@ -50,12 +61,12 @@ export function ImportsScreen() {
     setBusy(true);
     const company_ = entityId || company?.id || '';
     try {
-      setResult(
-        await api.upload<Result>(
-          `/api/tenant/imports/${kind}?apply=${apply}${kind === 'employees' && company_ ? `&entityId=${company_}` : ''}`,
-          file,
-        ),
+      const r = await api.upload<Result>(
+        `/api/tenant/imports/${kind}?apply=${apply}${kind === 'employees' && company_ ? `&entityId=${company_}` : ''}`,
+        file,
       );
+      setResult(r);
+      if (r.applied) toast.success(`${r.saved} ${r.saved === 1 ? 'row' : 'rows'} imported`);
     } catch (err) {
       setError(describeError(err));
     } finally {

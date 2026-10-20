@@ -1,7 +1,19 @@
 // Backups and the audit export (docs/wave8-plan.md step 8g.2), for admins: the nightly backup's hour and how many
 // are kept, every backup with whether it was proven by restoring it, a backup taken now, a download, and a ZIP of
 // the books and their records for the auditors.
-import { Alert, Badge, Button, Card, Field, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, saveFile } from '../api/client';
@@ -52,12 +64,14 @@ export function BackupsScreen() {
     if (s) setForm({ enabled: s.enabled, hour: String(s.hour), keep: String(s.keep) });
   }, [data.data?.settings]);
 
-  const run = async (what: string, fn: () => Promise<unknown>) => {
+  /** `done`: the toast once it worked (none for downloads, which show themselves). */
+  const run = async (what: string, fn: () => Promise<unknown>, done?: string) => {
     setError(null);
     setBusy(what);
     try {
       const r = await fn();
       if (r && typeof r === 'object' && 'backups' in r) qc.setQueryData(['backups'], r);
+      if (done) toast.success(done);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -74,7 +88,11 @@ export function BackupsScreen() {
         actions={
           <Button
             onClick={() =>
-              void run('take', () => api.request('/api/tenant/backups', { method: 'POST' }))
+              void run(
+                'take',
+                () => api.request('/api/tenant/backups', { method: 'POST' }),
+                'Backup taken',
+              )
             }
             disabled={busy !== null}
           >
@@ -102,15 +120,18 @@ export function BackupsScreen() {
                 className="flex flex-wrap items-end gap-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void run('settings', () =>
-                    api.request('/api/tenant/backups/settings', {
-                      method: 'POST',
-                      body: {
-                        enabled: form.enabled,
-                        hour: Number(form.hour),
-                        keep: Number(form.keep),
-                      },
-                    }),
+                  void run(
+                    'settings',
+                    () =>
+                      api.request('/api/tenant/backups/settings', {
+                        method: 'POST',
+                        body: {
+                          enabled: form.enabled,
+                          hour: Number(form.hour),
+                          keep: Number(form.keep),
+                        },
+                      }),
+                    'Backup settings saved',
                   );
                 }}
               >
@@ -149,7 +170,9 @@ export function BackupsScreen() {
             </Card>
             <Card title="Backups">
               {d.backups.length === 0 ? (
-                <p className="text-sm text-fg-muted">No backups yet.</p>
+                <EmptyState title="No backups yet.">
+                  The first is taken tonight at the hour set above; Back up now takes one at once.
+                </EmptyState>
               ) : (
                 <Table>
                   <thead>
@@ -197,10 +220,13 @@ export function BackupsScreen() {
                                   variant="ghost"
                                   disabled={busy !== null}
                                   onClick={() =>
-                                    void run(`check-${b.id}`, () =>
-                                      api.request(`/api/tenant/backups/${b.id}/check`, {
-                                        method: 'POST',
-                                      }),
+                                    void run(
+                                      `check-${b.id}`,
+                                      () =>
+                                        api.request(`/api/tenant/backups/${b.id}/check`, {
+                                          method: 'POST',
+                                        }),
+                                      'Restore check finished',
                                     )
                                   }
                                 >

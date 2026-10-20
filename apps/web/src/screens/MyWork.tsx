@@ -1,5 +1,5 @@
 // My work (docs/wave7-plan.md step 7a.7): on Home, what waits on this person, by kind, each line opening its record.
-import { Badge, Card, Spinner } from '@aerolith/ui';
+import { Badge, Card, EmptyState, Spinner } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
@@ -134,7 +134,9 @@ export function MyWorkCard() {
   return (
     <Card title="My work">
       {total === 0 ? (
-        <p className="text-sm text-fg-muted">Nothing waits on you.</p>
+        <EmptyState title="Nothing waits on you.">
+          Approvals, RFIs and bills waiting on you will appear here.
+        </EmptyState>
       ) : (
         <div className="space-y-4">
           <Part

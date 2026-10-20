@@ -2,6 +2,7 @@
 // requests share that single refresh — and retries. Browser refresh tokens are an HttpOnly cookie the page cannot
 // read; the desktop keeps its refresh token in the OS keychain via the preload bridge.
 import { showErrorDialog } from '@aerolith/ui';
+import { saveStarted, setUnsaved } from '../lib/unsaved';
 import { apiBase, clientKind, desktop } from '../platform';
 
 export class ApiError extends Error {
@@ -71,15 +72,19 @@ export class ApiClient {
     init: { method?: string; body?: unknown; auth?: boolean; idempotencyKey?: string },
   ): Promise<Response> {
     const auth = init.auth ?? true;
-    const res = await this.send(path, init, auth);
+    const changes = (init.method ?? (init.body === undefined ? 'GET' : 'POST')) !== 'GET';
+    if (changes) saveStarted();
+    let res = await this.send(path, init, auth);
     if (res.status === 401 && auth) {
       const refreshed = await this.refresh();
       if (!refreshed) {
         this.onSessionLost();
         return res;
       }
-      return this.send(path, init, auth);
+      res = await this.send(path, init, auth);
     }
+    // Something was saved: what was typed is no longer at risk (step 9a.4).
+    if (res.ok && changes) setUnsaved(false);
     return res;
   }
 

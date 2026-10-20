@@ -1,7 +1,6 @@
 // Bulk edit (docs/wave1-plan.md step 13): one change to every item in the selected lines, sections' contents
 // included, done by the server in one go however many lines that is.
-import { Alert, Button, Field, Input, Select } from '@aerolith/ui';
-import { X } from 'lucide-react';
+import { Alert, Button, Dialog, Field, Input, Select } from '@aerolith/ui';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
@@ -61,91 +60,79 @@ export function BulkEditDialog({
     }
   };
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-24"
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Bulk edit"
-        className="w-full max-w-md space-y-4 rounded-lg border border-line bg-surface p-5 shadow-xl"
-      >
-        <div className="flex items-start justify-between">
-          <h2 className="font-semibold">Bulk edit</h2>
-          <Button variant="ghost" aria-label="Close" onClick={onClose}>
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
-        {result ? (
-          <>
-            <Alert tone="success">
-              {result.changed.toLocaleString('en-IN')} item{result.changed === 1 ? '' : 's'}{' '}
-              changed.
-            </Alert>
-            <div className="flex justify-end">
-              <Button onClick={onDone}>Done</Button>
-            </div>
-          </>
+    <Dialog
+      open
+      onClose={result ? onDone : onClose}
+      title="Bulk edit"
+      footer={
+        result ? (
+          <Button onClick={onDone}>Done</Button>
         ) : (
           <>
-            <p className="text-sm text-fg-muted">
-              Applies to every item in the selected lines, including those inside selected sections.
-              A rate set here replaces the rate from a rate analysis, as typing it would.
-            </p>
-            <Field label="Change">
-              <Select value={action} onChange={(e) => setAction(e.target.value as Action)}>
-                {(Object.keys(ACTIONS) as Action[]).map((a) => (
-                  <option key={a} value={a}>
-                    {ACTIONS[a]}
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              busy={busy}
+              disabled={needsValue && action !== 'unit' && !value.trim()}
+              onClick={() => void apply()}
+            >
+              Apply
+            </Button>
+          </>
+        )
+      }
+    >
+      {result ? (
+        <Alert tone="success">
+          {result.changed.toLocaleString('en-IN')} item{result.changed === 1 ? '' : 's'} changed.
+        </Alert>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-fg-muted">
+            Applies to every item in the selected lines, including those inside selected sections. A
+            rate set here replaces the rate from a rate analysis, as typing it would.
+          </p>
+          <Field label="Change">
+            <Select value={action} onChange={(e) => setAction(e.target.value as Action)}>
+              {(Object.keys(ACTIONS) as Action[]).map((a) => (
+                <option key={a} value={a}>
+                  {ACTIONS[a]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {needsValue && (
+            <Field
+              label={action === 'scale' ? 'Percentage' : action === 'rate' ? 'Rate (₹)' : 'Unit'}
+              hint={
+                action === 'scale'
+                  ? '10 raises every rate by 10 %; -5 lowers it by 5 %.'
+                  : undefined
+              }
+            >
+              <Input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                inputMode={action === 'unit' ? 'text' : 'decimal'}
+                autoFocus
+              />
+            </Field>
+          )}
+          {action === 'item_kind' && (
+            <Field label="Kind">
+              <Select value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
+                {(Object.keys(KIND_LABEL) as ItemKind[]).map((k) => (
+                  <option key={k} value={k}>
+                    {KIND_LABEL[k]}
                   </option>
                 ))}
               </Select>
             </Field>
-            {needsValue && (
-              <Field
-                label={action === 'scale' ? 'Percentage' : action === 'rate' ? 'Rate (₹)' : 'Unit'}
-                hint={
-                  action === 'scale'
-                    ? '10 raises every rate by 10 %; -5 lowers it by 5 %.'
-                    : undefined
-                }
-              >
-                <Input
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  inputMode={action === 'unit' ? 'text' : 'decimal'}
-                  autoFocus
-                />
-              </Field>
-            )}
-            {action === 'item_kind' && (
-              <Field label="Kind">
-                <Select value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
-                  {(Object.keys(KIND_LABEL) as ItemKind[]).map((k) => (
-                    <option key={k} value={k}>
-                      {KIND_LABEL[k]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )}
-            {error && <Alert tone="danger">{error}</Alert>}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button
-                busy={busy}
-                disabled={needsValue && action !== 'unit' && !value.trim()}
-                onClick={() => void apply()}
-              >
-                Apply
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+          )}
+          {error && <Alert tone="danger">{error}</Alert>}
+        </div>
+      )}
+    </Dialog>
   );
 }

@@ -12,6 +12,8 @@ import {
   Select,
   Spinner,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -235,6 +237,13 @@ function ReportView({ initial }: { initial: DailyReport }) {
       qc.setQueryData(['daily-report', r.id], next);
       void qc.invalidateQueries({ queryKey: ['daily-reports', r.project.id] });
       void qc.invalidateQueries({ queryKey: ['inbox'] });
+      toast.success(
+        k === 'submit'
+          ? t('Report submitted')
+          : k === 'ack'
+            ? t('Report acknowledged')
+            : t('Report sent back for correction'),
+      );
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -899,6 +908,7 @@ function Photos({
   onChanged: (next: DailyReport) => void;
 }) {
   const t = useT();
+  const confirm = useConfirm();
   const [caption, setCaption] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -919,6 +929,7 @@ function Photos({
         new Promise<null>((ok) => setTimeout(() => ok(null), 1_500)),
       ]);
       position.current = null;
+      let uploaded = 0;
       for (const f of Array.from(files)) {
         const meta = {
           caption: caption.trim(),
@@ -939,6 +950,7 @@ function Photos({
               `/api/tenant/daily-reports/${r.id}/photos?${q.toString()}`,
               await shrink(f),
             );
+            uploaded++;
             continue;
           } catch (err) {
             if (!(err instanceof ApiError && err.status === 0)) throw err;
@@ -951,10 +963,15 @@ function Photos({
           { ...meta, photo: await shrinkToDataUrl(f, 1280, 0.7) },
         );
         if (sent.queued) setQueued((n) => n + 1);
-        else next = sent.result;
+        else {
+          next = sent.result;
+          uploaded++;
+        }
       }
       if (next) onChanged(next);
       setCaption('');
+      if (uploaded)
+        toast.success(uploaded === 1 ? t('Photo added') : t('{n} photos added', { n: uploaded }));
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -997,8 +1014,18 @@ function Photos({
                     type="button"
                     className="text-fg-muted hover:text-danger print:hidden"
                     aria-label={t('Remove photo {caption}', { caption: p.caption })}
-                    onClick={() =>
-                      void api
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: t('Remove this photo?'),
+                          body: t('It is taken off the report.'),
+                          confirmLabel: t('Remove the photo'),
+                          cancelLabel: t('Keep it'),
+                          tone: 'danger',
+                        }))
+                      )
+                        return;
+                      await api
                         .request<DailyReport>(
                           `/api/tenant/daily-reports/${r.id}/photos/${p.id}/remove`,
                           {
@@ -1006,8 +1033,14 @@ function Photos({
                             body: {},
                           },
                         )
-                        .then(onChanged, (e: unknown) => setError(describeError(e)))
-                    }
+                        .then(
+                          (next) => {
+                            onChanged(next);
+                            toast.success(t('Photo removed'));
+                          },
+                          (e: unknown) => setError(describeError(e)),
+                        );
+                    }}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </button>

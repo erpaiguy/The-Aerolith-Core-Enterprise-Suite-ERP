@@ -5,7 +5,18 @@ import { api, ApiError } from '../api/client';
 import type { ResetRequest, TenantUser } from '../api/types';
 import { describeError, errorMessage, formatDateTime } from '../lib/format';
 import { useSession } from '../session/session';
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 
 /** Shown once: the admin passes this to the user, who must replace it at first sign-in. */
 function OneTimePassword({
@@ -158,6 +169,7 @@ function RolePermissions({ readOnly }: { readOnly: boolean }) {
 export function UsersScreen() {
   const session = useSession();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const users = useQuery({
     queryKey: ['users'],
     queryFn: () => api.request<TenantUser[]>('/api/tenant/users'),
@@ -183,6 +195,7 @@ export function UsersScreen() {
       setIssued(res);
       setForm({ username: '', displayName: '', role: 'worker' });
       void qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success(`User ${res.username} added`);
     },
     onError: (err) => setError(errorMessage(err instanceof ApiError ? err.code : undefined)),
   });
@@ -197,6 +210,7 @@ export function UsersScreen() {
       if (r.id === session.user?.id) session.renamed(r.name.trim());
       setRenaming(null);
       void qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Name saved');
     },
   });
   const action = useMutation({
@@ -210,7 +224,16 @@ export function UsersScreen() {
       role?: string;
     }) =>
       api.request(`/api/tenant/users/${id}/${op}`, { method: 'POST', body: role ? { role } : {} }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: (_d, { op }) => {
+      void qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success(
+        op === 'deactivate'
+          ? 'User deactivated'
+          : op === 'reactivate'
+            ? 'User reactivated'
+            : 'Role changed',
+      );
+    },
     onError: (err) => setError(errorMessage(err instanceof ApiError ? err.code : undefined)),
   });
   const seats = session.entitlement?.seats ?? 0;
@@ -363,7 +386,18 @@ export function UsersScreen() {
                         (u.status === 'active' ? (
                           <Button
                             variant="ghost"
-                            onClick={() => action.mutate({ id: u.id, op: 'deactivate' })}
+                            onClick={async () => {
+                              if (
+                                !(await confirm({
+                                  title: `Deactivate ${u.displayName}?`,
+                                  body: 'They can no longer sign in and their seat is freed. You can reactivate them later.',
+                                  confirmLabel: 'Deactivate the user',
+                                  tone: 'danger',
+                                }))
+                              )
+                                return;
+                              action.mutate({ id: u.id, op: 'deactivate' });
+                            }}
                           >
                             Deactivate
                           </Button>
@@ -405,6 +439,7 @@ interface Profile {
  */
 function AccessProfiles({ users, readOnly }: { users: TenantUser[]; readOnly: boolean }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const profiles = useQuery({
     queryKey: ['access-profiles'],
     queryFn: () => api.request<Profile[]>('/api/tenant/permissions/profiles'),
@@ -442,6 +477,7 @@ function AccessProfiles({ users, readOnly }: { users: TenantUser[]; readOnly: bo
         : api.request('/api/tenant/permissions/profiles', { method: 'POST', body: form }),
     );
     if (ok) {
+      toast.success(editing ? `Profile ${form.name} saved` : `Profile ${form.name} added`);
       setEditing(null);
       setForm({ name: '', description: '', permissions: [] });
     }
@@ -487,13 +523,27 @@ function AccessProfiles({ users, readOnly }: { users: TenantUser[]; readOnly: bo
                     </Button>
                     <Button
                       variant="ghost"
-                      onClick={() =>
-                        void run(() =>
-                          api.request(`/api/tenant/permissions/profiles/${p.id}/delete`, {
-                            method: 'POST',
-                          }),
+                      onClick={async () => {
+                        if (
+                          !(await confirm({
+                            title: `Delete profile ${p.name}?`,
+                            body: p.users.length
+                              ? `${p.users.length} ${p.users.length === 1 ? 'person goes' : 'people go'} back to their role's permissions.`
+                              : 'Nobody has it, so no one is affected.',
+                            confirmLabel: 'Delete the profile',
+                            tone: 'danger',
+                          }))
                         )
-                      }
+                          return;
+                        if (
+                          await run(() =>
+                            api.request(`/api/tenant/permissions/profiles/${p.id}/delete`, {
+                              method: 'POST',
+                            }),
+                          )
+                        )
+                          toast.success(`Profile ${p.name} deleted`);
+                      }}
                     >
                       Delete
                     </Button>
@@ -564,14 +614,17 @@ function AccessProfiles({ users, readOnly }: { users: TenantUser[]; readOnly: bo
           <form
             className="mt-5 flex flex-wrap items-end gap-3"
             aria-label="Give a profile"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              void run(() =>
-                api.request('/api/tenant/permissions/profiles/assign', {
-                  method: 'POST',
-                  body: { userId: assign.userId, profileId: assign.profileId || null },
-                }),
-              );
+              if (
+                await run(() =>
+                  api.request('/api/tenant/permissions/profiles/assign', {
+                    method: 'POST',
+                    body: { userId: assign.userId, profileId: assign.profileId || null },
+                  }),
+                )
+              )
+                toast.success(assign.profileId ? 'Profile given' : 'Role permissions restored');
             }}
           >
             <Field label="Person">
@@ -615,6 +668,7 @@ function AccessProfiles({ users, readOnly }: { users: TenantUser[]; readOnly: bo
 
 export function ResetRequestsScreen() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const requests = useQuery({
     queryKey: ['password-resets'],
     queryFn: () => api.request<ResetRequest[]>('/api/tenant/password-resets'),
@@ -632,6 +686,11 @@ export function ResetRequestsScreen() {
       if ('temporaryPassword' in res) setIssued(res);
       void qc.invalidateQueries({ queryKey: ['password-resets'] });
       void qc.invalidateQueries({ queryKey: ['inbox'] });
+      toast.success(
+        'temporaryPassword' in res
+          ? `One-time password issued to ${res.username}`
+          : 'Request dismissed',
+      );
     },
   });
 
@@ -662,11 +721,36 @@ export function ResetRequestsScreen() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" onClick={() => act.mutate({ id: r.id, op: 'dismiss' })}>
+                  <Button
+                    variant="ghost"
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: `Dismiss ${r.displayName}'s request?`,
+                          body: 'Their password stays as it is; they can ask again from the sign-in screen.',
+                          confirmLabel: 'Dismiss the request',
+                          tone: 'danger',
+                        }))
+                      )
+                        return;
+                      act.mutate({ id: r.id, op: 'dismiss' });
+                    }}
+                  >
                     Dismiss
                   </Button>
                   <Button
-                    onClick={() => act.mutate({ id: r.id, op: 'issue' })}
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: `Issue a one-time password to ${r.displayName}?`,
+                          body: 'Their current password stops working at once. Check with them first: anyone who knows a username can send a request.',
+                          confirmLabel: 'Issue the password',
+                          tone: 'danger',
+                        }))
+                      )
+                        return;
+                      act.mutate({ id: r.id, op: 'issue' });
+                    }}
                     busy={act.isPending}
                   >
                     Issue one-time password
@@ -676,10 +760,9 @@ export function ResetRequestsScreen() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-fg-muted">
-            No pending requests. Staff who forget their password can ask you from the sign-in
-            screen.
-          </p>
+          <EmptyState title="No pending requests.">
+            Staff who forget their password can ask you from the sign-in screen.
+          </EmptyState>
         )}
       </Card>
       <p className="text-xs text-fg-subtle">
@@ -705,6 +788,7 @@ function EmailCell({ user, readOnly }: { user: TenantUser; readOnly: boolean }) 
         body: { email: value.trim() },
       });
       void qc.invalidateQueries({ queryKey: ['users'] });
+      toast.success(`Email of ${user.username} saved`);
     } catch (err) {
       setError(describeError(err));
     }

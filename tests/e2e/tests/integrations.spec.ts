@@ -41,6 +41,7 @@ test('an API key reads the report views until it is revoked', async ({ page }) =
   await page.screenshot({ path: 'screenshots/integrations-01-key.png', fullPage: true });
 
   await page.getByRole('button', { name: 'Revoke Power BI' }).click();
-  await expect(page.getByText('revoked')).toBeVisible();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke the key' }).click();
+  await expect(page.getByText('revoked', { exact: true })).toBeVisible();
   expect((await query()).status()).toBe(401);
 });

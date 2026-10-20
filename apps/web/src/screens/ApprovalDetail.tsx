@@ -6,11 +6,14 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   PageHeader,
   Spinner,
   Table,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -33,6 +36,7 @@ type Detail = Approval & { document: unknown };
 
 export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const key = ['approval', approvalId];
   const a = useQuery({
     queryKey: key,
@@ -47,13 +51,34 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
   if (a.isPending) return <Spinner />;
   if (a.isError) return <Alert tone="danger">{describeError(a.error)}</Alert>;
   const d = a.data;
-  const act = (op: 'approve' | 'reject' | 'withdraw' | 'comments') =>
-    void run(op, () =>
+  const done = {
+    approve: 'Approved',
+    reject: 'Rejected',
+    withdraw: 'Withdrawn',
+    comments: 'Comment added',
+  } as const;
+  const act = async (op: 'approve' | 'reject' | 'withdraw' | 'comments') => {
+    if (
+      op === 'reject' &&
+      !(await confirm({
+        title: `Reject this ${d.docLabel.toLowerCase()}?`,
+        body: 'It goes back to its submitter with your reason; they must change it and submit it again.',
+        confirmLabel: 'Reject it',
+        tone: 'danger',
+      }))
+    )
+      return;
+    const ok = await run(op, () =>
       api.request(`/api/tenant/approvals/${approvalId}/${op}`, {
         method: 'POST',
         body: comment.trim() ? { comment: comment.trim() } : {},
       }),
-    ).then((ok) => ok && setComment(''));
+    );
+    if (ok) {
+      setComment('');
+      toast.success(op === 'comments' ? done[op] : `${d.docLabel} ${done[op].toLowerCase()}`);
+    }
+  };
   return (
     <div className="space-y-5">
       <Link
@@ -147,14 +172,14 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
               <div className="mt-3 flex flex-wrap gap-2">
                 {d.mayAct && (
                   <>
-                    <Button busy={busy === 'approve'} onClick={() => act('approve')}>
+                    <Button busy={busy === 'approve'} onClick={() => void act('approve')}>
                       Approve
                     </Button>
                     <Button
                       variant="danger"
                       busy={busy === 'reject'}
                       disabled={comment.trim().length < 3}
-                      onClick={() => act('reject')}
+                      onClick={() => void act('reject')}
                     >
                       Reject
                     </Button>
@@ -164,7 +189,7 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
                   variant="secondary"
                   busy={busy === 'comments'}
                   disabled={comment.trim().length < 3}
-                  onClick={() => act('comments')}
+                  onClick={() => void act('comments')}
                 >
                   Add comment
                 </Button>
@@ -172,7 +197,7 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
                   <Button
                     variant="ghost"
                     busy={busy === 'withdraw'}
-                    onClick={() => act('withdraw')}
+                    onClick={() => void act('withdraw')}
                   >
                     Withdraw
                   </Button>
@@ -191,7 +216,7 @@ export function ApprovalDetailScreen({ approvalId }: { approvalId: string }) {
             {d.steps.length ? (
               <ApprovalSteps approval={d} />
             ) : (
-              <p className="text-sm text-fg-muted">No approval needed for this amount.</p>
+              <EmptyState title="No approval needed for this amount." />
             )}
           </Card>
           <Card title="History">

@@ -89,8 +89,6 @@ export const stores: AreaDict = {
     'sent {date}': '{date} रोजी पाठवले',
     Stock: 'स्टॉक',
     'Requisition for what is short': 'कमी असलेल्या मालाची मागणी',
-    "Empty. Goods received against the project's purchase orders come in here.":
-      'रिकामे. प्रकल्पाच्या खरेदी आदेशांवर आलेला माल इथे जमा होतो.',
     Material: 'साहित्य',
     'In stock': 'स्टॉकमध्ये',
     Rate: 'दर',
@@ -138,6 +136,25 @@ export const stores: AreaDict = {
     Note: 'टीप',
     'Send {name}': '{name} पाठवा',
     Send: 'पाठवा',
+    // Feedback (wave 9a.2)
+    'Receipt {n} cancelled': 'पावती {n} रद्द केली',
+    'Inspection recorded': 'तपासणी नोंदवली',
+    'Return the goods to {vendor}?': 'माल {vendor} यांना परत करायचा?',
+    'A return note is made against this receipt and the order owes them again.':
+      'या पावतीवर परतीची नोंद केली जाते आणि ऑर्डरवर तो माल पुन्हा येणे बाकी राहतो.',
+    'Return the goods': 'माल परत करा',
+    'Goods returned to the supplier': 'माल पुरवठादाराला परत केला',
+    // Toasts (step 9a.2)
+    'Stock take {n} started': 'स्टॉक मोजणी {n} सुरू केली',
+    'Requisition made for what is short': 'कमी असलेल्या मालाची मागणी केली',
+    'Reorder level saved': 'रिऑर्डर पातळी जतन केली',
+    'Empty.': 'रिकामे.',
+    "Goods received against the project's purchase orders come in here.":
+      'प्रकल्पाच्या खरेदी आदेशांवर मिळालेला माल येथे येतो.',
+    'Issue slip {n} saved': 'इश्यू स्लिप {n} जतन केली',
+    'Transfer {n} sent': 'ट्रान्सफर {n} पाठवले',
+    'Central store {name} added': 'मध्यवर्ती भांडार {name} जोडले',
+    'Stock valuation saved': 'स्टॉक मूल्यांकन जतन केले',
   },
   hi: {
     // Goods receipt
@@ -224,8 +241,6 @@ export const stores: AreaDict = {
     'sent {date}': '{date} को भेजा',
     Stock: 'स्टॉक',
     'Requisition for what is short': 'कम माल की माँग',
-    "Empty. Goods received against the project's purchase orders come in here.":
-      'खाली। परियोजना के खरीद आदेशों पर आया माल यहाँ जमा होता है।',
     Material: 'सामग्री',
     'In stock': 'स्टॉक में',
     Rate: 'दर',
@@ -273,5 +288,24 @@ export const stores: AreaDict = {
     Note: 'टिप्पणी',
     'Send {name}': '{name} भेजें',
     Send: 'भेजें',
+    // Feedback (wave 9a.2)
+    'Receipt {n} cancelled': 'रसीद {n} रद्द की',
+    'Inspection recorded': 'जाँच दर्ज की',
+    'Return the goods to {vendor}?': 'माल {vendor} को वापस करें?',
+    'A return note is made against this receipt and the order owes them again.':
+      'इस रसीद पर वापसी नोट बनता है और ऑर्डर पर वह माल फिर से आना बाकी रहता है।',
+    'Return the goods': 'माल वापस करें',
+    'Goods returned to the supplier': 'माल सप्लायर को वापस किया',
+    // Toasts (step 9a.2)
+    'Stock take {n} started': 'स्टॉक गिनती {n} शुरू की',
+    'Requisition made for what is short': 'कम माल की माँग बनाई',
+    'Reorder level saved': 'रीऑर्डर स्तर सहेजा',
+    'Empty.': 'खाली।',
+    "Goods received against the project's purchase orders come in here.":
+      'परियोजना के खरीद आदेशों पर मिला माल यहाँ आता है।',
+    'Issue slip {n} saved': 'जारी पर्ची {n} सहेजी',
+    'Transfer {n} sent': 'ट्रांसफर {n} भेजा',
+    'Central store {name} added': 'केंद्रीय भंडार {name} जोड़ा',
+    'Stock valuation saved': 'स्टॉक मूल्यांकन सहेजा',
   },
 };

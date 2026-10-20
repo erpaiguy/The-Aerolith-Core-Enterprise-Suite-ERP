@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -13,6 +14,8 @@ import {
   Table,
   Textarea,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -143,6 +146,7 @@ export function MaterialBudgetScreen({ budgetId }: { budgetId: string }) {
 
 function BudgetView({ b, onChanged }: { b: Budget; onChanged: (next?: Budget) => void }) {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [draft, setDraft] = useState(() => toDraft(b));
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(toDraft(b)), [draft, b]);
   const { run, busy, error } = useRun(() => onChanged());
@@ -168,7 +172,7 @@ function BudgetView({ b, onChanged }: { b: Budget; onChanged: (next?: Budget) =>
           },
         }),
       ),
-    );
+    ).then((ok) => ok && toast.success(`Revision ${b.revision} saved`));
   const isInForce = b.status === 'approved';
   const groups = Object.entries(
     (b.mayEdit ? draft.lines : b.lines).reduce<Record<string, (DraftLine | BudgetLine)[]>>(
@@ -215,7 +219,7 @@ function BudgetView({ b, onChanged }: { b: Budget; onChanged: (next?: Budget) =>
                       method: 'POST',
                       body: { rowVersion: b.rowVersion },
                     }),
-                  )
+                  ).then((ok) => ok && toast.success(`Revision ${b.revision} put up for approval`))
                 }
               >
                 <Send className="size-4" aria-hidden /> Submit for approval
@@ -225,17 +229,27 @@ function BudgetView({ b, onChanged }: { b: Budget; onChanged: (next?: Budget) =>
               <Button
                 variant="ghost"
                 busy={busy === 'discard'}
-                onClick={() =>
-                  void run('discard', async () => {
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: `Discard revision ${b.revision}?`,
+                      body: 'Its quantities and rates are thrown away; the revision in force stays as it is.',
+                      confirmLabel: 'Discard the revision',
+                      tone: 'danger',
+                    }))
+                  )
+                    return;
+                  await run('discard', async () => {
                     await api.request(`/api/tenant/material-budgets/${b.id}/discard`, {
                       method: 'POST',
                     });
+                    toast.success(`Revision ${b.revision} discarded`);
                     await navigate({
                       to: '/projects/$projectId',
                       params: { projectId: b.project.id },
                     });
-                  })
-                }
+                  });
+                }}
               >
                 Discard revision
               </Button>
@@ -275,7 +289,9 @@ function BudgetView({ b, onChanged }: { b: Budget; onChanged: (next?: Budget) =>
       )}
       {groups.length === 0 && (
         <Card>
-          <p className="text-sm text-fg-muted">Nothing in this budget yet.</p>
+          <EmptyState title="Nothing in this budget yet.">
+            {b.mayEdit ? 'Add the resources the project needs below.' : null}
+          </EmptyState>
         </Card>
       )}
       {groups.map(([kind, lines]) => (
@@ -453,7 +469,7 @@ function BudgetView({ b, onChanged }: { b: Budget; onChanged: (next?: Budget) =>
                     method: 'POST',
                     body: {},
                   }),
-                )
+                ).then((ok) => ok && toast.success('Withdrawn: you can change it again'))
               }
             >
               Withdraw to change it

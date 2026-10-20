@@ -1,6 +1,16 @@
 // The audit trail (docs/wave7-plan.md step 7a.8): who created, changed or removed which record and when, with the
 // fields changed. Admin only; filtered by person, kind of record, record and dates; older entries page in.
-import { Alert, Button, Card, Input, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+  Spinner,
+  Table,
+} from '@aerolith/ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
@@ -119,7 +129,9 @@ export function AuditScreen() {
         ) : trail.isError ? (
           <Alert tone="danger">{describeError(trail.error)}</Alert>
         ) : rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-fg-muted">Nothing recorded here.</p>
+          <EmptyState title="Nothing recorded here.">
+            Widen the dates or clear a filter to see more of the trail.
+          </EmptyState>
         ) : (
           <>
             <Table minWidth="52rem">

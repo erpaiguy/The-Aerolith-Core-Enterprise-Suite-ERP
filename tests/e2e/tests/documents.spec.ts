@@ -158,7 +158,7 @@ test('an estimator keeps the tender documents: folders, versions, preview, trash
     .click();
   await page.getByRole('button', { name: 'Trash (1)' }).click();
   await page.getByRole('button', { name: 'Delete Old layout.pdf for good' }).click();
-  await page.getByRole('button', { name: 'Sure? Delete for good' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete for good' }).click();
   await expect(page.getByText('The trash is empty.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Trash (0)' })).toBeVisible();
 

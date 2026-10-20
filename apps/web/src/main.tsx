@@ -4,6 +4,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ApiError } from './api/client';
+import { watchForEdits } from './lib/unsaved';
 import { startOutbox } from './offline';
 import { router } from './router';
 import { LanguageProvider } from './i18n/i18n';
@@ -25,6 +26,7 @@ const queryClient = new QueryClient({
 // The phone and browser app open with no signal and send what waited once it returns. The desktop app serves its
 // own files and keeps no service worker.
 startOutbox();
+watchForEdits();
 if ('serviceWorker' in navigator && location.protocol !== 'app:' && !import.meta.env.DEV) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js').catch(() => undefined);

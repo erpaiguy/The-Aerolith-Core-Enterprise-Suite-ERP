@@ -1,7 +1,17 @@
 // A project's macro plan (docs/wave2a-plan.md step 5): its live schedules rolled up through the WBS, with a bar for
 // each element against its baseline, progress by working days and the slip of its finish; the milestones; and the
 // same roll-up by package, trade and zone. Read only: the schedules are where work is planned.
-import { Alert, Badge, Button, Card, PageHeader, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  Spinner,
+  Table,
+  cx,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Printer } from 'lucide-react';
@@ -116,7 +126,11 @@ export function MacroScreen({ projectId }: { projectId: string }) {
         }
       />
       {m.schedules.length === 0 ? (
-        <Alert tone="info">No live schedules yet. Start one from the project&apos;s page.</Alert>
+        <Card>
+          <EmptyState title="No live schedules yet.">
+            Start one from the project&apos;s page.
+          </EmptyState>
+        </Card>
       ) : (
         <>
           <Card>
@@ -174,7 +188,9 @@ export function MacroScreen({ projectId }: { projectId: string }) {
           {view === 'wbs' && (
             <Card>
               {m.wbs.length === 0 ? (
-                <p className="text-sm text-fg-muted">The project has no WBS yet.</p>
+                <EmptyState title="The project has no WBS yet.">
+                  Set up the WBS from the project&apos;s page to roll the schedules up by it.
+                </EmptyState>
               ) : (
                 <RollTable
                   label="Macro plan by WBS"
@@ -211,7 +227,9 @@ export function MacroScreen({ projectId }: { projectId: string }) {
           {view === 'milestones' && (
             <Card>
               {m.milestones.length === 0 ? (
-                <p className="text-sm text-fg-muted">No milestones in the schedules.</p>
+                <EmptyState title="No milestones in the schedules.">
+                  Mark activities as milestones in a schedule to see them here.
+                </EmptyState>
               ) : (
                 <Table minWidth="44rem">
                   <thead>

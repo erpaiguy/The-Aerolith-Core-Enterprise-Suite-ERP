@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -13,6 +14,7 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
@@ -99,6 +101,7 @@ function PartyForm({ party, onDone }: { party: Party | null; onDone: () => void 
         body: party ? { ...v, rowVersion: party.rowVersion } : v,
       });
       await qc.invalidateQueries({ queryKey: ['parties'] });
+      toast.success(party ? `${v.name} saved` : `${v.name} added`);
       onDone();
     } catch (err) {
       setError(describeError(err));
@@ -341,9 +344,11 @@ export function ClientsScreen() {
         ) : parties.isError ? (
           <Alert tone="danger">{describeError(parties.error)}</Alert>
         ) : parties.data.length === 0 ? (
-          <p className="py-6 text-center text-sm text-fg-muted">
-            {q ? 'Nothing matches.' : 'No parties of this kind yet.'}
-          </p>
+          <EmptyState title={q ? 'Nothing matches.' : 'No parties of this kind yet.'}>
+            {q
+              ? 'Try another name, GSTIN or contact.'
+              : 'Add each client, supplier, subcontractor or competitor once with New party.'}
+          </EmptyState>
         ) : (
           <Table>
             <thead>

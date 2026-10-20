@@ -1,4 +1,17 @@
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
@@ -104,9 +117,11 @@ function SidePanel({ boqId, onJump }: { boqId: string; onJump: (key: string) => 
         {busy && !list ? (
           <Spinner />
         ) : !list || list.length === 0 ? (
-          <p className="p-3 text-sm text-fg-muted">
-            {q.length >= 2 ? 'No lines match.' : 'No sections yet.'}
-          </p>
+          <EmptyState title={q.length >= 2 ? 'No lines match.' : 'No sections yet.'}>
+            {q.length >= 2
+              ? 'Try another code or word.'
+              : 'Add a section in the grid, or import a BOQ.'}
+          </EmptyState>
         ) : (
           <ul>
             {list.map((r) => (
@@ -138,6 +153,7 @@ function SidePanel({ boqId, onJump }: { boqId: string; onJump: (key: string) => 
 
 export function BoqScreen({ boqId }: { boqId: string }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const canEditBoq = usePermission('boq.edit');
   const grid = useRef<GridHandle>(null);
   const [saving, setSaving] = useState(0);
@@ -201,6 +217,16 @@ export function BoqScreen({ boqId }: { boqId: string }) {
   const canEdit = canEditBoq && h.status === 'draft' && !archived;
   const running = importJob?.status === 'importing';
   const setArchived = async (to: boolean) => {
+    if (
+      to &&
+      !(await confirm({
+        title: `Archive ${h.name}?`,
+        body: 'It becomes read only and is left out of the bid. You can restore it later.',
+        confirmLabel: 'Archive the BOQ',
+        tone: 'danger',
+      }))
+    )
+      return;
     setArchiveError(null);
     try {
       qc.setQueryData(
@@ -213,6 +239,7 @@ export function BoqScreen({ boqId }: { boqId: string }) {
       void qc.invalidateQueries({ queryKey: ['tender-boqs'] });
       void qc.invalidateQueries({ queryKey: ['bid-summary'] });
       setGridKey((k) => k + 1);
+      toast.success(`${h.name} ${to ? 'archived' : 'restored'}`);
     } catch (err) {
       setArchiveError(describeError(err));
     }
@@ -552,26 +579,19 @@ function AnalysisPicker({
       ),
   });
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-24"
-      onKeyDown={(e) => e.key === 'Escape' && onDone(null)}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Choose a rate analysis"
-        className="w-full max-w-2xl rounded-lg border border-line bg-surface p-4 shadow-xl"
-      >
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="font-semibold">Rate from analysis</h2>
-          <Button variant="ghost" aria-label="Close" onClick={() => onDone(null)}>
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
-        <p className="mb-2 text-sm text-fg-muted">
+    <Dialog
+      open
+      onClose={() => onDone(null)}
+      title="Choose a rate analysis"
+      description={
+        <>
           For “{row.description || row.code || 'this item'}”{row.unit ? ` (${row.unit})` : ''}.
           Rates as on {rateDate}.
-        </p>
+        </>
+      }
+      size="lg"
+    >
+      <div>
         <Input
           autoFocus
           aria-label="Search rate analyses"
@@ -585,7 +605,9 @@ function AnalysisPicker({
           ) : list.isError ? (
             <Alert tone="danger">{describeError(list.error)}</Alert>
           ) : list.data.items.length === 0 ? (
-            <p className="p-3 text-sm text-fg-muted">No analyses match.</p>
+            <EmptyState title="No analyses match.">
+              Try another code or word, or make the analysis under Rate analyses.
+            </EmptyState>
           ) : (
             <ul>
               {list.data.items.map((a) => (
@@ -612,7 +634,7 @@ function AnalysisPicker({
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -717,6 +739,7 @@ export function TenderBoqs({ tenderId, canEdit }: { tenderId: string; canEdit: b
             method: 'POST',
             body: { name },
           });
+      toast.success(`BOQ ${name} created`);
       await navigate({ to: '/boqs/$boqId', params: { boqId: b.id } });
     } catch (err) {
       setError(describeError(err));
@@ -781,7 +804,11 @@ export function TenderBoqs({ tenderId, canEdit }: { tenderId: string; canEdit: b
       ) : boqs.isError ? (
         <Alert tone="danger">{describeError(boqs.error)}</Alert>
       ) : boqs.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">No BOQ yet.</p>
+        <EmptyState title="No BOQ yet.">
+          {canEdit
+            ? 'Use New BOQ to start one: empty, from a template, or imported from Excel.'
+            : 'BOQs added to this tender appear here.'}
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-line text-sm">
           {[

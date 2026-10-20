@@ -1,6 +1,14 @@
 // Electron main process (docs/02-tech-stack.md, docs/09-security.md §3.8). The window shows the bundled web UI from
 // app://aerolith; all business logic stays on the server.
-import { app, BrowserWindow, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  session,
+  shell,
+  type IpcMainInvokeEvent,
+} from 'electron';
 import { join } from 'node:path';
 import { APP_ORIGIN, loadConfig } from './config.js';
 import { registerSchemeAsPrivileged, serveApp } from './protocol.js';
@@ -30,6 +38,50 @@ function registerIpc(): void {
     )
       return;
     setRefreshToken(token);
+  });
+}
+
+// Leaving the app (docs/wave9-plan.md step 9a.4). While someone is signed in, closing the window asks first: the UI
+// shows what would be lost (unsent site entries, a form not saved) and answers. If the UI does not answer within
+// three seconds (it is stuck), a plain question from the operating system asks instead, so the window always closes.
+let guarded = false;
+let closing = false;
+
+function registerCloseGuard(win: BrowserWindow): void {
+  ipcMain.handle('aerolith:close-guard', (e, on: unknown) => {
+    if (fromOurUi(e)) guarded = on === true;
+  });
+  ipcMain.handle('aerolith:close-answer', (e, close: unknown) => {
+    if (!fromOurUi(e) || pending === null) return;
+    clearTimeout(pending);
+    pending = null;
+    if (close === true) {
+      closing = true;
+      win.close();
+    }
+  });
+  let pending: NodeJS.Timeout | null = null;
+  win.on('close', (event) => {
+    if (closing || !guarded || SMOKE_TEST) return;
+    event.preventDefault();
+    if (pending !== null) return;
+    win.webContents.send('aerolith:close-requested');
+    pending = setTimeout(() => {
+      pending = null;
+      const choice = dialog.showMessageBoxSync(win, {
+        type: 'question',
+        buttons: ['Close Aerolith Core', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Close Aerolith Core?',
+        message: 'Close Aerolith Core?',
+        detail: 'Anything not saved on the open screen will be lost.',
+      });
+      if (choice === 0) {
+        closing = true;
+        win.close();
+      }
+    }, 3_000);
   });
 }
 
@@ -81,6 +133,7 @@ app.whenReady().then(() => {
   serveApp(config.webRoot, config.apiBaseUrl);
   registerIpc();
   const win = createWindow(config.apiBaseUrl);
+  registerCloseGuard(win);
 
   if (SMOKE_TEST) {
     // CI/dev check: the UI loads, the bridge is present and no Node APIs leak into the page.

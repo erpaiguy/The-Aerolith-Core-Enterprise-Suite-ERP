@@ -113,6 +113,7 @@ test('a site engineer raises a requisition; the lead rejects it, then approves i
   await expect(page.getByTestId('requisition-total')).toHaveText('₹42,250');
   await page.getByLabel(/^Note/).fill('Order 80 bags; 20 are in the store');
   await page.getByRole('button', { name: 'Reject' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Reject it' }).click();
   await expect(page.getByRole('list', { name: 'Approval history' })).toContainText(
     'Order 80 bags; 20 are in the store',
   );

@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -60,9 +63,13 @@ export function ApprovalsScreen() {
         ) : rows.isError ? (
           <Alert tone="danger">{describeError(rows.error)}</Alert>
         ) : rows.data.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            {view === 'waiting' ? 'Nothing waits on you.' : 'None yet.'}
-          </p>
+          <EmptyState title={view === 'waiting' ? 'Nothing waits on you.' : 'None yet.'}>
+            {view === 'waiting'
+              ? 'Requests that need your decision appear here.'
+              : view === 'mine'
+                ? 'Documents you put up for approval appear here.'
+                : 'Requests you approve or reject appear here.'}
+          </EmptyState>
         ) : (
           <Table minWidth="48rem">
             <thead>
@@ -134,6 +141,7 @@ const indiaToday = () => new Date(Date.now() + 330 * 60_000).toISOString().slice
 function StandIns() {
   const { user } = useSession();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const list = useQuery({
     queryKey: ['approval-delegations'],
     queryFn: () => api.request<Delegation[]>('/api/tenant/approval-delegations'),
@@ -174,13 +182,26 @@ function StandIns() {
                 <Button
                   variant="ghost"
                   busy={busy === d.id}
-                  onClick={() =>
-                    void run(d.id, () =>
-                      api.request(`/api/tenant/approval-delegations/${d.id}/cancel`, {
-                        method: 'POST',
-                      }),
+                  onClick={async () => {
+                    if (
+                      !(await confirm({
+                        title: `Cancel ${d.toName}'s stand-in for ${d.fromName}?`,
+                        body: `From now on, what waits on ${d.fromName} is no longer approved by ${d.toName}.`,
+                        confirmLabel: 'Cancel the stand-in',
+                        cancelLabel: 'Keep it',
+                        tone: 'danger',
+                      }))
                     )
-                  }
+                      return;
+                    if (
+                      await run(d.id, () =>
+                        api.request(`/api/tenant/approval-delegations/${d.id}/cancel`, {
+                          method: 'POST',
+                        }),
+                      )
+                    )
+                      toast.success('Stand-in cancelled');
+                  }}
                 >
                   Cancel
                 </Button>
@@ -199,7 +220,11 @@ function StandIns() {
               method: 'POST',
               body: { ...v, fromUserId: v.fromUserId || null },
             }),
-          ).then((ok) => ok && setV({ ...v, toUserId: '', endsOn: '', reason: '' }));
+          ).then((ok) => {
+            if (!ok) return;
+            setV({ ...v, toUserId: '', endsOn: '', reason: '' });
+            toast.success('Stand-in added');
+          });
         }}
       >
         {isAdmin && (

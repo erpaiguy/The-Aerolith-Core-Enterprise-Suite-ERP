@@ -1,7 +1,18 @@
 // The company's approval rules (docs/wave2b-plan.md step 1), set by the admin: for each kind of document, the levels
 // it goes through, each from an amount upwards. With no levels a document is approved when it is submitted. Requests
 // already submitted keep the rules they were submitted under.
-import { Alert, Button, Card, Field, Input, PageHeader, Select, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  Spinner,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -97,9 +108,10 @@ function TypeRules({
   return (
     <Card title={`${type.label}s`}>
       {rows.length === 0 && (
-        <p className="mb-3 text-sm text-fg-muted">
-          No levels: a {type.label.toLowerCase()} is approved as soon as it is submitted.
-        </p>
+        <EmptyState title="No levels">
+          A {type.label.toLowerCase()} is approved as soon as it is submitted. Add a level to have
+          it approved first.
+        </EmptyState>
       )}
       <form
         className="space-y-3"
@@ -119,7 +131,7 @@ function TypeRules({
                 })),
               },
             }),
-          );
+          ).then((ok) => ok && toast.success(`Rules for ${type.label.toLowerCase()}s saved`));
         }}
       >
         {rows.map((r, i) => (

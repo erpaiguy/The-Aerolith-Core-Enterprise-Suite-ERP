@@ -11,6 +11,8 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -55,6 +57,7 @@ interface Hooks {
 
 export function IntegrationsScreen() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const keys = useQuery({
     queryKey: ['api-keys'],
     queryFn: () => api.request<Key[]>('/api/tenant/integrations/api-keys'),
@@ -89,12 +92,13 @@ export function IntegrationsScreen() {
   const [hookForm, setHookForm] = useState({ url: '', events: ['order.issued'] });
   const [secret, setSecret] = useState<{ label: string; value: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const run = async (f: () => Promise<void>) => {
+  const run = async (f: () => Promise<void>, done: string) => {
     setError(null);
     try {
       await f();
       void qc.invalidateQueries({ queryKey: ['api-keys'] });
       void qc.invalidateQueries({ queryKey: ['webhooks'] });
+      toast.success(done);
     } catch (err) {
       setError(describeError(err));
     }
@@ -135,7 +139,7 @@ export function IntegrationsScreen() {
               });
               setSecret({ label: `The key "${keyForm.name}".`, value: r.key });
               setKeyForm({ ...keyForm, name: '' });
-            });
+            }, `Key ${keyForm.name} made`);
           }}
         >
           <Field label="Key name">
@@ -196,13 +200,22 @@ export function IntegrationsScreen() {
                     ) : (
                       <Button
                         variant="ghost"
-                        onClick={() =>
-                          void run(async () => {
+                        onClick={async () => {
+                          if (
+                            !(await confirm({
+                              title: `Revoke the key ${k.name}?`,
+                              body: 'Anything using it is refused from now on. A revoked key cannot be brought back; make a new one instead.',
+                              confirmLabel: 'Revoke the key',
+                              tone: 'danger',
+                            }))
+                          )
+                            return;
+                          await run(async () => {
                             await api.request(`/api/tenant/integrations/api-keys/${k.id}/revoke`, {
                               method: 'POST',
                             });
-                          })
-                        }
+                          }, `Key ${k.name} revoked`);
+                        }}
                       >
                         Revoke {k.name}
                       </Button>
@@ -228,7 +241,7 @@ export function IntegrationsScreen() {
               });
               setSecret({ label: `The signing secret for ${hookForm.url}.`, value: r.secret });
               setHookForm({ ...hookForm, url: '' });
-            });
+            }, 'Webhook added');
           }}
         >
           <Field label="Address (https)">
@@ -273,20 +286,29 @@ export function IntegrationsScreen() {
                             await api.request(`/api/tenant/integrations/webhooks/${h.id}/test`, {
                               method: 'POST',
                             });
-                          })
+                          }, 'Test sent')
                         }
                       >
                         Send a test
                       </Button>
                       <Button
                         variant="ghost"
-                        onClick={() =>
-                          void run(async () => {
+                        onClick={async () => {
+                          if (
+                            !(await confirm({
+                              title: `Turn off the webhook to ${h.url}?`,
+                              body: 'Nothing more is sent to this address. To start again, add the webhook anew.',
+                              confirmLabel: 'Turn the webhook off',
+                              tone: 'danger',
+                            }))
+                          )
+                            return;
+                          await run(async () => {
                             await api.request(`/api/tenant/integrations/webhooks/${h.id}/disable`, {
                               method: 'POST',
                             });
-                          })
-                        }
+                          }, 'Webhook turned off');
+                        }}
                       >
                         Turn off
                       </Button>

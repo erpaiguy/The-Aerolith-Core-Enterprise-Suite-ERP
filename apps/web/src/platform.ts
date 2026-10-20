@@ -8,6 +8,10 @@ export interface DesktopBridge {
   deviceId(): Promise<string>;
   getRefreshToken(): Promise<string | null>;
   setRefreshToken(token: string | null): Promise<void>;
+  /** Leaving the app (step 9a.4); absent in desktop builds older than Wave 9. */
+  setCloseGuard?(on: boolean): Promise<void>;
+  onCloseRequested?(f: () => void): () => void;
+  answerClose?(close: boolean): Promise<void>;
 }
 
 declare global {

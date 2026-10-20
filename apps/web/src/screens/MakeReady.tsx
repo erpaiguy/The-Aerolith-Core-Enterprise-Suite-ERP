@@ -12,6 +12,8 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
@@ -69,6 +71,7 @@ interface Week {
 
 export function MakeReadyScreen({ planId }: { planId: string }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [error, setError] = useState<string | null>(null);
   const ready = useQuery({
     queryKey: ['readiness', planId],
@@ -101,11 +104,12 @@ export function MakeReadyScreen({ planId }: { planId: string }) {
         ['ppc', planId],
       ].map((k) => qc.invalidateQueries({ queryKey: k })),
     );
-  const run = async (path: string, body: object) => {
+  const run = async (path: string, body: object, done: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
       await refresh();
+      toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -118,28 +122,48 @@ export function MakeReadyScreen({ planId }: { planId: string }) {
 
   const addConstraint = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run(`/api/tenant/programmes/${planId}/constraints`, c))
+    if (await run(`/api/tenant/programmes/${planId}/constraints`, c, 'Constraint added'))
       setC({ ...c, description: '' });
   };
   const commit = async (e: FormEvent) => {
     e.preventDefault();
     if (
-      await run(`/api/tenant/programmes/${planId}/weekly-plan`, {
-        weekStart,
-        items: [{ activityId: what.activityId || null, what: what.what }],
-      })
+      await run(
+        `/api/tenant/programmes/${planId}/weekly-plan`,
+        {
+          weekStart,
+          items: [{ activityId: what.activityId || null, what: what.what }],
+        },
+        'Commitment added',
+      )
     )
       setWhat({ activityId: '', what: '' });
   };
-  const close = () =>
-    void run(`/api/tenant/programmes/${planId}/weekly-plan/close`, {
-      weekStart,
-      results: (week.data?.commitments ?? []).map((x) => ({
-        id: x.id,
-        done: results[x.id]?.done ?? true,
-        missReason: results[x.id]?.done === false ? results[x.id]?.missReason || 'other' : null,
-      })),
-    });
+  const close = async () => {
+    const items = week.data?.commitments ?? [];
+    const missed = items.filter((x) => results[x.id]?.done === false).length;
+    if (
+      !(await confirm({
+        title: `Close the week of ${weekStart}?`,
+        body: `${items.length - missed} of ${items.length} commitments done. The week's PPC is fixed and its plan can no longer be changed.`,
+        confirmLabel: 'Close the week',
+        tone: 'danger',
+      }))
+    )
+      return;
+    await run(
+      `/api/tenant/programmes/${planId}/weekly-plan/close`,
+      {
+        weekStart,
+        results: items.map((x) => ({
+          id: x.id,
+          done: results[x.id]?.done ?? true,
+          missReason: results[x.id]?.done === false ? results[x.id]?.missReason || 'other' : null,
+        })),
+      },
+      `Week of ${weekStart} closed`,
+    );
+  };
 
   const colours = typeof document === 'undefined' ? null : themeColours();
   const option: ChartOption | null =
@@ -281,7 +305,11 @@ export function MakeReadyScreen({ planId }: { planId: string }) {
                       type="button"
                       variant="ghost"
                       onClick={() =>
-                        void run(`/api/tenant/constraints/${x.id}/clear`, { on: today() })
+                        void run(
+                          `/api/tenant/constraints/${x.id}/clear`,
+                          { on: today() },
+                          'Constraint cleared',
+                        )
                       }
                     >
                       Clear
@@ -404,7 +432,7 @@ export function MakeReadyScreen({ planId }: { planId: string }) {
           </tbody>
         </Table>
         {!week.data?.closed && (week.data?.commitments.length ?? 0) > 0 && (
-          <Button type="button" className="mt-3" onClick={close}>
+          <Button type="button" className="mt-3" onClick={() => void close()}>
             Close the week
           </Button>
         )}

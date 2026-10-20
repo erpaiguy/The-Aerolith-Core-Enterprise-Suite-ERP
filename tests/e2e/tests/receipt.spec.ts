@@ -107,6 +107,7 @@ test('goods are received, inspected and returned, and the order closes when all 
   await back.getByLabel('Gate pass or debit note').fill('Gate pass 77');
   await back.getByLabel('Why it goes back').fill('Rejected on receipt');
   await back.getByRole('button', { name: 'Return to the supplier' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Return the goods' }).click();
   await expect(page.getByRole('list', { name: 'Returns' })).toContainText(/RTV\/\d{4}-\d{2}\/0001/);
   await expect(back).toHaveCount(0);
   await shot(page, 'receipt-02-returned');

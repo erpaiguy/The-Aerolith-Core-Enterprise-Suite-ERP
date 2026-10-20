@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil } from 'lucide-react';
@@ -34,6 +37,7 @@ const post = <T,>(url: string, body: object = {}) =>
 
 export function CostCodesScreen() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const canEdit = usePermission('costcodes.edit');
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +46,12 @@ export function CostCodesScreen() {
     queryFn: () => api.request<CostCode[]>('/api/tenant/cost-codes'),
   });
   const refresh = () => void qc.invalidateQueries({ queryKey: ['cost-codes'] });
-  const run = async (f: () => Promise<unknown>) => {
+  const run = async (f: () => Promise<unknown>, done?: string) => {
     setError(null);
     try {
       await f();
       refresh();
+      if (done) toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -69,14 +74,22 @@ export function CostCodesScreen() {
             Materials, labour, plant and equipment, subcontracts and site overheads, with the usual
             codes under each (23 in all). Edit, add or retire any of them afterwards.
           </p>
-          <Button onClick={() => void run(() => post('cost-codes/standard'))}>
+          <Button
+            onClick={() =>
+              void run(() => post('cost-codes/standard'), 'Standard cost codes loaded')
+            }
+          >
             Load the standard list
           </Button>
         </Card>
       )}
       <Card title={`Codes (${list.length})`}>
         {list.length === 0 ? (
-          <p className="text-sm text-fg-muted">No cost codes yet.</p>
+          <EmptyState title="No cost codes yet.">
+            {canEdit
+              ? 'Load the standard list above, or add codes of your own below.'
+              : 'An admin or manager sets up the cost codes.'}
+          </EmptyState>
         ) : (
           <Table minWidth="40rem">
             <thead>
@@ -99,8 +112,9 @@ export function CostCodesScreen() {
                         onCancel={() => setEditing(null)}
                         onSubmit={async (v) => {
                           if (
-                            await run(() =>
-                              post(`cost-codes/${c.id}`, { ...v, rowVersion: c.rowVersion }),
+                            await run(
+                              () => post(`cost-codes/${c.id}`, { ...v, rowVersion: c.rowVersion }),
+                              `${v.code} saved`,
                             )
                           )
                             setEditing(null);
@@ -135,14 +149,26 @@ export function CostCodesScreen() {
                           </Button>
                           <Button
                             variant="ghost"
-                            onClick={() =>
-                              void run(() =>
-                                post(`cost-codes/${c.id}`, {
-                                  rowVersion: c.rowVersion,
-                                  active: !c.active,
-                                }),
+                            onClick={async () => {
+                              if (
+                                c.active &&
+                                !(await confirm({
+                                  title: `Retire ${c.code} · ${c.name}?`,
+                                  body: 'It can no longer be chosen for new lines; lines already mapped to it keep it. You can restore it later.',
+                                  confirmLabel: 'Retire the code',
+                                  tone: 'danger',
+                                }))
                               )
-                            }
+                                return;
+                              await run(
+                                () =>
+                                  post(`cost-codes/${c.id}`, {
+                                    rowVersion: c.rowVersion,
+                                    active: !c.active,
+                                  }),
+                                `${c.code} ${c.active ? 'retired' : 'restored'}`,
+                              );
+                            }}
                           >
                             {c.active ? 'Retire' : 'Restore'}
                           </Button>
@@ -160,7 +186,7 @@ export function CostCodesScreen() {
         <Card title="Add a cost code">
           <CostCodeForm
             codes={list}
-            onSubmit={async (v) => void (await run(() => post('cost-codes', v)))}
+            onSubmit={async (v) => void (await run(() => post('cost-codes', v), `${v.code} added`))}
           />
         </Card>
       )}

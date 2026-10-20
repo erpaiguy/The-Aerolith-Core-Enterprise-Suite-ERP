@@ -75,6 +75,7 @@ import { usePermission } from '../session/permissions';
 import type { Inbox, ProjectSummary } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
 import { LANGUAGES, useLanguage, type Lang } from '../i18n/i18n';
+import { LeaveGuard } from '../session/LeaveGuard';
 import { useSession } from '../session/session';
 import { usePending } from '../offline';
 import { Badge, Select, useConfirm } from '@aerolith/ui';
@@ -1110,6 +1111,7 @@ export function AppShell() {
           <main className="flex-1 px-4 py-6 md:px-6">
             <Outlet />
           </main>
+          <LeaveGuard />
         </div>
       </div>
     </div>

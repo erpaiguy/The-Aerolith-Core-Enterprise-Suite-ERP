@@ -6,7 +6,7 @@ import type { Inbox, InboxItem, OwnerNotice } from '../api/types';
 import { daysUntil, errorMessage, formatDate, formatDateTime } from '../lib/format';
 import { apiBase } from '../platform';
 import { useSession } from '../session/session';
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Spinner, toast } from '@aerolith/ui';
 import { MyWorkCard } from './MyWork';
 
 function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => void }) {
@@ -68,6 +68,7 @@ function ReminderForm() {
         body: { title, dueAt: new Date(dueAt).toISOString() },
       }),
     onSuccess: () => {
+      toast.success('Reminder added');
       setTitle('');
       setDueAt('');
       void qc.invalidateQueries({ queryKey: ['inbox'] });
@@ -139,7 +140,10 @@ export function HomeScreen() {
   const readAll = useMutation({
     mutationFn: () =>
       api.request('/api/tenant/notifications/read-all', { method: 'POST', body: {} }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['inbox'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['inbox'] });
+      toast.success('All marked read');
+    },
   });
   const ent = session.entitlement;
 
@@ -184,10 +188,9 @@ export function HomeScreen() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-fg-muted">
-              Nothing needs your attention. Tender deadlines, approvals and reminders will appear
-              here.
-            </p>
+            <EmptyState title="Nothing needs your attention.">
+              Tender deadlines, approvals and reminders will appear here.
+            </EmptyState>
           )}
         </Card>
         <Card title="Reminders">

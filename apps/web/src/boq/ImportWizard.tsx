@@ -1,6 +1,18 @@
 // Import a BOQ from Excel or CSV (docs/wave1-plan.md step 4): upload -> confirm sheet, header, columns and structure
 // -> check (dry run) -> import. The server does the work in the background; this screen polls the job.
-import { Alert, Badge, Button, Card, Field, Select, Spinner, Stat, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Select,
+  Spinner,
+  Stat,
+  cx,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, FileSpreadsheet, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
@@ -81,7 +93,10 @@ function FilePicker({ boqId, onJob }: { boqId: string; onJob: (j: ImportJob) => 
   const [over, setOver] = useState(false);
   const upload = useMutation({
     mutationFn: (file: File) => api.upload<ImportJob>(`/api/tenant/boqs/${boqId}/imports`, file),
-    onSuccess: onJob,
+    onSuccess: (job, file) => {
+      onJob(job);
+      toast.success(`${file.name} uploaded`);
+    },
   });
   const pick = (files: FileList | null) => {
     const f = files?.[0];
@@ -497,8 +512,14 @@ export function useImportFinished(job: ImportJob | null | undefined, onImported:
     if (!job) return;
     const prev = last.current;
     last.current = { id: job.id, status: job.status };
-    if (prev?.id === job.id && prev.status === 'importing' && job.status === 'imported')
+    if (prev?.id === job.id && prev.status === 'importing' && job.status === 'imported') {
+      toast.success(
+        job.summary?.revision
+          ? 'Revised BOQ applied'
+          : `${job.summary?.lines.toLocaleString('en-IN') ?? 'All'} lines imported`,
+      );
       onImported();
+    }
   }, [job, onImported]);
 }
 
@@ -522,6 +543,7 @@ export function ImportWizard({
   revising?: boolean;
 }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const latest = useLatestImport(boqId, true);
   const setJob = (job: ImportJob) => qc.setQueryData(['boq-import', boqId], { job });
   const job =
@@ -543,7 +565,10 @@ export function ImportWizard({
         method: 'POST',
         body: a === 'validate' ? draft : a === 'start' ? { skipErrors } : {},
       }),
-    onSuccess: setJob,
+    onSuccess: (j, a) => {
+      setJob(j);
+      if (a === 'start') toast.success('Import started');
+    },
   });
 
   const dirty = job !== null && draft !== null && !sameSettings(draft, job.settings);
@@ -579,7 +604,23 @@ export function ImportWizard({
         <p className="text-sm text-fg-muted">
           The BOQ cannot be edited until this finishes. You can close this and come back.
         </p>
-        <Button variant="secondary" busy={act.isPending} onClick={() => act.mutate('cancel')}>
+        <Button
+          variant="secondary"
+          busy={act.isPending}
+          onClick={async () => {
+            if (
+              !(await confirm({
+                title: 'Cancel the import?',
+                body: 'Lines imported so far are taken out again and the BOQ stays as it was.',
+                confirmLabel: 'Cancel the import',
+                cancelLabel: 'Keep importing',
+                tone: 'danger',
+              }))
+            )
+              return;
+            act.mutate('cancel', { onSuccess: () => toast.success('Import cancelled') });
+          }}
+        >
           Cancel import
         </Button>
       </div>

@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -13,6 +14,8 @@ import {
   Table,
   Textarea,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -111,6 +114,7 @@ function useUploads(vault: VaultRef, onDone: () => void) {
   const work = async () => {
     if (running.current) return;
     running.current = true;
+    let uploaded = 0;
     const worker = async () => {
       for (;;) {
         const next = items.current.find((q) => q.state === 'waiting');
@@ -125,6 +129,7 @@ function useUploads(vault: VaultRef, onDone: () => void) {
             `/api/tenant/${vault.kind}/${vault.id}/documents/upload?${params}`,
             next.file,
           );
+          uploaded++;
           update(next.key, {
             state: 'done',
             message: `${OUTCOME[r.outcome]}${r.outcome === 'new_version' ? ` (v${r.document.versionNo})` : ''}`,
@@ -144,6 +149,7 @@ function useUploads(vault: VaultRef, onDone: () => void) {
     };
     await Promise.all(Array.from({ length: PARALLEL_UPLOADS }, worker));
     running.current = false;
+    if (uploaded) toast.success(uploaded === 1 ? 'File uploaded' : `${uploaded} files uploaded`);
     onDone();
   };
   const add = (
@@ -235,7 +241,7 @@ export function VaultDocuments({
   const current = folderId && byId.has(folderId) ? folderId : null;
   const q = useDeferredValue(filter.trim().toLowerCase());
 
-  const run = async (key: string, fn: () => Promise<unknown>) => {
+  const run = async (key: string, fn: () => Promise<unknown>, done?: string) => {
     setBusy(key);
     setError(null);
     try {
@@ -243,6 +249,7 @@ export function VaultDocuments({
       if (out && typeof out === 'object' && 'folders' in out)
         qc.setQueryData(['documents', vault.id], out);
       else refresh();
+      if (done) toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -307,8 +314,10 @@ export function VaultDocuments({
               className="w-full"
               busy={busy === 'standard'}
               onClick={() =>
-                void run('standard', () =>
-                  post<DocVault>(`${vault.kind}/${vault.id}/folders/standard`),
+                void run(
+                  'standard',
+                  () => post<DocVault>(`${vault.kind}/${vault.id}/folders/standard`),
+                  'Standard folders added',
                 )
               }
             >
@@ -477,11 +486,10 @@ export function VaultDocuments({
                 />
               )}
               {empty ? (
-                <p className="text-sm text-fg-muted">
-                  No documents yet.{' '}
+                <EmptyState title="No documents yet.">
                   {canEdit &&
                     'Add the standard folders, then upload the tender notice, drawings and addenda (or drop files here).'}
-                </p>
+                </EmptyState>
               ) : (
                 <DocumentList
                   subfolders={q ? [] : subfolders}
@@ -532,7 +540,7 @@ export function VaultDocuments({
   );
 }
 
-type Run = (key: string, fn: () => Promise<unknown>) => Promise<boolean>;
+type Run = (key: string, fn: () => Promise<unknown>, done?: string) => Promise<boolean>;
 
 function FolderTree({
   folders,
@@ -626,8 +634,10 @@ function NewFolder({
     );
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    void run('folder', () =>
-      post<DocVault>(`${vault.kind}/${vault.id}/folders`, { parentId, name }),
+    void run(
+      'folder',
+      () => post<DocVault>(`${vault.kind}/${vault.id}/folders`, { parentId, name }),
+      `Folder ${name.trim()} created`,
     ).then((ok) => {
       if (ok) {
         setName('');
@@ -673,6 +683,7 @@ function FolderActions({
   busy: string | null;
   onDeleted: () => void;
 }) {
+  const confirm = useConfirm();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(folder.name);
   // Anywhere but inside itself.
@@ -693,8 +704,10 @@ function FolderActions({
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void run('rename-folder', () =>
-              post<DocVault>(`folders/${folder.id}`, { rowVersion: folder.rowVersion, name }),
+            void run(
+              'rename-folder',
+              () => post<DocVault>(`folders/${folder.id}`, { rowVersion: folder.rowVersion, name }),
+              'Folder renamed',
             ).then((ok) => ok && setRenaming(false));
           }}
         >
@@ -730,11 +743,14 @@ function FolderActions({
             onChange={(e) => {
               const to = e.target.value;
               if (to)
-                void run('move-folder', () =>
-                  post<DocVault>(`folders/${folder.id}`, {
-                    rowVersion: folder.rowVersion,
-                    parentId: to === 'top' ? null : to,
-                  }),
+                void run(
+                  'move-folder',
+                  () =>
+                    post<DocVault>(`folders/${folder.id}`, {
+                      rowVersion: folder.rowVersion,
+                      parentId: to === 'top' ? null : to,
+                    }),
+                  `${folder.name} moved`,
                 );
             }}
           >
@@ -753,11 +769,14 @@ function FolderActions({
               variant="ghost"
               busy={busy === 'restrict'}
               onClick={() =>
-                void run('restrict', () =>
-                  post<DocVault>(`folders/${folder.id}`, {
-                    rowVersion: folder.rowVersion,
-                    restricted: !folder.restricted,
-                  }),
+                void run(
+                  'restrict',
+                  () =>
+                    post<DocVault>(`folders/${folder.id}`, {
+                      rowVersion: folder.rowVersion,
+                      restricted: !folder.restricted,
+                    }),
+                  folder.restricted ? 'Restriction lifted' : `${folder.name} restricted`,
                 )
               }
             >
@@ -768,11 +787,25 @@ function FolderActions({
           <Button
             variant="ghost"
             busy={busy === 'delete-folder'}
-            onClick={() =>
-              void run('delete-folder', () => post<DocVault>(`folders/${folder.id}/delete`)).then(
-                (ok) => ok && onDeleted(),
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: `Delete folder ${folder.name}?`,
+                  body: 'Only an empty folder can be deleted; move or trash what is in it first.',
+                  confirmLabel: 'Delete the folder',
+                  tone: 'danger',
+                }))
               )
-            }
+                return;
+              if (
+                await run(
+                  'delete-folder',
+                  () => post<DocVault>(`folders/${folder.id}/delete`),
+                  `Folder ${folder.name} deleted`,
+                )
+              )
+                onDeleted();
+            }}
           >
             <Trash2 className="size-4" aria-hidden /> Delete folder
           </Button>
@@ -860,9 +893,11 @@ function DocumentList({
 }) {
   if (subfolders.length === 0 && documents.length === 0)
     return (
-      <p className="text-sm text-fg-muted">
-        {showFolder ? 'Nothing matches.' : 'This folder is empty.'}
-      </p>
+      <EmptyState title={showFolder ? 'Nothing matches.' : 'This folder is empty.'}>
+        {showFolder
+          ? 'Try another name, tag or word.'
+          : 'Files and folders added here appear in this list.'}
+      </EmptyState>
     );
   return (
     <Table minWidth="40rem">
@@ -1147,7 +1182,11 @@ function DocumentPanel({
                 busy={busy === 'delete'}
                 onClick={() =>
                   void act('delete', () => post<DocDetail>(`documents/${documentId}/delete`)).then(
-                    (ok) => ok && onClose(),
+                    (ok) => {
+                      if (!ok) return;
+                      toast.success(`${d.name} moved to the trash`);
+                      onClose();
+                    },
                   )
                 }
               >
@@ -1177,7 +1216,11 @@ function DocumentPanel({
             onSave={(body) =>
               void act('edit', () =>
                 post<DocDetail>(`documents/${documentId}`, { rowVersion: d.rowVersion, ...body }),
-              ).then((ok) => ok && setEditing(false))
+              ).then((ok) => {
+                if (!ok) return;
+                setEditing(false);
+                toast.success('Details saved');
+              })
             }
             onCancel={() => setEditing(false)}
           />
@@ -1360,14 +1403,14 @@ function TrashList({
   const isAdmin = useSession().user?.role === 'admin';
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<string | null>(null);
-  const act = async (key: string, path: string) => {
+  const confirm = useConfirm();
+  const act = async (key: string, path: string, done: string) => {
     setBusy(key);
     setError(null);
     try {
       await post(path);
-      setConfirming(null);
       onChanged();
+      toast.success(done);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -1382,12 +1425,13 @@ function TrashList({
     queryKey: ['documents-trash', vault.id],
     queryFn: () => api.request<DocItem[]>(`/api/tenant/${vault.kind}/${vault.id}/documents/trash`),
   });
-  const restore = async (id: string) => {
+  const restore = async (id: string, name: string) => {
     setBusy(id);
     setError(null);
     try {
       await post(`documents/${id}/restore`);
       onChanged();
+      toast.success(`${name} restored`);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -1399,26 +1443,32 @@ function TrashList({
       title="Trash"
       actions={
         isAdmin &&
-        (trash.data?.length ?? 0) > 0 &&
-        (confirming === 'all' ? (
-          <span className="flex items-center gap-2 text-sm">
-            Delete all {trash.data!.length} for good?
-            <Button
-              variant="danger"
-              busy={busy === 'all'}
-              onClick={() => void act('all', `${vault.kind}/${vault.id}/documents/trash/empty`)}
-            >
-              Delete for good
-            </Button>
-            <Button variant="ghost" onClick={() => setConfirming(null)}>
-              Keep
-            </Button>
-          </span>
-        ) : (
-          <Button variant="secondary" onClick={() => setConfirming('all')}>
+        (trash.data?.length ?? 0) > 0 && (
+          <Button
+            variant="secondary"
+            busy={busy === 'all'}
+            onClick={async () => {
+              const n = trash.data!.length;
+              if (
+                !(await confirm({
+                  title: `Delete all ${n} for good?`,
+                  body: 'Every version of every document in the trash is deleted. This cannot be undone.',
+                  confirmLabel: 'Delete for good',
+                  cancelLabel: 'Keep',
+                  tone: 'danger',
+                }))
+              )
+                return;
+              await act(
+                'all',
+                `${vault.kind}/${vault.id}/documents/trash/empty`,
+                `${n} ${n === 1 ? 'document' : 'documents'} deleted for good`,
+              );
+            }}
+          >
             Empty trash
           </Button>
-        ))
+        )
       }
     >
       <p className="mb-3 text-sm text-fg-muted">
@@ -1437,7 +1487,9 @@ function TrashList({
       ) : trash.isError ? (
         <Alert tone="danger">{describeError(trash.error)}</Alert>
       ) : trash.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">The trash is empty.</p>
+        <EmptyState title="The trash is empty.">
+          Documents moved to the trash wait here until they are restored or deleted for good.
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-line text-sm" aria-label="Trash">
           {trash.data.map((d) => (
@@ -1454,29 +1506,37 @@ function TrashList({
                   <Button
                     variant="secondary"
                     busy={busy === d.id}
-                    onClick={() => void restore(d.id)}
+                    onClick={() => void restore(d.id, d.name)}
                   >
                     <RotateCcw className="size-4" aria-hidden /> Restore
                   </Button>
                 )}
-                {isAdmin &&
-                  (confirming === d.id ? (
-                    <Button
-                      variant="danger"
-                      busy={busy === `purge-${d.id}`}
-                      onClick={() => void act(`purge-${d.id}`, `documents/${d.id}/purge`)}
-                    >
-                      Sure? Delete for good
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      aria-label={`Delete ${d.name} for good`}
-                      onClick={() => setConfirming(d.id)}
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                    </Button>
-                  ))}
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    busy={busy === `purge-${d.id}`}
+                    aria-label={`Delete ${d.name} for good`}
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: `Delete ${d.name} for good?`,
+                          body: 'Every version of it is deleted. This cannot be undone.',
+                          confirmLabel: 'Delete for good',
+                          cancelLabel: 'Keep',
+                          tone: 'danger',
+                        }))
+                      )
+                        return;
+                      await act(
+                        `purge-${d.id}`,
+                        `documents/${d.id}/purge`,
+                        `${d.name} deleted for good`,
+                      );
+                    }}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </Button>
+                )}
               </span>
             </li>
           ))}
@@ -1587,9 +1647,11 @@ export function DocumentsScreen() {
         ) : results.isError ? (
           <Alert tone="danger">{describeError(results.error)}</Alert>
         ) : results.data.items.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            {q || tag ? 'Nothing matches.' : 'No documents yet.'}
-          </p>
+          <EmptyState title={q || tag ? 'Nothing matches.' : 'No documents yet.'}>
+            {q || tag
+              ? 'Try another word or tag.'
+              : "Upload documents from a tender's Documents tab or a project's Documents."}
+          </EmptyState>
         ) : (
           <Table minWidth="44rem">
             <thead>

@@ -1,6 +1,16 @@
 // A project's daily site reports (docs/wave2b-plan.md step 7): today's report for each site, the days with none, the
 // reports, and the weekly figures: man-days by trade, equipment hours worked and idle, hindrances by cause.
-import { Alert, Badge, Button, Card, Field, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Select,
+  Spinner,
+  Table,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Plus } from 'lucide-react';
@@ -200,7 +210,12 @@ export function Missing({
 
 export function ReportTable({ rows }: { rows: DailyReportList['reports'] }) {
   const t = useT();
-  if (!rows.length) return <p className="text-sm text-fg-muted">{t('None yet.')}</p>;
+  if (!rows.length)
+    return (
+      <EmptyState title={t('None yet.')}>
+        {t("Each site's report for the day is started from Today at the site.")}
+      </EmptyState>
+    );
   return (
     <Table minWidth="32rem">
       <thead>
@@ -302,7 +317,7 @@ function Weekly({ s }: { s: Summary }) {
       </div>
       <Card title={t('Hindrances, last eight weeks')}>
         {s.hindrances.length === 0 ? (
-          <p className="text-sm text-fg-muted">{t('None recorded.')}</p>
+          <EmptyState title={t('None recorded.')} />
         ) : (
           <Table minWidth="30rem">
             <thead>
