@@ -76,6 +76,7 @@ import { usePermission } from '../session/permissions';
 import type { Inbox, ProjectSummary } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
 import { LANGUAGES, useLanguage, type Lang } from '../i18n/i18n';
+import { HelpMenu } from '../help/HelpMenu';
 import { LeaveGuard } from '../session/LeaveGuard';
 import { ReleaseNotice } from '../updates/Updates';
 import { FavouriteToggle, PersonalNav, StatusBar, useRecordRecent } from './shell/Personal';
@@ -1121,6 +1122,7 @@ export function AppShell() {
             </div>
             <div className="flex items-center gap-1">
               <SearchPalette screens={screens} />
+              <HelpMenu />
               <NewMenu projectId={projectId} />
               <OutboxChip />
               <LanguagePicker />

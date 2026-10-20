@@ -21,6 +21,7 @@ import {
 } from './screens/Passwords';
 import { SignInScreen } from './screens/SignIn';
 import { LegalGate, LegalPage } from './legal/Legal';
+import { HelpCentreScreen, validateHelpSearch } from './help/HelpCentre';
 import { SettingsScreen } from './screens/Settings';
 import { BoqScreen } from './screens/Boq';
 import { ClientsScreen } from './screens/Clients';
@@ -1267,6 +1268,17 @@ const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => appLayout, path: '/sor-books', component: SorBooksScreen }),
     createRoute({ getParentRoute: () => appLayout, path: '/backups', component: BackupsScreen }),
     createRoute({ getParentRoute: () => appLayout, path: '/settings', component: SettingsScreen }),
+    createRoute({
+      getParentRoute: () => appLayout,
+      path: '/help',
+      validateSearch: validateHelpSearch,
+      component: function HelpPage() {
+        const search = useRouterState({
+          select: (s) => validateHelpSearch(s.location.search as Record<string, unknown>),
+        });
+        return <HelpCentreScreen {...search} />;
+      },
+    }),
     createRoute({
       getParentRoute: () => appLayout,
       path: '/two-factor',
