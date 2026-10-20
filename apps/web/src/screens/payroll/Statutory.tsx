@@ -1,6 +1,6 @@
 // A run's statutory dues paid by challan (docs/wave8-plan.md step 8c.3): PF with its TRRN, ESI, professional tax and
 // labour welfare fund, each posted from the bank; and the month's professional tax return.
-import { Alert, Badge, Button, Card, Field, Input, Select, Table } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, Field, Input, Select, Table, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
@@ -60,6 +60,7 @@ export function StatutoryDues({
           body: form,
         }),
       );
+      toast.success(`${form?.kind.toUpperCase() ?? 'Statutory'} challan recorded`);
       setForm(null);
     } catch (err) {
       setError(describeError(err));

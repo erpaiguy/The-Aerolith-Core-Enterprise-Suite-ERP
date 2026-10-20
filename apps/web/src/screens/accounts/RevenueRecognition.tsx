@@ -2,7 +2,19 @@
 // complete, the revenue it has earned, what its bills have taken, and the difference — unbilled revenue or billing
 // in excess — with any expected loss; posted as one journal on the month's last day, reversed on the next month's
 // first.
-import { Alert, Badge, Button, Card, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/client';
@@ -61,7 +73,17 @@ export function RevenueRecognitionScreen() {
       ),
     enabled: !!company && /^\d{4}-\d{2}$/.test(month),
   });
+  const confirm = useConfirm();
   const post = async () => {
+    if (
+      !(await confirm({
+        title: `Post the revenue on work done for ${month}?`,
+        body: "One journal is posted to the books on the month's last day and reversed on the next month's first.",
+        confirmLabel: 'Post the revenue',
+        tone: 'primary',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
@@ -71,6 +93,7 @@ export function RevenueRecognitionScreen() {
           body: { entityId: company!.id, month },
         }),
       );
+      toast.success(`Revenue on work done for ${month} posted`);
     } catch (err) {
       setError(describeError(err));
     }
@@ -106,7 +129,10 @@ export function RevenueRecognitionScreen() {
           }
         >
           {q.data.rows.length === 0 ? (
-            <p className="text-sm text-fg-muted">No project with work or bills by then.</p>
+            <EmptyState title="No project with work or bills by then.">
+              Projects show here once they have costs, measurements or bills by the month&apos;s
+              end.
+            </EmptyState>
           ) : (
             <Table minWidth="64rem">
               <thead>

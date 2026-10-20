@@ -91,6 +91,7 @@ test("an employee's September worked, posted and paid out on a payslip", async (
   await expect(line).toContainText('17,250.00');
   await page.getByRole('button', { name: 'Submit for approval' }).click();
   await page.getByRole('button', { name: 'Post' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Post the payroll' }).click();
   await expect(page.getByText(/posted JV\//)).toBeVisible();
   await shot(page, 'payroll-run');
 
@@ -109,6 +110,7 @@ test("an employee's September worked, posted and paid out on a payslip", async (
   await expect(sheet).toContainText('Raju Shinde');
   await page.getByLabel('Everyone %').fill('10');
   await page.getByRole('button', { name: 'Apply the increments' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Apply the increments' }).click();
   await expect(page.getByText(/New salaries from .* for 1 person\./)).toBeVisible();
   await expect(sheet.getByRole('row').filter({ hasText: 'Raju Shinde' })).toContainText('1 Dec');
 });

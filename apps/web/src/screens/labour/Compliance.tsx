@@ -1,6 +1,6 @@
 // Contract labour compliance as principal employer (docs/wave8-plan.md step 8c.1): each month's PF and ESI on the
 // contractor's wage sheets against the challans they showed, and what holds their bills.
-import { Alert, Badge, Button, Card, Field, Input, Select, Table } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, Field, Input, Select, Table, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
@@ -46,6 +46,7 @@ export function ComplianceCard({ partyId }: { partyId: string }) {
         method: 'POST',
         body: form,
       });
+      toast.success(`${form.kind.toUpperCase()} challan ${form.reference} recorded`);
       setForm({ ...form, reference: '', amount: '' });
       await qc.invalidateQueries({ queryKey: key });
     } catch (err) {

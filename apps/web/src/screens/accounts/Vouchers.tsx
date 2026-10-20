@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -12,6 +13,8 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -193,7 +196,7 @@ function VoucherList({
   return (
     <Card>
       {list.data.vouchers.length === 0 ? (
-        <p className="text-sm text-fg-muted">No vouchers.</p>
+        <EmptyState title="No vouchers.">Change the filters, or post a new voucher.</EmptyState>
       ) : (
         <Table minWidth="44rem">
           <thead>
@@ -273,6 +276,7 @@ export function NewVoucherScreen() {
   const [lines, setLines] = useState<DraftLine[]>([blank(1), blank(2)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const options = useMemo(
     () => ledgerOptions((chart.data?.accounts ?? []).filter((a) => a.kind !== 'party')),
     [chart.data],
@@ -302,6 +306,15 @@ export function NewVoucherScreen() {
             setError(`Line ${bad + 1}: a ledger and either a debit or a credit.`);
             return;
           }
+          if (
+            !(await confirm({
+              title: `Post this ${VOUCHER_TYPE[type].toLowerCase()} voucher of ₹${formatAmount(String(dr / 100))}?`,
+              body: 'It goes into the books dated as entered. A posted voucher cannot be edited, only reversed.',
+              confirmLabel: 'Post the voucher',
+              tone: 'primary',
+            }))
+          )
+            return;
           setBusy(true);
           setError(null);
           try {
@@ -324,6 +337,7 @@ export function NewVoucherScreen() {
               },
             });
             void qc.invalidateQueries({ queryKey: ['vouchers'] });
+            toast.success(`Voucher ${v.number} posted`);
             await navigate({ to: '/accounts/vouchers/$voucherId', params: { voucherId: v.id } });
           } catch (err) {
             setError(describeError(err));
@@ -517,11 +531,21 @@ export function VoucherScreen({ voucherId }: { voucherId: string }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   if (v.isPending) return <Spinner />;
   if (v.isError) return <Alert tone="danger">{describeError(v.error)}</Alert>;
   const x = v.data;
   const reverse = async (e: FormEvent) => {
     e.preventDefault();
+    if (
+      !(await confirm({
+        title: `Reverse voucher ${x.number}?`,
+        body: `A new voucher dated ${shortDate(date)} is posted with every line the other way round. It cannot be undone.`,
+        confirmLabel: 'Reverse the voucher',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -531,6 +555,7 @@ export function VoucherScreen({ voucherId }: { voucherId: string }) {
       });
       void qc.invalidateQueries({ queryKey: ['voucher', x.id] });
       void qc.invalidateQueries({ queryKey: ['vouchers'] });
+      toast.success(`Voucher ${x.number} reversed by ${r.number}`);
       await navigate({ to: '/accounts/vouchers/$voucherId', params: { voucherId: r.id } });
     } catch (err) {
       setError(describeError(err));

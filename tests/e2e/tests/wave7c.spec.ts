@@ -146,6 +146,7 @@ test("a month's close worked out from the books, then locked", async ({ page }) 
   await expect(steps).toContainText('None held.');
   await expect(steps).toContainText('No staff on the rolls.');
   await page.getByRole('button', { name: 'Lock the month' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Lock the month' }).click();
   await expect(page.getByText('Locked', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Lock the month' })).toHaveCount(0);
 });

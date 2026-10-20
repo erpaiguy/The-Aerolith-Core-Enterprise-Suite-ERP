@@ -1,7 +1,20 @@
 // GST (docs/wave3-plan.md step 6a): the month's outward and inward registers, GSTR-1 in the offline tool's sheets,
 // the GSTR-3B summary and the supplier-filed GSTR-2B matched against the purchase book; and, on a client bill, its
 // credit notes and e-invoice (the IRP JSON out, the IRN and signed QR back).
-import { Alert, Badge, Button, Card, Field, Input, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  Table,
+  cx,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { FileJson, FileSpreadsheet, Upload } from 'lucide-react';
@@ -215,6 +228,7 @@ function Rule37({ entityId }: { entityId: string }) {
   const [asOf, setAsOf] = useState(today());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const key = ['itc-reversals', entityId, asOf];
   const q = useQuery({
     queryKey: key,
@@ -224,6 +238,15 @@ function Rule37({ entityId }: { entityId: string }) {
       ),
   });
   const run = async () => {
+    if (
+      !(await confirm({
+        title: `Post the Rule 37 reversals and re-claims as on ${shortDate(asOf)}?`,
+        body: 'Input tax on suppliers unpaid after 180 days is reversed, and tax on those since paid is taken back, by vouchers posted to the books.',
+        confirmLabel: 'Post reversals and re-claims',
+        tone: 'primary',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -234,6 +257,7 @@ function Rule37({ entityId }: { entityId: string }) {
           body: { entityId, asOf },
         }),
       );
+      toast.success('Rule 37 reversals and re-claims posted');
       await qc.invalidateQueries({ queryKey: ['gstr3b'] });
     } catch (err) {
       setError(describeError(err));
@@ -284,7 +308,10 @@ function Rule37({ entityId }: { entityId: string }) {
       ) : q.isError ? (
         <Alert tone="danger">{describeError(q.error)}</Alert>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-fg-muted">No bill has gone 180 days unpaid.</p>
+        <EmptyState title="No bill has gone 180 days unpaid.">
+          Suppliers&apos; bills unpaid 180 days after their date show here, with the input tax to
+          reverse.
+        </EmptyState>
       ) : (
         <Table minWidth="40rem">
           <thead>
@@ -372,6 +399,7 @@ function GstTds({ entityId, period }: { entityId: string; period: string }) {
         },
       });
       setForm(null);
+      toast.success('GST TDS credit accepted');
       await qc.invalidateQueries({ queryKey: key });
     } catch (err) {
       setError(describeError(err));
@@ -503,7 +531,9 @@ function RegistersCard({ entityId, period }: { entityId: string; period: string 
       >
         {error && <Alert tone="danger">{error}</Alert>}
         {d.outward.length === 0 ? (
-          <p className="text-sm text-fg-muted">No invoices this month.</p>
+          <EmptyState title="No invoices this month.">
+            Tax invoices appear here when the client certifies an RA bill.
+          </EmptyState>
         ) : (
           <Table minWidth="56rem">
             <thead>
@@ -558,7 +588,9 @@ function RegistersCard({ entityId, period }: { entityId: string; period: string 
       </Card>
       <Card title="Inward register">
         {d.inward.length === 0 ? (
-          <p className="text-sm text-fg-muted">No suppliers' bills this month.</p>
+          <EmptyState title="No suppliers' bills this month.">
+            Suppliers&apos; bills booked in payables for this month appear here.
+          </EmptyState>
         ) : (
           <Table minWidth="56rem">
             <thead>
@@ -638,6 +670,7 @@ function TwoB({ entityId, period }: { entityId: string; period: string }) {
           file,
         ),
       );
+      toast.success(`GSTR-2B for ${period} uploaded`);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -808,6 +841,7 @@ function IrnBlock({
         body: f,
       });
       setOpen(false);
+      toast.success('IRN recorded');
       onSaved();
     } catch (err) {
       setError(describeError(err));
@@ -910,6 +944,7 @@ export function ClientBillGst({ billId, certified }: { billId: string; certified
   const [f, setF] = useState({ date: today(), reason: '', taxable: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   if (!certified || !mayBooks || g.isPending || g.isError) return null;
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: key });
@@ -917,6 +952,15 @@ export function ClientBillGst({ billId, certified }: { billId: string; certified
   };
   const raise = async (e: FormEvent) => {
     e.preventDefault();
+    if (
+      !(await confirm({
+        title: `Raise a credit note for ${rupees(f.taxable)} before GST?`,
+        body: 'The credit note is posted to the books against this invoice and goes into the GST returns. It cannot be withdrawn.',
+        confirmLabel: 'Raise the credit note',
+        tone: 'primary',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -925,6 +969,7 @@ export function ClientBillGst({ billId, certified }: { billId: string; certified
         body: f,
       });
       setF({ date: today(), reason: '', taxable: '' });
+      toast.success('Credit note raised');
       refresh();
     } catch (err) {
       setError(describeError(err));

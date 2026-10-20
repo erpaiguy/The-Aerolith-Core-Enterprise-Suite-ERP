@@ -5,6 +5,7 @@ export const muster: AreaDict = {
   mr: {
     // Labour muster
     'Muster of {day}': '{day} ची हजेरी',
+    'Muster of {day} saved': '{day} ची हजेरी जतन केली',
     'No signal: kept on this phone, and sent when the signal returns.':
       'नेटवर्क नाही: या फोनवर ठेवले आहे, नेटवर्क आल्यावर पाठवले जाईल.',
     'Saved.': 'जतन केले.',
@@ -89,10 +90,24 @@ export const muster: AreaDict = {
     'Cancel the leave': 'रजा रद्द करा',
     'Paid leave': 'पगारी रजा',
     'Unpaid leave': 'बिनपगारी रजा',
+    'Marked in': 'आत आल्याची हजेरी लावली',
+    'Marked out': 'बाहेर गेल्याची हजेरी लावली',
+    'Leave applied for': 'रजेसाठी अर्ज केला',
+    'Opening balance set': 'सुरुवातीची शिल्लक ठरवली',
+    'Withdraw this leave application?': 'हा रजा अर्ज मागे घ्यायचा?',
+    'It is taken back from approval. Apply again if the leave is still needed.':
+      'तो मंजुरीतून मागे घेतला जाईल. रजा अजून हवी असल्यास पुन्हा अर्ज करा.',
+    'Withdraw the application': 'अर्ज मागे घ्या',
+    'Leave withdrawn': 'रजा अर्ज मागे घेतला',
+    'Cancel this approved leave?': 'ही मंजूर रजा रद्द करायची?',
+    'The days go back to the balance and the leave no longer counts. It cannot be undone.':
+      'दिवस शिल्लकीत परत जातील आणि रजा मोजली जाणार नाही. हे परत करता येणार नाही.',
+    'Leave cancelled': 'रजा रद्द केली',
   },
   hi: {
     // Labour muster
     'Muster of {day}': '{day} की हाज़िरी',
+    'Muster of {day} saved': '{day} की हाज़िरी सहेज ली',
     'No signal: kept on this phone, and sent when the signal returns.':
       'नेटवर्क नहीं: इस फ़ोन पर रखा है, नेटवर्क आने पर भेजा जाएगा।',
     'Saved.': 'सहेज लिया।',
@@ -177,5 +192,18 @@ export const muster: AreaDict = {
     'Cancel the leave': 'छुट्टी रद्द करें',
     'Paid leave': 'वेतन सहित छुट्टी',
     'Unpaid leave': 'बिना वेतन छुट्टी',
+    'Marked in': 'आने की हाज़िरी लगी',
+    'Marked out': 'जाने की हाज़िरी लगी',
+    'Leave applied for': 'छुट्टी के लिए आवेदन किया',
+    'Opening balance set': 'शुरुआती बाकी तय की',
+    'Withdraw this leave application?': 'यह छुट्टी आवेदन वापस लें?',
+    'It is taken back from approval. Apply again if the leave is still needed.':
+      'यह मंज़ूरी से वापस ले लिया जाएगा। छुट्टी अब भी चाहिए तो फिर से आवेदन करें।',
+    'Withdraw the application': 'आवेदन वापस लें',
+    'Leave withdrawn': 'छुट्टी आवेदन वापस लिया',
+    'Cancel this approved leave?': 'यह मंज़ूर छुट्टी रद्द करें?',
+    'The days go back to the balance and the leave no longer counts. It cannot be undone.':
+      'दिन बाकी में लौट जाएँगे और छुट्टी नहीं गिनी जाएगी। इसे वापस नहीं किया जा सकता।',
+    'Leave cancelled': 'छुट्टी रद्द की',
   },
 };

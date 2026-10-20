@@ -10,6 +10,7 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
@@ -61,12 +62,17 @@ export function PriceIndicesScreen() {
       await run(`/api/tenant/accounts/price-indices/${key}/values`, {
         values: [{ month: v.month, value: v.value }],
       })
-    )
+    ) {
+      toast.success(`Index value for ${v.month} saved`);
       setV({ ...v, value: '' });
+    }
   };
   const addSeries = async (e: FormEvent) => {
     e.preventDefault();
-    if (await run('/api/tenant/accounts/price-indices', n)) setN({ key: '', name: '', source: '' });
+    if (await run('/api/tenant/accounts/price-indices', n)) {
+      toast.success(`Series ${n.name} added`);
+      setN({ key: '', name: '', source: '' });
+    }
   };
   return (
     <div className="space-y-5">

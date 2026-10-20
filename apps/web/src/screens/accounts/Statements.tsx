@@ -1,6 +1,19 @@
 // Financial statements (docs/wave3-plan.md step 8a): profit and loss and balance sheet in Schedule III's lines with the
 // previous year beside them, cash flow by the indirect method, each project's P&L, and the year end.
-import { Alert, Badge, Button, Card, Field, Input, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  Table,
+  cx,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileSpreadsheet } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
@@ -338,7 +351,9 @@ function Projects({ entityId, from, to }: { entityId: string; from: string; to: 
   return (
     <Card title="Project P&L">
       {r.data.projects.length === 0 ? (
-        <p className="text-sm text-fg-muted">No project has income or costs in these dates.</p>
+        <EmptyState title="No project has income or costs in these dates.">
+          Widen the dates, or post vouchers that name a project.
+        </EmptyState>
       ) : (
         <Table minWidth="56rem">
           <thead>
@@ -405,9 +420,18 @@ function YearEnd({ entityId }: { entityId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const confirm = useConfirm();
   const close = async (e: FormEvent) => {
     e.preventDefault();
-    if (!window.confirm(`Close ${fy}? Its months are locked and its income and expenses closed.`))
+    if (
+      !(await confirm({
+        title: `Close the financial year ${fy}?`,
+        body: 'Its months are locked, its income and expenses closed to the reserves and the closing stock posted. This cannot be undone.',
+        confirmLabel: 'Close the year',
+        tone: 'danger',
+        typeToConfirm: fy,
+      }))
+    )
       return;
     setBusy(true);
     setError(null);
@@ -417,6 +441,7 @@ function YearEnd({ entityId }: { entityId: string }) {
         body: { entityId, fy, closingStock: stock || '0' },
       });
       setDone(`${fy} closed: ${Number(out.profit) < 0 ? 'loss' : 'profit'} ${amt(out.profit)}.`);
+      toast.success(`Financial year ${fy} closed`);
       void qc.invalidateQueries({ queryKey: key });
     } catch (err) {
       setError(describeError(err));
@@ -505,7 +530,10 @@ function Tally({ entityId, from, to }: { entityId: string; from: string; to: str
               onChange={() =>
                 void api
                   .request('/api/tenant/accounts/mode', { method: 'PUT', body: { mode: k } })
-                  .then((next) => qc.setQueryData(['accounts-mode'], next))
+                  .then((next) => {
+                    qc.setQueryData(['accounts-mode'], next);
+                    toast.success('Accounts mode changed');
+                  })
                   .catch((err: unknown) => setError(describeError(err)))
               }
             />

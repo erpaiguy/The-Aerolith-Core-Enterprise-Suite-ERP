@@ -1,6 +1,6 @@
 // MSME suppliers (docs/wave8-plan.md step 8b.4): bills of micro and small enterprises past or nearing 45 days, the
 // year-end section 43B(h) disallowance, and the half-yearly MSME-1 data.
-import { Alert, Badge, Card, Field, Input, Select, Table } from '@aerolith/ui';
+import { Alert, Badge, Card, EmptyState, Field, Input, Select, Table } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -84,9 +84,7 @@ export function MsmeCard({ entityId, asOf }: { entityId: string; asOf: string })
     >
       {view === 'alerts' &&
         (rows.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            No micro or small supplier's bill is near its 45 days.
-          </p>
+          <EmptyState title="No micro or small supplier's bill is near its 45 days." />
         ) : (
           <Table minWidth="36rem">
             <thead>

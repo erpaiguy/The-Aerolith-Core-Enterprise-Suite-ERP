@@ -1,6 +1,19 @@
 // Setting up a company's books (docs/wave3-plan.md step 1): the months locked and open, and the opening balances,
 // typed in from an Excel sheet of Ledger, Debit and Credit. Locks and openings are the admin's.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Lock, LockOpen, Upload } from 'lucide-react';
@@ -47,7 +60,19 @@ function Periods({ entityId }: { entityId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const start = Number(fy.slice(0, 4));
-  const act = (path: 'lock' | 'reopen', month: string) => {
+  const confirm = useConfirm();
+  const act = async (path: 'lock' | 'reopen', month: string) => {
+    const name = MONTH.format(new Date(`${month}T00:00:00Z`));
+    if (
+      path === 'lock' &&
+      !(await confirm({
+        title: `Lock ${name}?`,
+        body: 'No voucher dated in the month can be posted, changed or reversed until an admin reopens it with a reason.',
+        confirmLabel: 'Lock the month',
+        tone: 'danger',
+      }))
+    )
+      return;
     const reason = path === 'reopen' ? window.prompt('Why is the month reopened?') : '';
     if (path === 'reopen' && (!reason || reason.trim().length < 3)) return;
     setBusy(month);
@@ -57,7 +82,10 @@ function Periods({ entityId }: { entityId: string }) {
         method: 'POST',
         body: { entityId, month, ...(path === 'reopen' ? { reason: reason!.trim() } : {}) },
       })
-      .then((d) => qc.setQueryData(key, d))
+      .then((d) => {
+        qc.setQueryData(key, d);
+        toast.success(`${name} ${path === 'lock' ? 'locked' : 'reopened'}`);
+      })
       .catch((err: unknown) => setError(describeError(err)))
       .finally(() => setBusy(null));
   };
@@ -124,7 +152,7 @@ function Periods({ entityId }: { entityId: string }) {
                       variant="ghost"
                       busy={busy === m.month}
                       aria-label={`${m.lockedAt ? 'Reopen' : 'Lock'} ${MONTH.format(new Date(`${m.month}T00:00:00Z`))}`}
-                      onClick={() => act(m.lockedAt ? 'reopen' : 'lock', m.month)}
+                      onClick={() => void act(m.lockedAt ? 'reopen' : 'lock', m.month)}
                     >
                       {m.lockedAt ? (
                         <LockOpen className="size-4" aria-hidden />
@@ -170,7 +198,20 @@ function Opening({ entityId }: { entityId: string }) {
   const [check, setCheck] = useState<Check | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const send = async (f: File, post: boolean) => {
+    if (
+      post &&
+      !(await confirm({
+        title: 'Post the opening balances?',
+        body: o.data?.voucher
+          ? 'They replace the opening balances in the books now.'
+          : 'They are posted to the books, dated the day before the books start.',
+        confirmLabel: 'Post the opening balances',
+        tone: o.data?.voucher ? 'danger' : 'primary',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -180,6 +221,7 @@ function Opening({ entityId }: { entityId: string }) {
       );
       setCheck(r);
       if (r.posted) {
+        toast.success(`${r.lines.length} opening balances posted to the books`);
         setFile(null);
         void qc.invalidateQueries({ queryKey: key });
         void qc.invalidateQueries({ queryKey: ['trial-balance'] });
@@ -233,7 +275,11 @@ function Opening({ entityId }: { entityId: string }) {
             </tbody>
           </Table>
         ) : (
-          <p className="text-sm text-fg-muted">None yet.</p>
+          <EmptyState title="None yet.">
+            {o.data.mayEdit && o.data.booksFrom
+              ? 'Post them from an Excel sheet below.'
+              : 'The admin posts them from an Excel sheet.'}
+          </EmptyState>
         )}
         {o.data.mayEdit && o.data.booksFrom && (
           <div className="space-y-3 rounded-md border border-line p-3">

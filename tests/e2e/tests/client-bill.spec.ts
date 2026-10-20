@@ -122,6 +122,7 @@ test('an RA bill from the measurement book, certified for less and posted', asyn
   await page.getByLabel('Certified Excavation in hard soil').fill('40');
   await page.getByLabel('Certificate no.').fill('EE/MNR/12');
   await page.getByRole('button', { name: 'Record the certificate' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Record and post' }).click();
   await expect(page.getByText('Certified', { exact: true })).toBeVisible();
   await expect(page.getByText(/Tax invoice INV\/\d{4}-\d{2}\/0001/)).toBeVisible();
   await expect(abstract.getByRole('row').filter({ hasText: 'Net payable' })).toContainText(
@@ -153,6 +154,10 @@ test('an RA bill from the measurement book, certified for less and posted', asyn
   await creditNote.getByLabel('Why').fill('Rate revised');
   await creditNote.getByLabel('Value before GST').fill('100');
   await creditNote.getByRole('button', { name: 'Raise a credit note' }).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Raise the credit note' })
+    .click();
   await expect(page.getByRole('list', { name: 'Credit notes' })).toContainText(
     /CN\/\d{4}-\d{2}\/0001.*total ₹118\.00/,
   );

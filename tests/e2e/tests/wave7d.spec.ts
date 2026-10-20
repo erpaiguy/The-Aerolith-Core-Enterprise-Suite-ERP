@@ -164,6 +164,7 @@ test('project registers, a site imprest, a recurring voucher and the company das
   const dueRows = page.getByRole('rowgroup', { name: 'Due entries' });
   await expect(dueRows.getByRole('row')).toHaveCount(2);
   await dueRows.getByRole('button', { name: 'Post' }).first().click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Post it' }).click();
   await expect(dueRows.getByRole('row')).toHaveCount(1);
   await expect(page.getByRole('list', { name: 'Recent entries' })).toContainText('PV');
 

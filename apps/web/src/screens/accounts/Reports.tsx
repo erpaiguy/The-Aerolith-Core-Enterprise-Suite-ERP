@@ -1,6 +1,17 @@
 // The books' reports (docs/wave3-plan.md step 1): the trial balance as at a date (optionally for one project), a
 // ledger between two dates with its running balance, and the day book; each also as Excel.
-import { Alert, Button, Card, Field, Input, Select, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  cx,
+} from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { FileSpreadsheet } from 'lucide-react';
@@ -368,7 +379,9 @@ function DayBook({ url }: { url: string }) {
   if (!book.data.vouchers.length)
     return (
       <Card>
-        <p className="text-sm text-fg-muted">No vouchers between these dates.</p>
+        <EmptyState title="No vouchers between these dates.">
+          Widen the dates, or post a voucher to see it in the day book.
+        </EmptyState>
       </Card>
     );
   return (

@@ -75,6 +75,7 @@ test('a statement imported, its lines posted and matched, the bank reconciled', 
     await form.getByLabel('Ledger').selectOption({ label: ledger });
     await form.getByLabel('Narration').fill(narration);
     await form.getByRole('button', { name: 'Post and match' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Post and match' }).click();
     await expect(lines.getByRole('row').filter({ hasText: what })).toContainText(
       /(PV|RV)\/\d{4}-\d{2}\/0001/,
     );

@@ -1,6 +1,19 @@
 // People (docs/wave3-plan.md step 11): the employees, each month's days for payroll, leave applications, a biometric
 // device's file, and the setup: designations (what they add, who approves), calendars, sites and leave types.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -109,6 +122,7 @@ function Employees({ entityId }: { entityId: string }) {
         body: { entityId, ...f, designationId: f.designationId || null },
       });
       setAdding(false);
+      toast.success(`Employee ${f.code} ${f.name} added`);
       setF({ ...f, code: '', name: '' });
       void qc.invalidateQueries({ queryKey: key });
     } catch (err) {
@@ -191,7 +205,9 @@ function Employees({ entityId }: { entityId: string }) {
       ) : list.isError ? (
         <Alert tone="danger">{describeError(list.error)}</Alert>
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">No employees yet.</p>
+        <EmptyState title="No employees yet.">
+          Add an employee to deploy them, mark attendance and run payroll.
+        </EmptyState>
       ) : (
         <Table minWidth="44rem">
           <thead>
@@ -332,7 +348,7 @@ function LeaveList({ entityId }: { entityId: string }) {
       ) : list.isError ? (
         <Alert tone="danger">{describeError(list.error)}</Alert>
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">None.</p>
+        <EmptyState title="None.">Leave people apply for shows here.</EmptyState>
       ) : (
         <Table minWidth="40rem">
           <thead>
@@ -389,7 +405,12 @@ function Import({ entityId }: { entityId: string }) {
     setError(null);
     setBusy(true);
     try {
-      setResult(await api.upload(`/api/tenant/hr/attendance/import?entityId=${entityId}`, file));
+      const r = await api.upload<NonNullable<typeof result>>(
+        `/api/tenant/hr/attendance/import?entityId=${entityId}`,
+        file,
+      );
+      setResult(r);
+      toast.success(`${r.imported} attendance days imported`);
       void qc.invalidateQueries({ queryKey: ['hr-month'] });
     } catch (err) {
       setError(describeError(err));
@@ -465,6 +486,7 @@ function Designations() {
         method: edit.id ? 'PUT' : 'POST',
         body: { name: edit.name, permissions: edit.permissions, rowVersion: edit.rowVersion },
       });
+      toast.success(`Designation ${edit.name} saved`);
       setEdit(null);
       void qc.invalidateQueries({ queryKey: ['designations'] });
       void qc.invalidateQueries({ queryKey: ['my-permissions'] });
@@ -581,6 +603,7 @@ function Calendars({ entityId }: { entityId: string }) {
   const [f, setF] = useState({ name: '', workWeek: 63, isDefault: false });
   const [holiday, setHoliday] = useState<Record<string, { day: string; name: string }>>({});
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const done = (data: Calendar[]) => qc.setQueryData(['hr-calendars', entityId], data);
   const add = async (e: FormEvent) => {
     e.preventDefault();
@@ -589,12 +612,23 @@ function Calendars({ entityId }: { entityId: string }) {
       done(
         await api.request('/api/tenant/hr/calendars', { method: 'POST', body: { entityId, ...f } }),
       );
+      toast.success(`Calendar ${f.name} added`);
       setF({ name: '', workWeek: 63, isDefault: false });
     } catch (err) {
       setError(describeError(err));
     }
   };
-  const setDay = async (calendarId: string, day: string, name: string | null) => {
+  const setDay = async (calendarId: string, day: string, name: string | null, was = '') => {
+    if (
+      name === null &&
+      !(await confirm({
+        title: `Remove the holiday ${was} on ${shortDate(day)}?`,
+        body: 'The day becomes a working day on this calendar, for attendance and payroll.',
+        confirmLabel: 'Remove the holiday',
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       done(
@@ -604,6 +638,7 @@ function Calendars({ entityId }: { entityId: string }) {
         }),
       );
       setHoliday({ ...holiday, [calendarId]: { day: '', name: '' } });
+      toast.success(name === null ? 'Holiday removed' : `Holiday ${name} added`);
     } catch (err) {
       setError(describeError(err));
     }
@@ -638,7 +673,7 @@ function Calendars({ entityId }: { entityId: string }) {
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() => void setDay(c.id, x.day, null)}
+                    onClick={() => void setDay(c.id, x.day, null, x.name)}
                   >
                     Remove
                   </Button>
@@ -747,6 +782,7 @@ function Sites({ entityId }: { entityId: string }) {
           radiusM: e.radiusM ? Number(e.radiusM) : null,
         },
       });
+      toast.success(`Site ${s.name} saved`);
       void qc.invalidateQueries({ queryKey: ['hr-sites', entityId] });
       void qc.invalidateQueries({ queryKey: ['hr-calendars', entityId] });
     } catch (err) {
@@ -833,7 +869,10 @@ function Sites({ entityId }: { entityId: string }) {
           </tbody>
         </Table>
       ) : (
-        <p className="text-sm text-fg-muted">No sites on this company&apos;s projects.</p>
+        <EmptyState title="No sites on this company's projects.">
+          Add sites to the company&apos;s projects to give them a calendar and a place for marking
+          attendance.
+        </EmptyState>
       )}
     </Card>
   );
@@ -864,12 +903,23 @@ function LeaveTypes({ entityId }: { entityId: string }) {
         ['leave-types'],
         await api.request('/api/tenant/hr/leave-types', { method: 'POST', body: f }),
       );
+      toast.success(`Leave type ${f.name} added`);
       setF({ ...f, code: '', name: '' });
     } catch (err) {
       setError(describeError(err));
     }
   };
+  const confirm = useConfirm();
   const carry = async () => {
+    if (
+      !(await confirm({
+        title: `Close the leave year ${year}?`,
+        body: `Each person's unused leave, up to each type's limit, is carried into ${Number(year) + 1} as its opening balance.`,
+        confirmLabel: 'Carry balances forward',
+        tone: 'primary',
+      }))
+    )
+      return;
     setError(null);
     try {
       const r = await api.request<{ rows: unknown[] }>('/api/tenant/hr/leave/carry-forward', {
@@ -877,6 +927,7 @@ function LeaveTypes({ entityId }: { entityId: string }) {
         body: { entityId, year: Number(year) },
       });
       setCarried(`${r.rows.length} balances carried into ${Number(year) + 1}.`);
+      toast.success(`Leave year ${year} closed`);
       void qc.invalidateQueries({ queryKey: ['hr-leave'] });
     } catch (err) {
       setError(describeError(err));

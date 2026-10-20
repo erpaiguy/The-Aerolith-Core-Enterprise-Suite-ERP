@@ -1,7 +1,18 @@
 // TDS returns and certificates (docs/wave8-plan.md step 8b.3): suppliers' lower-deduction certificates, salary TDS
 // deposited by challan for the 24Q, Form 16A for each supplier, and the 26Q and 24Q text files for the free File
 // Validation Utility (FVU), through which every file goes before upload.
-import { Alert, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { FileText, Printer } from 'lucide-react';
@@ -61,6 +72,7 @@ export function Certificates({ entityId, mayPost }: { entityId: string; mayPost:
           body: { entityId, ...form },
         }),
       );
+      toast.success(`Certificate ${form!.certNo} saved`);
       setForm(null);
     } catch (err) {
       setError(describeError(err));
@@ -133,7 +145,9 @@ export function Certificates({ entityId, mayPost }: { entityId: string; mayPost:
       ) : q.isError ? (
         <Alert tone="danger">{describeError(q.error)}</Alert>
       ) : q.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">No supplier has a lower-deduction certificate.</p>
+        <EmptyState title="No supplier has a lower-deduction certificate.">
+          Add a supplier&apos;s section 197 certificate to deduct at its lower rate.
+        </EmptyState>
       ) : (
         <Table minWidth="40rem">
           <thead>
@@ -226,6 +240,7 @@ export function SalaryTds({
         method: 'POST',
         body: { entityId, ...form, interest: form!.interest || '0' },
       });
+      toast.success('Salary TDS challan recorded');
       setForm(null);
       await qc.invalidateQueries({ queryKey: key });
     } catch (err) {

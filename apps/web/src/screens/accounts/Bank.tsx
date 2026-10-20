@@ -1,7 +1,21 @@
 // Bank reconciliation (docs/wave3-plan.md step 7): a bank ledger's statements imported (by its saved column mapping,
 // or OFX or MT940); each statement line matched to the ledger's vouchers (suggested, or picked); a line only the bank
 // knows made a voucher in one click; the reconciliation statement as at a date.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  cx,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
@@ -163,6 +177,7 @@ function Import({ accountId }: { accountId: string }) {
         }),
       );
       setEditing(false);
+      toast.success('Column mapping saved');
     } catch (err) {
       setError(describeError(err));
     }
@@ -177,6 +192,7 @@ function Import({ accountId }: { accountId: string }) {
         file,
       );
       setNote(`${r.imported} lines imported${r.skipped ? `, ${r.skipped} seen before` : ''}.`);
+      toast.success(`${r.imported} lines imported`);
       void qc.invalidateQueries({ queryKey: ['bank-statement'] });
       void qc.invalidateQueries({ queryKey: ['bank-reconciliation'] });
     } catch (err) {
@@ -291,6 +307,7 @@ function StatementCard({
   const [picked, setPicked] = useState<string[]>([]);
   const [post, setPost] = useState({ accountId: '', narration: '' });
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const done = () => {
     setOpen(null);
     setPicked([]);
@@ -298,10 +315,11 @@ function StatementCard({
     void qc.invalidateQueries({ queryKey: ['bank-statement'] });
     void qc.invalidateQueries({ queryKey: ['bank-reconciliation'] });
   };
-  const call = async (path: string, body: object) => {
+  const call = async (path: string, body: object, said: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      toast.success(said);
       done();
     } catch (err) {
       setError(describeError(err));
@@ -314,7 +332,9 @@ function StatementCard({
     <Card title="Statement lines">
       {error && <Alert tone="danger">{error}</Alert>}
       {s.data.lines.length === 0 ? (
-        <p className="text-sm text-fg-muted">No statement lines in these dates.</p>
+        <EmptyState title="No statement lines in these dates.">
+          Import the bank&apos;s statement above, or widen the dates.
+        </EmptyState>
       ) : (
         <Table minWidth="56rem">
           <thead>
@@ -355,9 +375,11 @@ function StatementCard({
                           onClick={() => {
                             const reason = window.prompt('Why is the match undone?');
                             if (reason && reason.trim().length >= 3)
-                              void call(`/api/tenant/accounts/bank-matches/${l.match!.id}/undo`, {
-                                reason: reason.trim(),
-                              });
+                              void call(
+                                `/api/tenant/accounts/bank-matches/${l.match!.id}/undo`,
+                                { reason: reason.trim() },
+                                'Match undone',
+                              );
                           }}
                         >
                           Undo
@@ -372,10 +394,14 @@ function StatementCard({
                           type="button"
                           variant="secondary"
                           onClick={() =>
-                            void call(`/api/tenant/accounts/bank-lines/${l.id}/match`, {
-                              entityId,
-                              lines: [{ voucherId: x.voucherId, position: x.position }],
-                            })
+                            void call(
+                              `/api/tenant/accounts/bank-lines/${l.id}/match`,
+                              {
+                                entityId,
+                                lines: [{ voucherId: x.voucherId, position: x.position }],
+                              },
+                              `Matched to ${x.number}`,
+                            )
                           }
                         >
                           Match {x.number} of {shortDate(x.date)}
@@ -424,13 +450,17 @@ function StatementCard({
                             type="button"
                             disabled={!picked.length}
                             onClick={() =>
-                              void call(`/api/tenant/accounts/bank-lines/${l.id}/match`, {
-                                entityId,
-                                lines: picked.map((k) => ({
-                                  voucherId: k.split(':')[0],
-                                  position: Number(k.split(':')[1]),
-                                })),
-                              })
+                              void call(
+                                `/api/tenant/accounts/bank-lines/${l.id}/match`,
+                                {
+                                  entityId,
+                                  lines: picked.map((k) => ({
+                                    voucherId: k.split(':')[0],
+                                    position: Number(k.split(':')[1]),
+                                  })),
+                                },
+                                'Statement line matched',
+                              )
                             }
                           >
                             Match the picked
@@ -441,12 +471,22 @@ function StatementCard({
                         <form
                           aria-label="Make a voucher"
                           className="flex flex-wrap items-end gap-2 rounded-md border border-line p-2"
-                          onSubmit={(e) => {
+                          onSubmit={async (e) => {
                             e.preventDefault();
-                            void call(`/api/tenant/accounts/bank-lines/${l.id}/post`, {
-                              entityId,
-                              ...post,
-                            });
+                            if (
+                              !(await confirm({
+                                title: `Post a voucher for ${signed(l.amount)}?`,
+                                body: 'A voucher is posted to the books against the chosen ledger and matched to this statement line.',
+                                confirmLabel: 'Post and match',
+                                tone: 'primary',
+                              }))
+                            )
+                              return;
+                            void call(
+                              `/api/tenant/accounts/bank-lines/${l.id}/post`,
+                              { entityId, ...post },
+                              'Voucher posted and matched',
+                            );
                           }}
                         >
                           <Field label="Ledger">

@@ -2,7 +2,20 @@
 // against an order (matched to it and its receipts, held when they do not match) or to a ledger; debit notes and
 // advances; payment runs approved under the rules, with a file for the bank, marked paid.
 import { MsmeCard } from './Msme';
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, FileSpreadsheet, Plus, Printer, Trash2 } from 'lucide-react';
@@ -128,7 +141,9 @@ function Ageing({ entityId, asOf }: { entityId: string; asOf: string }) {
   return (
     <Card title={`Owed to suppliers: ${rupees(r.data.total)}`}>
       {r.data.suppliers.length === 0 ? (
-        <p className="text-sm text-fg-muted">Nothing is owed.</p>
+        <EmptyState title="Nothing is owed.">
+          Suppliers&apos; bills entered here and not yet paid show by how long they are overdue.
+        </EmptyState>
       ) : (
         <Table minWidth="48rem">
           <thead>
@@ -193,7 +208,7 @@ function BillList({ entityId }: { entityId: string }) {
       }
     >
       {!list.data?.length ? (
-        <p className="text-sm text-fg-muted">None.</p>
+        <EmptyState title="None.">Bills entered with Enter a bill show here.</EmptyState>
       ) : (
         <Table minWidth="48rem">
           <thead>
@@ -408,6 +423,7 @@ export function NewVendorBillScreen() {
             });
             void qc.invalidateQueries({ queryKey: ['vendor-bills'] });
             void qc.invalidateQueries({ queryKey: ['payables'] });
+            toast.success(`Bill ${billNo} entered`);
             await navigate({ to: '/accounts/vendor-bills/$billId', params: { billId: b.id } });
           } catch (err) {
             setError(describeError(err));
@@ -678,10 +694,11 @@ export function VendorBillScreen({ billId }: { billId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [dn, setDn] = useState({ taxable: '', gstPct: '18', reason: '' });
   const [advance, setAdvance] = useState('');
+  const confirm = useConfirm();
   if (b.isPending) return <Spinner />;
   if (b.isError) return <Alert tone="danger">{describeError(b.error)}</Alert>;
   const x = b.data;
-  const act = (path: string, body: object) => {
+  const act = (path: string, body: object, said: string) => {
     setError(null);
     void api
       .request<VendorBill>(`/api/tenant/accounts/vendor-bills/${x.id}/${path}`, {
@@ -690,6 +707,7 @@ export function VendorBillScreen({ billId }: { billId: string }) {
       })
       .then((next) => {
         qc.setQueryData(key, next);
+        toast.success(said);
         void qc.invalidateQueries({ queryKey: ['payables'] });
         void qc.invalidateQueries({ queryKey: ['vendor-bills'] });
       })
@@ -734,7 +752,7 @@ export function VendorBillScreen({ billId }: { billId: string }) {
                 type="button"
                 onClick={() => {
                   const r = ask('Why is the bill passed despite the difference?');
-                  if (r) act('pass', { reason: r });
+                  if (r) act('pass', { reason: r }, `Bill ${x.billNo} passed and posted`);
                 }}
               >
                 Pass the bill
@@ -744,9 +762,18 @@ export function VendorBillScreen({ billId }: { billId: string }) {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => {
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: `Cancel ${x.party.name}'s bill ${x.billNo}?`,
+                      body: 'The bill is cancelled for good and its voucher, if any, is reversed. You will be asked why.',
+                      confirmLabel: 'Cancel the bill',
+                      tone: 'danger',
+                    }))
+                  )
+                    return;
                   const r = ask('Why is the bill cancelled?');
-                  if (r) act('cancel', { reason: r, date: today() });
+                  if (r) act('cancel', { reason: r, date: today() }, `Bill ${x.billNo} cancelled`);
                 }}
               >
                 Cancel
@@ -888,9 +915,18 @@ export function VendorBillScreen({ billId }: { billId: string }) {
             <form
               className="space-y-3"
               aria-label="Debit note"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                act('debit-notes', { date: today(), ...dn });
+                if (
+                  !(await confirm({
+                    title: `Raise a debit note on ${x.party.name} for ${rupees(dn.taxable)} before GST?`,
+                    body: 'The debit note is posted to the books against this bill and goes into the GST returns. It cannot be withdrawn.',
+                    confirmLabel: 'Raise the debit note',
+                    tone: 'primary',
+                  }))
+                )
+                  return;
+                act('debit-notes', { date: today(), ...dn }, 'Debit note raised');
               }}
             >
               <div className="grid gap-3 sm:grid-cols-[1fr_6rem]">
@@ -923,9 +959,18 @@ export function VendorBillScreen({ billId }: { billId: string }) {
             <form
               className="flex flex-wrap items-end gap-3"
               aria-label="Apply an advance"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                act('apply-advance', { date: today(), amount: advance });
+                if (
+                  !(await confirm({
+                    title: `Apply ${rupees(advance)} of advance to bill ${x.billNo}?`,
+                    body: "The supplier's advance is set off against the bill by a journal posted to the books.",
+                    confirmLabel: 'Apply the advance',
+                    tone: 'primary',
+                  }))
+                )
+                  return;
+                act('apply-advance', { date: today(), amount: advance }, 'Advance applied');
               }}
             >
               <Field label="Amount ₹">
@@ -993,6 +1038,7 @@ export function NewPaymentRunScreen() {
                 method: 'POST',
                 body: { entityId, bankAccountId: bankId, payOn, lines },
               });
+              toast.success('Payment run made');
               await navigate({ to: '/accounts/payment-runs/$runId', params: { runId: r.id } });
             } catch (err) {
               setError(describeError(err));
@@ -1081,7 +1127,10 @@ function RunForm(p: {
       </Card>
       <Card title="Bills to pay">
         {!open.length ? (
-          <p className="text-sm text-fg-muted">No bills are outstanding.</p>
+          <EmptyState title="No bills are outstanding.">
+            Posted suppliers&apos; bills with something left to pay show here; advances can be added
+            below.
+          </EmptyState>
         ) : (
           <Table minWidth="44rem">
             <thead>
@@ -1240,15 +1289,17 @@ export function PaymentRunScreen({ runId }: { runId: string }) {
   });
   const [paidOn, setPaidOn] = useState(today());
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   if (r.isPending) return <Spinner />;
   if (r.isError) return <Alert tone="danger">{describeError(r.error)}</Alert>;
   const x = r.data;
-  const act = (path: string, body: object = {}) => {
+  const act = (path: string, body: object, said: string) => {
     setError(null);
     void api
       .request<Run>(`/api/tenant/accounts/payment-runs/${x.id}/${path}`, { method: 'POST', body })
       .then((next) => {
         qc.setQueryData(key, next);
+        toast.success(said);
         void qc.invalidateQueries({ queryKey: ['payables'] });
       })
       .catch((err: unknown) => setError(describeError(err)));
@@ -1291,7 +1342,10 @@ export function PaymentRunScreen({ runId }: { runId: string }) {
       {error && <Alert tone="danger">{error}</Alert>}
       <div className="flex flex-wrap items-end gap-2 print:hidden">
         {x.maySubmit && (
-          <Button type="button" onClick={() => act('submit')}>
+          <Button
+            type="button"
+            onClick={() => act('submit', {}, `Payment run ${x.number} put up for approval`)}
+          >
             Submit for approval
           </Button>
         )}
@@ -1313,9 +1367,18 @@ export function PaymentRunScreen({ runId }: { runId: string }) {
           <form
             className="flex items-end gap-2"
             aria-label="Mark paid"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              act('paid', { paidOn });
+              if (
+                !(await confirm({
+                  title: `Mark payment run ${x.number} paid on ${shortDate(paidOn)}?`,
+                  body: `${rupees(x.total)} of payments from ${x.bank.name} are posted to the books and the bills settled. It cannot be undone.`,
+                  confirmLabel: 'Mark paid',
+                  tone: 'primary',
+                }))
+              )
+                return;
+              act('paid', { paidOn }, `Payment run ${x.number} marked paid`);
             }}
           >
             <Field label="Paid on">
@@ -1338,9 +1401,19 @@ export function PaymentRunScreen({ runId }: { runId: string }) {
           <Button
             type="button"
             variant="ghost"
-            onClick={() => {
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: `Cancel payment run ${x.number}?`,
+                  body: 'The run is cancelled for good; its bills are left to pay in another run. You will be asked why.',
+                  confirmLabel: 'Cancel the run',
+                  tone: 'danger',
+                }))
+              )
+                return;
               const why = window.prompt('Why is the run cancelled?');
-              if (why && why.trim().length >= 3) act('cancel', { reason: why.trim() });
+              if (why && why.trim().length >= 3)
+                act('cancel', { reason: why.trim() }, `Payment run ${x.number} cancelled`);
             }}
           >
             Cancel the run
@@ -1423,6 +1496,7 @@ function Tolerance() {
               body: { rateTolerancePct: value },
             })
             .then(() => {
+              toast.success('Rate tolerance saved');
               setPct(null);
               void qc.invalidateQueries({ queryKey: ['payables-settings'] });
             })

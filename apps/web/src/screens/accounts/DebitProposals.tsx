@@ -1,7 +1,18 @@
 // Debit notes from the stores (docs/wave8-plan.md step 8a.5): what the orders and the stores say suppliers should be
 // debited — billed beyond what was accepted (once goods went back or the order closed), or above the order's rate —
 // raised in one step.
-import { Alert, Badge, Button, Card, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -40,7 +51,18 @@ export function DebitProposalsScreen() {
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const raise = async (k: string) => {
+  const confirm = useConfirm();
+  const raise = async (p: Proposals['proposals'][number]) => {
+    const k = p.key;
+    if (
+      !(await confirm({
+        title: `Raise a debit note on ${p.bill.party}'s bill ${p.bill.billNo}?`,
+        body: `A debit note for ${formatInr(p.taxable)} plus GST is posted to the books against the bill.`,
+        confirmLabel: 'Raise the debit note',
+        tone: 'primary',
+      }))
+    )
+      return;
     setBusy(k);
     setError(null);
     try {
@@ -51,6 +73,7 @@ export function DebitProposalsScreen() {
           body: { entityId: company!.id, key: k },
         }),
       );
+      toast.success(`Debit note raised on bill ${p.bill.billNo}`);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -72,7 +95,10 @@ export function DebitProposalsScreen() {
       ) : (
         <Card>
           {q.data.proposals.length === 0 ? (
-            <p className="text-sm text-fg-muted">Nothing to debit: the bills match the orders.</p>
+            <EmptyState title="Nothing to debit: the bills match the orders.">
+              Bills billed beyond what the stores accepted, or above the order&apos;s rate, show
+              here.
+            </EmptyState>
           ) : (
             <Table minWidth="52rem">
               <thead>
@@ -120,7 +146,7 @@ export function DebitProposalsScreen() {
                         <Button
                           variant="secondary"
                           busy={busy === p.key}
-                          onClick={() => void raise(p.key)}
+                          onClick={() => void raise(p)}
                         >
                           Raise
                         </Button>

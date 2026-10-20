@@ -1,6 +1,18 @@
 // TDS deposited and returned (docs/wave3-plan.md step 6b): a quarter's deductions from suppliers' bills, the challans
 // that deposit them, the 26Q data for the return utility, and what clients deducted matched against 26AS.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { FileSpreadsheet, Upload } from 'lucide-react';
@@ -186,6 +198,7 @@ function Deductions({ entityId, quarter }: { entityId: string; quarter: string }
         },
       });
       setF({ ...f, key: '', bsrCode: '', challanNo: '', interest: '', fee: '' });
+      toast.success(`Challan ${f.bsrCode}/${f.challanNo} recorded`);
       for (const k of ['tds-deductions', 'tds-challans', 'tds-26q'])
         void qc.invalidateQueries({ queryKey: [k, entityId, quarter] });
     } catch (err) {
@@ -227,7 +240,9 @@ function Deductions({ entityId, quarter }: { entityId: string; quarter: string }
           </Alert>
         )}
         {d.data.rows.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing was deducted this quarter.</p>
+          <EmptyState title="Nothing was deducted this quarter.">
+            TDS deducted on suppliers&apos; bills in the quarter shows here, to deposit by challan.
+          </EmptyState>
         ) : (
           <Table minWidth="52rem">
             <thead>
@@ -409,6 +424,7 @@ function ClientCredits({ entityId, quarter }: { entityId: string; quarter: strin
           file,
         ),
       );
+      toast.success(`26AS for ${quarter} uploaded`);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -448,7 +464,9 @@ function ClientCredits({ entityId, quarter }: { entityId: string; quarter: strin
       ) : r.isError ? (
         <Alert tone="danger">{describeError(r.error)}</Alert>
       ) : r.data.rows.length === 0 ? (
-        <p className="text-sm text-fg-muted">No client deducted TDS this quarter.</p>
+        <EmptyState title="No client deducted TDS this quarter.">
+          TDS clients deduct from their receipts shows here, to match against 26AS.
+        </EmptyState>
       ) : (
         <Table minWidth="40rem">
           <thead>

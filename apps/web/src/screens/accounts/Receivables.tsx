@@ -1,6 +1,19 @@
 // Receivables (docs/wave3-plan.md step 3): what each client owes, aged; recording a client's payment against its
 // certified bills, retention released and advances; one receipt, cancelled by reversing it.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
@@ -110,7 +123,9 @@ function Ageing({ entityId, asOf }: { entityId: string; asOf: string }) {
     <>
       <Card title="By client">
         {d.clients.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing is owed.</p>
+          <EmptyState title="Nothing is owed.">
+            Clients&apos; certified bills not yet received show here by how long they are overdue.
+          </EmptyState>
         ) : (
           <Table minWidth="48rem">
             <thead>
@@ -346,6 +361,7 @@ export function NewClientReceiptScreen() {
               });
               void qc.invalidateQueries({ queryKey: ['receivables'] });
               void qc.invalidateQueries({ queryKey: ['client-receipts'] });
+              toast.success('Receipt recorded');
               await navigate({
                 to: '/accounts/client-receipts/$receiptId',
                 params: { receiptId: r.id },
@@ -701,10 +717,20 @@ export function ClientReceiptScreen({ receiptId }: { receiptId: string }) {
     queryFn: () => api.request<Receipt>(`/api/tenant/accounts/client-receipts/${receiptId}`),
   });
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   if (r.isPending) return <Spinner />;
   if (r.isError) return <Alert tone="danger">{describeError(r.error)}</Alert>;
   const x = r.data;
-  const cancel = () => {
+  const cancel = async () => {
+    if (
+      !(await confirm({
+        title: `Cancel the receipt of ${rupees(x.amount)} from ${x.party.name}?`,
+        body: 'Its voucher is reversed and the bills it settled are owed again. It cannot be undone. You will be asked why.',
+        confirmLabel: 'Cancel the receipt',
+        tone: 'danger',
+      }))
+    )
+      return;
     const reason = window.prompt('Why is the receipt cancelled?');
     if (!reason || reason.trim().length < 3) return;
     setError(null);
@@ -715,6 +741,7 @@ export function ClientReceiptScreen({ receiptId }: { receiptId: string }) {
       })
       .then((next) => {
         qc.setQueryData(key, next);
+        toast.success('Receipt cancelled');
         void qc.invalidateQueries({ queryKey: ['receivables'] });
       })
       .catch((err: unknown) => setError(describeError(err)));
@@ -743,7 +770,7 @@ export function ClientReceiptScreen({ receiptId }: { receiptId: string }) {
       <Card
         actions={
           x.mayCancel && (
-            <Button type="button" variant="ghost" onClick={cancel}>
+            <Button type="button" variant="ghost" onClick={() => void cancel()}>
               Cancel the receipt
             </Button>
           )

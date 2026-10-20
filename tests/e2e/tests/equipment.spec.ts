@@ -64,6 +64,7 @@ test('a machine allocated, logged and its month costed', async ({ page }) => {
   const costing = page.getByLabel('Costing');
   await expect(costing).toContainText('₹12,000.00');
   await costing.getByRole('button', { name: 'Post the month' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Post the month' }).click();
   await expect(costing).toContainText('Costed: JV/2026-27/0001');
   await shot(page, 'equipment-01-costed');
 });

@@ -6,12 +6,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -146,6 +149,7 @@ function Contractors({ open, onOpen }: { open: string | null; onOpen: (id: strin
           },
         }),
       );
+      toast.success('Contractor saved');
     } catch (err) {
       setError(describeError(err));
     }
@@ -157,9 +161,9 @@ function Contractors({ open, onOpen }: { open: string | null; onOpen: (id: strin
       ) : list.isError ? (
         <Alert tone="danger">{describeError(list.error)}</Alert>
       ) : list.data.length === 0 ? (
-        <p className="mb-3 text-sm text-fg-muted">
-          No labour contractors yet: pick a supplier below.
-        </p>
+        <EmptyState title="No labour contractors yet: pick a supplier below.">
+          Their licence and BOCW registration make them a labour contractor.
+        </EmptyState>
       ) : (
         <Table minWidth="40rem">
           <thead>
@@ -289,6 +293,7 @@ function ContractorCard({ partyId }: { partyId: string }) {
           body: w,
         }),
       );
+      toast.success(`Worker ${w.name} added`);
       setW({ ...w, name: '' });
       void qc.invalidateQueries({ queryKey: ['labour-contractors'] });
     } catch (err) {
@@ -303,6 +308,7 @@ function ContractorCard({ partyId }: { partyId: string }) {
         method: 'POST',
         body: { partyId, siteId: s.siteId, month: s.month },
       });
+      toast.success(`Wage sheet for ${s.month} worked out`);
       void qc.invalidateQueries({ queryKey: ['labour-sheets', partyId] });
     } catch (err) {
       setError(describeError(err));
@@ -497,6 +503,7 @@ function MinWages() {
         ['min-wages'],
         await api.request('/api/tenant/labour/min-wages', { method: 'POST', body: f }),
       );
+      toast.success('Minimum wage added');
     } catch (err) {
       setError(describeError(err));
     }
@@ -610,8 +617,18 @@ function Cess() {
   const banks = (chart.data?.accounts ?? []).filter((a) => a.kind === 'bank' && !a.closed);
   const [f, setF] = useState({ paidOn: today(), amount: '', reference: '', bankAccountId: '' });
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const pay = async (e: FormEvent) => {
     e.preventDefault();
+    if (
+      !(await confirm({
+        title: `Record ₹${f.amount} of BOCW cess paid?`,
+        body: 'The payment is posted to the books from the chosen bank against the project. It cannot be undone.',
+        confirmLabel: 'Record the payment',
+        tone: 'primary',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
@@ -621,6 +638,7 @@ function Cess() {
           body: f,
         }),
       );
+      toast.success(`BOCW cess challan ${f.reference} recorded`);
     } catch (err) {
       setError(describeError(err));
     }
@@ -722,7 +740,7 @@ export function WageSheetScreen({ sheetId }: { sheetId: string }) {
   });
   const [paid, setPaid] = useState({ paidOn: today(), reference: '', mode: 'bank' });
   const [error, setError] = useState<string | null>(null);
-  const act = async (path: string, body: object = {}) => {
+  const act = async (path: string, body: object, said: string) => {
     setError(null);
     try {
       qc.setQueryData(
@@ -732,6 +750,7 @@ export function WageSheetScreen({ sheetId }: { sheetId: string }) {
           body,
         }),
       );
+      toast.success(said);
       void qc.invalidateQueries({ queryKey: ['labour-sheets'] });
     } catch (err) {
       setError(describeError(err));
@@ -758,10 +777,14 @@ export function WageSheetScreen({ sheetId }: { sheetId: string }) {
           <div className="flex flex-wrap gap-2">
             {d.status === 'draft' && (
               <>
-                <Button type="button" variant="secondary" onClick={() => void act('work')}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void act('work', {}, 'Wage sheet worked out again')}
+                >
                   Work again
                 </Button>
-                <Button type="button" onClick={() => void act('pass')}>
+                <Button type="button" onClick={() => void act('pass', {}, 'Wage sheet passed')}>
                   Pass
                 </Button>
               </>
@@ -842,7 +865,7 @@ export function WageSheetScreen({ sheetId }: { sheetId: string }) {
             className="flex flex-wrap items-end gap-3"
             onSubmit={(e) => {
               e.preventDefault();
-              void act('verify', paid);
+              void act('verify', paid, 'Wages verified as paid');
             }}
           >
             <Field label="Paid on">
@@ -950,6 +973,7 @@ export function MusterScreen() {
       else {
         qc.setQueryData(key, sent.result);
         setSaved(t('Saved.'));
+        toast.success(t('Muster of {day} saved', { day: f.day }));
       }
       setEdits({});
       setPhoto(null);

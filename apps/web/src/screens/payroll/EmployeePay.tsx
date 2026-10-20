@@ -1,6 +1,17 @@
 // Payroll gaps on the employee's page (docs/wave8-plan.md step 8c.4): overtime approved by the day, loans and salary
 // advances with what is recovered, and the old regime's tax declarations with their proofs.
-import { Alert, Badge, Button, Card, Field, Input, Select, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  Select,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
@@ -13,10 +24,11 @@ const fyOf = (d: string) => Number(d.slice(0, 4)) - (Number(d.slice(5, 7)) < 4 ?
 function useAct() {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const act = async (key: unknown[], path: string, body: object, method = 'POST') => {
+  const act = async (key: unknown[], path: string, body: object, said: string) => {
     setError(null);
     try {
-      qc.setQueryData(key, await api.request(path, { method, body }));
+      qc.setQueryData(key, await api.request(path, { method: 'POST', body }));
+      toast.success(said);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -86,6 +98,7 @@ export function EmployeePayCard({ employeeId }: { employeeId: string }) {
   });
   const [d, setD] = useState({ section: '80C', description: '', declared: '' });
   const [proof, setProof] = useState<Record<string, string>>({});
+  const confirm = useConfirm();
   if (ot.isError) return null; // no payroll permission
   const submit = (fn: () => Promise<boolean>) => (e: FormEvent) => {
     e.preventDefault();
@@ -106,7 +119,12 @@ export function EmployeePayCard({ employeeId }: { employeeId: string }) {
         className="grid gap-3 md:grid-cols-4"
         aria-label="Add overtime"
         onSubmit={submit(() =>
-          act(otKey, `/api/tenant/payroll/employees/${employeeId}/overtime`, o),
+          act(
+            otKey,
+            `/api/tenant/payroll/employees/${employeeId}/overtime`,
+            o,
+            `${o.hours} hours of overtime approved`,
+          ),
         )}
       >
         <Field label="Day">
@@ -165,10 +183,21 @@ export function EmployeePayCard({ employeeId }: { employeeId: string }) {
         className="mt-2 grid gap-3 md:grid-cols-6"
         aria-label="Give a loan"
         onSubmit={submit(async () => {
-          const ok = await act(loanKey, `/api/tenant/payroll/employees/${employeeId}/loans`, {
-            ...l,
-            bankAccountId: l.bankAccountId || banks[0]?.id,
-          });
+          if (
+            !(await confirm({
+              title: `Give a ${l.kind === 'loan' ? 'loan' : 'salary advance'} of ${rupees(l.principal)}?`,
+              body: `The payment is posted to the books from the bank, and ${rupees(l.emi)} a month is recovered from salary from ${l.firstMonth}.`,
+              confirmLabel: l.kind === 'loan' ? 'Give the loan' : 'Give the advance',
+              tone: 'primary',
+            }))
+          )
+            return false;
+          const ok = await act(
+            loanKey,
+            `/api/tenant/payroll/employees/${employeeId}/loans`,
+            { ...l, bankAccountId: l.bankAccountId || banks[0]?.id },
+            `${l.kind === 'loan' ? 'Loan' : 'Salary advance'} of ${rupees(l.principal)} given`,
+          );
           if (ok) setL({ ...l, principal: '', emi: '' });
           return ok;
         })}
@@ -246,9 +275,12 @@ export function EmployeePayCard({ employeeId }: { employeeId: string }) {
                   <form
                     className="flex justify-end gap-2"
                     onSubmit={submit(() =>
-                      act(declKey, `/api/tenant/payroll/declarations/${x.id}/verify`, {
-                        proved: proof[x.id] ?? '',
-                      }),
+                      act(
+                        declKey,
+                        `/api/tenant/payroll/declarations/${x.id}/verify`,
+                        { proved: proof[x.id] ?? '' },
+                        `${x.section} proof verified`,
+                      ),
                     )}
                   >
                     <Input
@@ -284,6 +316,7 @@ export function EmployeePayCard({ employeeId }: { employeeId: string }) {
               fyStart: fy,
               ...d,
             },
+            `${d.section} declaration added`,
           );
           if (ok) setD({ ...d, description: '', declared: '' });
           return ok;

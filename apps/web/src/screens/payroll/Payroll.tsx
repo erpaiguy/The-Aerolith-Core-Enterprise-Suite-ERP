@@ -7,12 +7,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -177,6 +180,7 @@ function Runs({ entityId }: { entityId: string }) {
     setError(null);
     try {
       await api.request('/api/tenant/payroll/runs', { method: 'POST', body: { entityId, month } });
+      toast.success(`Payroll for ${month} worked out`);
       void qc.invalidateQueries({ queryKey: ['pay-runs', entityId] });
     } catch (err) {
       setError(describeError(err));
@@ -200,7 +204,9 @@ function Runs({ entityId }: { entityId: string }) {
       ) : runs.isError ? (
         <Alert tone="danger">{describeError(runs.error)}</Alert>
       ) : runs.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">No runs yet.</p>
+        <EmptyState title="No runs yet.">
+          Choose a month above and work it out to start the first payroll run.
+        </EmptyState>
       ) : (
         <Table minWidth="30rem">
           <thead>
@@ -265,6 +271,7 @@ function Rules() {
           body: { ...f, stateCode: f.stateCode || null, data: JSON.parse(f.data) as unknown },
         }),
       );
+      toast.success('Statutory rule saved');
     } catch (err) {
       setError(err instanceof SyntaxError ? 'The figures are not valid JSON.' : describeError(err));
     }
@@ -379,6 +386,7 @@ function Components() {
         ['pay-components'],
         await api.request('/api/tenant/payroll/components', { method: 'POST', body: f }),
       );
+      toast.success(`Pay component ${f.name} added`);
       setF({ ...f, code: '', name: '' });
     } catch (err) {
       setError(describeError(err));
@@ -469,7 +477,8 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
   const [adj, setAdj] = useState({ employeeId: '', componentId: '', amount: '', note: '' });
   const [pay, setPay] = useState({ bankAccountId: '', date: today() });
   const [error, setError] = useState<string | null>(null);
-  const act = async (path: string, body: object = {}) => {
+  const confirm = useConfirm();
+  const act = async (path: string, body: object, said: string) => {
     setError(null);
     try {
       qc.setQueryData(
@@ -479,12 +488,22 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
           body,
         }),
       );
+      toast.success(said);
       void qc.invalidateQueries({ queryKey: ['pay-runs'] });
     } catch (err) {
       setError(describeError(err));
     }
   };
-  const removeAdj = async (id: string) => {
+  const removeAdj = async (id: string, what: string) => {
+    if (
+      !(await confirm({
+        title: `Remove ${what} from the run?`,
+        body: 'It is taken out of this month and the run is worked out again.',
+        confirmLabel: 'Remove it',
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
@@ -493,6 +512,7 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
           method: 'DELETE',
         }),
       );
+      toast.success(`${what} removed`);
     } catch (err) {
       setError(describeError(err));
     }
@@ -525,16 +545,39 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
           <div className="flex flex-wrap gap-2">
             {r.status === 'draft' && (
               <>
-                <Button type="button" variant="secondary" onClick={() => void act('/work')}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void act('/work', {}, 'Payroll worked out again')}
+                >
                   Work again
                 </Button>
-                <Button type="button" onClick={() => void act('/submit')}>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    void act('/submit', {}, `Payroll for ${r.month} put up for approval`)
+                  }
+                >
                   Submit for approval
                 </Button>
               </>
             )}
             {r.status === 'approved' && (
-              <Button type="button" onClick={() => void act('/post')}>
+              <Button
+                type="button"
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: `Post the payroll for ${r.month}?`,
+                      body: 'The salaries, deductions and employer contributions are posted to the books. It cannot be undone.',
+                      confirmLabel: 'Post the payroll',
+                      tone: 'primary',
+                    }))
+                  )
+                    return;
+                  void act('/post', {}, `Payroll for ${r.month} posted`);
+                }}
+              >
                 Post
               </Button>
             )}
@@ -650,7 +693,11 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
                 <li key={a.id} className="flex items-center gap-2">
                   {r.lines.find((l) => l.employeeId === a.employeeId)?.code} · {a.name}{' '}
                   {rupees(a.amount)} {a.note}
-                  <Button type="button" variant="ghost" onClick={() => void removeAdj(a.id)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => void removeAdj(a.id, a.name)}
+                  >
                     Remove
                   </Button>
                 </li>
@@ -662,7 +709,7 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
             className="flex flex-wrap items-end gap-3"
             onSubmit={(e) => {
               e.preventDefault();
-              void act('/adjustments', adj);
+              void act('/adjustments', adj, 'Added to the run');
             }}
           >
             <Field label="Employee">
@@ -715,9 +762,18 @@ export function PayrollRunScreen({ runId }: { runId: string }) {
           <form
             aria-label="Pay"
             className="flex flex-wrap items-end gap-3"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              void act('/pay', pay);
+              if (
+                !(await confirm({
+                  title: `Record the payment of ${rupees(String(t.net ?? 0))} net for ${r.month}?`,
+                  body: 'The net pay is posted to the books as paid from the chosen bank. It cannot be undone.',
+                  confirmLabel: 'Record the payment',
+                  tone: 'primary',
+                }))
+              )
+                return;
+              void act('/pay', pay, `Payroll for ${r.month} paid`);
             }}
           >
             <Field label="From the bank">
@@ -927,6 +983,7 @@ export function SalaryCard({ employeeId }: { employeeId: string }) {
         }),
       );
       setAmounts({});
+      toast.success('Salary saved');
     } catch (err) {
       setError(describeError(err));
     }
@@ -952,7 +1009,9 @@ export function SalaryCard({ employeeId }: { employeeId: string }) {
           ))}
         </ul>
       ) : (
-        <p className="mb-3 text-sm text-fg-muted">No salary yet.</p>
+        <EmptyState title="No salary yet.">
+          {may ? 'Set the first salary below.' : 'Payroll sets the salary.'}
+        </EmptyState>
       )}
       {may && (
         <form
@@ -1102,7 +1161,9 @@ function YearForm({ entityId }: { entityId: string }) {
       ) : y.isError ? (
         <Alert tone="danger">{describeError(y.error)}</Alert>
       ) : y.data.employees.length === 0 ? (
-        <p className="text-sm text-fg-muted">No approved runs in the year.</p>
+        <EmptyState title="No approved runs in the year.">
+          The year&apos;s figures appear once its payroll runs are approved.
+        </EmptyState>
       ) : (
         <Table minWidth="52rem">
           <thead>
@@ -1186,8 +1247,9 @@ export function SettlementCard({
   });
   const [f, setF] = useState({ reason: 'resigned', noticeDays: '0', leaveTypeCode: 'EL' });
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   if (!may || !leftOn) return null;
-  const act = async (path: string, body: object) => {
+  const act = async (path: string, body: object, said: string) => {
     setError(null);
     try {
       qc.setQueryData(
@@ -1200,6 +1262,7 @@ export function SettlementCard({
           },
         ),
       );
+      toast.success(said);
     } catch (err) {
       setError(describeError(err));
     }
@@ -1232,7 +1295,11 @@ export function SettlementCard({
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void act('', { ...f, leaveTypeCode: f.leaveTypeCode || null });
+            void act(
+              '',
+              { ...f, leaveTypeCode: f.leaveTypeCode || null },
+              'Full and final worked out',
+            );
           }}
         >
           <Field label="Reason">
@@ -1261,7 +1328,21 @@ export function SettlementCard({
             Work it out
           </Button>
           {d && (
-            <Button type="button" onClick={() => void act('/post', {})}>
+            <Button
+              type="button"
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: `Post the full and final of ${rupees(d.total)}?`,
+                    body: 'The gratuity, leave encashment and notice pay are posted to the books. It cannot be undone.',
+                    confirmLabel: 'Post the settlement',
+                    tone: 'primary',
+                  }))
+                )
+                  return;
+                void act('/post', {}, 'Full and final posted');
+              }}
+            >
               Post
             </Button>
           )}

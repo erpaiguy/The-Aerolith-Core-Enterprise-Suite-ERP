@@ -92,6 +92,7 @@ test('a subcontractor measured, billed with deductions and certified into payabl
     .getByRole('button', { name: /^Reverse the entry/ })
     .nth(1)
     .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Reverse the entry' }).click();
   await expect(page.getByRole('list', { name: 'Book entries' })).toContainText(
     'Reversed: Wrong wing',
   );

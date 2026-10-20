@@ -13,6 +13,8 @@ import {
   Spinner,
   Table,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -72,7 +74,8 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const chart = useChart({ ifAllowed: true });
-  const run = async (k: string, path: string, body: object) => {
+  const confirm = useConfirm();
+  const run = async (k: string, path: string, body: object, said: string) => {
     setBusy(k);
     setError(null);
     try {
@@ -82,6 +85,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
           body,
         }),
       );
+      toast.success(said);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -89,14 +93,19 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
     }
   };
   const save = () =>
-    run('save', '', {
-      rowVersion: b.rowVersion,
-      indices: Object.fromEntries(Object.entries(indices).filter(([, v]) => v !== '')),
-      lines: b.lines
-        .filter((l) => cum[l.lineKey] !== l.cumQty)
-        .map((l) => ({ lineKey: l.lineKey, cumQty: cum[l.lineKey] })),
-      deductions,
-    });
+    run(
+      'save',
+      '',
+      {
+        rowVersion: b.rowVersion,
+        indices: Object.fromEntries(Object.entries(indices).filter(([, v]) => v !== '')),
+        lines: b.lines
+          .filter((l) => cum[l.lineKey] !== l.cumQty)
+          .map((l) => ({ lineKey: l.lineKey, cumQty: cum[l.lineKey] })),
+        deductions,
+      },
+      `RA bill ${b.raNo} saved`,
+    );
   const dirty =
     b.mayEdit &&
     (b.lines.some((l) => cum[l.lineKey] !== l.cumQty) ||
@@ -152,10 +161,24 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
                 type="button"
                 variant="ghost"
                 busy={busy === 'cancel'}
-                onClick={() => {
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: `Cancel RA bill ${b.raNo}?`,
+                      body: 'The bill is cancelled for good and can no longer be submitted or certified. You will be asked why.',
+                      confirmLabel: 'Cancel the bill',
+                      tone: 'danger',
+                    }))
+                  )
+                    return;
                   const reason = window.prompt('Why is the bill cancelled?');
                   if (reason && reason.trim().length >= 3)
-                    void run('cancel', '/cancel', { reason: reason.trim() });
+                    void run(
+                      'cancel',
+                      '/cancel',
+                      { reason: reason.trim() },
+                      `RA bill ${b.raNo} cancelled`,
+                    );
                 }}
               >
                 Cancel bill
@@ -395,13 +418,21 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
                 type="button"
                 variant="secondary"
                 busy={busy === 'refresh'}
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    window.confirm(
-                      'Take the measurement book again? Quantities typed in here are lost.',
-                    )
+                    await confirm({
+                      title: 'Take the measurement book again?',
+                      body: 'Quantities typed in here are lost and replaced by the measurement book.',
+                      confirmLabel: 'Take the book again',
+                      tone: 'danger',
+                    })
                   )
-                    void run('refresh', '/refresh', { upto: b.upto });
+                    void run(
+                      'refresh',
+                      '/refresh',
+                      { upto: b.upto },
+                      'Quantities taken from the measurement book',
+                    );
                 }}
               >
                 Take the measurement book again
@@ -411,7 +442,14 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
                 variant="secondary"
                 busy={busy === 'submit'}
                 disabled={dirty}
-                onClick={() => void run('submit', '/submit', { rowVersion: b.rowVersion })}
+                onClick={() =>
+                  void run(
+                    'submit',
+                    '/submit',
+                    { rowVersion: b.rowVersion },
+                    `RA bill ${b.raNo} submitted to the client`,
+                  )
+                }
               >
                 Submit the bill
               </Button>
@@ -429,16 +467,30 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
           <form
             aria-label="Certify"
             className="space-y-3"
-            onSubmit={(e: FormEvent) => {
+            onSubmit={async (e: FormEvent) => {
               e.preventDefault();
-              void run('certify', '/certify', {
-                rowVersion: b.rowVersion,
-                certifiedOn,
-                clientRef,
-                lines: b.lines
-                  .filter((l) => cert[l.lineKey] !== l.cumQty)
-                  .map((l) => ({ lineKey: l.lineKey, certQty: cert[l.lineKey] })),
-              });
+              if (
+                !(await confirm({
+                  title: `Record the client's certificate for RA bill ${b.raNo}?`,
+                  body: 'The bill becomes a tax invoice and is posted to the books. It cannot be edited afterwards.',
+                  confirmLabel: 'Record and post',
+                  tone: 'primary',
+                }))
+              )
+                return;
+              void run(
+                'certify',
+                '/certify',
+                {
+                  rowVersion: b.rowVersion,
+                  certifiedOn,
+                  clientRef,
+                  lines: b.lines
+                    .filter((l) => cert[l.lineKey] !== l.cumQty)
+                    .map((l) => ({ lineKey: l.lineKey, certQty: cert[l.lineKey] })),
+                },
+                `RA bill ${b.raNo} certified and posted`,
+              );
             }}
           >
             <p className="text-sm text-fg-muted">

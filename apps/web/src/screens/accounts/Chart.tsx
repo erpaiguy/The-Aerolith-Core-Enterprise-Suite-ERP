@@ -1,6 +1,18 @@
 // The chart of accounts and the account map (docs/wave3-plan.md step 1). Everyone with the books sees them; the admin
 // adds, renames, moves and closes accounts, and maps each role later steps post to.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  cx,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
@@ -164,6 +176,7 @@ function AccountForm({
           },
         ),
       );
+      toast.success(`Account ${f.code} ${f.name} saved`);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -298,7 +311,10 @@ function AccountMap({ entityId, accounts }: { entityId: string; accounts: Accoun
     setError(null);
     void api
       .request(`/api/tenant/accounts/map`, { method: 'POST', body: { entityId, role, accountId } })
-      .then((d) => qc.setQueryData(key, d))
+      .then((d) => {
+        qc.setQueryData(key, d);
+        toast.success('Account map updated');
+      })
       .catch((err: unknown) => setError(describeError(err)));
   };
   return (

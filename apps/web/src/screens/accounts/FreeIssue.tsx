@@ -1,7 +1,7 @@
 // Free-issue material to subcontractors (docs/wave8-plan.md step 8a.3): on a work order, how much of each material a
 // unit of its work should take, the wastage allowed and the penal rate beyond it, with where the order stands; on a
 // draft bill, the excess over the allowance for the work it certifies, recovered as a back-charge when accepted.
-import { Alert, Button, Card, Input, Select, Table } from '@aerolith/ui';
+import { Alert, Button, Card, EmptyState, Input, Select, Table, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -119,6 +119,7 @@ export function FreeIssueOrder({ orderId, mayEdit }: { orderId: string; mayEdit:
         }),
       );
       setDraft(null);
+      toast.success('Free-issue norms saved');
     } catch (err) {
       setError(describeError(err));
     }
@@ -195,7 +196,11 @@ export function FreeIssueOrder({ orderId, mayEdit }: { orderId: string; mayEdit:
           </tbody>
         </Table>
       ) : (
-        <p className="text-sm text-fg-muted">No material is set as free issue on this order.</p>
+        <EmptyState title="No material is set as free issue on this order.">
+          {mayEdit
+            ? 'Pick a material below and set how much a unit of work should take.'
+            : 'The billing team sets the materials the stores issue free.'}
+        </EmptyState>
       )}
       {mayEdit && q.data.lines.length ? (
         <div className="mt-3 space-y-2">
@@ -266,6 +271,7 @@ export function FreeIssueBill({
           { method: 'POST', body: {} },
         ),
       );
+      toast.success('Free-issue excess recovered as back-charges');
       onRecovered();
     } catch (err) {
       setError(describeError(err));

@@ -1,7 +1,19 @@
 // Material at site and month-end accruals (docs/wave8-plan.md step 8a.2): per project, goods received but not yet
 // invoiced, subcontract work measured but not yet billed, and the stock in its stores; posted as one journal on the
 // month's last day and reversed on the next month's first.
-import { Alert, Badge, Button, Card, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/client';
@@ -47,7 +59,17 @@ export function MonthEndAccrualsScreen() {
       ),
     enabled: !!company && /^\d{4}-\d{2}$/.test(month),
   });
+  const confirm = useConfirm();
   const post = async () => {
+    if (
+      !(await confirm({
+        title: `Post the accruals for ${month}?`,
+        body: "One journal is posted to the books on the month's last day and reversed on the next month's first.",
+        confirmLabel: 'Post the accruals',
+        tone: 'primary',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
@@ -57,6 +79,7 @@ export function MonthEndAccrualsScreen() {
           body: { entityId: company!.id, month },
         }),
       );
+      toast.success(`Accruals for ${month} posted`);
     } catch (err) {
       setError(describeError(err));
     }
@@ -97,9 +120,7 @@ export function MonthEndAccrualsScreen() {
             </Alert>
           ) : null}
           {q.data.rows.length === 0 ? (
-            <p className="text-sm text-fg-muted">
-              Nothing received or measured unbilled, and no stock at site.
-            </p>
+            <EmptyState title="Nothing received or measured unbilled, and no stock at site." />
           ) : (
             <Table minWidth="48rem">
               <thead>

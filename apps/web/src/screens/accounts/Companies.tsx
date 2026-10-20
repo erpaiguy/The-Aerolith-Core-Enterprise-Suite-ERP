@@ -11,6 +11,8 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -119,6 +121,7 @@ function LetterheadForm({ entityId, onClose }: { entityId: string; onClose: () =
   const [v, setV] = useState<Record<string, string> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const confirm = useConfirm();
   if (head.isPending) return <Spinner />;
   if (head.isError) return <Alert tone="danger">{describeError(head.error)}</Alert>;
   const l = head.data;
@@ -148,7 +151,10 @@ function LetterheadForm({ entityId, onClose }: { entityId: string; onClose: () =
   const logo = (file: File | undefined) => {
     if (!file) return;
     const r = new FileReader();
-    r.onload = () => void send('logo', { method: 'POST', body: { dataUrl: String(r.result) } });
+    r.onload = () =>
+      void send('logo', { method: 'POST', body: { dataUrl: String(r.result) } }).then(
+        (ok) => ok && toast.success('Logo uploaded'),
+      );
     r.readAsDataURL(file);
   };
   return (
@@ -169,7 +175,10 @@ function LetterheadForm({ entityId, onClose }: { entityId: string; onClose: () =
         className="space-y-4"
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
-          void send('letterhead', { method: 'POST', body: f }).then((ok) => setSaved(ok));
+          void send('letterhead', { method: 'POST', body: f }).then((ok) => {
+            setSaved(ok);
+            if (ok) toast.success('Letterhead saved');
+          });
         }}
       >
         <div className="flex flex-wrap items-center gap-4">
@@ -189,7 +198,18 @@ function LetterheadForm({ entityId, onClose }: { entityId: string; onClose: () =
             <Button
               type="button"
               variant="ghost"
-              onClick={() => void send('logo', { method: 'DELETE' })}
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: 'Remove the logo?',
+                    body: 'Printed documents no longer carry it until a new one is uploaded.',
+                    confirmLabel: 'Remove the logo',
+                    tone: 'danger',
+                  }))
+                )
+                  return;
+                if (await send('logo', { method: 'DELETE' })) toast.success('Logo removed');
+              }}
             >
               Remove the logo
             </Button>
@@ -271,6 +291,7 @@ function CompanyForm({ company, onClose }: { company?: Company; onClose: () => v
         },
       );
       qc.setQueryData(['companies'], out);
+      toast.success(company ? `${f.name} saved` : `Company ${f.name} added`);
       onClose();
     } catch (err) {
       setError(describeError(err));

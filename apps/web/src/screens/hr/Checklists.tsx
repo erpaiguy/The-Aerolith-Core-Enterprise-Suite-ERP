@@ -1,7 +1,7 @@
 // Joining and exit checklists (docs/wave7-plan.md step 7d.8), on the employee's page: each step done or not, the ones
 // the records answer (PAN, bank, UAN, sign-in, deployment; sign-in closed, settlement posted) marked as such, with a
 // link to where they are put right; HR ticks the rest.
-import { Alert, Badge, Button, Card, Input } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, Input, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { CheckCircle2, Circle } from 'lucide-react';
@@ -44,10 +44,11 @@ export function ChecklistsCard({ employeeId }: { employeeId: string }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   if (!q.data) return null;
   const x = q.data;
-  const send = async (url: string, body: object) => {
+  const send = async (url: string, body: object, said: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await api.request<Lists>(url, { method: 'POST', body }));
+      toast.success(said);
     } catch (err) {
       setError(describeError(err));
     }
@@ -58,7 +59,13 @@ export function ChecklistsCard({ employeeId }: { employeeId: string }) {
       return x.mayEdit && (kind === 'joining' || x.leftOn) ? (
         <Button
           variant="secondary"
-          onClick={() => void send(`/api/tenant/hr/employees/${employeeId}/checklists`, { kind })}
+          onClick={() =>
+            void send(
+              `/api/tenant/hr/employees/${employeeId}/checklists`,
+              { kind },
+              `${kind === 'joining' ? 'Joining' : 'Exit'} checklist started`,
+            )
+          }
         >
           Start the {kind} checklist
         </Button>
@@ -108,7 +115,11 @@ export function ChecklistsCard({ employeeId }: { employeeId: string }) {
                   <Button
                     variant="ghost"
                     onClick={() =>
-                      void send(`/api/tenant/hr/checklist-steps/${s.id}`, { done: false })
+                      void send(
+                        `/api/tenant/hr/checklist-steps/${s.id}`,
+                        { done: false },
+                        `${s.label}: marked not done`,
+                      )
                     }
                   >
                     Undo
@@ -125,10 +136,11 @@ export function ChecklistsCard({ employeeId }: { employeeId: string }) {
                       variant="secondary"
                       aria-label={`Done: ${s.label}`}
                       onClick={() =>
-                        void send(`/api/tenant/hr/checklist-steps/${s.id}`, {
-                          done: true,
-                          note: notes[s.id] ?? '',
-                        })
+                        void send(
+                          `/api/tenant/hr/checklist-steps/${s.id}`,
+                          { done: true, note: notes[s.id] ?? '' },
+                          `${s.label}: done`,
+                        )
                       }
                     >
                       Done

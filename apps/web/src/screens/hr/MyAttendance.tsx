@@ -12,6 +12,8 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -87,7 +89,10 @@ function Today({ me }: { me: Me }) {
             method: 'POST',
             body: { action, latitude: pos.coords.latitude, longitude: pos.coords.longitude },
           })
-          .then((data) => qc.setQueryData(['hr-me'], data))
+          .then((data) => {
+            qc.setQueryData(['hr-me'], data);
+            toast.success(action === 'in' ? t('Marked in') : t('Marked out'));
+          })
           .catch((err: unknown) => setError(describeError(err)))
           .finally(() => setBusy(false));
       },
@@ -198,6 +203,7 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
         body: { ...f, to: f.halfDay ? f.from : f.to, employeeId: self ? null : employeeId },
       });
       setF({ ...f, reason: '' });
+      toast.success(t('Leave applied for'));
       void qc.invalidateQueries({ queryKey: ['hr-leave', employeeId] });
       void qc.invalidateQueries({ queryKey: ['hr-leave-list'] });
     } catch (err) {
@@ -216,15 +222,28 @@ export function LeavePanel({ employeeId, self = false }: { employeeId: string; s
         body: { year, leaveTypeId: o.leaveTypeId, days: o.days },
       });
       setO({ leaveTypeId: '', days: '' });
+      toast.success(t('Opening balance set'));
       void qc.invalidateQueries({ queryKey: ['hr-leave', employeeId] });
     } catch (err) {
       setError(describeError(err));
     }
   };
+  const confirm = useConfirm();
   const withdraw = async (id: string) => {
+    if (
+      !(await confirm({
+        title: t('Withdraw this leave application?'),
+        body: t('It is taken back from approval. Apply again if the leave is still needed.'),
+        confirmLabel: t('Withdraw the application'),
+        cancelLabel: t('Keep it'),
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       await api.request(`/api/tenant/hr/leave/${id}/withdraw`, { method: 'POST' });
+      toast.success(t('Leave withdrawn'));
       void qc.invalidateQueries({ queryKey: ['hr-leave', employeeId] });
     } catch (err) {
       setError(describeError(err));
@@ -431,7 +450,30 @@ export function LeaveScreen({ leaveId }: { leaveId: string }) {
     queryFn: () => api.request<LeaveDetail>(`/api/tenant/hr/leave/${leaveId}`),
   });
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const act = async (what: 'withdraw' | 'cancel') => {
+    if (
+      !(await confirm(
+        what === 'withdraw'
+          ? {
+              title: t('Withdraw this leave application?'),
+              body: t('It is taken back from approval. Apply again if the leave is still needed.'),
+              confirmLabel: t('Withdraw the application'),
+              cancelLabel: t('Keep it'),
+              tone: 'danger',
+            }
+          : {
+              title: t('Cancel this approved leave?'),
+              body: t(
+                'The days go back to the balance and the leave no longer counts. It cannot be undone.',
+              ),
+              confirmLabel: t('Cancel the leave'),
+              cancelLabel: t('Keep it'),
+              tone: 'danger',
+            },
+      ))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
@@ -440,6 +482,7 @@ export function LeaveScreen({ leaveId }: { leaveId: string }) {
           method: 'POST',
         }),
       );
+      toast.success(what === 'withdraw' ? t('Leave withdrawn') : t('Leave cancelled'));
       void qc.invalidateQueries({ queryKey: ['hr-leave'] });
     } catch (err) {
       setError(describeError(err));

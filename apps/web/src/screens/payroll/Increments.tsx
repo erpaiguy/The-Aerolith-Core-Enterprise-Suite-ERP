@@ -1,6 +1,16 @@
 // Salary revisions in bulk (docs/wave7-plan.md step 7c.7): everyone in service on a day with their current gross; a
 // percentage per person (or one for all), reviewed and applied together as new salaries from that day.
-import { Alert, Button, Card, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/client';
@@ -38,12 +48,22 @@ export function IncrementsScreen() {
     enabled: !!company && /^\d{4}-\d{2}-\d{2}$/.test(from),
   });
   const of = (id: string) => pct[id] ?? all;
+  const confirm = useConfirm();
   const apply = async () => {
     setError(null);
     setDone(null);
     const rows = (q.data?.rows ?? [])
       .filter((r) => r.salary && Number(of(r.employee.id)) > 0)
       .map((r) => ({ employeeId: r.employee.id, pct: of(r.employee.id) }));
+    if (
+      !(await confirm({
+        title: `Apply increments for ${rows.length} ${rows.length === 1 ? 'person' : 'people'}?`,
+        body: `Each gets a new salary from ${shortDate(from)}, which payroll runs from then on use.`,
+        confirmLabel: 'Apply the increments',
+        tone: 'primary',
+      }))
+    )
+      return;
     try {
       qc.setQueryData(
         key,
@@ -56,6 +76,9 @@ export function IncrementsScreen() {
       setAll('');
       setDone(
         `New salaries from ${shortDate(from)} for ${rows.length} ${rows.length === 1 ? 'person' : 'people'}.`,
+      );
+      toast.success(
+        `Increments applied for ${rows.length} ${rows.length === 1 ? 'person' : 'people'}`,
       );
     } catch (err) {
       setError(describeError(err));

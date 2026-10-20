@@ -1,6 +1,16 @@
 // Month-end close (docs/wave7-plan.md step 7c.6): a company's month, each close step's state as the books show it,
 // and the lock once every step is done.
-import { Alert, Badge, Button, Card, Input, PageHeader, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Input,
+  PageHeader,
+  Spinner,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Circle, MinusCircle } from 'lucide-react';
 import { useState } from 'react';
@@ -34,7 +44,17 @@ export function CloseScreen() {
       api.request<Close>(`/api/tenant/accounts/close?entityId=${company!.id}&month=${month}`),
     enabled: !!company && /^\d{4}-\d{2}$/.test(month),
   });
+  const confirm = useConfirm();
   const lock = async () => {
+    if (
+      !(await confirm({
+        title: `Lock ${month}?`,
+        body: 'No voucher dated in the month can be posted, changed or reversed until an admin reopens it with a reason.',
+        confirmLabel: 'Lock the month',
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
@@ -44,6 +64,7 @@ export function CloseScreen() {
           body: { entityId: company!.id, month },
         }),
       );
+      toast.success(`${month} locked`);
     } catch (err) {
       setError(describeError(err));
     }

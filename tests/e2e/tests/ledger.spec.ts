@@ -68,6 +68,10 @@ test('the books: a company, the chart, opening balances, vouchers, a reversal, t
   const checked = page.getByLabel('Checked opening balances');
   await expect(checked).toContainText('3 balances: debit ₹5,00,000.00, credit ₹5,00,000.00.');
   await page.getByRole('button', { name: 'Post the opening balances' }).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Post the opening balances' })
+    .click();
   await expect(page.getByText('Opening balances posted.')).toBeVisible();
   await expect(page.getByRole('rowgroup', { name: 'Opening balances' })).toContainText(
     'SBI Current 1188',
@@ -89,6 +93,7 @@ test('the books: a company, the chart, opening balances, vouchers, a reversal, t
   await expect(voucher.getByRole('button', { name: 'Post the voucher' })).toBeDisabled();
   await line(2).getByLabel('Credit').fill('100000');
   await voucher.getByRole('button', { name: 'Post the voucher' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Post the voucher' }).click();
   await page.waitForURL(/\/accounts\/vouchers\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { name: /^Receipt RV\/2026-27\/0001$/ })).toBeVisible();
 
@@ -98,6 +103,7 @@ test('the books: a company, the chart, opening balances, vouchers, a reversal, t
   await rev.getByLabel('Date of the reversal').fill('2026-10-06');
   await rev.getByLabel('Why').fill('Entered in the wrong year');
   await rev.getByRole('button', { name: 'Reverse' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Reverse the voucher' }).click();
   await expect(page.getByRole('heading', { name: /^Receipt RV\/2026-27\/0002$/ })).toBeVisible();
   await expect(page.getByText('Reverses RV/2026-27/0001')).toBeVisible();
   await shot(page, 'ledger-01-reversal');
@@ -119,6 +125,7 @@ test('the books: a company, the chart, opening balances, vouchers, a reversal, t
   await nav('Books setup');
   await page.getByLabel('Financial year').selectOption('2026-27');
   await page.getByRole('button', { name: 'Lock October 2026' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Lock the month' }).click();
   await expect(page.getByRole('button', { name: 'Reopen October 2026' })).toBeVisible();
   await nav('Vouchers');
   await page.getByRole('link', { name: 'New voucher' }).click();
@@ -128,5 +135,6 @@ test('the books: a company, the chart, opening balances, vouchers, a reversal, t
   await line(2).getByLabel('Ledger').selectOption({ label: 'E1001 Capital account' });
   await line(2).getByLabel('Credit').fill('5000');
   await voucher.getByRole('button', { name: 'Post the voucher' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Post the voucher' }).click();
   await expect(page.getByText(/2026-10 is locked for this company/)).toBeVisible();
 });

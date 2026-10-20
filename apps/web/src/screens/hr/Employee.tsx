@@ -12,6 +12,7 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
@@ -107,6 +108,7 @@ export function EmployeeScreen({ employeeId }: { employeeId: string }) {
         }),
       );
       setForm(null);
+      toast.success(`${d.code} ${form.name || d.name} saved`);
       void qc.invalidateQueries({ queryKey: ['employees'] });
     } catch (err) {
       setError(describeError(err));
@@ -280,6 +282,7 @@ function Deployments({ employee, mayEdit }: { employee: Employee; mayEdit: boole
           body: { from: f.from, projectId: f.projectId || null, siteId: f.siteId || null },
         }),
       );
+      toast.success(`${employee.name} deployed from ${shortDate(f.from)}`);
       void qc.invalidateQueries({ queryKey: ['employees'] });
     } catch (err) {
       setError(describeError(err));
@@ -404,6 +407,8 @@ export function SiteRegisterScreen() {
       else qc.setQueryData(key, sent.result);
       setEdits({});
       setSaved(true);
+      if (sent.queued) toast.info(`Attendance for ${shortDate(day)} kept on this phone`);
+      else toast.success(`Attendance for ${shortDate(day)} saved`);
     } catch (err) {
       setError(describeError(err));
     }

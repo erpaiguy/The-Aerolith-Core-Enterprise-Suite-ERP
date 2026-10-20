@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -13,6 +14,8 @@ import {
   Spinner,
   Table,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -173,6 +176,7 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
   const [release, setRelease] = useState({ date: today(), amount: w.retention.left });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const base = `/api/tenant/work-orders/${w.order.id}`;
   const act = async (k: string, fn: () => Promise<void>) => {
     setBusy(k);
@@ -185,8 +189,11 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
       setBusy(null);
     }
   };
-  const call = (k: string, path: string, body: object, method = 'POST') =>
-    act(k, async () => onChanged(await api.request<WorkOrder>(path, { method, body })));
+  const call = (k: string, path: string, body: object, said: string, method = 'POST') =>
+    act(k, async () => {
+      onChanged(await api.request<WorkOrder>(path, { method, body }));
+      toast.success(said);
+    });
   const lineName = (k: string) => w.lines.find((l) => l.lineKey === k)?.description ?? '';
 
   return (
@@ -206,6 +213,7 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
                 retentionCap: terms.retentionCap || null,
                 tdsSection: terms.tdsSection || null,
               },
+              'Subcontract terms saved',
               'PUT',
             );
           }}
@@ -290,7 +298,7 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
             className="mt-4 flex flex-wrap items-end gap-3"
             onSubmit={(e: FormEvent) => {
               e.preventDefault();
-              void call('measure', `${base}/measurements`, entry).then(() =>
+              void call('measure', `${base}/measurements`, entry, 'Measurement recorded').then(() =>
                 setEntry((x) => ({ ...x, qty: '', description: '' })),
               );
             }}
@@ -349,13 +357,24 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
                     type="button"
                     variant="ghost"
                     aria-label={`Reverse the entry of ${shortDate(e.measuredOn)} for ${lineName(e.lineKey)}`}
-                    onClick={() => {
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: `Reverse the entry of ${shortDate(e.measuredOn)} for ${lineName(e.lineKey)}?`,
+                          body: 'A reversing entry is added to the measurement book; the entry stays struck through. You will be asked why.',
+                          confirmLabel: 'Reverse the entry',
+                          tone: 'danger',
+                        }))
+                      )
+                        return;
                       const reason = window.prompt('Why is the entry reversed?');
                       if (reason && reason.trim().length >= 3)
-                        void call('reverse', `/api/tenant/wo-measurements/${e.id}/reverse`, {
-                          date: today(),
-                          reason: reason.trim(),
-                        });
+                        void call(
+                          'reverse',
+                          `/api/tenant/wo-measurements/${e.id}/reverse`,
+                          { date: today(), reason: reason.trim() },
+                          'Measurement entry reversed',
+                        );
                     }}
                   >
                     <Undo2 className="size-4" aria-hidden />
@@ -401,7 +420,11 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
             </tbody>
           </Table>
         ) : (
-          <p className="text-sm text-fg-muted">No bills yet.</p>
+          <EmptyState title="No bills yet.">
+            {w.mayBill
+              ? 'Make the first RA bill from the measurement book below.'
+              : 'RA bills are made from the measurement book.'}
+          </EmptyState>
         )}
         {w.mayBill && (
           <form
@@ -414,6 +437,7 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
                   method: 'POST',
                   body: { upto },
                 });
+                toast.success(`RA bill ${b.raNo} made`);
                 await navigate({ to: '/subcontract-bills/$billId', params: { billId: b.id } });
               });
             }}
@@ -456,9 +480,23 @@ function WorkOrderView({ w, onChanged }: { w: WorkOrder; onChanged: (w: WorkOrde
           <form
             aria-label="Release retention"
             className="mt-3 flex flex-wrap items-end gap-3"
-            onSubmit={(e: FormEvent) => {
+            onSubmit={async (e: FormEvent) => {
               e.preventDefault();
-              void call('release', `${base}/retention-release`, release);
+              if (
+                !(await confirm({
+                  title: `Release ${rupees(release.amount)} of retention?`,
+                  body: "A bill for the release is posted to the subcontractor's account in payables.",
+                  confirmLabel: 'Release retention',
+                  tone: 'primary',
+                }))
+              )
+                return;
+              void call(
+                'release',
+                `${base}/retention-release`,
+                release,
+                `${rupees(release.amount)} of retention released`,
+              );
             }}
           >
             <Field label="Released on">
@@ -522,13 +560,15 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const chart = useChart({ ifAllowed: true });
-  const run = async (k: string, path: string, body: object, method = 'POST') => {
+  const confirm = useConfirm();
+  const run = async (k: string, path: string, body: object, said: string, method = 'POST') => {
     setBusy(k);
     setError(null);
     try {
       onChanged(
         await api.request<ScBill>(`/api/tenant/subcontract-bills/${b.id}${path}`, { method, body }),
       );
+      toast.success(said);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -574,10 +614,24 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
               type="button"
               variant="ghost"
               busy={busy === 'cancel'}
-              onClick={() => {
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: `Cancel subcontract RA bill ${b.raNo}?`,
+                    body: 'The bill is cancelled for good and can no longer be submitted or certified. You will be asked why.',
+                    confirmLabel: 'Cancel the bill',
+                    tone: 'danger',
+                  }))
+                )
+                  return;
                 const reason = window.prompt('Why is the bill cancelled?');
                 if (reason && reason.trim().length >= 3)
-                  void run('cancel', '/cancel', { reason: reason.trim() });
+                  void run(
+                    'cancel',
+                    '/cancel',
+                    { reason: reason.trim() },
+                    `Subcontract RA bill ${b.raNo} cancelled`,
+                  );
               }}
             >
               Cancel bill
@@ -635,6 +689,7 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
                   body: {},
                 });
                 onChanged(await api.request<ScBill>(`/api/tenant/subcontract-bills/${b.id}`));
+                toast.success('Snags charged as back-charges');
               } catch (err) {
                 setError(describeError(err));
               } finally {
@@ -789,6 +844,7 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
                       .map((l) => ({ lineKey: l.lineKey, cumQty: cum[l.lineKey] })),
                     backcharges: charges,
                   },
+                  `Subcontract RA bill ${b.raNo} saved`,
                   'PUT',
                 )
               }
@@ -799,13 +855,21 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
               type="button"
               variant="secondary"
               busy={busy === 'refresh'}
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  window.confirm(
-                    'Take the measurement book again? Quantities typed in here are lost.',
-                  )
+                  await confirm({
+                    title: 'Take the measurement book again?',
+                    body: 'Quantities typed in here are lost and replaced by the measurement book.',
+                    confirmLabel: 'Take the book again',
+                    tone: 'danger',
+                  })
                 )
-                  void run('refresh', '/refresh', { upto: b.upto, rowVersion: b.rowVersion });
+                  void run(
+                    'refresh',
+                    '/refresh',
+                    { upto: b.upto, rowVersion: b.rowVersion },
+                    'Quantities taken from the measurement book',
+                  );
               }}
             >
               Take the book again
@@ -815,7 +879,14 @@ function BillView({ b, onChanged }: { b: ScBill; onChanged: (next: ScBill) => vo
               variant="secondary"
               busy={busy === 'submit'}
               disabled={dirty || !b.maySubmit}
-              onClick={() => void run('submit', '/submit', { rowVersion: b.rowVersion })}
+              onClick={() =>
+                void run(
+                  'submit',
+                  '/submit',
+                  { rowVersion: b.rowVersion },
+                  `Subcontract RA bill ${b.raNo} submitted for certification`,
+                )
+              }
             >
               Submit for certification
             </Button>

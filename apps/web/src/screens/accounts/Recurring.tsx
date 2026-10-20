@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -63,10 +66,12 @@ export function RecurringScreen() {
   const [adding, setAdding] = useState(false);
   const [billNo, setBillNo] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const act = async (url: string, body: object) => {
+  const confirm = useConfirm();
+  const act = async (url: string, body: object, said: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await api.request<Recurring>(url, { method: 'POST', body }));
+      toast.success(said);
     } catch (err) {
       setError(describeError(err));
     }
@@ -94,6 +99,7 @@ export function RecurringScreen() {
           entityId={company.id}
           onDone={(r) => {
             qc.setQueryData(key, r);
+            toast.success('Recurring entry set up');
             setAdding(false);
           }}
           onCancel={() => setAdding(false)}
@@ -108,7 +114,9 @@ export function RecurringScreen() {
         <>
           <Card title={`Due (${due.length})`}>
             {due.length === 0 ? (
-              <p className="text-sm text-fg-muted">Nothing due.</p>
+              <EmptyState title="Nothing due.">
+                Each entry&apos;s due day brings a draft here to post or skip.
+              </EmptyState>
             ) : (
               <Table minWidth="40rem">
                 <tbody aria-label="Due entries">
@@ -134,19 +142,46 @@ export function RecurringScreen() {
                             ) : null}
                             <Button
                               variant="secondary"
-                              onClick={() =>
-                                void act(`/api/tenant/accounts/recurring-drafts/${d.id}/post`, {
-                                  billNo: billNo[d.id] || null,
-                                })
-                              }
+                              onClick={async () => {
+                                if (
+                                  !(await confirm({
+                                    title: `Post ${d.name} due ${shortDate(d.dueOn)}?`,
+                                    body:
+                                      d.kind === 'bill'
+                                        ? "The supplier's bill is posted to the books as set up."
+                                        : 'The voucher is posted to the books as set up.',
+                                    confirmLabel: 'Post it',
+                                    tone: 'primary',
+                                  }))
+                                )
+                                  return;
+                                void act(
+                                  `/api/tenant/accounts/recurring-drafts/${d.id}/post`,
+                                  { billNo: billNo[d.id] || null },
+                                  `${d.name} posted`,
+                                );
+                              }}
                             >
                               Post
                             </Button>
                             <Button
                               variant="ghost"
-                              onClick={() =>
-                                void act(`/api/tenant/accounts/recurring-drafts/${d.id}/skip`, {})
-                              }
+                              onClick={async () => {
+                                if (
+                                  !(await confirm({
+                                    title: `Skip ${d.name} due ${shortDate(d.dueOn)}?`,
+                                    body: 'Nothing is posted for this due day, and it cannot be posted later.',
+                                    confirmLabel: 'Skip it',
+                                    tone: 'danger',
+                                  }))
+                                )
+                                  return;
+                                void act(
+                                  `/api/tenant/accounts/recurring-drafts/${d.id}/skip`,
+                                  {},
+                                  `${d.name} skipped`,
+                                );
+                              }}
                             >
                               Skip
                             </Button>
@@ -161,7 +196,9 @@ export function RecurringScreen() {
           </Card>
           <Card title="Set up">
             {q.data.templates.length === 0 ? (
-              <p className="text-sm text-fg-muted">No recurring entry yet.</p>
+              <EmptyState title="No recurring entry yet.">
+                Set up rent, hire, AMCs and accruals to have them drafted on their due days.
+              </EmptyState>
             ) : (
               <Table minWidth="48rem">
                 <thead>
@@ -193,9 +230,11 @@ export function RecurringScreen() {
                           <Button
                             variant="ghost"
                             onClick={() =>
-                              void act(`/api/tenant/accounts/recurring/${t.id}/active`, {
-                                active: !t.active,
-                              })
+                              void act(
+                                `/api/tenant/accounts/recurring/${t.id}/active`,
+                                { active: !t.active },
+                                `${t.name} ${t.active ? 'paused' : 'resumed'}`,
+                              )
                             }
                           >
                             {t.active ? 'Pause' : 'Resume'}

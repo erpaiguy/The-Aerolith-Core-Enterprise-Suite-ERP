@@ -86,6 +86,7 @@ test("a supplier's bill entered, paid in an approved run with a bank file", asyn
     .getByRole('form', { name: 'Mark paid' })
     .getByRole('button', { name: 'Mark paid' })
     .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Mark paid' }).click();
   await expect(page.getByText('paid', { exact: true })).toBeVisible();
   await expect(page.getByRole('rowgroup', { name: 'Paid to Patil Estates' })).toContainText(
     '₹59,000.00',

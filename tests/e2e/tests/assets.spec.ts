@@ -44,6 +44,7 @@ test('an asset registered, depreciated for a year and sold', async ({ page }) =>
   const run = page.getByRole('form', { name: 'Depreciation run' });
   await run.getByLabel('Up to').fill('2027-03-31');
   await run.getByRole('button', { name: 'Run depreciation' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Post depreciation' }).click();
   await expect(page.getByLabel('Run result')).toContainText(
     /2,49,840\.00 depreciation posted \(JV\/2026-27\/0001\)/,
   );
@@ -54,8 +55,8 @@ test('an asset registered, depreciated for a year and sold', async ({ page }) =>
   const sell = page.getByRole('form', { name: 'Dispose' });
   await sell.getByLabel('Sold on').fill('2027-04-01');
   await sell.getByLabel('For ₹').fill('560000');
-  page.once('dialog', (d) => void d.accept());
   await sell.getByRole('button', { name: 'Dispose' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Dispose of the asset' }).click();
   await expect(assets).toContainText('Disposed');
   await shot(page, 'assets-01-sold');
 });

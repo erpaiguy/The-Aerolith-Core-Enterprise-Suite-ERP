@@ -1,6 +1,19 @@
 // Equipment and fleet (docs/wave3-plan.md step 10): the register, a machine's allocation, log sheets and maintenance,
 // fuel against the norm, and the month's costing (own machines charged to projects, hire bills from the logs).
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
@@ -148,6 +161,7 @@ function Register({
         },
       });
       setAdding(false);
+      toast.success(`Machine ${f.code} added`);
       void qc.invalidateQueries({ queryKey: key });
     } catch (err) {
       setError(describeError(err));
@@ -246,7 +260,9 @@ function Register({
       ) : list.isError ? (
         <Alert tone="danger">{describeError(list.error)}</Alert>
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">No machines registered.</p>
+        <EmptyState title="No machines registered.">
+          Add own and hired machines to allocate them to projects and keep their log sheets.
+        </EmptyState>
       ) : (
         <Table minWidth="40rem">
           <thead>
@@ -334,6 +350,7 @@ function MachineCard({ id }: { id: string }) {
     try {
       await api.request(`/api/tenant/equipment/${id}/${path}`, { method: 'POST', body });
       setNote(done);
+      toast.success(done.replace(/\.$/, ''));
       void qc.invalidateQueries({ queryKey: key });
       void qc.invalidateQueries({ queryKey: ['machine-logs', id] });
       void qc.invalidateQueries({ queryKey: ['equipment'] });
@@ -627,6 +644,29 @@ function Costing({ entityId }: { entityId: string }) {
       }>(`/api/tenant/equipment/costing?entityId=${entityId}&month=${month}`),
   });
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const post = async () => {
+    if (
+      !(await confirm({
+        title: `Post the costing for ${month}?`,
+        body: 'Own machines are charged to their projects by a voucher and the hire bills are raised from the log sheets. Both are posted to the books.',
+        confirmLabel: 'Post the month',
+        tone: 'primary',
+      }))
+    )
+      return;
+    setError(null);
+    try {
+      await api.request('/api/tenant/equipment/costing', {
+        method: 'POST',
+        body: { entityId, month },
+      });
+      toast.success(`Equipment costing for ${month} posted`);
+      void qc.invalidateQueries({ queryKey: key });
+    } catch (err) {
+      setError(describeError(err));
+    }
+  };
   return (
     <Card title="Month's costing">
       {error && <Alert tone="danger">{error}</Alert>}
@@ -657,18 +697,7 @@ function Costing({ entityId }: { entityId: string }) {
           ) : (
             mayPost &&
             (c.data.own.length > 0 || c.data.hired.length > 0) && (
-              <Button
-                type="button"
-                onClick={() =>
-                  void api
-                    .request('/api/tenant/equipment/costing', {
-                      method: 'POST',
-                      body: { entityId, month },
-                    })
-                    .then(() => qc.invalidateQueries({ queryKey: key }))
-                    .catch((err: unknown) => setError(describeError(err)))
-                }
-              >
+              <Button type="button" onClick={() => void post()}>
                 Post the month
               </Button>
             )

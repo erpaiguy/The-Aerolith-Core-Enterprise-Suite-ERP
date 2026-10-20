@@ -42,6 +42,7 @@ test('the statements for a year, and the year closed', async ({ page }) => {
     await line(2).getByLabel('Ledger').selectOption({ label: cr });
     await line(2).getByLabel('Credit').fill(amount);
     await voucher.getByRole('button', { name: 'Post the voucher' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Post the voucher' }).click();
     await page.waitForURL(/\/accounts\/vouchers\/[0-9a-f-]{36}$/);
   }
 
@@ -70,7 +71,9 @@ test('the statements for a year, and the year closed', async ({ page }) => {
   await page.getByRole('tab', { name: 'Year end' }).click();
   const close = page.getByRole('form', { name: 'Close a year' });
   await close.getByLabel('Financial year').fill('2026-27');
-  page.once('dialog', (d) => void d.accept());
   await close.getByRole('button', { name: 'Close the year' }).click();
+  const confirm = page.getByRole('alertdialog');
+  await confirm.getByRole('textbox').fill('2026-27');
+  await confirm.getByRole('button', { name: 'Close the year' }).click();
   await expect(page.getByText('2026-27 closed: profit ₹8,000.00.')).toBeVisible();
 });

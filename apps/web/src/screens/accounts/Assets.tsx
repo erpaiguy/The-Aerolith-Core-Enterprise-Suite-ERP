@@ -1,6 +1,19 @@
 // Fixed assets (docs/wave3-plan.md step 9): the register, an asset registered from a supplier's bill or the opening
 // balances, its transfers and disposal; depreciation runs (posted, reversed); the Income Tax blocks for a year.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../../api/client';
@@ -120,6 +133,7 @@ function Register({ entityId }: { entityId: string }) {
         },
       });
       setAdding(false);
+      toast.success(`Asset ${f.name} registered`);
       refresh();
     } catch (err) {
       setError(describeError(err));
@@ -233,7 +247,9 @@ function Register({ entityId }: { entityId: string }) {
       ) : list.isError ? (
         <Alert tone="danger">{describeError(list.error)}</Alert>
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">No assets registered.</p>
+        <EmptyState title="No assets registered.">
+          Register an asset from a supplier&apos;s bill or the opening balances.
+        </EmptyState>
       ) : (
         <Table minWidth="48rem">
           <thead>
@@ -292,10 +308,12 @@ function AssetActions({ id, onDone }: { id: string; onDone: () => void }) {
   const [move, setMove] = useState({ date: today(), projectId: '' });
   const [sale, setSale] = useState({ date: today(), proceeds: '', bankAccountId: '' });
   const [error, setError] = useState<string | null>(null);
-  const call = async (path: string, body: object) => {
+  const confirm = useConfirm();
+  const call = async (path: string, body: object, done: string) => {
     setError(null);
     try {
       await api.request(`/api/tenant/accounts/assets/${id}/${path}`, { method: 'POST', body });
+      toast.success(done);
       onDone();
     } catch (err) {
       setError(describeError(err));
@@ -309,7 +327,11 @@ function AssetActions({ id, onDone }: { id: string; onDone: () => void }) {
         className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          void call('transfer', { date: move.date, projectId: move.projectId || null });
+          void call(
+            'transfer',
+            { date: move.date, projectId: move.projectId || null },
+            'Asset transferred',
+          );
         }}
       >
         <Field label="Moved on">
@@ -340,18 +362,26 @@ function AssetActions({ id, onDone }: { id: string; onDone: () => void }) {
       <form
         aria-label="Dispose"
         className="flex flex-wrap items-end gap-2"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           if (
-            window.confirm(
-              'Dispose of the asset? Its depreciation to the day before is posted first.',
-            )
+            !(await confirm({
+              title: 'Dispose of the asset?',
+              body: 'Its depreciation to the day before is posted first, then the sale. It cannot be undone.',
+              confirmLabel: 'Dispose of the asset',
+              tone: 'danger',
+            }))
           )
-            void call('dispose', {
+            return;
+          void call(
+            'dispose',
+            {
               date: sale.date,
               proceeds: sale.proceeds || '0',
               bankAccountId: Number(sale.proceeds) > 0 ? sale.bankAccountId || banks[0]?.id : null,
-            });
+            },
+            'Asset disposed',
+          );
         }}
       >
         <Field label="Sold on">
@@ -402,12 +432,22 @@ function Runs({ entityId }: { entityId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const confirm = useConfirm();
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: key });
     void qc.invalidateQueries({ queryKey: ['assets', entityId] });
   };
   const run = async (e: FormEvent) => {
     e.preventDefault();
+    if (
+      !(await confirm({
+        title: `Post depreciation up to ${shortDate(upto)}?`,
+        body: 'A depreciation voucher is posted to the books for every active asset.',
+        confirmLabel: 'Post depreciation',
+        tone: 'primary',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -419,6 +459,7 @@ function Runs({ entityId }: { entityId: string }) {
         },
       );
       setNote(`${rupees(r.total)} depreciation posted (${r.voucher}).`);
+      toast.success(`Depreciation posted (${r.voucher})`);
       refresh();
     } catch (err) {
       setError(describeError(err));
@@ -488,7 +529,10 @@ function Runs({ entityId }: { entityId: string }) {
                                 method: 'POST',
                                 body: { date: r.upto, reason: reason.trim() },
                               })
-                              .then(refresh)
+                              .then(() => {
+                                toast.success('Depreciation run reversed');
+                                refresh();
+                              })
                               .catch((err: unknown) => setError(describeError(err)));
                         }}
                       >
