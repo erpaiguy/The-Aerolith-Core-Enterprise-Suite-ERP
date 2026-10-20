@@ -434,6 +434,15 @@ export function DataGrid<T>({
               <tr
                 key={rowKey(r)}
                 onClick={onRowClick ? () => onRowClick(r) : undefined}
+                // A clickable row is reachable by keyboard too: Tab to it, Enter opens it (step 9a.8).
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key === 'Enter' && e.target === e.currentTarget) onRowClick(r);
+                      }
+                    : undefined
+                }
                 className={cx(onRowClick && 'cursor-pointer hover:bg-surface-2')}
               >
                 {visible.map((c, i) => (

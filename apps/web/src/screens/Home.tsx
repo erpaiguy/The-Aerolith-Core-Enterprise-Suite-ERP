@@ -16,7 +16,7 @@ function ItemRow({ item, onRead }: { item: InboxItem; onRead?: (id: string) => v
     <li className="flex items-start gap-3 py-3">
       <span
         className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? 'bg-accent' : 'bg-transparent'}`}
-        aria-label={unread ? 'Unread' : undefined}
+        {...(unread ? { role: 'img', 'aria-label': 'Unread' } : { 'aria-hidden': true })}
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">

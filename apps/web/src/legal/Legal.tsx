@@ -112,7 +112,7 @@ export function LegalPage({ docKey }: { docKey: string }) {
 
 function Shell({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="min-h-dvh bg-canvas px-4 py-6 md:px-8">
+    <main className="min-h-dvh bg-canvas px-4 py-6 md:px-8">
       <div className="mx-auto max-w-3xl">
         <button
           type="button"
@@ -126,7 +126,7 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
           {children}
         </article>
       </div>
-    </div>
+    </main>
   );
 }
 
