@@ -317,7 +317,8 @@ export function EmptyState({
         </div>
       )}
       <p className="text-sm font-medium text-fg">{title}</p>
-      {children && <div className="max-w-md text-sm text-fg-muted">{children}</div>}
+      {/* A link in the sentence is underlined, not only coloured (step 9a.8). */}
+      {children && <div className="max-w-md text-sm text-fg-muted [&_a]:underline">{children}</div>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );
