@@ -9,10 +9,11 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import {
@@ -92,9 +93,13 @@ export class AuthController {
   @RateLimit(10)
   async login(
     @Body(new ZodPipe(loginSchema)) body: z.infer<typeof loginSchema>,
+    @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    const result = await this.auth.login(body);
+    const result = await this.auth.login({
+      ...body,
+      place: { ip: req.ip, userAgent: req.headers['user-agent'] },
+    });
     if (result.status !== 'ok' || body.client !== 'browser') return result;
     reply.header('set-cookie', refreshCookie(result.refreshToken, this.config.secureCookies));
     const { refreshToken: _refreshToken, ...rest } = result;
@@ -131,6 +136,13 @@ export class AuthController {
   ): Promise<void> {
     await this.auth.logout(claims);
     reply.header('set-cookie', clearedRefreshCookie(this.config.secureCookies));
+  }
+
+  @Get('welcome')
+  @UseGuards(TenantAuthGuard)
+  @AllowWhilePasswordChangeRequired()
+  welcome(@Auth() claims: TenantClaims) {
+    return this.auth.welcome(claims);
   }
 
   @Get('me')

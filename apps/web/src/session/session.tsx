@@ -1,4 +1,5 @@
 // Session state for the whole app: device activation (licence key → entitlement token), sign-in, and sign-out.
+import { toast } from '@aerolith/ui';
 import {
   createContext,
   useCallback,
@@ -17,7 +18,9 @@ import type {
   Me,
   SessionUser,
 } from '../api/types';
+import { formatDateTime } from '../lib/format';
 import { load, save } from '../lib/storage';
+import { outbox } from '../offline';
 import { clientKind, desktop } from '../platform';
 
 const ENTITLEMENT_KEY = 'aerolith.entitlement';
@@ -63,7 +66,8 @@ interface SessionApi extends SessionState {
   mfaSetUp(): Promise<void>;
   /** The signed-in user changed their name. */
   renamed(displayName: string): void;
-  signOut(): Promise<void>;
+  /** `idle` when the session ended for want of activity: the notice says so. */
+  signOut(reason?: 'idle'): Promise<void>;
   forgetDevice(): void;
 }
 
@@ -201,6 +205,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Site entries kept on the device are sent only while the person who made them is signed in.
+  const userId = state.status === 'signed_in' ? (state.user?.id ?? null) : null;
+  useEffect(() => {
+    outbox.setUser(userId);
+    if (userId && typeof navigator !== 'undefined' && navigator.onLine) void outbox.flush();
+  }, [userId]);
+
   useEffect(() => {
     api.onSessionLost = () => {
       rememberUser(null);
@@ -242,6 +253,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           mustSetUpMfa: !!result.mustSetUpMfa,
           licence: result.licence,
         }));
+        void welcome(result.user.displayName);
       },
       async mfaSetUp() {
         await api.refresh();
@@ -254,7 +266,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       renamed(displayName: string) {
         setState((s) => (s.user ? { ...s, user: { ...s.user, displayName } } : s));
       },
-      async signOut() {
+      async signOut(reason) {
         await api.request('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
         rememberUser(null);
         api.setAccessToken(null);
@@ -266,6 +278,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           mustChangePassword: false,
           licence: null,
         }));
+        if (reason === 'idle')
+          toast.warning(
+            'Signed out after a while without activity',
+            'Sign in again to carry on. Anything not saved before then was not kept.',
+            0,
+          );
+        else toast.success('Signed out', 'You can close this window, or sign in again below.');
       },
       forgetDevice() {
         setEntitlement(null);
@@ -276,6 +295,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/**
+ * The welcome after signing in (docs/wave9-plan.md step 9a.3): who, which company, and when and where they last
+ * signed in, so a sign-in that was not theirs stands out.
+ */
+async function welcome(name: string) {
+  const w = await api
+    .request<{
+      company: string | null;
+      previous: { at: string; device: string; ip: string | null } | null;
+    }>('/api/auth/welcome')
+    .catch(() => null);
+  const where = w?.previous
+    ? `Last signed in ${formatDateTime(w.previous.at)} from ${w.previous.device}${
+        w.previous.ip ? ` (${w.previous.ip})` : ''
+      }. Not you? Change your password and tell your administrator.`
+    : 'This is your first sign-in here.';
+  toast.success(
+    `Welcome, ${name}`,
+    w?.company ? `${w.company}. ${where}` : where,
+    w?.previous ? 8_000 : undefined,
+  );
 }
 
 export function useSession(): SessionApi {

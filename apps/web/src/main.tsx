@@ -7,6 +7,7 @@ import { ApiError } from './api/client';
 import { startOutbox } from './offline';
 import { router } from './router';
 import { LanguageProvider } from './i18n/i18n';
+import { IdleGuard } from './session/IdleGuard';
 import { SessionProvider } from './session/session';
 import './styles.css';
 
@@ -40,6 +41,7 @@ createRoot(root).render(
         <LanguageProvider>
           <ConfirmProvider>
             <RouterProvider router={router} />
+            <IdleGuard />
             <Toaster />
             <ErrorDialogHost />
           </ConfirmProvider>

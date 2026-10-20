@@ -64,4 +64,23 @@ describe('the offline outbox', () => {
     expect(calls).toBe(1);
     expect(store.items.size).toBe(1);
   });
+
+  it('sends a person’s entries only while they are signed in, never under the next person', async () => {
+    const store = memory();
+    const seen: string[] = [];
+    const box = new Outbox(store, async (path) => {
+      seen.push(path);
+      return { ok: true };
+    });
+    box.setUser('ravi');
+    await box.add('Ravi’s receipt', '/ravi', {});
+    box.setUser('sunita');
+    await box.add('Sunita’s report', '/sunita', {});
+    expect(await box.flush()).toEqual({ sent: 1, stopped: null });
+    expect(seen).toEqual(['/sunita']);
+    box.setUser('ravi');
+    await box.flush();
+    expect(seen).toEqual(['/sunita', '/ravi']);
+    expect(store.items.size).toBe(0);
+  });
 });

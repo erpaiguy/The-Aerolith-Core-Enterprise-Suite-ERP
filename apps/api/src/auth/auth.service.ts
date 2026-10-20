@@ -39,6 +39,40 @@ export type Client = 'browser' | 'desktop';
 export type TenantClaims = Extract<AccessClaims, { kind: 'tenant' }>;
 
 /** Idle timeouts decided in Phase 9: 30 minutes in a browser, 12 hours on the desktop. */
+export interface SignInPlace {
+  ip?: string | undefined;
+  userAgent?: string | undefined;
+}
+
+/** "Chrome on Windows", "the desktop app": enough to recognise one's own sign-in, from the browser's own string. */
+export function deviceOf(s: { client: Client; userAgent: string | null }): string {
+  if (s.client === 'desktop') return 'the desktop app';
+  const ua = s.userAgent ?? '';
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /OPR\//.test(ua)
+      ? 'Opera'
+      : /Firefox\//.test(ua)
+        ? 'Firefox'
+        : /Chrome\//.test(ua)
+          ? 'Chrome'
+          : /Safari\//.test(ua)
+            ? 'Safari'
+            : 'a browser';
+  const os = /Android/.test(ua)
+    ? 'Android'
+    : /iPhone|iPad/.test(ua)
+      ? 'iOS'
+      : /Windows/.test(ua)
+        ? 'Windows'
+        : /Mac OS X/.test(ua)
+          ? 'macOS'
+          : /Linux/.test(ua)
+            ? 'Linux'
+            : null;
+  return os ? `${browser} on ${os}` : browser;
+}
+
 export const IDLE_MS: Record<Client, number> = { browser: 30 * 60_000, desktop: 12 * 3_600_000 };
 const ABSOLUTE_MS = 30 * 86_400_000;
 const RESET_LINK_MINUTES = 30;
@@ -98,6 +132,8 @@ export class AuthService {
       password: string;
       code?: string | undefined;
       client: Client;
+      /** Where the sign-in came from, kept with the session (step 9a.3). */
+      place?: SignInPlace | undefined;
     },
     now = new Date(),
   ): Promise<LoginResult> {
@@ -114,7 +150,13 @@ export class AuthService {
   private async adminLogin(
     tenantId: string,
     lic: LicenceState,
-    input: { identifier: string; password: string; code?: string | undefined; client: Client },
+    input: {
+      identifier: string;
+      password: string;
+      code?: string | undefined;
+      client: Client;
+      place?: SignInPlace | undefined;
+    },
     now: Date,
   ): Promise<LoginResult> {
     const [owner] = await this.sql<IdentityRow[]>`
@@ -145,13 +187,19 @@ export class AuthService {
       VALUES (lower(${owner.email}), ${owner.email}, 'admin', ${owner.id}, false, ${now})
       ON CONFLICT (owner_account_id) DO UPDATE SET last_login_at = EXCLUDED.last_login_at, status = 'active'
       RETURNING *`;
-    return this.createSession(db, tenantId, user!, input.client, lic, now);
+    return this.createSession(db, tenantId, user!, input.client, lic, now, input.place);
   }
 
   private async staffLogin(
     tenantId: string,
     lic: LicenceState,
-    input: { identifier: string; password: string; code?: string | undefined; client: Client },
+    input: {
+      identifier: string;
+      password: string;
+      code?: string | undefined;
+      client: Client;
+      place?: SignInPlace | undefined;
+    },
     now: Date,
   ): Promise<LoginResult> {
     const db = await this.tenants.forTenant(tenantId);
@@ -183,7 +231,7 @@ export class AuthService {
       }
     }
     await db`UPDATE platform."user" SET failed_logins = 0, locked_until = NULL, last_login_at = ${now} WHERE id = ${user.id}`;
-    return this.createSession(db, tenantId, user, input.client, lic, now);
+    return this.createSession(db, tenantId, user, input.client, lic, now, input.place);
   }
 
   async refresh(refreshToken: string, now = new Date()) {
@@ -252,6 +300,28 @@ export class AuthService {
 
   async logout(claims: TenantClaims): Promise<void> {
     await this.revoke(await this.tenants.forTenant(claims.ten), claims.sid, 'logout');
+  }
+
+  /**
+   * For the welcome after signing in (step 9a.3): the company, and the sign-in before this one, so a person notices
+   * one that was not theirs.
+   */
+  async welcome(claims: TenantClaims) {
+    const db = await this.tenants.forTenant(claims.ten);
+    const [company] = await db<{ name: string }[]>`
+      SELECT coalesce(nullif(legal_name, ''), name) AS name FROM platform.entity
+      ORDER BY is_default DESC, created_at LIMIT 1`;
+    const [previous] = await db<
+      { at: Date; client: Client; ip: string | null; userAgent: string | null }[]
+    >`
+      SELECT created_at AS at, client, ip, user_agent AS "userAgent" FROM platform.session
+      WHERE user_id = ${claims.sub} AND id <> ${claims.sid} ORDER BY created_at DESC LIMIT 1`;
+    return {
+      company: company?.name ?? null,
+      previous: previous
+        ? { ...previous, at: previous.at.toISOString(), device: deviceOf(previous) }
+        : null,
+    };
   }
 
   async me(claims: TenantClaims) {
@@ -404,12 +474,15 @@ export class AuthService {
     client: Client,
     lic: LicenceState,
     now: Date,
+    place?: SignInPlace,
   ): Promise<LoginResult> {
     const id = randomUUID();
     const refresh = newRefreshToken(tenantId, id);
-    await db`INSERT INTO platform.session (id, user_id, client, refresh_hmac, idle_expires_at, absolute_expires_at)
+    await db`INSERT INTO platform.session (id, user_id, client, refresh_hmac, idle_expires_at, absolute_expires_at,
+        ip, user_agent)
       VALUES (${id}, ${user.id}, ${client}, ${hmacSecret(refresh.secret, this.config.sessionKey)},
-              ${new Date(now.getTime() + IDLE_MS[client])}, ${new Date(now.getTime() + ABSOLUTE_MS)})`;
+              ${new Date(now.getTime() + IDLE_MS[client])}, ${new Date(now.getTime() + ABSOLUTE_MS)},
+              ${place?.ip?.slice(0, 64) ?? null}, ${place?.userAgent?.slice(0, 300) ?? null})`;
     await this.audit(db, user.id, 'user.login', user.id, { client });
     const mustSetUpMfa = await this.staffMfa.mustEnroll(db, tenantId, user);
     return {

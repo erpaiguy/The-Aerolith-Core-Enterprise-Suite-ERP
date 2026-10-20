@@ -77,7 +77,7 @@ import { daysUntil, formatDate } from '../lib/format';
 import { LANGUAGES, useLanguage, type Lang } from '../i18n/i18n';
 import { useSession } from '../session/session';
 import { usePending } from '../offline';
-import { Badge, Select } from '@aerolith/ui';
+import { Badge, Select, useConfirm } from '@aerolith/ui';
 import { load, save } from '../lib/storage';
 import { SearchPalette, type ScreenEntry } from './SearchPalette';
 import { useMyWork, workCount } from './MyWork';
@@ -1104,13 +1104,7 @@ export function AppShell() {
               >
                 Two-factor sign-in
               </Link>
-              <button
-                type="button"
-                onClick={() => void session.signOut()}
-                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
-              >
-                <LogOut className="size-4" aria-hidden /> Sign out
-              </button>
+              <SignOutButton />
             </div>
           </header>
           <main className="flex-1 px-4 py-6 md:px-6">
@@ -1119,6 +1113,37 @@ export function AppShell() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Sign out (docs/wave9-plan.md step 9a.3). Site entries still waiting for signal are kept on the device and sent the
+ * next time this person signs in here, so signing out first asks whether to wait.
+ */
+function SignOutButton() {
+  const session = useSession();
+  const confirm = useConfirm();
+  const pending = usePending().filter((p) => !p.userId || p.userId === session.user?.id);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        if (
+          pending.length &&
+          !(await confirm({
+            title: `${pending.length} site ${pending.length === 1 ? 'entry is' : 'entries are'} not sent yet`,
+            body: 'They stay on this device and go the next time you sign in here with signal. Sign out anyway?',
+            confirmLabel: 'Sign out anyway',
+            cancelLabel: 'Stay signed in',
+          }))
+        )
+          return;
+        await session.signOut();
+      }}
+      className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
+    >
+      <LogOut className="size-4" aria-hidden /> Sign out
+    </button>
   );
 }
 

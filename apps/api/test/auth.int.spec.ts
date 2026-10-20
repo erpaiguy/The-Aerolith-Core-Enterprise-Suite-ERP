@@ -383,6 +383,29 @@ describe.skipIf(!controlUrl || !adminUrl)('authentication (integration)', () => 
       ).toMatchObject({ code: 'session_revoked' });
     });
 
+    it('welcomes a person with when and where they last signed in (step 9a.3)', async () => {
+      const chrome =
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
+      const first = await post(
+        '/auth/login',
+        {
+          entitlementToken: entitlement,
+          identifier: 'ravi.k',
+          password: 'Site-Office-Rain-42',
+          client: 'browser',
+        },
+        { 'user-agent': chrome, 'x-aerolith-client': 'browser' },
+      );
+      expect(first.statusCode).toBe(200);
+      const now = (await login('ravi.k', 'Site-Office-Rain-42')).json<{ accessToken: string }>();
+      const w = (await get('/auth/welcome', bearer(now.accessToken))).json<Json>();
+      expect(w).toMatchObject({
+        previous: { client: 'browser', device: 'Chrome on Windows', ip: '127.0.0.1' },
+      });
+      expect(Date.now() - Date.parse((w.previous as { at: string }).at)).toBeLessThan(60_000);
+      expect(w).toHaveProperty('company');
+    });
+
     it('locks an account after 5 wrong passwords', async () => {
       for (let i = 0; i < 5; i++)
         expect((await login('ravi.k', 'wrong-password-x')).statusCode).toBe(401);

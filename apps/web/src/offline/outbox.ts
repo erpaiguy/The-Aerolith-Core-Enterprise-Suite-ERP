@@ -12,6 +12,8 @@ export interface Pending {
   key: string;
   createdAt: number;
   error: string | null;
+  /** Who made it: sent only while they are signed in, never under the next person on a shared device. */
+  userId?: string | null;
 }
 
 /** Where pending items live: IndexedDB in the browser, a Map in tests. */
@@ -39,11 +41,17 @@ export const newKey = () => {
 export class Outbox {
   private flushing: Promise<{ sent: number; stopped: string | null }> | null = null;
   private listeners = new Set<() => void>();
+  private user: string | null = null;
 
   constructor(
     private readonly store: Store,
     private readonly send: Send,
   ) {}
+
+  /** The person signed in on this device now (null when nobody is). */
+  setUser(id: string | null) {
+    this.user = id;
+  }
 
   onChange(f: () => void) {
     this.listeners.add(f);
@@ -58,7 +66,16 @@ export class Outbox {
   }
 
   async add(label: string, path: string, body: unknown, key = newKey()) {
-    const p: Pending = { id: key, label, path, body, key, createdAt: Date.now(), error: null };
+    const p: Pending = {
+      id: key,
+      label,
+      path,
+      body,
+      key,
+      createdAt: Date.now(),
+      error: null,
+      userId: this.user,
+    };
     await this.store.put(p);
     this.changed();
     return p;
@@ -69,7 +86,10 @@ export class Outbox {
     this.changed();
   }
 
-  /** Sends what is waiting, oldest first; stops when offline again or at the first refusal. */
+  /**
+   * Sends what the signed-in person left waiting, oldest first; stops when offline again or at the first refusal.
+   * Someone else's entries wait for them to sign in on this device again.
+   */
   flush() {
     this.flushing ??= this.doFlush().finally(() => {
       this.flushing = null;
@@ -80,6 +100,7 @@ export class Outbox {
   private async doFlush() {
     let sent = 0;
     for (const p of await this.list()) {
+      if (p.userId && p.userId !== this.user) continue;
       const r = await this.send(p.path, p.body, p.key);
       if (r.ok) {
         await this.store.remove(p.id);
