@@ -27,7 +27,12 @@
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options DENY
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Site photos record where they were taken (the daily report asks for the position), so the app itself may.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(self)"
+		# Only honoured over HTTPS (the tunnel or proxy in front terminates TLS): stay on HTTPS for a year.
+		Strict-Transport-Security "max-age=31536000"
+		Cross-Origin-Opener-Policy same-origin
+		Cross-Origin-Resource-Policy same-origin
 		-Server
 	}
 }

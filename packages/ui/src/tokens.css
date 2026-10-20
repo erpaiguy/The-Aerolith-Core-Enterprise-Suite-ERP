@@ -159,6 +159,10 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* The page itself takes focus from "Skip to content" only to move the keyboard there; it is not a control. */
+main[tabindex='-1']:focus {
+  outline: none;
+}
 
 dialog::backdrop {
   background: var(--overlay);

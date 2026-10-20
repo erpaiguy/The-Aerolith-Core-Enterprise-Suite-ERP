@@ -32,6 +32,8 @@ const envSchema = z.object({
   WEBHOOK_WORKER: z.enum(['on', 'off']).optional(),
   WEBHOOK_ALLOW_PRIVATE: z.enum(['true', 'false']).default('false'),
   MAX_TENANT_POOLS: z.coerce.number().int().positive().default(50),
+  TENANT_POOL_MAX: z.coerce.number().int().positive().max(50).default(5),
+  LOG_FORMAT: z.enum(['text', 'json']).default('text'),
   IMPORT_DIR: z.string().optional(),
   IMPORT_MAX_MB: z.coerce.number().int().positive().max(1024).default(100),
   DOCUMENT_DIR: z.string().min(1).optional(),
@@ -93,6 +95,8 @@ export interface AppConfig {
   /** Lets webhooks reach private addresses and plain http: tests and on-premises installs only. */
   webhookAllowPrivate: boolean;
   maxTenantPools: number;
+  /** Connections each tenant's pool may hold (step 9b.5). */
+  tenantPoolMax: number;
   /** Where uploaded import files wait while the user maps columns (docs/wave1-plan.md step 4). */
   importDir: string;
   importMaxBytes: number;
@@ -207,6 +211,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     webhookWorker: (e.WEBHOOK_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
     webhookAllowPrivate: e.WEBHOOK_ALLOW_PRIVATE === 'true',
     maxTenantPools: e.MAX_TENANT_POOLS,
+    tenantPoolMax: e.TENANT_POOL_MAX,
     importDir: e.IMPORT_DIR ?? join(tmpdir(), 'aerolith-imports'),
     importMaxBytes: e.IMPORT_MAX_MB * 1024 * 1024,
     documents: documentsConfig(e),

@@ -491,7 +491,15 @@ function NewMenu({ projectId }: { projectId: string | null }) {
     { label: 'Employee', to: '/hr', search: { new: 'employee' }, show: mayPeople },
   ];
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onKeyDown={(e) => {
+        // Esc folds the menu and puts the keyboard back on its button.
+        if (e.key !== 'Escape' || !open) return;
+        setOpen(false);
+        e.currentTarget.querySelector('button')?.focus();
+      }}
+    >
       <button
         type="button"
         aria-expanded={open}
@@ -1026,12 +1034,26 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
+      {/* The first thing the keyboard reaches (step 9a.8): past the menu and header to the page itself. */}
+      <a
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main')?.focus();
+        }}
+        className="sr-only rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
+      >
+        Skip to content
+      </a>
       <div className="print:hidden">
         <LicenceBanner />
       </div>
       <div className="flex flex-1 flex-col md:flex-row">
         {/* On a wide screen the menu stays put and scrolls on its own; the page scrolls beside it. */}
-        <aside className="print:hidden flex flex-col border-b border-line bg-surface md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 md:border-b-0 md:border-r">
+        <aside
+          aria-label="Menu"
+          className="print:hidden flex flex-col border-b border-line bg-surface md:sticky md:top-0 md:h-dvh md:w-64 md:shrink-0 md:border-b-0 md:border-r"
+        >
           <div className="flex items-center gap-2.5 px-4 py-4">
             <div className="flex size-8 items-center justify-center rounded-md bg-accent text-sm font-bold text-accent-fg">
               A
@@ -1088,7 +1110,10 @@ export function AppShell() {
           </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">
+          <header
+            aria-label="Page tools"
+            className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6"
+          >
             <div className="flex min-w-0 items-center gap-1.5 text-sm">
               <FavouriteToggle />
               <span className="font-medium">{session.user?.displayName}</span>{' '}
@@ -1108,7 +1133,7 @@ export function AppShell() {
               <SignOutButton />
             </div>
           </header>
-          <main className="flex-1 px-4 py-6 md:px-6">
+          <main id="main" tabIndex={-1} className="flex-1 px-4 py-6 md:px-6">
             <Outlet />
           </main>
           <StatusBar release={<ReleaseNotice place="status" />} />

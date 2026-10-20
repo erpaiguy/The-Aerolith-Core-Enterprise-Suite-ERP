@@ -317,6 +317,15 @@ function RunList({ entityId }: { entityId: string }) {
   return (
     <Card title="Payment runs">
       <Table minWidth="32rem">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Pay on</th>
+            <th>Status</th>
+            <th>Suppliers</th>
+            <th className="text-right">Total</th>
+          </tr>
+        </thead>
         <tbody aria-label="Payment runs">
           {list.data.map((r) => (
             <tr key={r.id}>

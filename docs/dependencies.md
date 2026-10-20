@@ -47,3 +47,4 @@ The CI licence gate (`pnpm licenses:check`) checks transitive dependencies autom
 | electron-builder | MIT | Windows installer packaging. Pulls in `truncate-utf8-bytes` (WTFPL) at build time only; accepted under the build-tooling rule in licensing-policy §2 |
 | smtp-server, mailparser, @types/nodemailer, @types/smtp-server, @types/mailparser | MIT-0 / MIT | Real SMTP conversations and parsing in email tests and e2e |
 | @playwright/test | Apache-2.0 | Browser end-to-end tests. CI installs its own Chromium; sandboxed machines can point `PW_CHROMIUM_PATH` at a pre-installed one |
+| axe-core, @axe-core/playwright | MPL-2.0 | Accessibility checks (step 9a.8): in the browser suite and against shared components in web unit tests. Unmodified and never shipped, so allowed for development under licensing-policy §2 |

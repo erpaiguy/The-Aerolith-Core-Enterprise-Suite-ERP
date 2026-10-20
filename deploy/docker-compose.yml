@@ -44,6 +44,8 @@ services:
       # Tender documents of tenants on this Postgres. Back this volume up with the database (docs/deployment-docker.md).
       DOCUMENT_DIR: /app/documents
       BACKUP_DIR: /app/backups
+      # One JSON object per log line, with the request reference people quote (docs/hardening.md).
+      LOG_FORMAT: ${LOG_FORMAT:-json}
     volumes:
       - mail-outbox:/app/.mail-outbox
       - documents:/app/documents

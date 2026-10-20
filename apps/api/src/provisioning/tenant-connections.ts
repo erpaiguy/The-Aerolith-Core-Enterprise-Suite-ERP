@@ -38,7 +38,7 @@ export class TenantConnections implements OnApplicationShutdown {
       throw new ServiceUnavailableException({ code: 'tenant_db_not_ready', status: row.status });
     }
     const pool = postgres(open(row.app_url_secret, this.config.controlPlaneEncKey), {
-      max: 5,
+      max: this.config.tenantPoolMax,
       idle_timeout: 60,
       connect_timeout: 10,
       prepare: false,

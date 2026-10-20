@@ -34,4 +34,20 @@ describe('GET /api/health', () => {
     expect(b.headers['x-request-id']).toMatch(ref);
     expect(a.headers['x-request-id']).not.toBe(b.headers['x-request-id']);
   });
+
+  it('answers with headers that keep the API out of frames, sniffing and shared caches (step 9b.5)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.headers).toMatchObject({
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'referrer-policy': 'no-referrer',
+      'cache-control': 'no-store',
+    });
+  });
+
+  it('says whether it is ready to work, not only alive', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health/ready' });
+    expect([200, 503]).toContain(res.statusCode);
+    expect(res.json()).toHaveProperty('status', res.statusCode === 200 ? 'ready' : 'not_ready');
+  });
 });

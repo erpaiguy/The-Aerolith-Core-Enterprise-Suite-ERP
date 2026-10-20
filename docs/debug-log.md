@@ -45,6 +45,8 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-19 | Tests | The nightly-backup test used the real clock, so it failed whenever it ran between midnight and 02:00 IST. [Certain] | Low | Fixed: the test runs at a fixed 03:30 IST |
 | D-20 | Tests | The FIFO stores test provisions a second company inside the test with the default 5-second limit; under the full run's load it timed out (623 of 624 passed). Every other test that provisions a company allows 90 seconds. [Certain] | Low | Fixed: 90 seconds, like the rest |
 | D-21 | Tests | After the ECharts upgrade the dashboards browser test failed: it expected the licence notice to say `echarts 6.0.0` and ECharts' 2025 copyright line, and the notice rightly said 6.1.0 and 2026. [Certain] | Low | Fixed: the test reads the version from the web app's `package.json` and accepts any copyright end year; 79 of 79 |
+| D-22 | Offline outbox | Site entries kept on a device with no signal carried no record of who made them, so on a shared site tablet they were sent under whoever signed in next. Found while building the sign-out warning (Wave 9). [Certain] | High | Fixed (`fec91ec`): each entry keeps its author and is sent only while that person is signed in; tested |
+| D-23 | Site photos | The web server's `Permissions-Policy` turned location off for the app itself (`geolocation=()`), so photos on the daily report never recorded where they were taken in the Docker deployment. Found while reviewing headers (Wave 9). [Certain] | Medium | Fixed: `geolocation=(self)` in deploy/Caddyfile |
 
 ## Actions taken
 
@@ -61,6 +63,8 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-19 | The backup test uses a fixed clock. | Passes at any hour |
 | D-20 | The FIFO test gets the 90-second limit the other provisioning tests have. | `test/inventory.int.spec.ts` 6 of 6 |
 | D-21 | The licence-notice check follows the shipped ECharts version. | `tests/e2e/tests/dashboards.spec.ts` passes |
+| D-22 | Outbox entries carry their author; others' wait for them. | `apps/web/src/offline/outbox.test.ts` |
+| D-23 | Location allowed for the app's own pages. | deploy/Caddyfile; docs/hardening.md |
 | D-9, D-11, D-13, D-16 | Left for the owner: see each row. | — |
 
 ## Recommendations

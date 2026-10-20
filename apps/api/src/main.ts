@@ -3,12 +3,15 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
 import { configureApp } from './bootstrap.js';
+import { JsonLogger } from './common/json-logger.js';
 import { loadConfig } from './config/config.js';
 
 async function bootstrap(): Promise<void> {
+  const json = process.env.LOG_FORMAT === 'json';
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ trustProxy: loadConfig().trustProxy }),
+    json ? { logger: new JsonLogger() } : {},
   );
   configureApp(app);
   app.enableShutdownHooks();

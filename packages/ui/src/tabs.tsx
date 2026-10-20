@@ -60,7 +60,8 @@ export function Tabs<T extends string>({
               role="tab"
               id={`${base}-tab-${t.id}`}
               aria-selected={on}
-              aria-controls={`${base}-panel`}
+              // Only a tab list that shows its panel points at it (a filter strip has none).
+              aria-controls={children !== undefined ? `${base}-panel` : undefined}
               tabIndex={on ? 0 : -1}
               onClick={() => onChange(t.id)}
               className={cx(

@@ -41,6 +41,12 @@ function requestIds(fastify: FastifyInstance) {
     const ref = [...randomBytes(10)].map((b) => alphabet[b % alphabet.length]).join('');
     refs.set(req, ref);
     void reply.header(REQUEST_ID_HEADER, ref);
+    // The API's own answers are never framed, sniffed or cached by a shared cache, even when reached without the
+    // web server in front (step 9b.5). Routes that serve files set their own type, disposition and policy.
+    void reply.header('X-Content-Type-Options', 'nosniff');
+    void reply.header('X-Frame-Options', 'DENY');
+    void reply.header('Referrer-Policy', 'no-referrer');
+    if (!reply.hasHeader('Cache-Control')) void reply.header('Cache-Control', 'no-store');
     done();
   });
   // Server faults are logged with the reference the person was shown, next to the stack Nest logs.
