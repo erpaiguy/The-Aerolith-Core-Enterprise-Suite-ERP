@@ -21,3 +21,4 @@ export * from './licence-key.js';
 export * from './sort-key.js';
 export * from './schedule.js';
 export * from './legal.js';
+export * from './release.js';

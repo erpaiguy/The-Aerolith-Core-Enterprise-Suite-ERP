@@ -39,6 +39,9 @@ const envSchema = z.object({
   DOCUMENT_JANITOR: z.enum(['on', 'off']).optional(),
   BACKUP_DIR: z.string().min(1).optional(),
   BACKUP_WORKER: z.enum(['on', 'off']).optional(),
+  UPDATE_MANIFEST_URL: z.string().url().optional(),
+  RELEASE_PUBLIC_KEY: z.string().min(40).optional(),
+  UPDATE_WORKER: z.enum(['on', 'off']).optional(),
   CLAMD_HOST: z.string().min(1).optional(),
   CLAMD_PORT: z.coerce.number().int().positive().max(65535).default(3310),
   RATE_LIMIT_SCALE: z.coerce.number().positive().default(1),
@@ -81,6 +84,8 @@ export interface AppConfig {
   provisioningWorker: boolean;
   /** Tenant backups (docs/wave8-plan.md step 8g.2): where the files go, and the nightly loop. */
   backup: { dir: string; worker: boolean };
+  /** Where the signed release manifest is, and the key it must be signed with (step 9b.4). */
+  updates: { manifestUrl: string | null; publicKey: string | null; worker: boolean };
   /** Runs scheduled report exports (docs/wave6-plan.md step 3). */
   reportsWorker: boolean;
   /** Sends webhook deliveries (docs/wave6-plan.md step 6). */
@@ -205,6 +210,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     importDir: e.IMPORT_DIR ?? join(tmpdir(), 'aerolith-imports'),
     importMaxBytes: e.IMPORT_MAX_MB * 1024 * 1024,
     documents: documentsConfig(e),
+    updates: {
+      manifestUrl: e.UPDATE_MANIFEST_URL ?? null,
+      publicKey: e.RELEASE_PUBLIC_KEY ?? null,
+      worker: (e.UPDATE_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
+    },
     backup: {
       dir: e.BACKUP_DIR ?? join(process.cwd(), '.backups'),
       worker: (e.BACKUP_WORKER ?? (e.NODE_ENV === 'test' ? 'off' : 'on')) === 'on',
