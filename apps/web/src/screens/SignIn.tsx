@@ -8,6 +8,7 @@ import { load, save } from '../lib/storage';
 import { clientKind } from '../platform';
 import { useSession } from '../session/session';
 import { LEGAL_DOCUMENTS } from '@aerolith/shared';
+import { ReleaseNotice } from '../updates/Updates';
 import { Alert, AuthLayout, Button, Field, Input } from '@aerolith/ui';
 
 type Step =
@@ -268,6 +269,7 @@ function SignInFooter() {
   return (
     <>
       <p>Aerolith Core · Construction ERP</p>
+      <ReleaseNotice place="sign-in" />
       <nav aria-label="Legal" className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
         {LEGAL_DOCUMENTS.map((d) => (
           <Link

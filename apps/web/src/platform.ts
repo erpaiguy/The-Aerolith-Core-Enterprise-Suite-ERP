@@ -12,6 +12,14 @@ export interface DesktopBridge {
   setCloseGuard?(on: boolean): Promise<void>;
   onCloseRequested?(f: () => void): () => void;
   answerClose?(close: boolean): Promise<void>;
+  /** Updates of the desktop app (step 9b.4); absent in older builds. */
+  updates?: {
+    get(): Promise<unknown>;
+    check(): Promise<unknown>;
+    setMode(mode: 'auto' | 'manual'): Promise<void>;
+    restart(): Promise<void>;
+    onChange(f: (state: unknown) => void): () => void;
+  };
 }
 
 declare global {
