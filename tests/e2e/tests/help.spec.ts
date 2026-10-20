@@ -62,7 +62,10 @@ test('help for the page, the help centre and a support request', async ({ page }
   await page.getByRole('tab', { name: 'Help topics' }).click();
   await page.getByLabel('Search help topics').fill('trial balance');
   await expect(
-    page.getByRole('region', { name: 'Topics found' }).getByText('Trial balance', { exact: true }),
+    page
+      .getByRole('region', { name: 'Topics found' })
+      .getByText('Trial balance', { exact: true })
+      .first(),
   ).toBeVisible();
 
   await page.getByRole('tab', { name: 'Terms and privacy' }).click();

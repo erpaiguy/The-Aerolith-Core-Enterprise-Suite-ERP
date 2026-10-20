@@ -20,6 +20,7 @@ import type {
 } from '../api/types';
 import { formatDateTime } from '../lib/format';
 import { load, save } from '../lib/storage';
+import { setUnsaved } from '../lib/unsaved';
 import { outbox } from '../offline';
 import { loadPrefs } from '../lib/prefs';
 import { clientKind, desktop } from '../platform';
@@ -269,6 +270,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setState((s) => (s.user ? { ...s, user: { ...s.user, displayName } } : s));
       },
       async signOut(reason) {
+        // Signing out is a choice to leave: no "unsaved changes" question on the way out.
+        setUnsaved(false);
         await api.request('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
         rememberUser(null);
         api.setAccessToken(null);

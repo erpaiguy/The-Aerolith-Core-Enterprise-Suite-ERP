@@ -34,7 +34,12 @@ export const menuOpen = (baseURL: string = BASE_URL) => ({
   origins: [
     {
       origin: new URL(baseURL).origin,
-      localStorage: [{ name: 'aerolith.nav.open', value: JSON.stringify(MENU_GROUPS) }],
+      // Pop-up notices off (Settings → This device): they repeat names the tests look up by text. The tests of the
+      // notices themselves (leaving.spec.ts) start with them on.
+      localStorage: [
+        { name: 'aerolith.nav.open', value: JSON.stringify(MENU_GROUPS) },
+        { name: 'aerolith.toasts', value: 'off' },
+      ],
     },
   ],
 });

@@ -1112,7 +1112,7 @@ export function AppShell() {
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <header
-            aria-label="Page tools"
+            aria-label="Page actions"
             className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6"
           >
             <div className="flex min-w-0 items-center gap-1.5 text-sm">

@@ -2,6 +2,7 @@
 //   RELEASE_SIGNING_KEY=... node tools/release/sign-manifest.mjs release/manifest.json > release/manifest.signed.json
 // The manifest's installers get their SHA-256 and size filled in from local files named in `file` (and `file` is
 // dropped), so what is signed is exactly what was built.
+import { Buffer } from 'node:buffer';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

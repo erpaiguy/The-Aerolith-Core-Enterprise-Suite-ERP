@@ -24,6 +24,7 @@ import { LANGUAGES, useLanguage, type Lang } from '../i18n/i18n';
 import { useLegalState, type LegalState } from '../legal/Legal';
 import { describeError, formatDate, formatDateTime, formatInr } from '../lib/format';
 import { formats, setFormats, type DateStyle, type NumberStyle } from '../lib/locale';
+import { noticesOn, setNoticesOn } from '../lib/notices';
 import { setTheme, theme, type Theme } from '../lib/theme';
 import { desktop } from '../platform';
 import { useSession } from '../session/session';
@@ -141,6 +142,7 @@ function Device() {
               ))}
             </Select>
           </Field>
+          <NoticesField />
           <Field label="Theme">
             <Select
               value={t}
@@ -431,5 +433,31 @@ function LegalReview() {
         <p className="text-sm text-fg-muted">Nobody yet.</p>
       )}
     </Card>
+  );
+}
+
+function NoticesField() {
+  const [on, setOn] = useState(noticesOn());
+  return (
+    <Field
+      label="Pop-up notices"
+      hint="Short notices after saving or sending. Failures are always shown on the page."
+    >
+      <Select
+        value={on ? 'on' : 'off'}
+        onChange={(e) => {
+          const next = e.target.value === 'on';
+          setOn(next);
+          setNoticesOn(next);
+          toast.info(
+            next ? 'Pop-up notices are on' : 'Pop-up notices will stop',
+            'From the next time the app opens.',
+          );
+        }}
+      >
+        <option value="on">Show them</option>
+        <option value="off">Do not show them</option>
+      </Select>
+    </Field>
   );
 }

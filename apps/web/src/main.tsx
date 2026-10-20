@@ -4,6 +4,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ApiError } from './api/client';
+import { noticesOn } from './lib/notices';
 import { applyTheme } from './lib/theme';
 import { watchForEdits } from './lib/unsaved';
 import { startOutbox } from './offline';
@@ -46,7 +47,7 @@ createRoot(root).render(
           <ConfirmProvider>
             <RouterProvider router={router} />
             <IdleGuard />
-            <Toaster />
+            {noticesOn() && <Toaster />}
             <ErrorDialogHost />
           </ConfirmProvider>
         </LanguageProvider>

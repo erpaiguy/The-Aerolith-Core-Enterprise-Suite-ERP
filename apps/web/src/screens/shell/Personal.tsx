@@ -7,6 +7,7 @@ import { Clock, Star, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../../api/client';
 import { usePref } from '../../lib/prefs';
+import { load, save } from '../../lib/storage';
 import { usePending } from '../../offline';
 import { desktop } from '../../platform';
 import { useSession } from '../../session/session';
@@ -52,8 +53,8 @@ export function FavouriteToggle() {
     <button
       type="button"
       aria-pressed={on}
-      aria-label={on ? 'Remove this page from favourites' : 'Add this page to favourites'}
-      title={on ? 'Remove from favourites' : 'Add to favourites'}
+      aria-label={on ? 'Take this page out of favourites' : 'Keep this page in favourites'}
+      title={on ? 'Take out of favourites' : 'Keep in favourites'}
       onClick={() =>
         setFavs(
           on
@@ -68,30 +69,63 @@ export function FavouriteToggle() {
   );
 }
 
-function PageList({ label, icon, pages }: { label: string; icon: ReactNode; pages: PageRef[] }) {
+function PageList({
+  label,
+  icon,
+  pages,
+  folds,
+}: {
+  label: string;
+  icon: ReactNode;
+  pages: PageRef[];
+  /** Folded until opened (and remembered on this device), so the menu stays short. */
+  folds?: string;
+}) {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const [open, setOpen] = useState(() => !folds || load(folds) === 'open');
   if (!pages.length) return null;
+  const heading = (
+    <>
+      {icon}
+      {label}
+    </>
+  );
   return (
     <nav aria-label={label} className="mb-2">
-      <div className="flex items-center gap-1.5 px-2.5 pt-1 pb-1 text-xs font-medium text-fg-muted">
-        {icon}
-        {label}
-      </div>
-      <ul className="space-y-0.5">
-        {pages.map((p) => (
-          <li key={p.path}>
-            <Link
-              to={p.path}
-              aria-current={p.path === path ? 'page' : undefined}
-              className={`block truncate rounded-md px-2.5 py-1.5 text-sm hover:bg-surface-2 ${
-                p.path === path ? 'bg-surface-2 font-medium text-fg' : 'text-fg-muted'
-              }`}
-            >
-              {p.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {folds ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => {
+            setOpen(!open);
+            save(folds, open ? null : 'open');
+          }}
+          className="flex w-full items-center gap-1.5 rounded-md px-2.5 pt-1 pb-1 text-left text-xs font-medium text-fg-muted hover:bg-surface-2"
+        >
+          {heading}
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 px-2.5 pt-1 pb-1 text-xs font-medium text-fg-muted">
+          {heading}
+        </div>
+      )}
+      {open && (
+        <ul className="space-y-0.5">
+          {pages.map((p) => (
+            <li key={p.path}>
+              <Link
+                to={p.path}
+                aria-current={p.path === path ? 'page' : undefined}
+                className={`block truncate rounded-md px-2.5 py-1.5 text-sm hover:bg-surface-2 ${
+                  p.path === path ? 'bg-surface-2 font-medium text-fg' : 'text-fg-muted'
+                }`}
+              >
+                {p.title}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </nav>
   );
 }
@@ -108,6 +142,7 @@ export function PersonalNav() {
         label="Recent"
         icon={<Clock className="size-3.5" aria-hidden />}
         pages={recent.filter((r) => !fav.has(r.path)).slice(0, 5)}
+        folds="aerolith.nav.recent"
       />
     </>
   );
@@ -147,10 +182,7 @@ export function StatusBar({ release }: { release?: ReactNode }) {
     staleTime: Infinity,
   });
   return (
-    <footer
-      aria-label="Status"
-      className="print:hidden sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-surface px-4 py-1.5 text-xs text-fg-muted md:px-6"
-    >
+    <footer className="print:hidden flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-surface px-4 py-1.5 text-xs text-fg-muted md:px-6">
       {company.data?.company && (
         <span className="truncate font-medium">{company.data.company}</span>
       )}
