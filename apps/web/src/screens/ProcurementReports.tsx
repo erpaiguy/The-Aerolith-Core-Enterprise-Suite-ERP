@@ -1,7 +1,7 @@
 // Procurement reports (docs/wave2b-plan.md step 9): requisition to order to receipt, what suppliers still owe, material
 // reconciliation with wastage against the norms, and supplier performance; each also as Excel. A project's four, and
 // the company's open orders and suppliers over the projects the user sees.
-import { Alert, Badge, Button, Card, PageHeader, Spinner, Table } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, EmptyState, PageHeader, Spinner, Table } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, FileSpreadsheet } from 'lucide-react';
@@ -157,7 +157,11 @@ function Report<T>({
   );
 }
 
-const None = () => <p className="text-sm text-fg-muted">Nothing yet.</p>;
+const None = () => (
+  <EmptyState title="Nothing yet.">
+    The report fills as requisitions are raised, orders placed and goods received.
+  </EmptyState>
+);
 
 function RequisitionTracker({ projectId }: { projectId: string }) {
   return (

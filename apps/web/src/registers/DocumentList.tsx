@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -13,6 +14,7 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -117,7 +119,9 @@ export function DocumentListScreen({ projectId }: { projectId: string }) {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing to show.</p>
+          <EmptyState title="Nothing to show.">
+            List the drawings and documents the project expects, and when; late ones stand out.
+          </EmptyState>
         ) : (
           <Table minWidth="56rem">
             <thead>
@@ -199,6 +203,7 @@ function AddExpected({ projectId, onClose }: { projectId: string; onClose: () =>
         body: { items },
       })
       .then(() => {
+        toast.success(`${items.length} document${items.length === 1 ? '' : 's'} expected`);
         void qc.invalidateQueries({ queryKey: ['expected-documents', projectId] });
         onClose();
       })
@@ -293,6 +298,7 @@ function Receive({
               body: { ...f, documentId: f.documentId || null },
             })
             .then(() => {
+              toast.success(`${row.code} marked received`);
               void qc.invalidateQueries({ queryKey: ['expected-documents', projectId] });
               onClose();
             })

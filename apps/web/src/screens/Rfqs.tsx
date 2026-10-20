@@ -1,6 +1,6 @@
 // Every enquiry (RFQ) the person may see, from tenders and from projects (docs/wave7-plan.md step 7a.2): one list for
 // estimation and purchase, instead of opening each tender or project first.
-import { Alert, Badge, Card, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import { Alert, Badge, Card, EmptyState, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -63,7 +63,9 @@ export function RfqsScreen() {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.length === 0 ? (
-          <p className="py-6 text-center text-sm text-fg-muted">No enquiries here.</p>
+          <EmptyState title="No enquiries here.">
+            Start an enquiry from a tender&rsquo;s BOQ or a project&rsquo;s requisitions.
+          </EmptyState>
         ) : (
           <Table minWidth="48rem">
             <thead>

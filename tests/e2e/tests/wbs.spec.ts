@@ -100,6 +100,7 @@ test('a project gets its WBS and cost codes, mapped from its BOQ', async ({ page
   await page.getByRole('button', { name: 'Add element' }).click();
   await expect(wbs.getByRole('row').filter({ hasText: 'Finishes' })).toBeVisible();
   await page.getByRole('button', { name: 'Remove 3' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove the element' }).click();
   await expect(wbs.getByRole('row').filter({ hasText: 'Finishes' })).toHaveCount(0);
 
   // 5. In the contract BOQ: the WBS beside each item; the Concrete section mapped to a cost code.

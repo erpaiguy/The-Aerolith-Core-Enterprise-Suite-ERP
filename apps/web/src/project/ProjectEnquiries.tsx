@@ -1,6 +1,17 @@
 // A project's enquiries to vendors (docs/wave2b-plan.md step 3): Wave 1's RFQs, for what its approved requisitions
 // need. Started here (with the requisitions ticked) or from a requisition's page; worked on the RFQ's page.
-import { Alert, Badge, Button, Card, Field, Input, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
@@ -66,9 +77,9 @@ export function ProjectEnquiries({ project: p }: { project: ProjectDetail }) {
       ) : rfqs.isError ? (
         <Alert tone="danger">{describeError(rfqs.error)}</Alert>
       ) : rfqs.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">
-          None yet. Ask vendors to quote for what approved requisitions need.
-        </p>
+        <EmptyState title="None yet.">
+          Ask vendors to quote for what approved requisitions need.
+        </EmptyState>
       ) : (
         <Table minWidth="36rem">
           <thead>
@@ -145,6 +156,7 @@ function NewEnquiry({
             method: 'POST',
             body: { title: title.trim(), dueOn: dueOn || null, requisitionIds: [...picked] },
           });
+          toast.success(`Enquiry ${r.number} started`);
           onMade(r.id);
         });
       }}

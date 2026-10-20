@@ -1,6 +1,16 @@
 // Purchase and work orders across the projects I am on (docs/wave2b-plan.md step 4). New ones are written from a
 // project's page, or made from the vendors chosen in its enquiry.
-import { Alert, Badge, Card, Field, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Card,
+  EmptyState,
+  Field,
+  PageHeader,
+  Select,
+  Spinner,
+  Table,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -62,7 +72,12 @@ export function OrderTable({
   rows: OrderRow[];
   showProject?: boolean;
 }) {
-  if (!rows.length) return <p className="text-sm text-fg-muted">None.</p>;
+  if (!rows.length)
+    return (
+      <EmptyState title="No orders.">
+        Write one from a project's page, or from the vendors chosen in its enquiry.
+      </EmptyState>
+    );
   return (
     <Table minWidth="44rem">
       <thead>

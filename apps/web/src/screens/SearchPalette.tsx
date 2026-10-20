@@ -1,6 +1,6 @@
 // Search everything (docs/wave7-plan.md step 7a.6): Ctrl+K (or the header's Search) opens one box over the screens in
 // the menu and the records the person may see: projects, tenders, parties, employees and document numbers.
-import { Spinner } from '@aerolith/ui';
+import { Dialog, Spinner } from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
@@ -152,17 +152,8 @@ function Palette({ screens, onClose }: { screens: ScreenEntry[]; onClose: () => 
     void navigate({ to: t.to, ...(t.search ? { search: t.search } : {}) } as never);
   };
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[12vh]"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-label="Search"
-        aria-modal="true"
-        className="w-full max-w-xl overflow-hidden rounded-lg border border-line bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog open onClose={onClose} title="Search">
+      <div className="-mx-5 -my-4">
         <div className="flex items-center gap-2 border-b border-line px-3">
           <Search className="size-4 text-fg-muted" aria-hidden />
           <input
@@ -215,6 +206,6 @@ function Palette({ screens, onClose }: { screens: ScreenEntry[]; onClose: () => 
           ) : null}
         </ul>
       </div>
-    </div>
+    </Dialog>
   );
 }

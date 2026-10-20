@@ -13,6 +13,8 @@ import {
   Select,
   Spinner,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -118,20 +120,22 @@ export function OrderOfRevisionScreen({ revisionId }: { revisionId: string }) {
 
 function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => void }) {
   const { run, busy, error } = useRun(() => onChanged());
+  const confirm = useConfirm();
+  const kind = ORDER_KIND[o.kind];
   const editing = o.mayEdit ? o.open : null;
   const [draft, setDraft] = useState(() => (editing ? toDraft(editing) : null));
   const dirty = useMemo(
     () => !!editing && JSON.stringify(draft) !== JSON.stringify(toDraft(editing)),
     [draft, editing],
   );
-  const call = (k: string, path: string, body: object = {}) =>
+  const call = (k: string, path: string, body: object = {}, done?: string) =>
     void run(k, async () =>
       onChanged(await api.request<Order>(`/api/tenant/${path}`, { method: 'POST', body })),
-    );
-  const ask = (question: string, k: string, path: string) => {
+    ).then((ok) => ok && done && toast.success(done));
+  const ask = (question: string, k: string, path: string, done: string) => {
     const reason = window.prompt(question);
     if (!reason || reason.trim().length < 3) return;
-    call(k, path, { reason: reason.trim() });
+    call(k, path, { reason: reason.trim() }, done);
   };
   const shown = editing ?? o.open ?? o.inForce;
   // Beyond the material budget, the order goes up only with a reason (step 8a.4).
@@ -145,7 +149,6 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
   });
   const [overReason, setOverReason] = useState('');
   const over = budget.data?.over ?? [];
-  const kind = ORDER_KIND[o.kind];
   return (
     <div className="space-y-5">
       <Link
@@ -190,10 +193,15 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
                       : undefined
                 }
                 onClick={() =>
-                  call('submit', `order-revisions/${editing.id}/submit`, {
-                    rowVersion: editing.rowVersion,
-                    overBudgetReason: over.length ? overReason.trim() : null,
-                  })
+                  call(
+                    'submit',
+                    `order-revisions/${editing.id}/submit`,
+                    {
+                      rowVersion: editing.rowVersion,
+                      overBudgetReason: over.length ? overReason.trim() : null,
+                    },
+                    `${kind} ${o.number} put up for approval`,
+                  )
                 }
               >
                 <Send className="size-4" aria-hidden /> Submit for approval
@@ -208,7 +216,14 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
               <Button
                 variant="secondary"
                 busy={busy === 'amend'}
-                onClick={() => ask('Why is the order amended?', 'amend', `orders/${o.id}/amend`)}
+                onClick={() =>
+                  ask(
+                    'Why is the order amended?',
+                    'amend',
+                    `orders/${o.id}/amend`,
+                    `Amendment of ${o.number} started`,
+                  )
+                }
               >
                 Amend
               </Button>
@@ -222,6 +237,7 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
                     'Close the order: why is nothing more expected?',
                     'close',
                     `orders/${o.id}/close`,
+                    `${kind} ${o.number} closed`,
                   )
                 }
               >
@@ -233,7 +249,12 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
                 variant="ghost"
                 busy={busy === 'cancel'}
                 onClick={() =>
-                  ask('Why is the order cancelled?', 'cancel', `orders/${o.id}/cancel`)
+                  ask(
+                    'Why is the order cancelled?',
+                    'cancel',
+                    `orders/${o.id}/cancel`,
+                    `${kind} ${o.number} cancelled`,
+                  )
                 }
               >
                 Cancel order
@@ -337,9 +358,25 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
                   },
                 }),
               ),
-            )
+            ).then((ok) => ok && toast.success(`${kind} ${o.number} saved`))
           }
-          onDiscard={() => call('discard', `order-revisions/${editing.id}/discard`)}
+          onDiscard={async () => {
+            if (
+              !(await confirm({
+                title: `Discard amendment ${editing.revision} of ${o.number}?`,
+                body: `Its changes are thrown away; revision ${o.inForce?.revision ?? 0} stays in force.`,
+                confirmLabel: 'Discard the amendment',
+                tone: 'danger',
+              }))
+            )
+              return;
+            call(
+              'discard',
+              `order-revisions/${editing.id}/discard`,
+              {},
+              `Amendment ${editing.revision} discarded`,
+            );
+          }}
         />
       ) : (
         shown && <RevisionView r={shown} />
@@ -376,7 +413,7 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
                     method: 'POST',
                     body: {},
                   }),
-                )
+                ).then((ok) => ok && toast.success(`${o.number} withdrawn to change it`))
               }
             >
               Withdraw to change it
@@ -501,7 +538,7 @@ function Acknowledge({
 }: {
   o: Order;
   busy: boolean;
-  call: (k: string, path: string, body: object) => void;
+  call: (k: string, path: string, body: object, done?: string) => void;
 }) {
   const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
   const [on, setOn] = useState(today);
@@ -512,7 +549,12 @@ function Acknowledge({
       aria-label="Acknowledgement"
       onSubmit={(e) => {
         e.preventDefault();
-        call('ack', `orders/${o.id}/acknowledge`, { on, reference: reference.trim() });
+        call(
+          'ack',
+          `orders/${o.id}/acknowledge`,
+          { on, reference: reference.trim() },
+          `Acknowledgement of ${o.number} recorded`,
+        );
       }}
     >
       <p className="w-full text-sm text-fg-muted">

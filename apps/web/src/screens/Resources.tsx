@@ -4,12 +4,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -55,6 +58,7 @@ function NewResource({ onDone }: { onDone: (r: ResourceDetail | null) => void })
         method: 'POST',
         body: rate.trim() ? { ...rest, rate: rate.trim(), effectiveFrom, source } : rest,
       });
+      toast.success(`Resource ${r.code} added`);
       onDone(r);
     } catch (err) {
       setError(describeError(err));
@@ -125,12 +129,14 @@ function ResourcePanel({
   const [rate, setRate] = useState({ effectiveFrom: today(), rate: '', source: '' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const run = async (fn: () => Promise<ResourceDetail>) => {
+  const confirm = useConfirm();
+  const run = async (fn: () => Promise<ResourceDetail>, done: string) => {
     setBusy(true);
     setError(null);
     try {
       qc.setQueryData(['resource', id], await fn());
       await qc.invalidateQueries({ queryKey: ['resources'] });
+      toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -142,8 +148,9 @@ function ResourcePanel({
   const addRate = async (e: FormEvent) => {
     e.preventDefault();
     if (
-      await run(() =>
-        api.request(`/api/tenant/resources/${id}/rates`, { method: 'POST', body: rate }),
+      await run(
+        () => api.request(`/api/tenant/resources/${id}/rates`, { method: 'POST', body: rate }),
+        'Rate added',
       )
     )
       setRate((r) => ({ ...r, rate: '', source: '' }));
@@ -172,7 +179,9 @@ function ResourcePanel({
       </p>
       <h3 className="mb-1 text-sm font-medium">Rates</h3>
       {r.rates.length === 0 ? (
-        <p className="mb-3 text-sm text-fg-muted">No rate yet.</p>
+        <EmptyState title="No rate yet.">
+          {canEdit ? 'Add its first rate below, with the day it applies from.' : undefined}
+        </EmptyState>
       ) : (
         <table className="mb-3 w-full text-sm" aria-label="Rate history">
           <thead className="text-xs text-fg-muted">
@@ -194,14 +203,25 @@ function ResourcePanel({
                     <button
                       type="button"
                       className="text-xs text-fg-subtle hover:text-danger"
-                      onClick={() =>
-                        void run(() =>
-                          api.request(`/api/tenant/resources/${id}/rates/delete`, {
-                            method: 'POST',
-                            body: { effectiveFrom: x.effectiveFrom },
-                          }),
+                      onClick={async () => {
+                        if (
+                          !(await confirm({
+                            title: `Remove the rate from ${formatDate(x.effectiveFrom)}?`,
+                            body: `${formatRate(x.rate)} is deleted from ${r.code}'s rate history; the rate before it applies from that day.`,
+                            confirmLabel: 'Remove the rate',
+                            tone: 'danger',
+                          }))
                         )
-                      }
+                          return;
+                        await run(
+                          () =>
+                            api.request(`/api/tenant/resources/${id}/rates/delete`, {
+                              method: 'POST',
+                              body: { effectiveFrom: x.effectiveFrom },
+                            }),
+                          'Rate removed',
+                        );
+                      }}
                     >
                       Remove
                     </button>
@@ -250,14 +270,26 @@ function ResourcePanel({
       {canEdit && (
         <Button
           variant="ghost"
-          onClick={() =>
-            void run(() =>
-              api.request(`/api/tenant/resources/${id}`, {
-                method: 'POST',
-                body: { rowVersion: r.rowVersion, active: !r.active },
-              }),
+          onClick={async () => {
+            if (
+              r.active &&
+              !(await confirm({
+                title: `Archive ${r.code} ${r.name}?`,
+                body: 'It is no longer offered for new analyses, requisitions and orders. Where it is already used, it stays.',
+                confirmLabel: 'Archive the resource',
+                tone: 'danger',
+              }))
             )
-          }
+              return;
+            await run(
+              () =>
+                api.request(`/api/tenant/resources/${id}`, {
+                  method: 'POST',
+                  body: { rowVersion: r.rowVersion, active: !r.active },
+                }),
+              `${r.code} ${r.active ? 'archived' : 'restored'}`,
+            );
+          }}
         >
           {r.active ? 'Archive' : 'Restore'}
         </Button>
@@ -307,7 +339,12 @@ function PriceBook({ onDone }: { onDone: () => void }) {
       const qs = new URLSearchParams({ dryRun: String(dryRun), effectiveFrom, defaultKind });
       const r = await api.upload<PriceBookResult>(`/api/tenant/resources/price-book?${qs}`, file);
       setResult(r);
-      if (!dryRun) await qc.invalidateQueries({ queryKey: ['resources'] });
+      if (!dryRun) {
+        await qc.invalidateQueries({ queryKey: ['resources'] });
+        toast.success(
+          `Price book imported: ${r.created} new, ${r.updated} changed, ${r.rates} rates`,
+        );
+      }
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -542,11 +579,9 @@ export function ResourcesScreen() {
           ) : list.isError ? (
             <Alert tone="danger">{describeError(list.error)}</Alert>
           ) : list.data.items.length === 0 ? (
-            <p className="text-sm text-fg-muted">
-              {q || kind
-                ? 'No resources match.'
-                : 'No resources yet. Add one or import a price book.'}
-            </p>
+            <EmptyState title={q || kind ? 'No resources match.' : 'No resources yet.'}>
+              {q || kind ? 'Try another search or kind.' : 'Add one or import a price book.'}
+            </EmptyState>
           ) : (
             <>
               <Table minWidth="36rem">

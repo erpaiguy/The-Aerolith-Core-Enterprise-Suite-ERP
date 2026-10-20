@@ -1,6 +1,18 @@
 // The documents stock moves on (docs/wave2b-plan.md step 6): an issue slip (and what came back from site), a transfer
 // (received at the other end, or cancelled while in transit), and a stock take (counted, approved, posted).
-import { Alert, Badge, Button, Card, Field, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Printer } from 'lucide-react';
@@ -112,7 +124,7 @@ export function IssueScreen({ issueId }: { issueId: string }) {
                       .map((l) => ({ position: l.position, qty: qty[l.position]!.trim() })),
                   },
                 }),
-              );
+              ).then((ok) => ok && toast.success(`Return to the store on ${d.number} recorded`));
             }}
           >
             {out.map((l) => (
@@ -161,6 +173,7 @@ export function TransferScreen({ transferId }: { transferId: string }) {
     void qc.invalidateQueries({ queryKey: key });
     void qc.invalidateQueries({ queryKey: ['store'] });
   });
+  const confirm = useConfirm();
   // What arrived, line by line, when it is not all that was sent (step 8e.3).
   const [arrived, setArrived] = useState<Record<number, { qty: string; reason: string }>>({});
   if (t.isPending) return <Spinner />;
@@ -218,7 +231,7 @@ export function TransferScreen({ transferId }: { transferId: string }) {
                           })),
                       },
                     }),
-                  )
+                  ).then((ok) => ok && toast.success(`Transfer ${d.number} received`))
                 }
               >
                 Received
@@ -228,14 +241,26 @@ export function TransferScreen({ transferId }: { transferId: string }) {
               <Button
                 variant="ghost"
                 busy={busy === 'cancel'}
-                onClick={() =>
-                  void run('cancel', () =>
-                    api.request(`/api/tenant/transfers/${d.id}/cancel`, {
-                      method: 'POST',
-                      body: {},
-                    }),
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: `Cancel transfer ${d.number}?`,
+                      body: `The goods go back into ${d.fromStore.name}'s stock and the transfer cannot be received.`,
+                      confirmLabel: 'Cancel the transfer',
+                      tone: 'danger',
+                    }))
                   )
-                }
+                    return;
+                  if (
+                    await run('cancel', () =>
+                      api.request(`/api/tenant/transfers/${d.id}/cancel`, {
+                        method: 'POST',
+                        body: {},
+                      }),
+                    )
+                  )
+                    toast.success(`Transfer ${d.number} cancelled`);
+                }}
               >
                 Cancel (back to {d.fromStore.name})
               </Button>
@@ -369,10 +394,11 @@ function CountView({ c, refresh }: { c: StockCount; refresh: () => void }) {
       counted[l.resourceId]!.reason !== l.reason,
   );
   const { run, busy, error } = useRun(refresh);
-  const post = (k: string, path: string, body: object) =>
+  const confirm = useConfirm();
+  const post = (k: string, path: string, body: object, done: string) =>
     void run(k, () =>
       api.request(`/api/tenant/stock-counts/${c.id}${path}`, { method: 'POST', body }),
-    );
+    ).then((ok) => ok && toast.success(done));
   const totalValue = c.lines.reduce((t, l) => t + Number(l.value), 0);
   return (
     <div className="space-y-5">
@@ -406,14 +432,32 @@ function CountView({ c, refresh }: { c: StockCount; refresh: () => void }) {
                 busy={busy === 'submit'}
                 disabled={dirty}
                 title={dirty ? 'Save your counts first' : undefined}
-                onClick={() => post('submit', '/submit', { rowVersion: c.rowVersion })}
+                onClick={() =>
+                  post(
+                    'submit',
+                    '/submit',
+                    { rowVersion: c.rowVersion },
+                    `Stock take ${c.number} put up for approval`,
+                  )
+                }
               >
                 Submit for approval
               </Button>
               <Button
                 variant="ghost"
                 busy={busy === 'discard'}
-                onClick={() => post('discard', '/discard', {})}
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: `Discard stock take ${c.number}?`,
+                      body: 'The counts typed in are thrown away; the stock stays as the book has it.',
+                      confirmLabel: 'Discard the stock take',
+                      tone: 'danger',
+                    }))
+                  )
+                    return;
+                  post('discard', '/discard', {}, `Stock take ${c.number} discarded`);
+                }}
               >
                 Discard
               </Button>
@@ -433,16 +477,21 @@ function CountView({ c, refresh }: { c: StockCount; refresh: () => void }) {
             <Button
               busy={busy === 'save'}
               onClick={() =>
-                post('save', '', {
-                  rowVersion: c.rowVersion,
-                  countedOn: c.countedOn,
-                  notes: c.notes,
-                  lines: c.lines.map((l) => ({
-                    resourceId: l.resourceId,
-                    counted: counted[l.resourceId]!.counted.trim() || '0',
-                    reason: counted[l.resourceId]!.reason,
-                  })),
-                })
+                post(
+                  'save',
+                  '',
+                  {
+                    rowVersion: c.rowVersion,
+                    countedOn: c.countedOn,
+                    notes: c.notes,
+                    lines: c.lines.map((l) => ({
+                      resourceId: l.resourceId,
+                      counted: counted[l.resourceId]!.counted.trim() || '0',
+                      reason: counted[l.resourceId]!.reason,
+                    })),
+                  },
+                  'Counts saved',
+                )
               }
             >
               Save counts
@@ -556,7 +605,7 @@ function CountView({ c, refresh }: { c: StockCount; refresh: () => void }) {
                     method: 'POST',
                     body: {},
                   }),
-                )
+                ).then((ok) => ok && toast.success(`Stock take ${c.number} withdrawn to change it`))
               }
             >
               Withdraw to change it

@@ -1,7 +1,19 @@
 // A project's BOQs on its page (docs/wave2a-plan.md step 2): the contract BOQ and budget made from the won tender
 // (contract at the quoted rates, optionally priced to the negotiated contract value; budget at the estimate rates),
 // the list of the project's BOQs, and the budget against the contract with the planned margin.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
@@ -46,11 +58,11 @@ export function ProjectBoqs({ project: p }: { project: ProjectDetail }) {
       {p.tenderId && !fromTender && <CopyFromTender project={p} canCopy={canCopy} />}
       <Card title={`BOQs (${boqs.data.length})`} actions={canAdd && <NewBoq projectId={p.id} />}>
         {boqs.data.length === 0 ? (
-          <p className="text-sm text-fg-muted">
+          <EmptyState title="None yet.">
             {p.tenderId
-              ? 'None yet. Make the contract BOQ and budget from the won tender, above.'
-              : 'None yet. Add a contract BOQ and a budget, then import or type their lines.'}
-          </p>
+              ? 'Make the contract BOQ and budget from the won tender, above.'
+              : 'Add a contract BOQ and a budget, then import or type their lines.'}
+          </EmptyState>
         ) : (
           <Table minWidth="30rem">
             <thead>
@@ -147,6 +159,7 @@ function CopyFromTender({ project: p, canCopy }: { project: ProjectDetail; canCo
         method: 'POST',
         body: { matchContractValue: canScale && match },
       });
+      toast.success('Contract BOQ and budget being made from the tender');
       await preview.refetch();
     } catch (err) {
       setError(describeError(err));
@@ -260,6 +273,7 @@ function NewBoq({ projectId }: { projectId: string }) {
         method: 'POST',
         body: { name, kind },
       });
+      toast.success(`BOQ ${name.trim()} added`);
       setOpen(false);
       setName('');
       void qc.invalidateQueries({ queryKey: ['project-boqs', projectId] });

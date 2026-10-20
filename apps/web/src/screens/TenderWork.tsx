@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   Select,
@@ -13,6 +14,8 @@ import {
   Table,
   Textarea,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
@@ -56,11 +59,13 @@ export const useTenderWork = (tenderId: string) =>
 function useAction(onDone: () => void) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const run = async (key: string, fn: () => Promise<unknown>) => {
+  /** `done` is the toast once it has worked; none for a status picked in a list. */
+  const run = async (key: string, fn: () => Promise<unknown>, done?: string) => {
     setBusy(key);
     setError(null);
     try {
       await fn();
+      if (done) toast.success(done);
       onDone();
       return true;
     } catch (err) {
@@ -105,6 +110,7 @@ function QueryRow({
 }) {
   const [answering, setAnswering] = useState(false);
   const [answer, setAnswer] = useState('');
+  const confirm = useConfirm();
   const update = (body: object) => post(`queries/${q.id}`, { rowVersion: q.rowVersion, ...body });
   return (
     <li className="space-y-1 py-3">
@@ -129,14 +135,35 @@ function QueryRow({
                 <Button
                   variant="secondary"
                   busy={busy === `send-${q.id}`}
-                  onClick={() => void run(`send-${q.id}`, () => update({ status: 'sent' }))}
+                  onClick={() =>
+                    void run(
+                      `send-${q.id}`,
+                      () => update({ status: 'sent' }),
+                      `Q${q.seq} marked sent`,
+                    )
+                  }
                 >
                   Mark sent
                 </Button>
                 <Button
                   variant="ghost"
                   aria-label={`Delete query ${q.seq}`}
-                  onClick={() => void run(`del-${q.id}`, () => post(`queries/${q.id}/delete`))}
+                  onClick={async () => {
+                    if (
+                      !(await confirm({
+                        title: `Delete query Q${q.seq}?`,
+                        body: 'The draft question is deleted; it has not been sent to the client.',
+                        confirmLabel: 'Delete the query',
+                        tone: 'danger',
+                      }))
+                    )
+                      return;
+                    await run(
+                      `del-${q.id}`,
+                      () => post(`queries/${q.id}/delete`),
+                      `Q${q.seq} deleted`,
+                    );
+                  }}
                 >
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
@@ -149,7 +176,13 @@ function QueryRow({
                 </Button>
                 <Button
                   variant="ghost"
-                  onClick={() => void run(`wd-${q.id}`, () => update({ status: 'withdrawn' }))}
+                  onClick={() =>
+                    void run(
+                      `wd-${q.id}`,
+                      () => update({ status: 'withdrawn' }),
+                      `Q${q.seq} withdrawn`,
+                    )
+                  }
                 >
                   Withdraw
                 </Button>
@@ -176,9 +209,11 @@ function QueryRow({
           className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(`ans-${q.id}`, () => update({ status: 'answered', answer })).then(
-              (ok) => ok && setAnswering(false),
-            );
+            void run(
+              `ans-${q.id}`,
+              () => update({ status: 'answered', answer }),
+              `Answer to Q${q.seq} recorded`,
+            ).then((ok) => ok && setAnswering(false));
           }}
         >
           <Field label={`Client's answer to Q${q.seq}`}>
@@ -229,25 +264,30 @@ export function QueriesAndAddenda({
 
   const addQuery = (e: FormEvent) => {
     e.preventDefault();
-    void run('query', () => post(`tenders/${tender.id}/queries`, { reference, question })).then(
-      (ok) => {
-        if (ok) {
-          setReference('');
-          setQuestion('');
-        }
-      },
-    );
+    void run(
+      'query',
+      () => post(`tenders/${tender.id}/queries`, { reference, question }),
+      'Query added',
+    ).then((ok) => {
+      if (ok) {
+        setReference('');
+        setQuestion('');
+      }
+    });
   };
   const addAddendum = (e: FormEvent) => {
     e.preventDefault();
-    void run('addendum', () =>
-      post(`tenders/${tender.id}/addenda`, {
-        ref: a.ref,
-        issuedOn: a.issuedOn,
-        summary: a.summary,
-        affectsBoq: a.affectsBoq,
-        newSubmissionDueAt: fromLocalInput(a.newDue),
-      }),
+    void run(
+      'addendum',
+      () =>
+        post(`tenders/${tender.id}/addenda`, {
+          ref: a.ref,
+          issuedOn: a.issuedOn,
+          summary: a.summary,
+          affectsBoq: a.affectsBoq,
+          newSubmissionDueAt: fromLocalInput(a.newDue),
+        }),
+      `Addendum ${a.ref.trim()} recorded`,
     ).then((ok) => {
       if (ok) {
         setAdding(false);
@@ -265,7 +305,9 @@ export function QueriesAndAddenda({
           </p>
         )}
         {work.queries.length === 0 ? (
-          <p className="text-sm text-fg-muted">No queries raised.</p>
+          <EmptyState title="No queries raised.">
+            Questions for the client before the pre-bid meeting go here.
+          </EmptyState>
         ) : (
           <ol className="divide-y divide-line text-sm" aria-label="Queries">
             {work.queries.map((q) => (
@@ -370,7 +412,9 @@ export function QueriesAndAddenda({
           </form>
         )}
         {work.addenda.length === 0 ? (
-          <p className="text-sm text-fg-muted">No addenda issued.</p>
+          <EmptyState title="No addenda issued.">
+            Record each corrigendum the client issues; a new due date moves the deadline.
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-line text-sm" aria-label="Addenda">
             {work.addenda.map((x) => (
@@ -487,15 +531,18 @@ export function Securities({
     setV((s) => ({ ...s, [k]: e.target.value }));
   const add = (e: FormEvent) => {
     e.preventDefault();
-    void run('add', () =>
-      post(`tenders/${tender.id}/securities`, {
-        ...v,
-        amount: money(v.amount) ?? '0',
-        bank: v.bank,
-        instrumentNo: v.instrumentNo,
-        issuedOn: v.issuedOn || null,
-        validUntil: v.validUntil || null,
-      }),
+    void run(
+      'add',
+      () =>
+        post(`tenders/${tender.id}/securities`, {
+          ...v,
+          amount: money(v.amount) ?? '0',
+          bank: v.bank,
+          instrumentNo: v.instrumentNo,
+          issuedOn: v.issuedOn || null,
+          validUntil: v.validUntil || null,
+        }),
+      'Security recorded',
     ).then((ok) => {
       if (ok) {
         setAdding(false);
@@ -588,7 +635,9 @@ export function Securities({
         </form>
       )}
       {work.securities.length === 0 ? (
-        <p className="text-sm text-fg-muted">Nothing recorded yet.</p>
+        <EmptyState title="Nothing recorded yet.">
+          Record the EMD and any other security given with the bid.
+        </EmptyState>
       ) : (
         <Table minWidth="44rem">
           <thead>
@@ -691,6 +740,7 @@ export function Checklist({
 }) {
   const { user } = useSession();
   const { run, busy, error } = useAction(onChanged);
+  const confirm = useConfirm();
   const canAttach = usePermission('documents.edit');
   const people = useQuery({
     queryKey: ['people'],
@@ -704,12 +754,15 @@ export function Checklist({
   const done = required.filter((c) => c.status !== 'pending').length;
   const add = (e: FormEvent) => {
     e.preventDefault();
-    void run('add', () =>
-      post(`tenders/${tender.id}/checklist`, {
-        ...v,
-        assigneeId: v.assigneeId || null,
-        dueOn: v.dueOn || null,
-      }),
+    void run(
+      'add',
+      () =>
+        post(`tenders/${tender.id}/checklist`, {
+          ...v,
+          assigneeId: v.assigneeId || null,
+          dueOn: v.dueOn || null,
+        }),
+      'Checklist item added',
     ).then((ok) => ok && setV(blank));
   };
 
@@ -722,7 +775,11 @@ export function Checklist({
             variant="secondary"
             busy={busy === 'standard'}
             onClick={() =>
-              void run('standard', () => post(`tenders/${tender.id}/checklist/standard`))
+              void run(
+                'standard',
+                () => post(`tenders/${tender.id}/checklist/standard`),
+                'Standard documents added',
+              )
             }
           >
             Add the standard documents
@@ -731,11 +788,11 @@ export function Checklist({
       }
     >
       {items.length === 0 ? (
-        <p className="text-sm text-fg-muted">
-          Nothing on the list yet. The standard documents cover what most Indian works tenders ask
-          for (EMD, PAN, GST, experience and turnover certificates, affidavits, the priced BOQ);
-          edit them to match this tender.
-        </p>
+        <EmptyState title="Nothing on the list yet.">
+          The standard documents cover what most Indian works tenders ask for (EMD, PAN, GST,
+          experience and turnover certificates, affidavits, the priced BOQ); edit them to match this
+          tender.
+        </EmptyState>
       ) : (
         <>
           <p className="mb-3 text-sm" data-testid="checklist-progress">
@@ -811,9 +868,22 @@ export function Checklist({
                           <Button
                             variant="ghost"
                             aria-label={`Remove ${c.title}`}
-                            onClick={() =>
-                              void run(`del-${c.id}`, () => post(`checklist/${c.id}/delete`))
-                            }
+                            onClick={async () => {
+                              if (
+                                !(await confirm({
+                                  title: `Remove ${c.title} from the checklist?`,
+                                  body: 'The item and its status are deleted from this tender’s checklist.',
+                                  confirmLabel: 'Remove the item',
+                                  tone: 'danger',
+                                }))
+                              )
+                                return;
+                              await run(
+                                `del-${c.id}`,
+                                () => post(`checklist/${c.id}/delete`),
+                                `${c.title} removed`,
+                              );
+                            }}
                           >
                             <Trash2 className="size-4" aria-hidden />
                           </Button>
@@ -960,14 +1030,17 @@ export function SubmissionForm({
       aria-label={revised ? 'Record a revised offer' : 'Record the submission'}
       onSubmit={(e) => {
         e.preventDefault();
-        void run('submit', () =>
-          post(`tenders/${tender.id}/submissions`, {
-            submittedAt: fromLocalInput(v.at),
-            mode: v.mode,
-            reference: v.reference,
-            bidValue: money(v.bidValue),
-            notes: v.notes,
-          }),
+        void run(
+          'submit',
+          () =>
+            post(`tenders/${tender.id}/submissions`, {
+              submittedAt: fromLocalInput(v.at),
+              mode: v.mode,
+              reference: v.reference,
+              bidValue: money(v.bidValue),
+              notes: v.notes,
+            }),
+          revised ? 'Revised offer recorded' : 'Submission recorded',
         );
       }}
     >
@@ -1077,16 +1150,20 @@ export function ResultForm({
       aria-label={lost ? 'Record the loss' : 'Record the win'}
       onSubmit={(e) => {
         e.preventDefault();
-        void run('result', () =>
-          post(`tenders/${tender.id}/result`, {
-            outcome,
-            on: v.on || null,
-            category: v.category || null,
-            reason: v.reason,
-            // Lost to L1 with no figure typed: the winning bid is L1's value at the opening.
-            value: money(v.value) ?? (lost && !v.winner.trim() ? (l1?.quotedValue ?? null) : null),
-            winnerName: lost ? v.winner.trim() || l1?.name || null : null,
-          }),
+        void run(
+          'result',
+          () =>
+            post(`tenders/${tender.id}/result`, {
+              outcome,
+              on: v.on || null,
+              category: v.category || null,
+              reason: v.reason,
+              // Lost to L1 with no figure typed: the winning bid is L1's value at the opening.
+              value:
+                money(v.value) ?? (lost && !v.winner.trim() ? (l1?.quotedValue ?? null) : null),
+              winnerName: lost ? v.winner.trim() || l1?.name || null : null,
+            }),
+          lost ? 'Loss recorded' : 'Win recorded',
         );
       }}
     >
@@ -1223,17 +1300,20 @@ function OpeningEditor({
       aria-label="Bids at the opening"
       onSubmit={(e) => {
         e.preventDefault();
-        void run('save', () =>
-          post(`tenders/${tender.id}/bids`, {
-            bids: filled.map((r) => ({
-              us: r.us,
-              name: r.us ? null : r.name.trim(),
-              // A percentage alone: the server works out the value from the estimate.
-              quotedValue: r.pct.trim() && !r.value.trim() ? null : money(r.value),
-              quotedPct: r.pct.trim() || null,
-              qualified: r.qualified,
-            })),
-          }),
+        void run(
+          'save',
+          () =>
+            post(`tenders/${tender.id}/bids`, {
+              bids: filled.map((r) => ({
+                us: r.us,
+                name: r.us ? null : r.name.trim(),
+                // A percentage alone: the server works out the value from the estimate.
+                quotedValue: r.pct.trim() && !r.value.trim() ? null : money(r.value),
+                quotedPct: r.pct.trim() || null,
+                qualified: r.qualified,
+              })),
+            }),
+          'Bids at the opening saved',
         );
       }}
       className="space-y-3"
@@ -1391,7 +1471,7 @@ export function SubmissionAndResult({
           </div>
         )}
         {work.submissions.length === 0 ? (
-          <p className="text-sm text-fg-muted">Not submitted yet.</p>
+          <EmptyState title="Not submitted yet." />
         ) : (
           <Table minWidth="36rem">
             <thead>

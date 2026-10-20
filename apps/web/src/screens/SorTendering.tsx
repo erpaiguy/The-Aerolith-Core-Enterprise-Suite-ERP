@@ -1,7 +1,7 @@
 // Schedule-of-rates tendering on a tender (docs/wave8-plan.md step 8f.2): whether it is quoted item by item or as a
 // percentage on the estimate; the estimate's items citing the schedule and taking its rates; and the item-wise
 // comparative of every bidder's rates.
-import { Alert, Badge, Button, Card, Field, Input, Select, Table } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, Field, Input, Select, Table, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
@@ -57,10 +57,11 @@ export function SorTendering({ tenderId, canEdit }: { tenderId: string; canEdit:
     queryFn: () => api.request<SorItem[]>(`/api/tenant/sor-items?q=${encodeURIComponent(cite!.q)}`),
     enabled: !!cite && cite.q.trim().length >= 2,
   });
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => Promise<unknown>, done?: string) => {
     setError(null);
     try {
       await fn();
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: ['tender-rate-mode', tenderId] });
       void qc.invalidateQueries({ queryKey: ['tender-item-comparative', tenderId] });
     } catch (err) {
@@ -128,7 +129,12 @@ export function SorTendering({ tenderId, canEdit }: { tenderId: string; canEdit:
               {canEdit && c.lines.some((l) => l.sorCode) && (
                 <Button
                   variant="secondary"
-                  onClick={() => void run(() => post(`/api/tenant/boqs/${c.boqId}/sor/apply`, {}))}
+                  onClick={() =>
+                    void run(
+                      () => post(`/api/tenant/boqs/${c.boqId}/sor/apply`, {}),
+                      'SOR rates taken into the estimate',
+                    )
+                  }
                 >
                   Take the SOR rates
                 </Button>

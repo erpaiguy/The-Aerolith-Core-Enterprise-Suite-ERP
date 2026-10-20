@@ -5,12 +5,14 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -95,6 +97,9 @@ function CentralStore() {
                 stateCode: form.stateCode || null,
               },
             }),
+          ).then(
+            (ok) =>
+              ok && toast.success(t('Central store {name} added', { name: form.name.trim() })),
           );
         }}
       >
@@ -152,7 +157,7 @@ export function StoreTable({
   showProject?: boolean;
 }) {
   const t = useT();
-  if (!rows.length) return <p className="text-sm text-fg-muted">{t('None yet.')}</p>;
+  if (!rows.length) return <EmptyState title={t('None yet.')} />;
   return (
     <Table minWidth="36rem">
       <thead>
@@ -243,7 +248,7 @@ function Valuation() {
             onClick={() =>
               void run('set', () =>
                 api.request('/api/tenant/stock/valuation', { method: 'POST', body: { method } }),
-              )
+              ).then((ok) => ok && toast.success(t('Stock valuation saved')))
             }
           >
             {t('Save')}

@@ -1,6 +1,6 @@
 // Stock ageing (docs/wave8-plan.md step 8e.4): what lies in the stores by how long it has lain, and what has not been
 // issued for three months: money tied up on the shelf.
-import { Alert, Badge, Card, PageHeader, Spinner, Table } from '@aerolith/ui';
+import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, Table } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -78,7 +78,9 @@ export function StockAgeingScreen() {
             }
           >
             {d!.rows.length === 0 ? (
-              <p className="text-sm text-fg-muted">The stores are empty.</p>
+              <EmptyState title="The stores are empty.">
+                Stock shows here once goods are received into a store.
+              </EmptyState>
             ) : (
               <Table minWidth="56rem">
                 <thead>

@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -12,6 +13,7 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -63,6 +65,7 @@ export function LettersScreen({ projectId }: { projectId: string }) {
   const close = async (id: string) => {
     try {
       await api.request(`/api/tenant/letters/${id}/close`, { method: 'POST', body: {} });
+      toast.success('Letter closed');
       void qc.invalidateQueries({ queryKey: ['letters', projectId] });
     } catch (err) {
       setError(describeError(err));
@@ -102,7 +105,9 @@ export function LettersScreen({ projectId }: { projectId: string }) {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.letters.length === 0 ? (
-          <p className="text-sm text-fg-muted">No letter entered yet.</p>
+          <EmptyState title="No letter entered yet.">
+            Enter each letter received or sent; answers are linked to the letter they reply to.
+          </EmptyState>
         ) : (
           <Table minWidth="56rem">
             <thead>
@@ -210,6 +215,7 @@ function NewLetter({
               },
             })
             .then(() => {
+              toast.success(replyTo ? 'Answer saved' : 'Letter saved');
               void qc.invalidateQueries({ queryKey: ['letters', projectId] });
               onClose();
             })

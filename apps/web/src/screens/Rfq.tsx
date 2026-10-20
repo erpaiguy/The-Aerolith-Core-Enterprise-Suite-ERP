@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -16,6 +17,8 @@ import {
   Table,
   Textarea,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -107,6 +110,7 @@ export function TenderRfqs({ tenderId }: { tenderId: string }) {
         dueOn: form.dueOn || null,
         terms: form.terms,
       });
+      toast.success(`RFQ ${r.number} started`);
       await navigate({ to: '/rfqs/$rfqId', params: { rfqId: r.id } });
     } catch (err) {
       setError(describeError(err));
@@ -188,10 +192,10 @@ export function TenderRfqs({ tenderId }: { tenderId: string }) {
       ) : rfqs.isError ? (
         <Alert tone="danger">{describeError(rfqs.error)}</Alert>
       ) : rfqs.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">
-          No RFQs yet. Ask subcontractors to price BOQ items, or suppliers to quote materials, and
-          compare their quotes here.
-        </p>
+        <EmptyState title="No RFQs yet.">
+          Ask subcontractors to price BOQ items, or suppliers to quote materials, and compare their
+          quotes here.
+        </EmptyState>
       ) : (
         <Table>
           <thead>
@@ -247,12 +251,19 @@ function useRfqAction(
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const run = async <T,>(key: string, fn: () => Promise<T>, rfqOf?: (r: T) => RfqDetail) => {
+  /** `done` is the toast once it has worked; none for small edits made cell by cell. */
+  const run = async <T,>(
+    key: string,
+    fn: () => Promise<T>,
+    rfqOf?: ((r: T) => RfqDetail) | null,
+    done?: string | ((r: T) => string),
+  ) => {
     setBusy(key);
     setError(null);
     try {
       const out = await fn();
       qc.setQueryData(['rfq', rfqId], rfqOf ? rfqOf(out) : (out as unknown as RfqDetail));
+      if (done) toast.success(typeof done === 'string' ? done : done(out));
       if (tenderId) {
         void qc.invalidateQueries({ queryKey: ['rfqs', tenderId] });
         void qc.invalidateQueries({ queryKey: ['tender', tenderId] });
@@ -281,16 +292,31 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
   });
   const action = useRfqAction(rfqId, rfq.data?.tenderId, rfq.data?.projectId);
   const [editing, setEditing] = useState(false);
+  const confirm = useConfirm();
 
   if (rfq.isPending) return <Spinner />;
   if (rfq.isError) return <Alert tone="danger">{describeError(rfq.error)}</Alert>;
   const r = rfq.data;
   const open = r.status === 'draft' || r.status === 'sent';
   const canEdit = canEditRfq && open;
-  const setStatus = (status: RfqStatus) =>
-    void action.run(`status-${status}`, () =>
-      post<RfqDetail>(`rfqs/${r.id}`, { rowVersion: r.rowVersion, status }),
+  const setStatus = async (status: RfqStatus) => {
+    if (
+      status === 'cancelled' &&
+      !(await confirm({
+        title: `Cancel RFQ ${r.number}?`,
+        body: 'Nothing on it can change while it is cancelled, and its quotes cannot be compared or ordered from. It can be reopened.',
+        confirmLabel: 'Cancel the RFQ',
+        tone: 'danger',
+      }))
+    )
+      return;
+    await action.run(
+      `status-${status}`,
+      () => post<RfqDetail>(`rfqs/${r.id}`, { rowVersion: r.rowVersion, status }),
+      null,
+      `RFQ ${r.number} ${status === 'closed' ? 'closed' : status === 'cancelled' ? 'cancelled' : 'reopened'}`,
     );
+  };
   const anySent = r.vendors.some((v) => v.status !== 'invited');
 
   return (
@@ -337,7 +363,7 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
                 <Button
                   variant="secondary"
                   busy={action.busy === 'status-closed'}
-                  onClick={() => setStatus('closed')}
+                  onClick={() => void setStatus('closed')}
                 >
                   Close RFQ
                 </Button>
@@ -346,7 +372,7 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
                 <Button
                   variant="ghost"
                   busy={action.busy === 'status-cancelled'}
-                  onClick={() => setStatus('cancelled')}
+                  onClick={() => void setStatus('cancelled')}
                 >
                   Cancel RFQ
                 </Button>
@@ -355,7 +381,7 @@ export function RfqScreen({ rfqId }: { rfqId: string }) {
                 <Button
                   variant="secondary"
                   busy={action.busy === `status-${anySent ? 'sent' : 'draft'}`}
-                  onClick={() => setStatus(anySent ? 'sent' : 'draft')}
+                  onClick={() => void setStatus(anySent ? 'sent' : 'draft')}
                 >
                   Reopen
                 </Button>
@@ -393,13 +419,17 @@ function EditRfq({ rfq, action, onDone }: { rfq: RfqDetail; action: Action; onDo
   const save = (e: FormEvent) => {
     e.preventDefault();
     void action
-      .run('edit', () =>
-        post<RfqDetail>(`rfqs/${rfq.id}`, {
-          rowVersion: rfq.rowVersion,
-          title: v.title,
-          dueOn: v.dueOn || null,
-          terms: v.terms,
-        }),
+      .run(
+        'edit',
+        () =>
+          post<RfqDetail>(`rfqs/${rfq.id}`, {
+            rowVersion: rfq.rowVersion,
+            title: v.title,
+            dueOn: v.dueOn || null,
+            terms: v.terms,
+          }),
+        null,
+        `RFQ ${rfq.number} saved`,
       )
       .then((ok) => ok && onDone());
   };
@@ -448,6 +478,7 @@ function EditRfq({ rfq, action, onDone }: { rfq: RfqDetail; action: Action; onDo
 function Lines({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; action: Action }) {
   const [adding, setAdding] = useState<'boq' | 'resources' | 'requisitions' | 'free' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const confirm = useConfirm();
   const add = async (key: string, body: object) => {
     setNotice(null);
     const out = await action.run(
@@ -578,11 +609,25 @@ function Lines({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; act
                           : 'Remove'
                       }
                       disabled={action.busy !== null}
-                      onClick={() =>
-                        void action.run(`del-${l.id}`, () =>
-                          post<RfqDetail>(`rfq-lines/${l.id}/delete`),
+                      onClick={async () => {
+                        if (
+                          !(await confirm({
+                            title: `Remove line ${l.seq} from ${rfq.number}?`,
+                            body: quoted.has(l.id)
+                              ? 'The line and the rates vendors quoted for it are deleted.'
+                              : 'The line is deleted from the enquiry.',
+                            confirmLabel: 'Remove the line',
+                            tone: 'danger',
+                          }))
                         )
-                      }
+                          return;
+                        await action.run(
+                          `del-${l.id}`,
+                          () => post<RfqDetail>(`rfq-lines/${l.id}/delete`),
+                          null,
+                          `Line ${l.seq} removed`,
+                        );
+                      }}
                     >
                       <Trash2 className="size-4" aria-hidden />
                     </button>
@@ -995,6 +1040,7 @@ function FreeLine({
 function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; action: Action }) {
   const qc = useQueryClient();
   const canSend = usePermission('rfq.edit');
+  const confirm = useConfirm();
   const [quoting, setQuoting] = useState<string | null>(null);
   const [imported, setImported] = useState<{ vendor: string; out: RfqQuoteImport } | null>(null);
   const fileFor = useRef<string | null>(null);
@@ -1017,22 +1063,27 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
     if (!partyId || !owner || files.length === 0) return;
     setAttached(null);
     let where = owner.name;
-    const out = await action.run(`attach-${partyId}`, async () => {
-      const vault = await api.request<DocVault>(`/api/tenant/${owner.path}/documents`);
-      const folder = vault.folders.find((f) => f.name === QUOTES_FOLDER);
-      if (folder) where = `“${QUOTES_FOLDER}”`;
-      for (const file of files) {
-        const { document } = await api.upload<{ document: { id: string } }>(
-          `/api/tenant/${owner.path}/documents/upload${folder ? `?folderId=${folder.id}` : ''}`,
-          file,
-        );
-        await post(`documents/${document.id}/links`, {
-          kind: 'rfq_vendor',
-          targetId: `${rfq.id}/${partyId}`,
-        });
-      }
-      return api.request<RfqDetail>(`/api/tenant/rfqs/${rfq.id}`);
-    });
+    const out = await action.run(
+      `attach-${partyId}`,
+      async () => {
+        const vault = await api.request<DocVault>(`/api/tenant/${owner.path}/documents`);
+        const folder = vault.folders.find((f) => f.name === QUOTES_FOLDER);
+        if (folder) where = `“${QUOTES_FOLDER}”`;
+        for (const file of files) {
+          const { document } = await api.upload<{ document: { id: string } }>(
+            `/api/tenant/${owner.path}/documents/upload${folder ? `?folderId=${folder.id}` : ''}`,
+            file,
+          );
+          await post(`documents/${document.id}/links`, {
+            kind: 'rfq_vendor',
+            targetId: `${rfq.id}/${partyId}`,
+          });
+        }
+        return api.request<RfqDetail>(`/api/tenant/rfqs/${rfq.id}`);
+      },
+      null,
+      `${files.length === 1 ? files[0]!.name : `${files.length} files`} attached`,
+    );
     if (out) {
       setAttached(
         `Attached ${files.length === 1 ? files[0]!.name : `${files.length} files`}, kept in ${where}.`,
@@ -1075,6 +1126,7 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
           file,
         ),
       (x) => x.rfq,
+      (x) => `${x.lines} rate${x.lines === 1 ? '' : 's'} imported`,
     );
     if (out)
       setImported({ vendor: rfq.vendors.find((v) => v.partyId === partyId)?.name ?? '', out });
@@ -1228,10 +1280,14 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
                       variant="secondary"
                       busy={action.busy === `sent-${v.partyId}`}
                       onClick={() =>
-                        void action.run(`sent-${v.partyId}`, () =>
-                          post<RfqDetail>(`rfqs/${rfq.id}/vendors/${v.partyId}`, {
-                            status: 'sent',
-                          }),
+                        void action.run(
+                          `sent-${v.partyId}`,
+                          () =>
+                            post<RfqDetail>(`rfqs/${rfq.id}/vendors/${v.partyId}`, {
+                              status: 'sent',
+                            }),
+                          null,
+                          `Enquiry to ${v.name} marked sent`,
                         )
                       }
                     >
@@ -1277,10 +1333,14 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
                     <Button
                       variant="ghost"
                       onClick={() =>
-                        void action.run(`declined-${v.partyId}`, () =>
-                          post<RfqDetail>(`rfqs/${rfq.id}/vendors/${v.partyId}`, {
-                            status: 'declined',
-                          }),
+                        void action.run(
+                          `declined-${v.partyId}`,
+                          () =>
+                            post<RfqDetail>(`rfqs/${rfq.id}/vendors/${v.partyId}`, {
+                              status: 'declined',
+                            }),
+                          null,
+                          `${v.name} marked as declined`,
                         )
                       }
                     >
@@ -1292,11 +1352,23 @@ function Vendors({ rfq, canEdit, action }: { rfq: RfqDetail; canEdit: boolean; a
                       type="button"
                       className="rounded p-2 text-fg-muted hover:bg-surface-2 hover:text-danger"
                       aria-label={`Remove ${v.name}`}
-                      onClick={() =>
-                        void action.run(`remove-${v.partyId}`, () =>
-                          post<RfqDetail>(`rfqs/${rfq.id}/vendors/${v.partyId}/delete`),
+                      onClick={async () => {
+                        if (
+                          !(await confirm({
+                            title: `Remove ${v.name} from ${rfq.number}?`,
+                            body: `${v.name} is no longer asked to quote on this enquiry.`,
+                            confirmLabel: 'Remove the vendor',
+                            tone: 'danger',
+                          }))
                         )
-                      }
+                          return;
+                        await action.run(
+                          `remove-${v.partyId}`,
+                          () => post<RfqDetail>(`rfqs/${rfq.id}/vendors/${v.partyId}/delete`),
+                          null,
+                          `${v.name} removed`,
+                        );
+                      }}
                     >
                       <Trash2 className="size-4" aria-hidden />
                     </button>
@@ -1335,11 +1407,15 @@ function AddVendor({ rfq, action }: { rfq: RfqDetail; action: Action }) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     void action
-      .run('vendor', () =>
-        post<RfqDetail>(
-          `rfqs/${rfq.id}/vendors`,
-          known ? { partyId: known.id } : { name: name.trim(), email: email.trim() || null },
-        ),
+      .run(
+        'vendor',
+        () =>
+          post<RfqDetail>(
+            `rfqs/${rfq.id}/vendors`,
+            known ? { partyId: known.id } : { name: name.trim(), email: email.trim() || null },
+          ),
+        null,
+        `${known?.name ?? name.trim()} added`,
       )
       .then((ok) => {
         if (ok) {
@@ -1423,21 +1499,25 @@ function QuoteForm({
   const save = (e: FormEvent) => {
     e.preventDefault();
     void action
-      .run(`quote-${vendor.partyId}`, () =>
-        post<RfqDetail>(`rfqs/${rfq.id}/vendors/${vendor.partyId}/quote`, {
-          receivedOn: head.receivedOn,
-          validUntil: head.validUntil || null,
-          reference: head.reference || null,
-          gstMode: head.gstMode,
-          gstPct: head.gstMode === 'exempt' ? '0' : head.gstPct,
-          terms: head.terms,
-          newRound: !q || revised,
-          lines: filled.map((l) => ({
-            lineId: l.id,
-            rate: rates[l.id]!.rate.trim(),
-            remark: rates[l.id]!.remark.trim(),
-          })),
-        }),
+      .run(
+        `quote-${vendor.partyId}`,
+        () =>
+          post<RfqDetail>(`rfqs/${rfq.id}/vendors/${vendor.partyId}/quote`, {
+            receivedOn: head.receivedOn,
+            validUntil: head.validUntil || null,
+            reference: head.reference || null,
+            gstMode: head.gstMode,
+            gstPct: head.gstMode === 'exempt' ? '0' : head.gstPct,
+            terms: head.terms,
+            newRound: !q || revised,
+            lines: filled.map((l) => ({
+              lineId: l.id,
+              rate: rates[l.id]!.rate.trim(),
+              remark: rates[l.id]!.remark.trim(),
+            })),
+          }),
+        null,
+        `Quote of ${vendor.name} saved`,
       )
       .then((ok) => ok && onDone());
   };
@@ -1689,6 +1769,7 @@ function Comparative({
       'apply',
       () => post<RfqApplyResult>(`rfqs/${rfq.id}/apply`),
       (x) => x.rfq,
+      'Chosen rates put into the estimate',
     );
     if (out) setApplied(out);
   };
@@ -1729,6 +1810,7 @@ function Comparative({
                     lowest: true,
                   }),
                 (x) => x.rfq,
+                (x) => `The lowest chosen on ${x.chosen} line${x.chosen === 1 ? '' : 's'}`,
               )
             }
           >
@@ -1755,6 +1837,8 @@ function Comparative({
                   () =>
                     post<{ chosen: number; rfq: RfqDetail }>(`rfqs/${rfq.id}/select`, { award }),
                   (x) => x.rfq,
+                  (x) =>
+                    `${quoted.find((v) => v.partyId === award)?.name ?? 'Vendor'} chosen on ${x.chosen} line${x.chosen === 1 ? '' : 's'}`,
                 )
               }
             >
@@ -1927,6 +2011,7 @@ function MakeOrders({ rfq, lines }: { rfq: RfqDetail; lines: number }) {
         orders: { id: string; number: string; vendor: { name: string } }[];
       }>(`/api/tenant/rfqs/${rfq.id}/orders`, { method: 'POST', body: {} });
       setMade(r.orders);
+      toast.success(`${r.orders.length} draft order${r.orders.length === 1 ? '' : 's'} made`);
       void qc.invalidateQueries({ queryKey: ['orders'] });
     } catch (err) {
       setError(describeError(err));
@@ -2044,6 +2129,7 @@ function RfqCategory({
               method: 'POST',
               body: { category: e.target.value || null },
             });
+            toast.success('Trade category saved');
             void qc.invalidateQueries({ queryKey: ['rfq', rfqId] });
           } catch (err) {
             setError(describeError(err));

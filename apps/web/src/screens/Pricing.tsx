@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   Select,
@@ -12,6 +13,8 @@ import {
   Stat,
   Table,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -188,6 +191,7 @@ function ScenarioEditor({
   const [copyName, setCopyName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
   const body = useMemo(() => toBody(d), [d]);
   const key = useDeferredValue(JSON.stringify(body));
   const preview = useQuery({
@@ -213,11 +217,13 @@ function ScenarioEditor({
     path: string,
     payload: object,
     focus: (s: PricingSummary) => string | null,
+    done: string,
   ) => {
     setBusy(true);
     setError(null);
     try {
       const s = await api.request<PricingSummary>(path, { method: 'POST', body: payload });
+      toast.success(done);
       onSaved(s, focus(s));
     } catch (err) {
       setError(describeError(err));
@@ -231,11 +237,13 @@ function ScenarioEditor({
           `/api/tenant/scenarios/${scenario.id}`,
           { ...body, name: d.name, rowVersion: scenario.rowVersion },
           () => scenario.id,
+          `Scenario ${d.name.trim()} saved`,
         )
       : run(
           `/api/tenant/boqs/${boqId}/scenarios`,
           { ...body, name: d.name },
           (s) => s.scenarios.at(-1)?.id ?? null,
+          `Scenario ${d.name.trim()} created`,
         );
 
   return (
@@ -392,7 +400,12 @@ function ScenarioEditor({
                 variant="secondary"
                 busy={busy}
                 onClick={() =>
-                  void run(`/api/tenant/scenarios/${scenario.id}/select`, {}, () => scenario.id)
+                  void run(
+                    `/api/tenant/scenarios/${scenario.id}/select`,
+                    {},
+                    () => scenario.id,
+                    `${scenario.name} is now the bid`,
+                  )
                 }
               >
                 Use as the bid
@@ -416,6 +429,7 @@ function ScenarioEditor({
                         `/api/tenant/scenarios/${scenario.id}/copy`,
                         { name: copyName.trim() },
                         (s) => s.scenarios.find((x) => x.name === copyName.trim())?.id ?? null,
+                        `Copied as ${copyName.trim()}`,
                       )
                     }
                   >
@@ -425,9 +439,23 @@ function ScenarioEditor({
                 <Button
                   variant="ghost"
                   aria-label="Delete scenario"
-                  onClick={() =>
-                    void run(`/api/tenant/scenarios/${scenario.id}/delete`, {}, () => null)
-                  }
+                  onClick={async () => {
+                    if (
+                      !(await confirm({
+                        title: `Delete scenario ${scenario.name}?`,
+                        body: 'Its markups and the prices worked out from them are deleted. The BOQ and its rates stay as they are.',
+                        confirmLabel: 'Delete the scenario',
+                        tone: 'danger',
+                      }))
+                    )
+                      return;
+                    await run(
+                      `/api/tenant/scenarios/${scenario.id}/delete`,
+                      {},
+                      () => null,
+                      `Scenario ${scenario.name} deleted`,
+                    );
+                  }}
                 >
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
@@ -543,9 +571,9 @@ export function BoqPricingScreen({ boqId }: { boqId: string }) {
         }
       >
         {s.scenarios.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            No scenario yet. The first one you create becomes the bid.
-          </p>
+          <EmptyState title="No scenario yet.">
+            The first one you create becomes the bid.
+          </EmptyState>
         ) : (
           <Table minWidth="40rem">
             <thead>

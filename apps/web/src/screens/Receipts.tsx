@@ -1,6 +1,16 @@
 // Goods receipts across the projects I am on (docs/wave2b-plan.md step 5). New ones are recorded from a purchase
 // order's page.
-import { Alert, Badge, Card, Field, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Card,
+  EmptyState,
+  Field,
+  PageHeader,
+  Select,
+  Spinner,
+  Table,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -35,7 +45,9 @@ export function ReceiptsScreen() {
         ) : rows.isError ? (
           <Alert tone="danger">{describeError(rows.error)}</Alert>
         ) : rows.data.length === 0 ? (
-          <p className="text-sm text-fg-muted">None.</p>
+          <EmptyState title="No goods receipts.">
+            A store records a receipt against an order when the goods arrive.
+          </EmptyState>
         ) : (
           <Table minWidth="44rem">
             <thead>

@@ -139,6 +139,7 @@ test('project registers, a site imprest, a recurring voucher and the company das
   const entries = page.getByRole('rowgroup', { name: 'Imprest entries' });
   await expect(entries).toContainText('to settle');
   await page.getByRole('button', { name: 'Settle the spends' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Settle the spends' }).click();
   await expect(entries).not.toContainText('to settle');
   await expect(entries).toContainText('JV');
   await expect(page.getByLabel('Imprest totals')).toContainText('3,800');

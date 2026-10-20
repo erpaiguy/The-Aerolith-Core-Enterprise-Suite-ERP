@@ -1,6 +1,16 @@
 // Purchase requisitions across the projects I am on (docs/wave2b-plan.md step 1). New ones are raised from a
 // project's page.
-import { Alert, Badge, Card, Field, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Card,
+  EmptyState,
+  Field,
+  PageHeader,
+  Select,
+  Spinner,
+  Table,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -53,7 +63,12 @@ export function RequisitionTable({
   rows: RequisitionRow[];
   showProject?: boolean;
 }) {
-  if (!rows.length) return <p className="text-sm text-fg-muted">None.</p>;
+  if (!rows.length)
+    return (
+      <EmptyState title="No requisitions.">
+        A site raises a requisition from its project's page for the materials it needs.
+      </EmptyState>
+    );
   return (
     <Table minWidth="44rem">
       <thead>

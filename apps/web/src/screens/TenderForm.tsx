@@ -1,5 +1,5 @@
 // Create/edit form for a tender. Used by "New tender" and by "Edit" on the tender page.
-import { Alert, Button, Field, Input, Select, Textarea } from '@aerolith/ui';
+import { Alert, Button, Field, Input, Select, Textarea, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api/client';
@@ -113,6 +113,7 @@ function NewClient({ onCreated }: { onCreated: (p: Party) => void }) {
         body: { name, gstin, isClient: true },
       });
       await qc.invalidateQueries({ queryKey: ['parties'] });
+      toast.success(`Client ${p.name} added`);
       onCreated(p);
       setOpen(false);
       setName('');

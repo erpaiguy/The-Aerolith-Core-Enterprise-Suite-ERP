@@ -1,6 +1,18 @@
 // A project's client RA bills on its page (docs/wave3-plan.md step 2): the bills, a new one made up to a date from the
 // measurement book, and the contract terms every bill copies (GST, retention, the advance, escalation).
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Plus, Settings2, Trash2 } from 'lucide-react';
@@ -47,6 +59,7 @@ export function ProjectClientBills({ project: p }: { project: ProjectDetail }) {
         body: { upto, siteId: sites.length > 1 ? siteId : null },
       });
       void qc.invalidateQueries({ queryKey: key });
+      toast.success('Client bill drafted');
       await navigate({ to: '/client-bills/$billId', params: { billId: b.id } });
     } catch (err) {
       setError(describeError(err));
@@ -133,7 +146,9 @@ export function ProjectClientBills({ project: p }: { project: ProjectDetail }) {
         )}
         {error && <Alert tone="danger">{error}</Alert>}
         {d.bills.length === 0 ? (
-          <p className="text-sm text-fg-muted">No bills yet.</p>
+          <EmptyState title="No bills yet.">
+            A running bill is made from the work measured in the contract BOQ up to a date.
+          </EmptyState>
         ) : (
           <Table minWidth="40rem">
             <thead>
@@ -230,6 +245,7 @@ function TermsForm({
           },
         }),
       );
+      toast.success('Billing terms saved');
     } catch (err) {
       setError(describeError(err));
     } finally {

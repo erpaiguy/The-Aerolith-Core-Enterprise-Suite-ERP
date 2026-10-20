@@ -5,12 +5,15 @@ import {
   Alert,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -30,6 +33,7 @@ export function WbsScreen({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const confirm = useConfirm();
   const project = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.request<ProjectDetail>(`/api/tenant/projects/${projectId}`),
@@ -42,10 +46,11 @@ export function WbsScreen({ projectId }: { projectId: string }) {
     queryKey: ['project-boqs', projectId],
     queryFn: () => api.request<ProjectBoq[]>(`/api/tenant/projects/${projectId}/boqs`),
   });
-  const run = async (f: () => Promise<unknown>) => {
+  const run = async (f: () => Promise<unknown>, done?: string) => {
     setError(null);
     try {
       await f();
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: ['project-breakdown', projectId] });
       void qc.invalidateQueries({ queryKey: ['project-wbs', projectId] });
       return true;
@@ -88,13 +93,20 @@ export function WbsScreen({ projectId }: { projectId: string }) {
         <FromBoq
           boqs={live}
           onMake={(boqId, depth) =>
-            run(() => post(`projects/${projectId}/wbs/from-boq`, { boqId, depth }))
+            run(
+              () => post(`projects/${projectId}/wbs/from-boq`, { boqId, depth }),
+              'WBS made from the BOQ',
+            )
           }
         />
       )}
       <Card title={`WBS (${d.wbs.length})`}>
         {d.wbs.length === 0 ? (
-          <p className="text-sm text-fg-muted">No WBS yet.</p>
+          <EmptyState title="No WBS yet.">
+            {canEdit
+              ? 'Make it from the contract BOQ above, or add elements by hand below.'
+              : undefined}
+          </EmptyState>
         ) : (
           <Table minWidth="44rem">
             <thead>
@@ -118,7 +130,10 @@ export function WbsScreen({ projectId }: { projectId: string }) {
                         onCancel={() => setEditing(null)}
                         onSubmit={async (v) => {
                           if (
-                            await run(() => post(`wbs/${n.id}`, { ...v, rowVersion: n.rowVersion }))
+                            await run(
+                              () => post(`wbs/${n.id}`, { ...v, rowVersion: n.rowVersion }),
+                              `${n.code} saved`,
+                            )
                           )
                             setEditing(null);
                         }}
@@ -171,7 +186,18 @@ export function WbsScreen({ projectId }: { projectId: string }) {
                         <Button
                           variant="ghost"
                           aria-label={`Remove ${n.code}`}
-                          onClick={() => void run(() => post(`wbs/${n.id}/delete`))}
+                          onClick={async () => {
+                            if (
+                              !(await confirm({
+                                title: `Remove WBS element ${n.code} ${n.name}?`,
+                                body: 'It is deleted from the project’s WBS. Only an element with nothing under it can go.',
+                                confirmLabel: 'Remove the element',
+                                tone: 'danger',
+                              }))
+                            )
+                              return;
+                            await run(() => post(`wbs/${n.id}/delete`), `${n.code} removed`);
+                          }}
                         >
                           <Trash2 className="size-4" aria-hidden />
                         </Button>
@@ -190,7 +216,9 @@ export function WbsScreen({ projectId }: { projectId: string }) {
           <div className="mt-4 border-t border-line pt-4">
             <WbsForm
               nodes={d.wbs}
-              onSubmit={async (v) => void (await run(() => post(`projects/${projectId}/wbs`, v)))}
+              onSubmit={async (v) =>
+                void (await run(() => post(`projects/${projectId}/wbs`, v), `${v.code} added`))
+              }
             />
           </div>
         )}

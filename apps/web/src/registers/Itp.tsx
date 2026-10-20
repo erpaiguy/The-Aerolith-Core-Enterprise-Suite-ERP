@@ -6,12 +6,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -62,11 +65,24 @@ export function ItpScreen({ projectId }: { projectId: string }) {
   });
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const remove = (id: string) => {
+  const confirm = useConfirm();
+  const remove = async (id: string, activity: string) => {
+    if (
+      !(await confirm({
+        title: `Remove ${activity} from the plan?`,
+        body: 'The line is deleted from the inspection and test plan. Checks already done stay on record.',
+        confirmLabel: 'Remove the line',
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     void api
       .request(`/api/tenant/itp-lines/${id}`, { method: 'DELETE' })
-      .then(() => void qc.invalidateQueries({ queryKey: ['itp', projectId] }))
+      .then(() => {
+        toast.success(`${activity} removed from the plan`);
+        void qc.invalidateQueries({ queryKey: ['itp', projectId] });
+      })
       .catch((err: unknown) => setError(describeError(err)));
   };
   return (
@@ -96,7 +112,9 @@ export function ItpScreen({ projectId }: { projectId: string }) {
         ) : plan.isError ? (
           <Alert tone="danger">{describeError(plan.error)}</Alert>
         ) : plan.data.lines.length === 0 ? (
-          <p className="text-sm text-fg-muted">No activity in the plan yet.</p>
+          <EmptyState title="No activity in the plan yet.">
+            List each activity with its test, how often, and who witnesses it.
+          </EmptyState>
         ) : (
           <Table minWidth="60rem">
             <thead>
@@ -145,7 +163,7 @@ export function ItpScreen({ projectId }: { projectId: string }) {
                       <Button
                         variant="ghost"
                         aria-label={`Remove ${l.activity}`}
-                        onClick={() => remove(l.id)}
+                        onClick={() => void remove(l.id, l.activity)}
                       >
                         Remove
                       </Button>
@@ -201,6 +219,7 @@ function AddLine({
               },
             })
             .then(() => {
+              toast.success(`${f.activity.trim()} added to the plan`);
               void qc.invalidateQueries({ queryKey: ['itp', projectId] });
               onClose();
             })

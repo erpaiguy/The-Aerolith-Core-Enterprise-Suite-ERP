@@ -1,4 +1,15 @@
-import { Alert, Badge, Button, Card, Field, PageHeader, Spinner, Textarea } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  PageHeader,
+  Spinner,
+  Textarea,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, ExternalLink, Pencil } from 'lucide-react';
@@ -71,6 +82,7 @@ function StatusActions({ tender, onChanged }: { tender: TenderDetail; onChanged:
         method: 'POST',
         body: { to, reason },
       });
+      toast.success(`Tender ${tender.number}: ${STATUS_LABEL[to].toLowerCase()}`);
       setPending(null);
       setReason('');
       onChanged();
@@ -199,6 +211,7 @@ function BidDecision({
           criteria: criteria.map(({ key, weight, score: s }) => ({ key, weight, score: s })),
         },
       });
+      toast.success(decision === 'bid' ? 'Decision recorded: bid' : 'Decision recorded: no bid');
       setReason('');
       onChanged();
     } catch (err) {
@@ -286,7 +299,7 @@ function BidDecision({
           </div>
         </div>
       ) : tender.decisions.length === 0 ? (
-        <p className="text-sm text-fg-muted">No decision recorded yet.</p>
+        <EmptyState title="No decision recorded yet." />
       ) : null}
 
       {tender.decisions.length > 0 && (
@@ -431,6 +444,7 @@ export function TenderDetailScreen({ tenderId }: { tenderId: string }) {
                 method: 'POST',
                 body: { ...body, rowVersion: t.rowVersion },
               });
+              toast.success(`Tender ${t.number} saved`);
               setEditing(false);
               refresh();
             }}

@@ -2,7 +2,17 @@
 // (contract, budget, the work done), each schedule's finish against its baseline with its progress three ways
 // (planned, scheduled, measured) side by side, the S-curve (planned, forecast, earned), the next two weeks and the
 // next milestones. Read only: each figure links to where it is kept.
-import { Alert, Badge, Button, Card, PageHeader, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  Spinner,
+  Table,
+  cx,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Printer } from 'lucide-react';
@@ -190,7 +200,9 @@ export function ProjectDashboardScreen({ projectId }: { projectId: string }) {
         }
       >
         {d.schedules.length === 0 ? (
-          <p className="text-sm text-fg-muted">No live schedules yet.</p>
+          <EmptyState title="No live schedules yet.">
+            Start one from the project&apos;s page; its progress shows here.
+          </EmptyState>
         ) : (
           <>
             <Table minWidth="52rem">
@@ -280,10 +292,10 @@ export function ProjectDashboardScreen({ projectId }: { projectId: string }) {
         {d.curve ? (
           <SCurve curve={d.curve} contract={d.money.contract} />
         ) : (
-          <p className="text-sm text-fg-muted">
-            Nothing to draw yet: link BOQ items to schedule activities (in an activity&apos;s panel)
-            and measure work done in the contract BOQ.
-          </p>
+          <EmptyState title="Nothing to draw yet.">
+            Link BOQ items to schedule activities (in an activity&apos;s panel) and measure work
+            done in the contract BOQ.
+          </EmptyState>
         )}
       </Card>
 
@@ -303,7 +315,7 @@ export function ProjectDashboardScreen({ projectId }: { projectId: string }) {
           }
         >
           {d.lookahead.activities.length === 0 ? (
-            <p className="text-sm text-fg-muted">Nothing on or due.</p>
+            <EmptyState title="Nothing on or due." />
           ) : (
             <Table minWidth="28rem">
               <thead>
@@ -339,7 +351,7 @@ export function ProjectDashboardScreen({ projectId }: { projectId: string }) {
         </Card>
         <Card title="Next milestones">
           {d.milestones.length === 0 ? (
-            <p className="text-sm text-fg-muted">No milestones still to come.</p>
+            <EmptyState title="No milestones still to come." />
           ) : (
             <Table minWidth="28rem">
               <thead>

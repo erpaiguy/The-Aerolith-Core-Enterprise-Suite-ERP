@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -110,17 +113,19 @@ export function ScrapToolsScreen() {
 function useAction(key: unknown[]) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const run = async (path: string, body: object) => {
+  const confirm = useConfirm();
+  const run = async (path: string, body: object, done: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await api.request(path, { method: 'POST', body }));
+      toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
       return false;
     }
   };
-  return { run, error };
+  return { run, error, confirm };
 }
 
 function ScrapCard({ projectId }: { projectId: string }) {
@@ -138,7 +143,7 @@ function ScrapCard({ projectId }: { projectId: string }) {
     queryKey: ['parties', 'all'],
     queryFn: () => api.request<{ id: string; name: string }[]>('/api/tenant/parties'),
   });
-  const { run, error } = useAction(key);
+  const { run, error, confirm } = useAction(key);
   const [entry, setEntry] = useState({
     material: '',
     unit: 't',
@@ -191,7 +196,7 @@ function ScrapCard({ projectId }: { projectId: string }) {
           className="mt-3 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(`/api/tenant/projects/${projectId}/scrap`, entry).then(
+            void run(`/api/tenant/projects/${projectId}/scrap`, entry, 'Scrap noted').then(
               (ok) => ok && setEntry({ ...entry, qty: '' }),
             );
           }}
@@ -249,22 +254,36 @@ function ScrapCard({ projectId }: { projectId: string }) {
         <form
           aria-label="Sell scrap"
           className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            void run(`/api/tenant/projects/${projectId}/scrap-sales`, {
-              partyId: sale.partyId,
-              siteId: sale.siteId || sites.data?.sites[0]?.id,
-              soldOn: today(),
-              lines: [
-                {
-                  material: sale.material,
-                  unit: pick?.unit ?? '',
-                  qty: sale.qty,
-                  rate: sale.rate,
-                  gstPct: sale.gstPct,
-                },
-              ],
-            }).then((ok) => ok && setSale({ ...sale, qty: '', rate: '' }));
+            const buyer = parties.data?.find((p) => p.id === sale.partyId)?.name ?? 'the buyer';
+            if (
+              !(await confirm({
+                title: `Sell ${sale.qty} ${pick?.unit ?? ''} of ${sale.material} to ${buyer}?`,
+                body: 'The sale is billed to the buyer and goes into the books; the scrap leaves the balance.',
+                confirmLabel: 'Sell the scrap',
+                tone: 'primary',
+              }))
+            )
+              return;
+            void run(
+              `/api/tenant/projects/${projectId}/scrap-sales`,
+              {
+                partyId: sale.partyId,
+                siteId: sale.siteId || sites.data?.sites[0]?.id,
+                soldOn: today(),
+                lines: [
+                  {
+                    material: sale.material,
+                    unit: pick?.unit ?? '',
+                    qty: sale.qty,
+                    rate: sale.rate,
+                    gstPct: sale.gstPct,
+                  },
+                ],
+              },
+              `${sale.material} sold to ${buyer}`,
+            ).then((ok) => ok && setSale({ ...sale, qty: '', rate: '' }));
           }}
         >
           <Field label="Buyer">
@@ -360,7 +379,7 @@ function ToolsCard({ projectId }: { projectId: string }) {
     queryKey: key,
     queryFn: () => api.request<Tools>(`/api/tenant/projects/${projectId}/tools`),
   });
-  const { run, error } = useAction(key);
+  const { run, error, confirm } = useAction(key);
   const [form, setForm] = useState({
     tool: '',
     qty: '1',
@@ -409,14 +428,29 @@ function ToolsCard({ projectId }: { projectId: string }) {
                       <form
                         aria-label={`Return ${t.tool}`}
                         className="flex flex-wrap gap-2"
-                        onSubmit={(e) => {
+                        onSubmit={async (e) => {
                           e.preventDefault();
-                          void run(`/api/tenant/tool-issues/${t.id}/return`, {
-                            returned: Number(b.returned || 0),
-                            lost: Number(b.lost || 0),
-                            on: today(),
-                            note: b.note,
-                          });
+                          const lost = Number(b.lost || 0);
+                          if (
+                            lost > 0 &&
+                            !(await confirm({
+                              title: `Write off ${lost} × ${t.tool} as lost?`,
+                              body: `They are taken off ${t.issuedTo}'s count for good.`,
+                              confirmLabel: 'Write off as lost',
+                              tone: 'danger',
+                            }))
+                          )
+                            return;
+                          void run(
+                            `/api/tenant/tool-issues/${t.id}/return`,
+                            {
+                              returned: Number(b.returned || 0),
+                              lost,
+                              on: today(),
+                              note: b.note,
+                            },
+                            `Return of ${t.tool} recorded`,
+                          );
                         }}
                       >
                         <Input
@@ -465,10 +499,14 @@ function ToolsCard({ projectId }: { projectId: string }) {
           className="mt-3 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(`/api/tenant/projects/${projectId}/tools`, {
-              ...form,
-              qty: Number(form.qty),
-            }).then((ok) => ok && setForm({ ...form, tool: '', qty: '1' }));
+            void run(
+              `/api/tenant/projects/${projectId}/tools`,
+              {
+                ...form,
+                qty: Number(form.qty),
+              },
+              `${form.tool} issued`,
+            ).then((ok) => ok && setForm({ ...form, tool: '', qty: '1' }));
           }}
         >
           <Field label="Tool">
@@ -540,7 +578,7 @@ function OverdueTools() {
       {q.isPending ? (
         <Spinner />
       ) : (q.data ?? []).length === 0 ? (
-        <p className="text-sm text-fg-muted">None overdue.</p>
+        <EmptyState title="None overdue.">Every tool issued is back or not yet due.</EmptyState>
       ) : (
         <ul className="space-y-1 text-sm" aria-label="Tools overdue">
           {q.data!.map((t) => (

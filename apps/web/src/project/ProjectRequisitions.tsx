@@ -1,6 +1,6 @@
 // A project's purchase requisitions on its page (docs/wave2b-plan.md step 1), and a new one: a title first, then its
 // lines on the requisition's own page.
-import { Alert, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import { Alert, Button, Card, Field, Input, Spinner, toast } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
@@ -53,6 +53,7 @@ export function ProjectRequisitions({ project: p }: { project: ProjectDetail }) 
                   body: { title: title.trim(), lines: [] },
                 },
               );
+              toast.success(`Requisition ${r.number} started`);
               await navigate({
                 to: '/requisitions/$requisitionId',
                 params: { requisitionId: r.id },

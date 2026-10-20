@@ -2,7 +2,7 @@
 // checklist item asks for; or on a project (docs/wave2b-plan.md step 8): a goods receipt's challan and test
 // certificates. The file is kept in the vault's documents (in the standard folder for it when the vault has one the
 // user may see, or in the folders `path` names) and linked here; unlinking leaves it in the documents.
-import { Button } from '@aerolith/ui';
+import { Button, toast } from '@aerolith/ui';
 import { FileText, Paperclip, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { api, saveFile } from '../api/client';
@@ -42,11 +42,12 @@ export function LinkedDocuments({
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => Promise<unknown>, done: string) => {
     setBusy(true);
     setError(null);
     try {
       await fn();
+      toast.success(done);
       onChanged();
     } catch (err) {
       setError(describeError(err));
@@ -60,22 +61,25 @@ export function LinkedDocuments({
       body: { kind, targetId },
     });
   const attach = (files: File[]) =>
-    void run(async () => {
-      const params = new URLSearchParams();
-      if (folder) {
-        const v = await api.request<DocVault>(`/api/tenant/${vault}/documents`);
-        const f = v.folders.find((x) => x.name === folder);
-        if (f) params.set('folderId', f.id);
-      }
-      if (path) params.set('path', path);
-      for (const file of files) {
-        const { document } = await api.upload<{ document: { id: string } }>(
-          `/api/tenant/${vault}/documents/upload?${params.toString()}`,
-          file,
-        );
-        await link(document.id);
-      }
-    });
+    void run(
+      async () => {
+        const params = new URLSearchParams();
+        if (folder) {
+          const v = await api.request<DocVault>(`/api/tenant/${vault}/documents`);
+          const f = v.folders.find((x) => x.name === folder);
+          if (f) params.set('folderId', f.id);
+        }
+        if (path) params.set('path', path);
+        for (const file of files) {
+          const { document } = await api.upload<{ document: { id: string } }>(
+            `/api/tenant/${vault}/documents/upload?${params.toString()}`,
+            file,
+          );
+          await link(document.id);
+        }
+      },
+      `${files.length === 1 ? files[0]!.name : `${files.length} files`} attached`,
+    );
   const open = (id: string) =>
     void (async () => {
       try {
@@ -105,7 +109,7 @@ export function LinkedDocuments({
                   type="button"
                   className="rounded text-fg-muted hover:text-danger"
                   aria-label={`Unlink ${d.name}`}
-                  onClick={() => void run(() => link(d.id, true))}
+                  onClick={() => void run(() => link(d.id, true), `${d.name} unlinked`)}
                 >
                   <X className="size-3.5" aria-hidden />
                 </button>

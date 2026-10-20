@@ -1,6 +1,6 @@
 // A project's purchase and work orders on its page (docs/wave2b-plan.md step 4), and a new one written directly. Most
 // come from the vendors chosen in an enquiry, made on the enquiry's page.
-import { Alert, Button, Card, Field, Select, Spinner } from '@aerolith/ui';
+import { Alert, Button, Card, EmptyState, Field, Select, Spinner, toast } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
@@ -60,9 +60,9 @@ export function ProjectOrders({ project: p }: { project: ProjectDetail }) {
       ) : orders.isError ? (
         <Alert tone="danger">{describeError(orders.error)}</Alert>
       ) : orders.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">
-          None yet. Make them from the vendors chosen in an enquiry, or write one here.
-        </p>
+        <EmptyState title="None yet.">
+          Make them from the vendors chosen in an enquiry, or write one here.
+        </EmptyState>
       ) : (
         <OrderTable rows={orders.data} />
       )}
@@ -101,6 +101,7 @@ function NewOrder({
             method: 'POST',
             body: { kind, partyId, siteId: sites.length === 1 ? sites[0]!.id : null, lines: [] },
           });
+          toast.success(`Order ${o.number} started`);
           onMade(o.id);
         });
       }}
@@ -205,6 +206,7 @@ function FromRequisitions({
               body: { partyId, gstPct, lines },
             },
           );
+          toast.success(`Order ${o.number} made from the requisitions`);
           onMade(o.id);
         });
       }}
@@ -212,9 +214,7 @@ function FromRequisitions({
       {open.isPending ? (
         <Spinner />
       ) : !open.data?.length ? (
-        <p className="text-sm text-fg-muted">
-          No approved requisition line is waiting to be ordered.
-        </p>
+        <EmptyState title="No approved requisition line is waiting to be ordered." />
       ) : (
         <ul className="space-y-1 text-sm" aria-label="Requisition lines">
           {open.data.map((l) => (

@@ -1,6 +1,17 @@
 // A project's material budget on its page (docs/wave2b-plan.md step 2): the revision in force, the one being worked
 // on, the revisions before; making it from the tender (or empty) and starting a revision.
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -40,10 +51,26 @@ export function ProjectMaterialBudget({ project: p }: { project: ProjectDetail }
     () => void qc.invalidateQueries({ queryKey: ['material-budget-overview', p.id] }),
   );
   const [reason, setReason] = useState<string | null>(null);
+  const confirm = useConfirm();
   const open = (id: string) =>
     navigate({ to: '/material-budgets/$budgetId', params: { budgetId: id } });
-  const make = (path: string, body: object = {}) =>
-    void run(path, async () => {
+  const DONE: Record<string, string> = {
+    'from-tender': 'Material budget made from the tender',
+    blank: 'Empty material budget started',
+    revise: 'Revision of the material budget started',
+  };
+  const make = async (path: string, body: object = {}) => {
+    if (
+      path === 'from-tender' &&
+      !(await confirm({
+        title: 'Make the material budget from the tender?',
+        body: "It is worked out from the tender's rate analyses, and the tender's estimate is then closed for good.",
+        confirmLabel: 'Make it from the tender',
+        tone: 'primary',
+      }))
+    )
+      return;
+    await run(path, async () => {
       const b = await api.request<{ id: string }>(
         `/api/tenant/projects/${p.id}/material-budget/${path}`,
         {
@@ -51,8 +78,10 @@ export function ProjectMaterialBudget({ project: p }: { project: ProjectDetail }
           body,
         },
       );
+      toast.success(DONE[path] ?? 'Material budget saved');
       await open(b.id);
     });
+  };
   if (o.isPending) return <Spinner />;
   if (o.isError) return <Alert tone="danger">{describeError(o.error)}</Alert>;
   const d = o.data;
@@ -60,19 +89,23 @@ export function ProjectMaterialBudget({ project: p }: { project: ProjectDetail }
     <Card title="Material budget">
       {d.revisions.length === 0 ? (
         <div className="space-y-3 text-sm">
-          <p className="text-fg-muted">
+          <EmptyState title="None yet.">
             {d.fromTender
-              ? "None yet. Made from the tender's rate analyses: what each BOQ item takes of cement, steel, labour and the rest, at the estimate's rates. The tender's estimate is then closed."
-              : 'None yet. This project has no contract BOQ from a tender here: start an empty budget and add to it.'}
-          </p>
+              ? "Made from the tender's rate analyses: what each BOQ item takes of cement, steel, labour and the rest, at the estimate's rates. The tender's estimate is then closed."
+              : 'This project has no contract BOQ from a tender here: start an empty budget and add to it.'}
+          </EmptyState>
           {d.mayStart && (
             <div className="flex gap-2">
               {d.fromTender && (
-                <Button busy={busy === 'from-tender'} onClick={() => make('from-tender')}>
+                <Button busy={busy === 'from-tender'} onClick={() => void make('from-tender')}>
                   Make it from the tender
                 </Button>
               )}
-              <Button variant="secondary" busy={busy === 'blank'} onClick={() => make('blank')}>
+              <Button
+                variant="secondary"
+                busy={busy === 'blank'}
+                onClick={() => void make('blank')}
+              >
                 Start an empty budget
               </Button>
             </div>
@@ -120,7 +153,7 @@ export function ProjectMaterialBudget({ project: p }: { project: ProjectDetail }
               aria-label="New revision"
               onSubmit={(e) => {
                 e.preventDefault();
-                make('revise', { reason: reason.trim() });
+                void make('revise', { reason: reason.trim() });
               }}
             >
               <div className="min-w-64 flex-1">

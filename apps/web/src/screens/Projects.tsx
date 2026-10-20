@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -13,6 +14,8 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -78,6 +81,15 @@ const MOVE_LABEL: Record<ProjectStatus, string> = {
   completed: 'Mark completed',
   closed: 'Close the project',
   cancelled: 'Cancel the project',
+};
+/** For the toast once a move is made. */
+const MOVED: Record<ProjectStatus, string> = {
+  planned: 'moved back to planned',
+  active: 'started',
+  on_hold: 'put on hold',
+  completed: 'marked completed',
+  closed: 'closed',
+  cancelled: 'cancelled',
 };
 const REASON_NEEDED: ProjectStatus[] = ['on_hold', 'cancelled'];
 const ROLE_LABEL: Record<ProjectRole, string> = {
@@ -187,11 +199,13 @@ export function ProjectsScreen() {
         ) : projects.isError ? (
           <Alert tone="danger">{describeError(projects.error)}</Alert>
         ) : projects.data.items.length === 0 ? (
-          <p className="py-8 text-center text-sm text-fg-muted">
+          <EmptyState
+            title={q || filter !== 'live' ? 'No projects match.' : 'No live projects you can see.'}
+          >
             {q || filter !== 'live'
-              ? 'No projects match.'
-              : 'No live projects you can see. A won tender becomes one from its page.'}
-          </p>
+              ? 'Try another search or status.'
+              : 'A won tender becomes one from its page.'}
+          </EmptyState>
         ) : (
           <Table minWidth="48rem">
             <thead>
@@ -376,6 +390,7 @@ function NewProject({ onCancel }: { onCancel: () => void }) {
         onCancel={onCancel}
         onSubmit={async (body) => {
           const p = await post<ProjectDetail>('projects', body);
+          toast.success(`Project ${p.number} created`);
           await navigate({ to: '/projects/$projectId', params: { projectId: p.id } });
         }}
       />
@@ -472,6 +487,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
                   rowVersion: p.rowVersion,
                 }),
               );
+              toast.success('Project saved');
               setEditing(false);
             }}
           />
@@ -630,11 +646,22 @@ function StatusActions({
   project: ProjectDetail;
   onDone: (p: ProjectDetail) => void;
 }) {
+  const confirm = useConfirm();
   const [to, setTo] = useState<ProjectStatus | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const move = async (status: ProjectStatus, why: string | null) => {
+    if (
+      status === 'closed' &&
+      !(await confirm({
+        title: `Close project ${p.number}?`,
+        body: 'A closed project is finished for good: its work, stores and bills stop taking new entries.',
+        confirmLabel: 'Close the project',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -645,6 +672,7 @@ function StatusActions({
           reason: why,
         }),
       );
+      toast.success(`Project ${p.number} ${MOVED[status]}`);
       setTo(null);
       setReason('');
     } catch (err) {
@@ -708,11 +736,12 @@ function Sites({
   const [stateCode, setStateCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (fn: () => Promise<ProjectDetail>) => {
+  const run = async (fn: () => Promise<ProjectDetail>, done: string) => {
     setBusy(true);
     setError(null);
     try {
       onDone(await fn());
+      toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -724,9 +753,10 @@ function Sites({
   return (
     <Card title={`Sites (${p.sites.length})`}>
       {p.sites.length === 0 ? (
-        <p className="mb-3 text-sm text-fg-muted">
-          No site yet. Each site&apos;s state decides GST&apos;s place of supply later.
-        </p>
+        <EmptyState title="No site yet.">
+          {p.canEdit ? 'Add one below. ' : ''}Each site&apos;s state decides GST&apos;s place of
+          supply later.
+        </EmptyState>
       ) : (
         <ul className="mb-3 divide-y divide-line text-sm" aria-label="Sites">
           {p.sites.map((s) => (
@@ -745,11 +775,13 @@ function Sites({
                 <Button
                   variant="ghost"
                   onClick={() =>
-                    void run(() =>
-                      post<ProjectDetail>(`sites/${s.id}`, {
-                        rowVersion: s.rowVersion,
-                        active: !s.active,
-                      }),
+                    void run(
+                      () =>
+                        post<ProjectDetail>(`sites/${s.id}`, {
+                          rowVersion: s.rowVersion,
+                          active: !s.active,
+                        }),
+                      `Site ${s.name} ${s.active ? 'marked finished' : 'reopened'}`,
                     )
                   }
                 >
@@ -765,12 +797,14 @@ function Sites({
           className="grid gap-2 border-t border-line pt-3 md:grid-cols-[1fr_1fr_7rem_auto]"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(() =>
-              post<ProjectDetail>(`projects/${p.id}/sites`, {
-                name,
-                address,
-                stateCode,
-              }),
+            void run(
+              () =>
+                post<ProjectDetail>(`projects/${p.id}/sites`, {
+                  name,
+                  address,
+                  stateCode,
+                }),
+              `Site ${name.trim()} added`,
             ).then((ok) => {
               if (ok) {
                 setName('');
@@ -826,10 +860,12 @@ function Team({
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState<ProjectRole>('member');
   const [error, setError] = useState<string | null>(null);
-  const set = async (user: string, r: ProjectRole | null) => {
+  const confirm = useConfirm();
+  const set = async (user: string, r: ProjectRole | null, done: string) => {
     setError(null);
     try {
       onDone(await post<ProjectDetail>(`projects/${p.id}/team`, { userId: user, role: r }));
+      toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -851,7 +887,13 @@ function Team({
                   <Select
                     aria-label={`Role of ${m.displayName}`}
                     value={m.role}
-                    onChange={(e) => void set(m.userId, e.target.value as ProjectRole)}
+                    onChange={(e) =>
+                      void set(
+                        m.userId,
+                        e.target.value as ProjectRole,
+                        `${m.displayName} is now ${ROLE_LABEL[e.target.value as ProjectRole].toLowerCase()}`,
+                      )
+                    }
                   >
                     {(Object.keys(ROLE_LABEL) as ProjectRole[]).map((r) => (
                       <option key={r} value={r}>
@@ -863,7 +905,18 @@ function Team({
                 <Button
                   variant="ghost"
                   aria-label={`Take ${m.displayName} off the team`}
-                  onClick={() => void set(m.userId, null)}
+                  onClick={async () => {
+                    if (
+                      !(await confirm({
+                        title: `Take ${m.displayName} off the team?`,
+                        body: `${m.displayName} no longer sees or works on project ${p.number} unless added again.`,
+                        confirmLabel: 'Take off the team',
+                        tone: 'danger',
+                      }))
+                    )
+                      return;
+                    await set(m.userId, null, `${m.displayName} taken off the team`);
+                  }}
                 >
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
@@ -879,7 +932,8 @@ function Team({
           className="mt-3 flex flex-wrap items-end gap-2 border-t border-line pt-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void set(userId, role).then((ok) => ok && setUserId(''));
+            const who = people.data?.find((u) => u.id === userId)?.displayName ?? 'Person';
+            void set(userId, role, `${who} added to the team`).then((ok) => ok && setUserId(''));
           }}
         >
           <Field label="Add to the team">
@@ -977,6 +1031,7 @@ export function TenderProjectCard({ tenderId }: { tenderId: string }) {
                 setError(null);
                 try {
                   const p = await post<ProjectDetail>(`tenders/${tenderId}/project`);
+                  toast.success(`Project ${p.number} made from the tender`);
                   await navigate({ to: '/projects/$projectId', params: { projectId: p.id } });
                 } catch (err) {
                   setError(describeError(err));

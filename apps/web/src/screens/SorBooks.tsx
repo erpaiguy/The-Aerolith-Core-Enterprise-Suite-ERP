@@ -1,6 +1,17 @@
 // The company's schedules of rates (docs/wave8-plan.md step 8f.2): its own copies of CPWD DSR or a state PWD's SOR,
 // imported from a spreadsheet (Code, Description, Unit, Rate; Chapter if any). None is shipped with the app.
-import { Alert, Button, Card, Field, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { api } from '../api/client';
@@ -53,7 +64,9 @@ export function SorBooksScreen() {
         {books.isPending ? (
           <Spinner />
         ) : (books.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">None yet. Add one, then import its spreadsheet.</p>
+          <EmptyState title="None yet.">
+            {mayEdit ? 'Add one below, then import its spreadsheet.' : undefined}
+          </EmptyState>
         ) : (
           <Table minWidth="36rem">
             <thead>
@@ -96,6 +109,7 @@ export function SorBooksScreen() {
                                 tone: 'info',
                                 text: `${r.imported} items imported.${r.problems.length ? ` Skipped: ${r.problems.slice(0, 5).join(' ')}` : ''}`,
                               });
+                              toast.success(`${r.imported} items imported into ${b.name}`);
                               refresh();
                             } catch (err) {
                               setMsg({ tone: 'danger', text: describeError(err) });
@@ -127,6 +141,7 @@ export function SorBooksScreen() {
                   method: 'POST',
                   body: { name: form.name, issuer: form.issuer, edition: form.edition },
                 });
+                toast.success(`Schedule ${form.name.trim()} added`);
                 setForm({ ...form, name: '', edition: '' });
                 refresh();
               } catch (err) {

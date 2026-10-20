@@ -1,5 +1,16 @@
 // Across tenders (docs/wave1-plan.md step 8): the agenda of coming dates, and the win/loss analysis.
-import { Alert, Badge, Card, Field, PageHeader, Select, Spinner, Stat, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Card,
+  EmptyState,
+  Field,
+  PageHeader,
+  Select,
+  Spinner,
+  Stat,
+  Table,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
@@ -199,7 +210,9 @@ function AgendaList({ view }: { view: React.ReactNode }) {
       ) : agenda.isError ? (
         <Alert tone="danger">{describeError(agenda.error)}</Alert>
       ) : agenda.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">Nothing due.</p>
+        <EmptyState title="Nothing due.">
+          Deadlines of open tenders show here as they come up.
+        </EmptyState>
       ) : (
         <ol className="space-y-4" aria-label="Agenda">
           {Object.entries(
@@ -262,7 +275,9 @@ function TallyTable({ title, rows }: { title: string; rows: (WinLossTally & { na
   return (
     <Card title={title}>
       {rows.length === 0 ? (
-        <p className="text-sm text-fg-muted">Nothing yet.</p>
+        <EmptyState title="Nothing yet.">
+          It fills as tenders are decided and their results recorded.
+        </EmptyState>
       ) : (
         <Table minWidth="26rem">
           <thead>
@@ -342,9 +357,9 @@ export function WinLossScreen() {
           <TallyTable title="By client" rows={data.data.byClient} />
           <Card title="Competitors, head to head">
             {data.data.competitors.length === 0 ? (
-              <p className="text-sm text-fg-muted">
+              <EmptyState title="No competitors recorded yet.">
                 Record the bids at each opening to see who you meet and how you compare.
-              </p>
+              </EmptyState>
             ) : (
               <Table minWidth="40rem">
                 <thead>
@@ -379,7 +394,7 @@ export function WinLossScreen() {
           <div className="grid gap-5 xl:grid-cols-2">
             <Card title="Why we lost">
               {data.data.lossReasons.length === 0 ? (
-                <p className="text-sm text-fg-muted">No losses recorded.</p>
+                <EmptyState title="No losses recorded." />
               ) : (
                 <ul className="space-y-1 text-sm">
                   {data.data.lossReasons.map((r) => (

@@ -5,12 +5,14 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -128,6 +130,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                           })),
                         },
                       });
+                      toast.success(t('Stock take {n} started', { n: c.number }));
                       await navigate({ to: '/stock-counts/$countId', params: { countId: c.id } });
                     })
                   }
@@ -186,6 +189,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                     `/api/tenant/stores/${s.id}/reorder-requisition`,
                     { method: 'POST', body: {} },
                   );
+                  toast.success(t('Requisition made for what is short'));
                   await navigate({
                     to: '/requisitions/$requisitionId',
                     params: { requisitionId: r.id },
@@ -199,9 +203,9 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
         }
       >
         {s.stock.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            {t("Empty. Goods received against the project's purchase orders come in here.")}
-          </p>
+          <EmptyState title={t('Empty.')}>
+            {t("Goods received against the project's purchase orders come in here.")}
+          </EmptyState>
         ) : (
           <Table minWidth="44rem">
             <thead>
@@ -254,7 +258,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                                 max: level ? x.maxLevel : null,
                               },
                             }),
-                          )
+                          ).then((ok) => ok && toast.success(t('Reorder level saved')))
                         }
                       />
                     ) : x.reorderLevel ? (
@@ -274,7 +278,7 @@ function StoreView({ s, refresh }: { s: Store; refresh: () => void }) {
                               method: 'POST',
                               body: { resourceId: x.resourceId, level: x.reorderLevel, max },
                             }),
-                          )
+                          ).then((ok) => ok && toast.success(t('Reorder level saved')))
                         }
                       />
                     ) : x.maxLevel ? (
@@ -494,6 +498,7 @@ function IssueForm({ s, onCancel }: { s: Store; onCancel: () => void }) {
               return;
             }
             void qc.invalidateQueries({ queryKey: ['store', s.id] });
+            toast.success(t('Issue slip {n} saved', { n: sent.result.number }));
             await navigate({ to: '/issues/$issueId', params: { issueId: sent.result.id } });
           });
         }}
@@ -653,7 +658,7 @@ function TransferForm({
         onSubmit={(e) => {
           e.preventDefault();
           void run('send', async () => {
-            const t = await api.request<Transfer>(`/api/tenant/stores/${s.id}/transfers`, {
+            const tr = await api.request<Transfer>(`/api/tenant/stores/${s.id}/transfers`, {
               method: 'POST',
               body: {
                 toStoreId: to,
@@ -668,7 +673,8 @@ function TransferForm({
                 })),
               },
             });
-            await navigate({ to: '/transfers/$transferId', params: { transferId: t.id } });
+            toast.success(t('Transfer {n} sent', { n: tr.number }));
+            await navigate({ to: '/transfers/$transferId', params: { transferId: tr.id } });
           });
         }}
       >

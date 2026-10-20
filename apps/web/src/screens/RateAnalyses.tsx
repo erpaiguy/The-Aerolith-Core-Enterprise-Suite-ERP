@@ -1,5 +1,17 @@
 // Rate analysis (docs/04-features.md E2): list, and the editor with live costing as on a date.
-import { Alert, Badge, Button, Card, Field, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowDown, ArrowLeft, ArrowUp, Plus, Search, Trash2 } from 'lucide-react';
@@ -88,9 +100,11 @@ export function RateAnalysesScreen() {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.items.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            {q ? 'No analyses match.' : 'No rate analyses yet.'}
-          </p>
+          <EmptyState title={q ? 'No analyses match.' : 'No rate analyses yet.'}>
+            {q
+              ? 'Try another code or description.'
+              : 'Build one from resources with "New analysis"; BOQ items can then take their rate from it.'}
+          </EmptyState>
         ) : (
           <>
             <Table minWidth="36rem">
@@ -435,6 +449,7 @@ export function AnalysisEditor({ analysisId }: { analysisId: string }) {
       qc.setQueryData(['rate-analysis', saved.id], saved);
       setRowVersion(saved.rowVersion);
       setDraft(fromDetail(saved));
+      toast.success(`Rate analysis ${saved.code} ${isNew ? 'created' : 'saved'}`);
       if (isNew)
         await navigate({ to: '/rate-analyses/$analysisId', params: { analysisId: saved.id } });
     } catch (err) {
@@ -455,6 +470,7 @@ export function AnalysisEditor({ analysisId }: { analysisId: string }) {
         },
       );
       await qc.invalidateQueries({ queryKey: ['rate-analyses'] });
+      toast.success(`Copied as ${saved.code}`);
       setCopyCode('');
       await navigate({ to: '/rate-analyses/$analysisId', params: { analysisId: saved.id } });
     } catch (err) {
@@ -664,7 +680,11 @@ export function AnalysisEditor({ analysisId }: { analysisId: string }) {
             </tbody>
           </table>
         </div>
-        {draft.lines.length === 0 && <p className="text-sm text-fg-muted">No lines yet.</p>}
+        {draft.lines.length === 0 && (
+          <EmptyState title="No lines yet.">
+            {!ro && 'Add resources, sub-analyses or lump sums with the buttons below.'}
+          </EmptyState>
+        )}
         {!ro && (
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => addLine('resource')}>

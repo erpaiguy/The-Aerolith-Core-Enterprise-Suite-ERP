@@ -1,5 +1,16 @@
 // A project's stores on its page (docs/wave2b-plan.md step 6): what each holds, a new one, and the consumption report.
-import { Alert, Button, Card, Field, Input, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
@@ -62,7 +73,7 @@ export function ProjectStores({ project: p }: { project: ProjectDetail }) {
                 method: 'POST',
                 body: { siteId, name: name.trim() },
               }),
-            );
+            ).then((ok) => ok && toast.success(`Store ${name.trim()} added`));
           }}
         >
           <div className="min-w-56 flex-1">
@@ -149,7 +160,7 @@ export function ConsumptionScreen({ projectId }: { projectId: string }) {
       <h1 className="text-xl font-semibold">Material consumption</h1>
       <Card title="By material">
         {c.data.resources.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing budgeted, received or issued yet.</p>
+          <EmptyState title="Nothing budgeted, received or issued yet." />
         ) : (
           <Table minWidth="52rem">
             <thead>

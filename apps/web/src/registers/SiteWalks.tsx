@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -12,6 +13,7 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -110,7 +112,9 @@ export function SiteWalksScreen({ projectId }: { projectId: string }) {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.walks.length === 0 ? (
-          <p className="text-sm text-fg-muted">No site walk recorded yet.</p>
+          <EmptyState title="No site walk recorded yet.">
+            Record each safety walk with what was found; each finding goes to its owner to close.
+          </EmptyState>
         ) : (
           <Table minWidth="40rem">
             <thead>
@@ -198,6 +202,7 @@ function NewWalk({
               },
             })
             .then((w) => {
+              toast.success(`Site walk ${w.number} recorded`);
               void qc.invalidateQueries({ queryKey: ['site-walks', project.id] });
               void qc.invalidateQueries({ queryKey: ['my-work'] });
               onDone(w.id);
@@ -322,6 +327,7 @@ export function WalkCard({ id }: { id: string }) {
           body: { closedOn: today(), closure },
         }),
       );
+      toast.success('Finding closed');
       setClosing(null);
       setClosure('');
       void qc.invalidateQueries({ queryKey: ['site-walks', x.projectId] });

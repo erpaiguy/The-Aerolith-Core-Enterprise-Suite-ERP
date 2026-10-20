@@ -1,6 +1,6 @@
 // A project's schedules on its page (docs/wave2a-plan.md step 4): the list, a new schedule (empty, or laid out on the
 // project's WBS) and a schedule from an MS Project XML or Primavera XER file. The tender's programme is not copied.
-import { Alert, Button, Card, Field, Input, Table } from '@aerolith/ui';
+import { Alert, Button, Card, EmptyState, Field, Input, Table, toast } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Plus, Upload } from 'lucide-react';
@@ -47,6 +47,7 @@ export function ProjectSchedules({ project: p }: { project: ProjectDetail }) {
         method: 'POST',
         body: { name, startOn, fromWbs },
       });
+      toast.success(`Schedule ${plan.name} started`);
       await open(plan.id);
     } catch (err) {
       setError(describeError(err));
@@ -61,6 +62,7 @@ export function ProjectSchedules({ project: p }: { project: ProjectDetail }) {
         `/api/tenant/projects/${p.id}/schedules/import`,
         file,
       );
+      toast.success(`Schedule ${r.plan.name} imported`);
       await open(r.plan.id);
     } catch (err) {
       setError(describeError(err));
@@ -136,9 +138,9 @@ export function ProjectSchedules({ project: p }: { project: ProjectDetail }) {
       )}
       {error && <Alert tone="danger">{error}</Alert>}
       {list.data && list.data.length === 0 && !adding && (
-        <p className="text-sm text-fg-muted">
-          No schedule yet. Start one on the WBS, or import one from MS Project or Primavera.
-        </p>
+        <EmptyState title="No schedule yet.">
+          Start one on the WBS, or import one from MS Project or Primavera.
+        </EmptyState>
       )}
       {list.data && list.data.some((x) => !x.archivedAt) && (
         <p className="mb-2 text-sm">

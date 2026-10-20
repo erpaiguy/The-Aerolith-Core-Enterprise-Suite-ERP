@@ -110,6 +110,10 @@ test('the material budget comes from the tender, measures requisitions and is re
   await card(page, 'Material budget')
     .getByRole('button', { name: 'Make it from the tender' })
     .click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Make it from the tender' })
+    .click();
   await page.waitForURL(/\/material-budgets\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { name: 'Material budget, revision 0' })).toBeVisible();
   await expect(page.getByLabel('Quantity of CEM')).toHaveValue('34.68');

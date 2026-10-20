@@ -1,11 +1,21 @@
 // What this phone is keeping until there is signal (docs/wave6-plan.md step 4), oldest first; a refused one with its
 // reason, to discard after fixing it on its screen.
-import { Alert, Badge, Button, Card, PageHeader } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useState } from 'react';
 import { outbox, usePending } from '../offline';
 
 export function OutboxScreen() {
   const items = usePending();
+  const confirm = useConfirm();
   const [note, setNote] = useState<string | null>(null);
   return (
     <div className="space-y-5">
@@ -32,6 +42,11 @@ export function OutboxScreen() {
       />
       {note && <Alert tone="info">{note}</Alert>}
       <Card>
+        {items.length === 0 && (
+          <EmptyState title="Nothing waiting.">
+            Forms saved here without signal show until they are sent.
+          </EmptyState>
+        )}
         <ol className="space-y-2 text-sm" aria-label="Waiting to be sent">
           {items.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-2">
@@ -40,7 +55,23 @@ export function OutboxScreen() {
               {p.error ? (
                 <>
                   <Badge tone="danger">refused: {p.error}</Badge>
-                  <Button type="button" variant="ghost" onClick={() => void outbox.discard(p.id)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: `Discard ${p.label}?`,
+                          body: 'It is removed from this phone and never sent. Enter it again on its screen once it is fixed.',
+                          confirmLabel: 'Discard the form',
+                          tone: 'danger',
+                        }))
+                      )
+                        return;
+                      await outbox.discard(p.id);
+                      toast.success(`${p.label} discarded`);
+                    }}
+                  >
                     Discard
                   </Button>
                 </>
@@ -49,7 +80,6 @@ export function OutboxScreen() {
               )}
             </li>
           ))}
-          {items.length === 0 && <li className="text-fg-muted">Nothing waiting.</li>}
         </ol>
       </Card>
     </div>

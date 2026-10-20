@@ -5,14 +5,18 @@ import {
   Badge,
   Button,
   Card,
+  Dialog,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, X } from 'lucide-react';
+import { Archive, ArchiveRestore } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api/client';
 import type { BoqTemplate } from '../api/types';
@@ -42,12 +46,12 @@ export function SaveTemplateDialog({
     setBusy(true);
     setError(null);
     try {
-      setSaved(
-        await api.request<BoqTemplate>(`/api/tenant/boqs/${boqId}/save-as-template`, {
-          method: 'POST',
-          body: { name, vertical, description, withQuantities, withRates },
-        }),
-      );
+      const t = await api.request<BoqTemplate>(`/api/tenant/boqs/${boqId}/save-as-template`, {
+        method: 'POST',
+        body: { name, vertical, description, withQuantities, withRates },
+      });
+      setSaved(t);
+      toast.success(`Template ${t.name} saved`);
       void qc.invalidateQueries({ queryKey: ['boq-templates'] });
     } catch (err) {
       setError(describeError(err));
@@ -56,88 +60,78 @@ export function SaveTemplateDialog({
     }
   };
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-24"
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Save as template"
-        className="w-full max-w-lg space-y-4 rounded-lg border border-line bg-surface p-5 shadow-xl"
-      >
-        <div className="flex items-start justify-between">
-          <h2 className="font-semibold">Save as template</h2>
-          <Button variant="ghost" aria-label="Close" onClick={onClose}>
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
-        {saved ? (
-          <>
-            <Alert tone="success">
-              Saved &ldquo;{saved.name}&rdquo;: {saved.lineCount} lines. Choose it under
-              &ldquo;Start from&rdquo; when you add a BOQ to a tender.
-            </Alert>
-            <div className="flex justify-end">
-              <Button onClick={onClose}>Done</Button>
-            </div>
-          </>
+    <Dialog
+      open
+      onClose={onClose}
+      title="Save as template"
+      footer={
+        saved ? (
+          <Button onClick={onClose}>Done</Button>
         ) : (
           <>
-            <p className="text-sm text-fg-muted">
-              The BOQ&rsquo;s sections, items, units and kinds become a template for new BOQs. It is
-              a copy: later changes to this BOQ do not change it.
-            </p>
-            <Field label="Template name">
-              <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-            </Field>
-            <Field label="Vertical">
-              <Select value={vertical} onChange={(e) => setVertical(e.target.value)}>
-                {Object.entries(VERTICALS).map(([k, l]) => (
-                  <option key={k} value={k}>
-                    {l}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Description (optional)">
-              <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-            </Field>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={withQuantities}
-                onChange={(e) => setWithQuantities(e.target.checked)}
-              />
-              Keep the quantities
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={withRates}
-                onChange={(e) => setWithRates(e.target.checked)}
-              />
-              Keep the rates (and their rate analyses)
-            </label>
-            {error && <Alert tone="danger">{error}</Alert>}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button busy={busy} disabled={!name.trim()} onClick={() => void save()}>
-                Save template
-              </Button>
-            </div>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button busy={busy} disabled={!name.trim()} onClick={() => void save()}>
+              Save template
+            </Button>
           </>
-        )}
-      </div>
-    </div>
+        )
+      }
+    >
+      {saved ? (
+        <Alert tone="success">
+          Saved &ldquo;{saved.name}&rdquo;: {saved.lineCount} lines. Choose it under &ldquo;Start
+          from&rdquo; when you add a BOQ to a tender.
+        </Alert>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-fg-muted">
+            The BOQ&rsquo;s sections, items, units and kinds become a template for new BOQs. It is a
+            copy: later changes to this BOQ do not change it.
+          </p>
+          <Field label="Template name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          </Field>
+          <Field label="Vertical">
+            <Select value={vertical} onChange={(e) => setVertical(e.target.value)}>
+              {Object.entries(VERTICALS).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Description (optional)">
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={withQuantities}
+              onChange={(e) => setWithQuantities(e.target.checked)}
+            />
+            Keep the quantities
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={withRates}
+              onChange={(e) => setWithRates(e.target.checked)}
+            />
+            Keep the rates (and their rate analyses)
+          </label>
+          {error && <Alert tone="danger">{error}</Alert>}
+        </div>
+      )}
+    </Dialog>
   );
 }
 
 /** The templates, to rename and archive. */
 export function TemplatesScreen() {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const canEdit = usePermission('boq.edit');
   const [archived, setArchived] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,10 +142,11 @@ export function TemplatesScreen() {
         `/api/tenant/boq-templates?archived=${archived ? 'true' : 'false'}`,
       ),
   });
-  const act = async (t: BoqTemplate, body: object, path = '') => {
+  const act = async (t: BoqTemplate, body: object, path = '', done?: string) => {
     setError(null);
     try {
       await api.request(`/api/tenant/boq-templates/${t.id}${path}`, { method: 'POST', body });
+      toast.success(done ?? `Template ${t.name} saved`);
       void qc.invalidateQueries({ queryKey: ['boq-templates'] });
     } catch (err) {
       setError(describeError(err));
@@ -183,11 +178,11 @@ export function TemplatesScreen() {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.length === 0 ? (
-          <p className="text-sm text-fg-muted">
+          <EmptyState title={archived ? 'No archived template.' : 'No template yet.'}>
             {archived
-              ? 'No archived template.'
-              : 'No template yet. Open a BOQ and use "Save as template".'}
-          </p>
+              ? 'Templates archived from the "In use" list show here.'
+              : 'Open a BOQ and use "Save as template".'}
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-line" aria-label="Templates">
             {list.data.map((t) => (
@@ -222,7 +217,24 @@ export function TemplatesScreen() {
                     </Select>
                     <Button
                       variant="ghost"
-                      onClick={() => void act(t, { archived: !archived }, '/archive')}
+                      onClick={async () => {
+                        if (
+                          !archived &&
+                          !(await confirm({
+                            title: `Archive template ${t.name}?`,
+                            body: 'It is no longer offered when a tender gets a new BOQ. BOQs already started from it keep their lines.',
+                            confirmLabel: 'Archive the template',
+                            tone: 'danger',
+                          }))
+                        )
+                          return;
+                        await act(
+                          t,
+                          { archived: !archived },
+                          '/archive',
+                          `Template ${t.name} ${archived ? 'restored' : 'archived'}`,
+                        );
+                      }}
                     >
                       {archived ? (
                         <>

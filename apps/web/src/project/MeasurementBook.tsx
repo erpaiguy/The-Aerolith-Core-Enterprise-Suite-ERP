@@ -1,9 +1,19 @@
 // An item's measurement book (docs/wave2a-plan.md step 6): the work done on a contract BOQ item, entry by entry, and a
 // new entry from dimensions (nos × length × breadth × height, deductions) or as one figure. Entries are never changed:
 // a wrong one is reversed by an entry of the opposite quantity.
-import { Alert, Badge, Button, Field, Input, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Dialog,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { formatQty, formatRate, type BoqRow } from '../boq/model';
@@ -122,7 +132,10 @@ export function MeasurementBook({
               }),
         },
       );
-      if (!sent.queued) return sent.result;
+      if (!sent.queued) {
+        toast.success('Measurement recorded');
+        return sent.result;
+      }
       setKept((n) => n + 1);
       return book.data as Book;
     }).then((ok) => {
@@ -140,42 +153,30 @@ export function MeasurementBook({
         method: 'POST',
         body: { reason: reason.trim() },
       }),
-    );
+    ).then((ok) => ok && toast.success('Entry reversed'));
   };
   const b = book.data;
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4 pt-16"
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Measurement book"
-        className="w-full max-w-3xl space-y-4 rounded-lg border border-line bg-surface p-5 shadow-xl"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="font-semibold">
-              Measurement book · {row.code ? `${row.code} · ` : ''}
-              {row.description}
-            </h2>
-            {b && (
-              <p className="text-sm text-fg-muted" data-testid="book-summary">
-                Done {formatQty(b.done)} of {formatQty(b.qty)} {b.unit ?? ''}
-                {b.pct !== null && ` (${b.pct}%)`} · rate {formatRate(b.rate)}
-                {b.pct !== null && b.pct > 100 && (
-                  <span className="ml-2">
-                    <Badge tone="warning">more than the BOQ quantity</Badge>
-                  </span>
-                )}
-              </p>
+    <Dialog
+      open
+      onClose={onClose}
+      size="xl"
+      title={`Measurement book · ${row.code ? `${row.code} · ` : ''}${row.description}`}
+      description={
+        b && (
+          <p data-testid="book-summary">
+            Done {formatQty(b.done)} of {formatQty(b.qty)} {b.unit ?? ''}
+            {b.pct !== null && ` (${b.pct}%)`} · rate {formatRate(b.rate)}
+            {b.pct !== null && b.pct > 100 && (
+              <span className="ml-2">
+                <Badge tone="warning">more than the BOQ quantity</Badge>
+              </span>
             )}
-          </div>
-          <Button variant="ghost" aria-label="Close" onClick={onClose}>
-            <X className="size-4" aria-hidden />
-          </Button>
-        </div>
+          </p>
+        )
+      }
+    >
+      <div className="space-y-4">
         {book.isPending && <Spinner />}
         {book.isError && <Alert tone="danger">{describeError(book.error)}</Alert>}
         {b && b.entries.length > 0 && (
@@ -224,7 +225,11 @@ export function MeasurementBook({
           </table>
         )}
         {b && b.entries.length === 0 && (
-          <p className="text-sm text-fg-muted">Nothing measured yet.</p>
+          <EmptyState title="Nothing measured yet.">
+            {canRecord
+              ? 'Record the first entry below, from dimensions or as one quantity.'
+              : 'Entries show here as the work is measured.'}
+          </EmptyState>
         )}
         {canRecord && (
           <form
@@ -346,6 +351,6 @@ export function MeasurementBook({
           </form>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

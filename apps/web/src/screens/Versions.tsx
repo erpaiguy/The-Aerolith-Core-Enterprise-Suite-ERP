@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  Dialog,
   Field,
   Input,
   Select,
@@ -13,10 +14,11 @@ import {
   Table,
   Textarea,
   cx,
+  toast,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Download, X } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import { useState } from 'react';
 import { api, saveFile } from '../api/client';
 import type { BoqVersions, VersionChange, VersionCompare } from '../api/types';
@@ -51,6 +53,7 @@ export function FreezeDialog({
         method: 'POST',
         body: { kind, label, note },
       });
+      toast.success(`Version ${versionNo} frozen`);
       onDone();
     } catch (err) {
       setError(describeError(err));
@@ -58,22 +61,22 @@ export function FreezeDialog({
     }
   };
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 p-4 pt-24"
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Freeze version ${versionNo}`}
-        className="w-full max-w-lg space-y-4 rounded-lg border border-line bg-surface p-5 shadow-xl"
-      >
-        <div className="flex items-start justify-between">
-          <h2 className="font-semibold">Freeze version {versionNo}</h2>
-          <Button variant="ghost" aria-label="Close" onClick={onClose}>
-            <X className="size-4" aria-hidden />
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Freeze version ${versionNo}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
           </Button>
-        </div>
+          <Button busy={busy} onClick={() => void freeze()}>
+            Freeze version {versionNo}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         <p className="text-sm text-fg-muted">
           The BOQ and its bid are kept exactly as they are now. Changes afterwards need a new
           revision, and you can always compare against this version or export it.
@@ -94,16 +97,8 @@ export function FreezeDialog({
           <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         {error && <Alert tone="danger">{error}</Alert>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button busy={busy} onClick={() => void freeze()}>
-            Freeze version {versionNo}
-          </Button>
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -327,6 +322,7 @@ export function BoqVersionsScreen({ boqId }: { boqId: string }) {
     setError(null);
     try {
       await api.request(`/api/tenant/boqs/${boqId}/revise`, { method: 'POST', body: {} });
+      toast.success(`Revision ${(versions.data?.current.versionNo ?? 0) + 1} started`);
       refresh();
     } catch (err) {
       setError(describeError(err));

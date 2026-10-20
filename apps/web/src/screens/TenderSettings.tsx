@@ -1,7 +1,17 @@
 // The company's tender settings (docs/wave1-plan.md step 13): its bid/no-bid criteria and weights, its standard
 // document checklist, the standard folders of a tender's documents and how long their trash keeps documents. Admin
 // only; until changed, the built-in lists apply and the trash keeps everything.
-import { Alert, Button, Card, Input, PageHeader, Select, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  PageHeader,
+  Select,
+  Spinner,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -84,7 +94,19 @@ function DocumentSettings() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ what: string; message: string } | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const confirm = useConfirm();
   const save = async (what: 'folders' | 'trash', body: object) => {
+    if (
+      what === 'folders' &&
+      Object.values(body).every((v) => v === null) &&
+      !(await confirm({
+        title: 'Go back to the built-in folders?',
+        body: 'Your own folder list is deleted; new tenders get the built-in folders. Tenders made already keep theirs.',
+        confirmLabel: 'Use the built-in folders',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusy(what);
     setError(null);
     setSaved(null);
@@ -97,6 +119,7 @@ function DocumentSettings() {
         }),
       );
       setSaved(what);
+      toast.success(what === 'folders' ? 'Document folders saved' : 'Bin period saved');
     } catch (err) {
       setError({ what, message: describeError(err) });
     } finally {
@@ -246,7 +269,19 @@ function useSave(path: string) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const confirm = useConfirm();
+  const what = path === 'checklist' ? 'submission checklist' : 'bid criteria';
   const save = async (body: object) => {
+    if (
+      Object.values(body).every((v) => v === null) &&
+      !(await confirm({
+        title: `Go back to the built-in ${what}?`,
+        body: `Your own list is deleted; the built-in ${what} apply from now on.`,
+        confirmLabel: 'Use the built-in list',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     setSaved(false);
@@ -259,6 +294,7 @@ function useSave(path: string) {
         }),
       );
       setSaved(true);
+      toast.success(path === 'checklist' ? 'Submission checklist saved' : 'Bid criteria saved');
     } catch (err) {
       setError(describeError(err));
     } finally {

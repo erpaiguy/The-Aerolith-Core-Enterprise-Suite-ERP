@@ -1,6 +1,6 @@
 // Material reconciliation (docs/wave7-plan.md step 7c.2): what the measured work should have taken of each material,
 // by the rate analyses' norms, against what the stores issued; over the norm is wastage to look into.
-import { Alert, Card, Input, Table } from '@aerolith/ui';
+import { Alert, Card, EmptyState, Input, Table } from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
@@ -52,7 +52,7 @@ export function MaterialReconciliation({ projectId }: { projectId: string }) {
       {r.isError ? (
         <Alert tone="danger">{describeError(r.error)}</Alert>
       ) : !r.data ? null : r.data.rows.length === 0 ? (
-        <p className="text-sm text-fg-muted">No material measured or issued in this period.</p>
+        <EmptyState title="No material measured or issued in this period." />
       ) : (
         <>
           <Table minWidth="48rem">
@@ -142,7 +142,9 @@ export function EstimateVsActual({ projectId }: { projectId: string }) {
   return (
     <Card title="Estimate against actual">
       {items.length === 0 ? (
-        <p className="text-sm text-fg-muted">No measured item has a rate analysis yet.</p>
+        <EmptyState title="No measured item has a rate analysis yet.">
+          Items take their norms from a rate analysis; link one in the BOQ to compare.
+        </EmptyState>
       ) : (
         <Table minWidth="52rem">
           <thead>

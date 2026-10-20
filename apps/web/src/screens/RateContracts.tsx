@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -52,16 +55,27 @@ export function RateContractsScreen() {
   });
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const close = async (id: string) => {
+  const confirm = useConfirm();
+  const close = async (c: Contract) => {
+    if (
+      !(await confirm({
+        title: `Close the rate contract with ${c.party.name}?`,
+        body: 'New orders stop taking its rates. Orders already placed keep them.',
+        confirmLabel: 'Close the contract',
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
         ['rate-contracts'],
-        await api.request<List>(`/api/tenant/rate-contracts/${id}/close`, {
+        await api.request<List>(`/api/tenant/rate-contracts/${c.id}/close`, {
           method: 'POST',
           body: {},
         }),
       );
+      toast.success(`Rate contract with ${c.party.name} closed`);
     } catch (err) {
       setError(describeError(err));
     }
@@ -87,7 +101,9 @@ export function RateContractsScreen() {
         <Alert tone="danger">{describeError(list.error)}</Alert>
       ) : list.data.contracts.length === 0 ? (
         <Card>
-          <p className="text-sm text-fg-muted">No rate contract yet.</p>
+          <EmptyState title="No rate contract yet.">
+            Agree rates with a supplier for a period; orders to the supplier then take them.
+          </EmptyState>
         </Card>
       ) : (
         list.data.contracts.map((c) => (
@@ -102,7 +118,7 @@ export function RateContractsScreen() {
             }
             actions={
               list.data.mayEdit && c.status === 'active' ? (
-                <Button variant="ghost" onClick={() => void close(c.id)}>
+                <Button variant="ghost" onClick={() => void close(c)}>
                   Close
                 </Button>
               ) : null
@@ -191,6 +207,7 @@ function NewContract({ onClose }: { onClose: () => void }) {
             })
             .then((out) => {
               qc.setQueryData(['rate-contracts'], out);
+              toast.success('Rate contract saved');
               onClose();
             })
             .catch((err: unknown) => setError(describeError(err)));

@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   Select,
@@ -14,6 +15,8 @@ import {
   Table,
   Textarea,
   cx,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -99,6 +102,7 @@ export function TenderProgrammes({ tenderId }: { tenderId: string }) {
         file,
       );
       setReport({ planId: r.plan.id, name: r.plan.name, report: r.report });
+      toast.success(`Programme ${r.plan.name} imported`);
       void list.refetch();
     } catch (err) {
       setError(describeError(err));
@@ -115,6 +119,7 @@ export function TenderProgrammes({ tenderId }: { tenderId: string }) {
         method: 'POST',
         body: { name, startOn },
       });
+      toast.success(`Programme ${p.name} created`);
       await navigate({ to: '/programmes/$planId', params: { planId: p.id } });
     } catch (err) {
       setError(describeError(err));
@@ -189,7 +194,11 @@ export function TenderProgrammes({ tenderId }: { tenderId: string }) {
       ) : list.isError ? (
         <Alert tone="danger">{describeError(list.error)}</Alert>
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">No programme yet.</p>
+        <EmptyState title="No programme yet.">
+          {canEdit
+            ? 'Start one with "New programme", or import an MS Project or Primavera P6 file.'
+            : 'A planner starts the programme for the bid.'}
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-line text-sm">
           {list.data.map((p) => (
@@ -402,6 +411,7 @@ const variance = (base: string | null, now: string | null) => {
 
 export function ProgrammeScreen({ planId }: { planId: string }) {
   const canEditRole = usePermission('programme.edit');
+  const confirm = useConfirm();
   const { plan, busy, error, setError, edit, post, lastIdMap } = usePlan(planId);
   const [selected, setSelected] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -489,10 +499,19 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
     const afterId = dir === 1 ? sibs[j]!.id : (sibs[j - 1]?.id ?? null);
     void edit([{ op: 'move', id: sel.id, parentId: sel.parentId, afterId }]);
   };
-  const remove = () => {
+  const remove = async () => {
     if (!sel) return;
     const under = d.activities.filter((a) => a.parentId === sel.id).length;
-    if (under && !window.confirm(`Delete ${sel.code} and everything under it?`)) return;
+    if (
+      under &&
+      !(await confirm({
+        title: `Delete ${sel.code} and everything under it?`,
+        body: `${sel.name} and the ${under} activit${under === 1 ? 'y' : 'ies'} indented under it are deleted, with their links.`,
+        confirmLabel: 'Delete the activities',
+        tone: 'danger',
+      }))
+    )
+      return;
     void edit([{ op: 'delete', id: sel.id }]);
   };
   const setPreds = (a: ProgrammeActivity, text: string) => {
@@ -520,7 +539,7 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
   const onKey = (e: KeyboardEvent) => {
     if (!canEdit || (e.target as HTMLElement).tagName === 'INPUT') return;
     if (e.key === 'Insert') add('task');
-    else if (e.key === 'Delete' && sel) remove();
+    else if (e.key === 'Delete' && sel) void remove();
     else if (e.altKey && e.shiftKey && e.key === 'ArrowRight') indent();
     else if (e.altKey && e.shiftKey && e.key === 'ArrowLeft') outdent();
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -626,12 +645,33 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
           plan={d}
           busy={busy}
           onSave={(body) =>
-            void post('', (x) => ({ rowVersion: x.rowVersion, ...body })).then(
-              (ok) => ok && setPanel(null),
-            )
+            void post('', (x) => ({ rowVersion: x.rowVersion, ...body })).then((ok) => {
+              if (!ok) return;
+              toast.success(`${schedule ? 'Schedule' : 'Programme'} settings saved`);
+              setPanel(null);
+            })
           }
-          onArchive={(archived) => void post('/archive', () => ({ archived }))}
-          onBaseline={(name) => post('/baselines', () => ({ name }))}
+          onArchive={async (archived) => {
+            const what = schedule ? 'schedule' : 'programme';
+            if (
+              archived &&
+              !(await confirm({
+                title: `Archive ${d.name}?`,
+                body: `The ${what} becomes read-only: nobody can change its activities until it is restored.`,
+                confirmLabel: `Archive the ${what}`,
+                tone: 'danger',
+              }))
+            )
+              return;
+            if (await post('/archive', () => ({ archived })))
+              toast.success(`${d.name} ${archived ? 'archived' : 'restored'}`);
+          }}
+          onBaseline={(name) =>
+            post('/baselines', () => ({ name })).then((ok) => {
+              if (ok) toast.success(`Baseline ${name} taken`);
+              return ok;
+            })
+          }
         />
       )}
       {panel === 'resources' && <ResourceLoad planId={planId} />}
@@ -644,7 +684,10 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
             post(id ? `/calendars/${id}` : '/calendars', (x) => ({
               rowVersion: x.rowVersion,
               ...body,
-            }))
+            })).then((ok) => {
+              if (ok) toast.success(`Calendar ${body.name} saved`);
+              return ok;
+            })
           }
         />
       )}
@@ -699,7 +742,7 @@ export function ProgrammeScreen({ planId }: { planId: string }) {
             <Button
               variant="ghost"
               aria-label="Delete activity"
-              onClick={remove}
+              onClick={() => void remove()}
               disabled={!canEdit || !sel}
             >
               <Trash2 className="size-4" aria-hidden />
@@ -1360,7 +1403,11 @@ function ActivityLines({
                 <Button
                   variant="ghost"
                   aria-label={`Unlink ${l.code}`}
-                  onClick={() => void save('/remove', { lineKey: l.lineKey })}
+                  onClick={() =>
+                    void save('/remove', { lineKey: l.lineKey }).then(
+                      (ok) => ok && toast.success(`${l.code} unlinked`),
+                    )
+                  }
                 >
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
@@ -1378,7 +1425,11 @@ function ActivityLines({
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void save('', { boqId: chosen, code: code.trim() }).then((ok) => ok && setCode(''));
+            void save('', { boqId: chosen, code: code.trim() }).then((ok) => {
+              if (!ok) return;
+              toast.success(`${code.trim()} linked`);
+              setCode('');
+            });
           }}
         >
           {(contracts.data?.length ?? 0) > 1 && (
@@ -1478,7 +1529,11 @@ function ActivityResources({
                 <Button
                   variant="ghost"
                   aria-label={`Take ${r.code} off`}
-                  onClick={() => void save(r.resourceId, null)}
+                  onClick={() =>
+                    void save(r.resourceId, null).then(
+                      (ok) => ok && toast.success(`${r.code} taken off`),
+                    )
+                  }
                 >
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
@@ -1494,7 +1549,11 @@ function ActivityResources({
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void save(resourceId, units.trim()).then((ok) => ok && setUnits(''));
+            void save(resourceId, units.trim()).then((ok) => {
+              if (!ok) return;
+              toast.success('Resource put on the activity');
+              setUnits('');
+            });
           }}
         >
           <Field label="Find a resource">
@@ -1545,7 +1604,7 @@ function SettingsPanel({
     dataDate?: string | null;
     baselineId?: string | null;
   }) => void;
-  onArchive: (archived: boolean) => void;
+  onArchive: (archived: boolean) => void | Promise<void>;
   onBaseline: (name: string) => Promise<boolean>;
 }) {
   const schedule = plan.kind === 'project_schedule';
@@ -1643,7 +1702,7 @@ function SettingsPanel({
           <Button type="submit" busy={busy}>
             Save and recalculate
           </Button>
-          <Button type="button" variant="ghost" onClick={() => onArchive(!plan.archivedAt)}>
+          <Button type="button" variant="ghost" onClick={() => void onArchive(!plan.archivedAt)}>
             {plan.archivedAt
               ? `Restore ${schedule ? 'schedule' : 'programme'}`
               : `Archive ${schedule ? 'schedule' : 'programme'}`}

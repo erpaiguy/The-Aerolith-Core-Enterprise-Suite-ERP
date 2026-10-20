@@ -1,6 +1,17 @@
 // What has come against a purchase order (docs/wave2b-plan.md step 5): line by line, accepted, on hold, rejected and
 // still owed; its receipts; and a new receipt, with what was rejected at the gate or held for inspection.
-import { Alert, Badge, Button, Card, Field, Input, Select, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { PackageCheck } from 'lucide-react';
@@ -111,7 +122,9 @@ export function OrderReceipts({ o }: { o: Order }) {
         </ul>
       )}
       {o.receipts.length === 0 && !receiving && (
-        <p className="mt-3 text-sm text-fg-muted">Nothing received yet.</p>
+        <EmptyState title="Nothing received yet.">
+          Record a receipt against the delivery challan when goods arrive.
+        </EmptyState>
       )}
     </Card>
   );
@@ -196,6 +209,7 @@ function ReceiveForm({ o, onCancel }: { o: Order; onCancel: () => void }) {
           }
           void qc.invalidateQueries({ queryKey: ['order', o.id] });
           void qc.invalidateQueries({ queryKey: ['receipts'] });
+          toast.success(`Goods receipt ${sent.result.number} recorded`);
           await navigate({ to: '/receipts/$receiptId', params: { receiptId: sent.result.id } });
         });
       }}

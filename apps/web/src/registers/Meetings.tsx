@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -12,6 +13,7 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -103,7 +105,9 @@ export function MeetingsScreen({ projectId }: { projectId: string }) {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.meetings.length === 0 ? (
-          <p className="text-sm text-fg-muted">No meeting recorded yet.</p>
+          <EmptyState title="No meeting recorded yet.">
+            Record each meeting with its decisions and actions; owners see their actions on My work.
+          </EmptyState>
         ) : (
           <Table minWidth="36rem">
             <thead>
@@ -179,6 +183,7 @@ function NewMeeting({
               body: { ...f, actions: actions.filter((a) => a.description.trim()) },
             })
             .then((m) => {
+              toast.success('Meeting recorded');
               void qc.invalidateQueries({ queryKey: ['meetings', project.id] });
               void qc.invalidateQueries({ queryKey: ['my-work'] });
               onDone(m.id);
@@ -294,6 +299,7 @@ export function MeetingCard({ id }: { id: string }) {
           body: {},
         }),
       );
+      toast.success('Action marked done');
       void qc.invalidateQueries({ queryKey: ['meetings', x.projectId] });
       void qc.invalidateQueries({ queryKey: ['my-work'] });
     } catch (err) {

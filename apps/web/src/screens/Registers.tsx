@@ -1,7 +1,17 @@
 // Company-wide registers (docs/wave7-plan.md step 7a.3): the records kept inside projects (daily reports, bills,
 // drawings, RFIs, inspections, NCRs, store issues and transfers), listed across every project the person can see, with
 // project, status, date and text filters. Each row opens the record's own screen.
-import { Alert, Badge, Card, Input, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Card,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+  Spinner,
+  Table,
+} from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
@@ -385,7 +395,10 @@ export function RegisterScreen({ kind }: { kind: RegisterKind }) {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-fg-muted">Nothing here.</p>
+          <EmptyState title="Nothing here.">
+            Entries show here as they are made on their projects; widen the dates or clear the
+            search to see more.
+          </EmptyState>
         ) : (
           <>
             {list.data.limited ? (

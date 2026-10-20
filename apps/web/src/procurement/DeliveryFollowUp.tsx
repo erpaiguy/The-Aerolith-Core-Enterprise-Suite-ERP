@@ -1,6 +1,6 @@
 // Delivery follow-up on a purchase order (docs/wave8-plan.md step 8e.2): each line's instalments set against what
 // came, and the buyer's expediting notes with the date the supplier promised.
-import { Alert, Badge, Button, Card, Field, Input, Table } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Table, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
@@ -53,10 +53,11 @@ export function DeliveryFollowUp({ orderId }: { orderId: string }) {
   const [rows, setRows] = useState<{ dueOn: string; qty: string; note: string }[]>([]);
   const [note, setNote] = useState({ note: '', promisedOn: '' });
   const [error, setError] = useState<string | null>(null);
-  const run = async (path: string, body: object) => {
+  const run = async (path: string, body: object, done: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await api.request<FollowUp>(path, { method: 'POST', body }));
+      toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -88,6 +89,7 @@ export function DeliveryFollowUp({ orderId }: { orderId: string }) {
                     method: 'POST',
                     body: { pct: e.target.value || '0' },
                   });
+                  toast.success('Receipt tolerance saved');
                   void qc.invalidateQueries({ queryKey: key });
                 } catch (err) {
                   setError(describeError(err));
@@ -127,10 +129,14 @@ export function DeliveryFollowUp({ orderId }: { orderId: string }) {
                     className="space-y-2"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      void run(`/api/tenant/orders/${orderId}/schedule`, {
-                        lineKey: l.lineKey,
-                        slots: rows.filter((r) => r.dueOn && r.qty),
-                      }).then((ok) => ok && setEditing(null));
+                      void run(
+                        `/api/tenant/orders/${orderId}/schedule`,
+                        {
+                          lineKey: l.lineKey,
+                          slots: rows.filter((r) => r.dueOn && r.qty),
+                        },
+                        `Instalments of line ${l.position} saved`,
+                      ).then((ok) => ok && setEditing(null));
                     }}
                   >
                     {rows.map((r, i) => (
@@ -222,7 +228,9 @@ export function DeliveryFollowUp({ orderId }: { orderId: string }) {
       </Table>
       <h3 className="mt-4 text-sm font-semibold">Expediting</h3>
       {d.notes.length === 0 ? (
-        <p className="text-sm text-fg-muted">No notes.</p>
+        <EmptyState title="No notes.">
+          {d.mayEdit ? 'Note each chase with the supplier and the date they promise.' : undefined}
+        </EmptyState>
       ) : (
         <ul className="space-y-1 text-sm" aria-label="Expediting notes">
           {d.notes.map((x) => (
@@ -239,10 +247,14 @@ export function DeliveryFollowUp({ orderId }: { orderId: string }) {
           className="mt-2 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void run(`/api/tenant/orders/${orderId}/expedite`, {
-              note: note.note,
-              promisedOn: note.promisedOn || null,
-            }).then((ok) => ok && setNote({ note: '', promisedOn: '' }));
+            void run(
+              `/api/tenant/orders/${orderId}/expedite`,
+              {
+                note: note.note,
+                promisedOn: note.promisedOn || null,
+              },
+              'Expediting note added',
+            ).then((ok) => ok && setNote({ note: '', promisedOn: '' }));
           }}
         >
           <div className="min-w-64 flex-1">

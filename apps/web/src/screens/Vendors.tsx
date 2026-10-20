@@ -6,12 +6,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -143,6 +146,11 @@ export function VendorsScreen() {
                         body: { approvedOnly: e.target.checked },
                       }),
                     );
+                    toast.success(
+                      e.target.checked
+                        ? 'Enquiries and orders now go to approved vendors only'
+                        : 'Enquiries and orders may go to any vendor',
+                    );
                   } catch (err) {
                     setError(describeError(err));
                   }
@@ -184,7 +192,9 @@ export function VendorsScreen() {
         {list.isPending ? (
           <Spinner />
         ) : (list.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">None.</p>
+          <EmptyState title="No vendors here.">
+            Vendors and subcontractors are added as parties, or when an enquiry asks them to quote.
+          </EmptyState>
         ) : (
           <Table minWidth="48rem">
             <thead>
@@ -243,11 +253,13 @@ export function VendorScreen({ partyId }: { partyId: string }) {
   });
   const [doc, setDoc] = useState({ kind: 'gst_certificate', number: '', validUntil: '', note: '' });
   const file = useRef<HTMLInputElement>(null);
-  const run = async (fn: () => Promise<Vendor>) => {
+  const confirm = useConfirm();
+  const run = async (fn: () => Promise<Vendor>, done?: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await fn());
       void qc.invalidateQueries({ queryKey: ['vendors'] });
+      if (done) toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -299,14 +311,25 @@ export function VendorScreen({ partyId }: { partyId: string }) {
           <form
             aria-label="Vendor status"
             className="flex flex-wrap items-end gap-3"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               if (!status.status) return;
+              if (
+                status.status === 'blacklisted' &&
+                !(await confirm({
+                  title: `Blacklist ${d.name}?`,
+                  body: 'No enquiry or order can go to them while they are blacklisted.',
+                  confirmLabel: 'Blacklist the vendor',
+                  tone: 'danger',
+                }))
+              )
+                return;
               void run(
                 post(`/api/tenant/vendors/${partyId}/status`, {
                   status: status.status,
                   reason: status.reason,
                 }),
+                `${d.name}: ${label(status.status).toLowerCase()}`,
               ).then((ok) => ok && setStatus({ status: '', reason: '' }));
             }}
           >
@@ -409,9 +432,21 @@ export function VendorScreen({ partyId }: { partyId: string }) {
                       <Button
                         type="button"
                         variant="ghost"
-                        onClick={() =>
-                          void run(post(`/api/tenant/vendor-documents/${x.id}/remove`, {}))
-                        }
+                        onClick={async () => {
+                          if (
+                            !(await confirm({
+                              title: `Remove ${label(x.kind)} ${x.number}?`,
+                              body: `The document and its scan are taken off ${d.name}'s KYC.`,
+                              confirmLabel: 'Remove the document',
+                              tone: 'danger',
+                            }))
+                          )
+                            return;
+                          await run(
+                            post(`/api/tenant/vendor-documents/${x.id}/remove`, {}),
+                            `${label(x.kind)} removed`,
+                          );
+                        }}
                       >
                         Remove
                       </Button>
@@ -435,23 +470,26 @@ export function VendorScreen({ partyId }: { partyId: string }) {
                 validUntil: doc.validUntil || null,
                 note: doc.note,
               };
-              void run(() => {
-                if (!scan)
-                  return api.request<Vendor>(`/api/tenant/vendors/${partyId}/documents`, {
-                    method: 'POST',
-                    body: meta,
+              void run(
+                () => {
+                  if (!scan)
+                    return api.request<Vendor>(`/api/tenant/vendors/${partyId}/documents`, {
+                      method: 'POST',
+                      body: meta,
+                    });
+                  const q = new URLSearchParams({
+                    kind: meta.kind,
+                    number: meta.number,
+                    note: meta.note,
                   });
-                const q = new URLSearchParams({
-                  kind: meta.kind,
-                  number: meta.number,
-                  note: meta.note,
-                });
-                if (meta.validUntil) q.set('validUntil', meta.validUntil);
-                return api.upload<Vendor>(
-                  `/api/tenant/vendors/${partyId}/documents?${q.toString()}`,
-                  scan,
-                );
-              }).then((ok) => {
+                  if (meta.validUntil) q.set('validUntil', meta.validUntil);
+                  return api.upload<Vendor>(
+                    `/api/tenant/vendors/${partyId}/documents?${q.toString()}`,
+                    scan,
+                  );
+                },
+                `${label(meta.kind)} added`,
+              ).then((ok) => {
                 if (!ok) return;
                 setDoc({ ...doc, number: '', validUntil: '', note: '' });
                 if (file.current) file.current.value = '';

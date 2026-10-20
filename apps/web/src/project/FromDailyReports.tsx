@@ -1,6 +1,6 @@
 // Daily reports into the measurement book (docs/wave7-plan.md step 7c.1): the month's quantities the site reported
 // against contract BOQ items, less what the book already has; reviewed line by line and accepted into the book.
-import { Alert, Button, Card, Input, Table } from '@aerolith/ui';
+import { Alert, Button, Card, EmptyState, Input, Table, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api/client';
@@ -64,6 +64,7 @@ export function FromDailyReports({ projectId }: { projectId: string }) {
         body: { month, lines },
       });
       qc.setQueryData(key, next);
+      toast.success(`Measurement book: ${lines.length} item${lines.length === 1 ? '' : 's'} added`);
       setQty({});
       setDone(
         `${lines.length} item${lines.length === 1 ? '' : 's'} put in the book on ${shortDate(next.bookOn)}.`,
@@ -92,9 +93,9 @@ export function FromDailyReports({ projectId }: { projectId: string }) {
       {q.isError ? (
         <Alert tone="danger">{describeError(q.error)}</Alert>
       ) : !q.data ? null : q.data.lines.length === 0 ? (
-        <p className="text-sm text-fg-muted">
-          No submitted daily report this month gives a quantity against a BOQ item.
-        </p>
+        <EmptyState title="No submitted daily report this month gives a quantity against a BOQ item.">
+          Daily reports that record work done against BOQ items show here, ready for the book.
+        </EmptyState>
       ) : (
         <>
           <Table minWidth="48rem">

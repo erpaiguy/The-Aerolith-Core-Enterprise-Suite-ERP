@@ -1,4 +1,15 @@
-import { Alert, Badge, Button, Card, Input, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { CalendarDays, List, Plus, Search, TrendingUp } from 'lucide-react';
@@ -182,21 +193,18 @@ export function TendersScreen() {
             ) : tenders.isError ? (
               <Alert tone="danger">{describeError(tenders.error)}</Alert>
             ) : tenders.data.items.length === 0 ? (
-              <div className="py-8 text-center text-sm text-fg-muted">
+              <EmptyState title={q || filter !== 'open' ? 'No tenders match.' : 'No open tenders.'}>
                 {q || filter !== 'open' ? (
-                  'No tenders match.'
+                  'Try another search or status.'
                 ) : canEdit ? (
                   <>
-                    No open tenders.{' '}
                     <Link to="/tenders/new" className="text-accent hover:underline">
                       Add the first one
                     </Link>
                     .
                   </>
-                ) : (
-                  'No open tenders.'
-                )}
-              </div>
+                ) : undefined}
+              </EmptyState>
             ) : (
               <Table minWidth="48rem">
                 <thead>
@@ -266,6 +274,7 @@ export function NewTenderScreen() {
               method: 'POST',
               body,
             });
+            toast.success(`Tender ${t.number} created`);
             await navigate({ to: '/tenders/$tenderId', params: { tenderId: t.id } });
           }}
         />

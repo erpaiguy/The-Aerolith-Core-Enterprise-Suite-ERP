@@ -6,12 +6,14 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Textarea,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -136,14 +138,14 @@ function RequisitionView({
           },
         }),
       ),
-    );
+    ).then((ok) => ok && toast.success(`Requisition ${r.number} saved`));
   const submit = () =>
     run('submit', () =>
       api.request(`/api/tenant/requisitions/${r.id}/submit`, {
         method: 'POST',
         body: { rowVersion: r.rowVersion },
       }),
-    );
+    ).then((ok) => ok && toast.success(`Requisition ${r.number} put up for approval`));
   const cancel = () => {
     const reason = window.prompt('Why is it cancelled?');
     if (!reason || reason.trim().length < 3) return;
@@ -152,12 +154,12 @@ function RequisitionView({
         method: 'POST',
         body: { reason: reason.trim() },
       }),
-    );
+    ).then((ok) => ok && toast.success(`Requisition ${r.number} cancelled`));
   };
   const withdraw = () =>
     void run('withdraw', () =>
       api.request(`/api/tenant/approvals/${r.approval!.id}/withdraw`, { method: 'POST', body: {} }),
-    );
+    ).then((ok) => ok && toast.success(`Requisition ${r.number} withdrawn to change it`));
   const draftTotal = draft.lines.reduce((s, l) => s + (lineAmount(l) ?? 0), 0);
   return (
     <div className="space-y-5">
@@ -730,6 +732,7 @@ function Enquiries({ r }: { r: Requisition }) {
                     },
                   },
                 );
+                toast.success('Enquiry started');
                 await navigate({ to: '/rfqs/$rfqId', params: { rfqId: rfq.id } });
               })
             }
@@ -740,7 +743,9 @@ function Enquiries({ r }: { r: Requisition }) {
       }
     >
       {r.enquiries.length === 0 ? (
-        <p className="text-sm text-fg-muted">Not asked for yet.</p>
+        <EmptyState title="Not asked for yet.">
+          {canRfq ? 'Use "Ask vendors" to send its lines out for quotes.' : undefined}
+        </EmptyState>
       ) : (
         <ul className="space-y-1 text-sm" aria-label="Enquiries for it">
           {r.enquiries.map((q) => (

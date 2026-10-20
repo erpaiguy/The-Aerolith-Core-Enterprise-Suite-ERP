@@ -1,6 +1,19 @@
 // A project's documents (docs/wave2b-plan.md step 8): its drawings register, each drawing's revisions (each a version
 // of one document, a new one superseding the last), and its vault, kept to its team.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Table, cx } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Table,
+  cx,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Download, Plus, Printer, Upload } from 'lucide-react';
@@ -183,10 +196,9 @@ function Drawings({ projectId }: { projectId: string }) {
           />
         )}
         {drawings.length === 0 ? (
-          <p className="text-sm text-fg-muted">
-            No drawings yet. Add each drawing as it is issued; every revision is kept, the latest
-            one in force.
-          </p>
+          <EmptyState title="No drawings yet.">
+            Add each drawing as it is issued; every revision is kept, the latest one in force.
+          </EmptyState>
         ) : (
           <Table minWidth="44rem">
             <thead>
@@ -264,6 +276,7 @@ function NewDrawing({
         method: 'POST',
         body: { number, title, discipline },
       });
+      toast.success(`Drawing ${number.trim()} added`);
       onDone(d.id);
     } catch (err) {
       setError(describeError(err));
@@ -341,7 +354,9 @@ function DrawingCard({ drawingId, onChanged }: { drawingId: string; onChanged: (
           />
         )}
         {x.revisions.length === 0 ? (
-          <p className="text-sm text-fg-muted">No revision received yet.</p>
+          <EmptyState title="No revision received yet.">
+            {x.mayEdit ? 'Add the first revision above, with its file.' : undefined}
+          </EmptyState>
         ) : (
           <Table minWidth="40rem">
             <thead>
@@ -454,6 +469,7 @@ function NewRevision({
     try {
       const q = new URLSearchParams({ revision, purpose, receivedFrom, receivedOn, note });
       await api.upload(`/api/tenant/drawings/${drawingId}/revisions?${q.toString()}`, file);
+      toast.success(`Revision ${revision.trim()} added`);
       setRevision('');
       setNote('');
       if (input.current) input.current.value = '';

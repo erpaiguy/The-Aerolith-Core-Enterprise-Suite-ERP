@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -112,7 +115,9 @@ export function ImprestScreen({ projectId }: { projectId: string }) {
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
         ) : list.data.imprests.length === 0 ? (
-          <p className="text-sm text-fg-muted">No imprest on this project.</p>
+          <EmptyState title="No imprest on this project.">
+            Open one for each person who holds site cash, with its float.
+          </EmptyState>
         ) : (
           <Table minWidth="48rem">
             <thead>
@@ -185,6 +190,7 @@ function NewImprest({
               body: { ...f, floatLimit: f.floatLimit || '0' },
             })
             .then((i) => {
+              toast.success(`Imprest ${i.number} opened`);
               void qc.invalidateQueries({ queryKey: ['imprests', projectId] });
               onDone(i.id);
             })
@@ -246,16 +252,44 @@ export function ImprestCard({ id }: { id: string }) {
     close: false,
   });
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const x = q.data;
+  const DONE: Record<Move | 'settle', string> = {
+    advances: 'Advance paid',
+    expenses: 'Spend entered',
+    settle: 'Spends settled in the books',
+    'take-back': `Imprest ${x.number} taken back and closed`,
+  };
   const send = async (path: Move | 'settle', body: object) => {
+    if (
+      path === 'settle' &&
+      !(await confirm({
+        title: `Settle the spends of ${x.number}?`,
+        body: `${formatInr(x.totals.unsettled)} of spends are posted to the books as a journal voucher.`,
+        confirmLabel: 'Settle the spends',
+        tone: 'primary',
+      }))
+    )
+      return;
+    if (
+      path === 'take-back' &&
+      !(await confirm({
+        title: `Take back and close ${x.number}?`,
+        body: `What ${x.custodian} holds is taken back into the books and the imprest is closed for good.`,
+        confirmLabel: 'Take back and close',
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       qc.setQueryData(
         key,
         await api.request<Imprest>(`/api/tenant/imprests/${id}/${path}`, { method: 'POST', body }),
       );
+      toast.success(DONE[path]);
       setMove(null);
       setF({ ...f, amount: '', description: '', reference: '', close: false });
       void qc.invalidateQueries({ queryKey: ['imprests', x.projectId] });
