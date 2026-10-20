@@ -3,12 +3,13 @@ import {
   Badge,
   Button,
   Card,
+  DataGrid,
   EmptyState,
   Input,
   PageHeader,
   Spinner,
-  Table,
   toast,
+  type GridColumn,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -17,6 +18,7 @@ import { useDeferredValue, useState } from 'react';
 import { api } from '../api/client';
 import type { TenderDetail, TenderStatus, TenderSummary } from '../api/types';
 import { daysUntil, describeError, formatDate, formatInrShort } from '../lib/format';
+import { num, useGridStorage } from '../lib/grid';
 import { usePermission } from '../session/permissions';
 import { TenderForm } from './TenderForm';
 import { TenderAgenda } from './TenderInsights';
@@ -87,8 +89,71 @@ const FILTERS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' },
 ];
 
+const TENDER_COLUMNS: GridColumn<TenderSummary>[] = [
+  {
+    id: 'number',
+    header: 'Number',
+    width: 130,
+    value: (t) => t.number,
+    cell: (t) => (
+      <span className="whitespace-nowrap font-mono text-xs text-fg-muted">{t.number}</span>
+    ),
+  },
+  {
+    id: 'tender',
+    header: 'Tender',
+    width: 320,
+    hideable: false,
+    value: (t) => t.title,
+    cell: (t) => (
+      <>
+        <Link
+          to="/tenders/$tenderId"
+          params={{ tenderId: t.id }}
+          className="font-medium text-accent hover:underline"
+        >
+          {t.title}
+        </Link>
+        <div className="truncate text-xs text-fg-muted">
+          {[t.client?.name, t.location].filter(Boolean).join(' · ') || '-'}
+        </div>
+      </>
+    ),
+  },
+  {
+    id: 'due',
+    header: 'Due',
+    width: 170,
+    value: (t) => (t.submissionDueAt ? new Date(t.submissionDueAt) : null),
+    cell: (t) => <DueLabel iso={t.submissionDueAt} open={OPEN.includes(t.status)} />,
+  },
+  {
+    id: 'value',
+    header: 'Value',
+    align: 'right',
+    width: 120,
+    value: (t) => num(t.estimatedValue),
+    cell: (t) => <span className="whitespace-nowrap">{formatInrShort(t.estimatedValue)}</span>,
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    width: 120,
+    value: (t) => STATUS_LABEL[t.status],
+    cell: (t) => <Badge tone={statusTone(t.status)}>{STATUS_LABEL[t.status]}</Badge>,
+  },
+  {
+    id: 'owner',
+    header: 'Owner',
+    width: 150,
+    value: (t) => t.owner?.displayName ?? null,
+    cell: (t) => <span className="text-fg-muted">{t.owner?.displayName ?? '-'}</span>,
+  },
+];
+
 export function TendersScreen() {
   const canEdit = useCanEditTenders();
+  const storage = useGridStorage('tenders');
   const canPrice = usePermission('pricing.edit');
   const navigate = useNavigate();
   const [view, setView] = useState<'list' | 'agenda'>('list');
@@ -206,49 +271,15 @@ export function TendersScreen() {
                 ) : undefined}
               </EmptyState>
             ) : (
-              <Table minWidth="48rem">
-                <thead>
-                  <tr>
-                    <th>Number</th>
-                    <th>Tender</th>
-                    <th>Due</th>
-                    <th className="text-right">Value</th>
-                    <th>Status</th>
-                    <th>Owner</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenders.data.items.map((t) => (
-                    <tr key={t.id}>
-                      <td className="whitespace-nowrap font-mono text-xs text-fg-muted">
-                        {t.number}
-                      </td>
-                      <td className="max-w-[24rem]">
-                        <Link
-                          to="/tenders/$tenderId"
-                          params={{ tenderId: t.id }}
-                          className="font-medium text-accent hover:underline"
-                        >
-                          {t.title}
-                        </Link>
-                        <div className="truncate text-xs text-fg-muted">
-                          {[t.client?.name, t.location].filter(Boolean).join(' · ') || '-'}
-                        </div>
-                      </td>
-                      <td>
-                        <DueLabel iso={t.submissionDueAt} open={OPEN.includes(t.status)} />
-                      </td>
-                      <td className="whitespace-nowrap text-right tabular-nums">
-                        {formatInrShort(t.estimatedValue)}
-                      </td>
-                      <td>
-                        <Badge tone={statusTone(t.status)}>{STATUS_LABEL[t.status]}</Badge>
-                      </td>
-                      <td className="text-fg-muted">{t.owner?.displayName ?? '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+              <DataGrid
+                id="tenders"
+                label="Tenders"
+                columns={TENDER_COLUMNS}
+                rows={tenders.data.items}
+                rowKey={(t) => t.id}
+                storage={storage}
+                exportName="Tenders"
+              />
             )}
           </Card>
         </>

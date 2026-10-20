@@ -1,11 +1,22 @@
 // Every enquiry (RFQ) the person may see, from tenders and from projects (docs/wave7-plan.md step 7a.2): one list for
 // estimation and purchase, instead of opening each tender or project first.
-import { Alert, Badge, Card, EmptyState, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Card,
+  DataGrid,
+  EmptyState,
+  PageHeader,
+  Select,
+  Spinner,
+  type GridColumn,
+} from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
+import { day, useGridStorage } from '../lib/grid';
 import { shortDate } from '../schedule/model';
 
 interface RfqRow {
@@ -28,6 +39,77 @@ const TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning'> = {
   cancelled: 'warning',
 };
 
+const columns: GridColumn<RfqRow>[] = [
+  {
+    id: 'rfq',
+    header: 'RFQ',
+    width: 260,
+    hideable: false,
+    value: (r) => `${r.number} ${r.title}`,
+    cell: (r) => (
+      <Link to="/rfqs/$rfqId" params={{ rfqId: r.id }} className="hover:underline">
+        <span className="font-mono text-xs">{r.number}</span> {r.title}
+      </Link>
+    ),
+  },
+  {
+    id: 'for',
+    header: 'For',
+    width: 220,
+    value: (r) =>
+      r.tender ? `Tender: ${r.tender.title}` : r.project ? `Project: ${r.project.name}` : null,
+    cell: (r) =>
+      r.tender ? (
+        <Link
+          to="/tenders/$tenderId"
+          params={{ tenderId: r.tender.id }}
+          className="text-sm hover:underline"
+        >
+          Tender: {r.tender.title}
+        </Link>
+      ) : r.project ? (
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId: r.project.id }}
+          className="text-sm hover:underline"
+        >
+          Project: {r.project.name}
+        </Link>
+      ) : null,
+  },
+  { id: 'kind', header: 'Kind', width: 100, value: (r) => r.kind, cell: (r) => r.kind },
+  {
+    id: 'dueOn',
+    header: 'Quotes due',
+    width: 120,
+    value: (r) => day(r.dueOn),
+    cell: (r) => (r.dueOn ? shortDate(r.dueOn) : '-'),
+  },
+  {
+    id: 'lines',
+    header: 'Lines',
+    align: 'right',
+    width: 80,
+    value: (r) => r.lines,
+    cell: (r) => r.lines,
+  },
+  {
+    id: 'quotes',
+    header: 'Quotes',
+    align: 'right',
+    width: 100,
+    value: (r) => r.quotes,
+    cell: (r) => `${r.quotes} of ${r.vendors}`,
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    width: 110,
+    value: (r) => r.status,
+    cell: (r) => <Badge tone={TONE[r.status] ?? 'neutral'}>{r.status}</Badge>,
+  },
+];
+
 export function RfqsScreen() {
   const [status, setStatus] = useState('open');
   const [source, setSource] = useState('all');
@@ -36,6 +118,7 @@ export function RfqsScreen() {
     queryFn: () => api.request<RfqRow[]>(`/api/tenant/rfqs?status=${status}&source=${source}`),
     placeholderData: keepPreviousData,
   });
+  const storage = useGridStorage('rfqs');
   return (
     <div className="space-y-5">
       <PageHeader
@@ -62,63 +145,21 @@ export function RfqsScreen() {
           <Spinner />
         ) : list.isError ? (
           <Alert tone="danger">{describeError(list.error)}</Alert>
-        ) : list.data.length === 0 ? (
-          <EmptyState title="No enquiries here.">
-            Start an enquiry from a tender&rsquo;s BOQ or a project&rsquo;s requisitions.
-          </EmptyState>
         ) : (
-          <Table minWidth="48rem">
-            <thead>
-              <tr>
-                <th>RFQ</th>
-                <th>For</th>
-                <th>Kind</th>
-                <th>Quotes due</th>
-                <th className="text-right">Lines</th>
-                <th className="text-right">Quotes</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody aria-label="Enquiries">
-              {list.data.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <Link to="/rfqs/$rfqId" params={{ rfqId: r.id }} className="hover:underline">
-                      <span className="font-mono text-xs">{r.number}</span> {r.title}
-                    </Link>
-                  </td>
-                  <td className="text-sm">
-                    {r.tender ? (
-                      <Link
-                        to="/tenders/$tenderId"
-                        params={{ tenderId: r.tender.id }}
-                        className="hover:underline"
-                      >
-                        Tender: {r.tender.title}
-                      </Link>
-                    ) : r.project ? (
-                      <Link
-                        to="/projects/$projectId"
-                        params={{ projectId: r.project.id }}
-                        className="hover:underline"
-                      >
-                        Project: {r.project.name}
-                      </Link>
-                    ) : null}
-                  </td>
-                  <td>{r.kind}</td>
-                  <td>{r.dueOn ? shortDate(r.dueOn) : '-'}</td>
-                  <td className="text-right">{r.lines}</td>
-                  <td className="text-right">
-                    {r.quotes} of {r.vendors}
-                  </td>
-                  <td>
-                    <Badge tone={TONE[r.status] ?? 'neutral'}>{r.status}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          <DataGrid
+            id="rfqs"
+            label="Enquiries"
+            columns={columns}
+            rows={list.data}
+            rowKey={(r) => r.id}
+            storage={storage}
+            exportName="Enquiries"
+            empty={
+              <EmptyState title="No enquiries here.">
+                Start an enquiry from a tender&rsquo;s BOQ or a project&rsquo;s requisitions.
+              </EmptyState>
+            }
+          />
         )}
       </Card>
     </div>

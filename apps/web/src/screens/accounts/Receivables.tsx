@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  DataGrid,
   EmptyState,
   Field,
   Input,
@@ -13,6 +14,7 @@ import {
   Table,
   toast,
   useConfirm,
+  type GridColumn,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -22,6 +24,7 @@ import { api, saveFile } from '../../api/client';
 import type { Party } from '../../api/types';
 import { ledgerOptions, today, useChart } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { day, num, useGridStorage } from '../../lib/grid';
 import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
@@ -109,7 +112,144 @@ export function ReceivablesScreen() {
   );
 }
 
+type OutstandingBill = Report['bills'][number];
+const OUTSTANDING_COLUMNS: GridColumn<OutstandingBill>[] = [
+  {
+    id: 'client',
+    header: 'Client',
+    width: 200,
+    value: (b) => b.party.name,
+    cell: (b) => <span className="text-sm">{b.party.name}</span>,
+  },
+  {
+    id: 'bill',
+    header: 'Bill',
+    width: 160,
+    hideable: false,
+    value: (b) => `${b.project.number} RA ${b.raNo}`,
+    cell: (b) => (
+      <Link
+        to="/client-bills/$billId"
+        params={{ billId: b.id }}
+        className="text-accent hover:underline"
+      >
+        {b.project.number} RA {b.raNo}
+      </Link>
+    ),
+  },
+  {
+    id: 'invoice',
+    header: 'Invoice',
+    width: 200,
+    value: (b) => b.invoiceNo,
+    cell: (b) => (
+      <span className="whitespace-nowrap text-sm">
+        <span className="font-mono text-xs">{b.invoiceNo}</span> {shortDate(b.invoiceDate)}
+      </span>
+    ),
+  },
+  {
+    id: 'net',
+    header: 'Net payable',
+    align: 'right',
+    width: 130,
+    value: (b) => num(b.net),
+    cell: (b) => rupees(b.net),
+  },
+  {
+    id: 'received',
+    header: 'Received',
+    align: 'right',
+    width: 130,
+    value: (b) => (Number(b.received) ? num(b.received) : null),
+    cell: (b) => (Number(b.received) ? rupees(b.received) : ''),
+  },
+  {
+    id: 'outstanding',
+    header: 'Outstanding',
+    align: 'right',
+    width: 130,
+    value: (b) => num(b.outstanding),
+    cell: (b) => <span className="font-medium">{rupees(b.outstanding)}</span>,
+  },
+  {
+    id: 'days',
+    header: 'Days',
+    align: 'right',
+    width: 130,
+    value: (b) => b.ageDays,
+    cell: (b) => (
+      <>
+        {b.ageDays} {b.ageDays > 90 && <Badge tone="danger">over 90</Badge>}
+      </>
+    ),
+  },
+];
+
+interface ClientReceiptRow {
+  id: string;
+  receivedOn: string;
+  party: string;
+  amount: string;
+  tds: string;
+  reference: string;
+  status: string;
+  voucher: string;
+}
+const RECEIPT_COLUMNS: GridColumn<ClientReceiptRow>[] = [
+  {
+    id: 'date',
+    header: 'Date',
+    width: 110,
+    value: (r) => day(r.receivedOn),
+    cell: (r) => <span className="whitespace-nowrap">{shortDate(r.receivedOn)}</span>,
+  },
+  {
+    id: 'voucher',
+    header: 'Voucher',
+    width: 200,
+    hideable: false,
+    value: (r) => r.voucher,
+    cell: (r) => (
+      <>
+        <Link
+          to="/accounts/client-receipts/$receiptId"
+          params={{ receiptId: r.id }}
+          className="font-mono text-xs text-accent hover:underline"
+        >
+          {r.voucher}
+        </Link>{' '}
+        {r.status === 'cancelled' && <Badge tone="danger">Cancelled</Badge>}
+      </>
+    ),
+  },
+  {
+    id: 'client',
+    header: 'Client',
+    width: 220,
+    value: (r) => r.party,
+    cell: (r) => <span className="text-sm">{r.party}</span>,
+  },
+  {
+    id: 'amount',
+    header: 'Received',
+    align: 'right',
+    width: 140,
+    value: (r) => num(r.amount),
+    cell: (r) => rupees(r.amount),
+  },
+  {
+    id: 'tds',
+    header: 'TDS',
+    align: 'right',
+    width: 110,
+    value: (r) => (Number(r.tds) ? num(r.tds) : null),
+    cell: (r) => (Number(r.tds) ? rupees(r.tds) : ''),
+  },
+];
+
 function Ageing({ entityId, asOf }: { entityId: string; asOf: string }) {
+  const billsGrid = useGridStorage('receivable-bills');
   const r = useQuery({
     queryKey: ['receivables', entityId, asOf],
     queryFn: () =>
@@ -176,47 +316,15 @@ function Ageing({ entityId, asOf }: { entityId: string; asOf: string }) {
       </Card>
       {d.bills.length > 0 && (
         <Card title="Bills outstanding">
-          <Table minWidth="48rem">
-            <thead>
-              <tr>
-                <th>Client</th>
-                <th>Bill</th>
-                <th>Invoice</th>
-                <th className="text-right">Net payable</th>
-                <th className="text-right">Received</th>
-                <th className="text-right">Outstanding</th>
-                <th className="text-right">Days</th>
-              </tr>
-            </thead>
-            <tbody aria-label="Bills outstanding">
-              {d.bills.map((b) => (
-                <tr key={b.id}>
-                  <td className="text-sm">{b.party.name}</td>
-                  <td>
-                    <Link
-                      to="/client-bills/$billId"
-                      params={{ billId: b.id }}
-                      className="text-accent hover:underline"
-                    >
-                      {b.project.number} RA {b.raNo}
-                    </Link>
-                  </td>
-                  <td className="whitespace-nowrap text-sm">
-                    <span className="font-mono text-xs">{b.invoiceNo}</span>{' '}
-                    {shortDate(b.invoiceDate)}
-                  </td>
-                  <td className="text-right tabular-nums">{rupees(b.net)}</td>
-                  <td className="text-right tabular-nums">
-                    {Number(b.received) ? rupees(b.received) : ''}
-                  </td>
-                  <td className="text-right font-medium tabular-nums">{rupees(b.outstanding)}</td>
-                  <td className="text-right tabular-nums">
-                    {b.ageDays} {b.ageDays > 90 && <Badge tone="danger">over 90</Badge>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          <DataGrid
+            id="receivable-bills"
+            label="Bills outstanding"
+            columns={OUTSTANDING_COLUMNS}
+            rows={d.bills}
+            rowKey={(b) => b.id}
+            storage={billsGrid}
+            exportName="Bills outstanding"
+          />
         </Card>
       )}
     </>
@@ -224,56 +332,24 @@ function Ageing({ entityId, asOf }: { entityId: string; asOf: string }) {
 }
 
 function Receipts({ entityId }: { entityId: string }) {
+  const storage = useGridStorage('client-receipts');
   const list = useQuery({
     queryKey: ['client-receipts', entityId],
     queryFn: () =>
-      api.request<
-        {
-          id: string;
-          receivedOn: string;
-          party: string;
-          amount: string;
-          tds: string;
-          reference: string;
-          status: string;
-          voucher: string;
-        }[]
-      >(`/api/tenant/accounts/client-receipts?entityId=${entityId}`),
+      api.request<ClientReceiptRow[]>(`/api/tenant/accounts/client-receipts?entityId=${entityId}`),
   });
   if (!list.data?.length) return null;
   return (
     <Card title="Receipts">
-      <Table minWidth="40rem">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Voucher</th>
-            <th>Client</th>
-            <th className="text-right">Received</th>
-            <th className="text-right">TDS</th>
-          </tr>
-        </thead>
-        <tbody aria-label="Client receipts">
-          {list.data.map((r) => (
-            <tr key={r.id}>
-              <td className="whitespace-nowrap">{shortDate(r.receivedOn)}</td>
-              <td>
-                <Link
-                  to="/accounts/client-receipts/$receiptId"
-                  params={{ receiptId: r.id }}
-                  className="font-mono text-xs text-accent hover:underline"
-                >
-                  {r.voucher}
-                </Link>{' '}
-                {r.status === 'cancelled' && <Badge tone="danger">Cancelled</Badge>}
-              </td>
-              <td className="text-sm">{r.party}</td>
-              <td className="text-right tabular-nums">{rupees(r.amount)}</td>
-              <td className="text-right tabular-nums">{Number(r.tds) ? rupees(r.tds) : ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
+      <DataGrid
+        id="client-receipts"
+        label="Client receipts"
+        columns={RECEIPT_COLUMNS}
+        rows={list.data}
+        rowKey={(r) => r.id}
+        storage={storage}
+        exportName="Client receipts"
+      />
     </Card>
   );
 }

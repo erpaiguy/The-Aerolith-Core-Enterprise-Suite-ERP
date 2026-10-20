@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  DataGrid,
   EmptyState,
   Field,
   Input,
@@ -15,12 +16,14 @@ import {
   Table,
   toast,
   useConfirm,
+  type GridColumn,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useRef, useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
+import { useGridStorage } from '../lib/grid';
 import { usePermission } from '../session/permissions';
 
 export type VendorStatus = 'unvetted' | 'approved' | 'on_hold' | 'blacklisted';
@@ -120,6 +123,63 @@ export function VendorsScreen() {
   });
   const [error, setError] = useState<string | null>(null);
   const name = (k: string) => cats.data?.find((c) => c.key === k)?.name ?? k;
+  const storage = useGridStorage('vendors');
+  const columns: GridColumn<VendorRow>[] = [
+    {
+      id: 'name',
+      header: 'Name',
+      width: 240,
+      hideable: false,
+      value: (v) => v.name,
+      cell: (v) => (
+        <>
+          <Link to="/vendors/$partyId" params={{ partyId: v.id }} className="underline">
+            {v.name}
+          </Link>
+          {v.city && <span className="text-xs text-fg-muted"> {v.city}</span>}
+        </>
+      ),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      width: 180,
+      value: (v) => label(v.status),
+      cell: (v) => (
+        <>
+          <Badge tone={STATUS_TONE[v.status]}>{label(v.status)}</Badge>
+          {v.statusReason && <div className="text-xs text-fg-muted">{v.statusReason}</div>}
+        </>
+      ),
+    },
+    {
+      id: 'categories',
+      header: 'Categories',
+      width: 220,
+      value: (v) => v.categories.map(name).join(', '),
+      cell: (v) => <span className="text-sm">{v.categories.map(name).join(', ')}</span>,
+    },
+    {
+      id: 'msme',
+      header: 'MSME',
+      width: 110,
+      value: (v) => (v.msmeType ? label(v.msmeType) : null),
+      cell: (v) => <span className="text-sm">{v.msmeType ? label(v.msmeType) : ''}</span>,
+    },
+    {
+      id: 'documents',
+      header: 'Documents',
+      width: 180,
+      value: (v) => v.documents,
+      cell: (v) => (
+        <span className="text-sm">
+          {v.documents}
+          {v.expired > 0 && <Badge tone="danger">{v.expired} expired</Badge>}
+          {v.expiring > 0 && <Badge tone="warning">{v.expiring} expiring</Badge>}
+        </span>
+      ),
+    },
+  ];
   return (
     <div className="space-y-5">
       <PageHeader
@@ -191,47 +251,22 @@ export function VendorsScreen() {
         </div>
         {list.isPending ? (
           <Spinner />
-        ) : (list.data ?? []).length === 0 ? (
-          <EmptyState title="No vendors here.">
-            Vendors and subcontractors are added as parties, or when an enquiry asks them to quote.
-          </EmptyState>
         ) : (
-          <Table minWidth="48rem">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Categories</th>
-                <th>MSME</th>
-                <th>Documents</th>
-              </tr>
-            </thead>
-            <tbody aria-label="Vendors">
-              {(list.data ?? []).map((v) => (
-                <tr key={v.id}>
-                  <td>
-                    <Link to="/vendors/$partyId" params={{ partyId: v.id }} className="underline">
-                      {v.name}
-                    </Link>
-                    {v.city && <span className="text-xs text-fg-muted"> {v.city}</span>}
-                  </td>
-                  <td>
-                    <Badge tone={STATUS_TONE[v.status]}>{label(v.status)}</Badge>
-                    {v.statusReason && (
-                      <div className="text-xs text-fg-muted">{v.statusReason}</div>
-                    )}
-                  </td>
-                  <td className="text-sm">{v.categories.map(name).join(', ')}</td>
-                  <td className="text-sm">{v.msmeType ? label(v.msmeType) : ''}</td>
-                  <td className="text-sm">
-                    {v.documents}
-                    {v.expired > 0 && <Badge tone="danger">{v.expired} expired</Badge>}
-                    {v.expiring > 0 && <Badge tone="warning">{v.expiring} expiring</Badge>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          <DataGrid
+            id="vendors"
+            label="Vendors"
+            columns={columns}
+            rows={list.data ?? []}
+            rowKey={(v) => v.id}
+            storage={storage}
+            exportName="Vendors"
+            empty={
+              <EmptyState title="No vendors here.">
+                Vendors and subcontractors are added as parties, or when an enquiry asks them to
+                quote.
+              </EmptyState>
+            }
+          />
         )}
       </Card>
     </div>

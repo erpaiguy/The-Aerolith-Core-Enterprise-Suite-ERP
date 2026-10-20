@@ -6,16 +6,17 @@ import {
   Badge,
   Button,
   Card,
+  DataGrid,
   EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
-  Table,
   Textarea,
   toast,
   useConfirm,
+  type GridColumn,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -55,6 +56,7 @@ import {
   formatInr,
   formatInrShort,
 } from '../lib/format';
+import { day, num, useGridStorage } from '../lib/grid';
 import { useFocusForm, useNewParam } from '../lib/new-param';
 
 export const PROJECT_STATUS: Record<ProjectStatus, string> = {
@@ -114,7 +116,85 @@ const post = <T,>(url: string, body: object = {}) =>
 
 // --- the register ---
 
+const PROJECT_COLUMNS: GridColumn<ProjectSummary>[] = [
+  {
+    id: 'number',
+    header: 'Number',
+    width: 130,
+    value: (p) => p.number,
+    cell: (p) => (
+      <span className="whitespace-nowrap font-mono text-xs text-fg-muted">{p.number}</span>
+    ),
+  },
+  {
+    id: 'project',
+    header: 'Project',
+    width: 300,
+    hideable: false,
+    value: (p) => p.name,
+    cell: (p) => (
+      <>
+        <Link
+          to="/projects/$projectId"
+          params={{ projectId: p.id }}
+          className="font-medium text-accent hover:underline"
+        >
+          {p.name}
+        </Link>
+        <div className="truncate text-xs text-fg-muted">
+          {[p.client?.name, p.location].filter(Boolean).join(' · ') || '-'}
+        </div>
+      </>
+    ),
+  },
+  {
+    id: 'start',
+    header: 'Start',
+    width: 120,
+    value: (p) => day(p.startOn),
+    cell: (p) => (
+      <span className="whitespace-nowrap text-fg-muted">
+        {p.startOn ? formatDate(p.startOn) : '-'}
+      </span>
+    ),
+  },
+  {
+    id: 'finish',
+    header: 'Planned finish',
+    width: 130,
+    value: (p) => day(p.plannedFinishOn),
+    cell: (p) => (
+      <span className="whitespace-nowrap text-fg-muted">
+        {p.plannedFinishOn ? formatDate(p.plannedFinishOn) : '-'}
+      </span>
+    ),
+  },
+  {
+    id: 'value',
+    header: 'Contract value',
+    align: 'right',
+    width: 140,
+    value: (p) => num(p.contractValue),
+    cell: (p) => <span className="whitespace-nowrap">{formatInrShort(p.contractValue)}</span>,
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    width: 120,
+    value: (p) => PROJECT_STATUS[p.status],
+    cell: (p) => <Badge tone={STATUS_TONE[p.status]}>{PROJECT_STATUS[p.status]}</Badge>,
+  },
+  {
+    id: 'lead',
+    header: 'Lead',
+    width: 150,
+    value: (p) => p.lead?.displayName ?? null,
+    cell: (p) => <span className="text-fg-muted">{p.lead?.displayName ?? '-'}</span>,
+  },
+];
+
 export function ProjectsScreen() {
+  const storage = useGridStorage('projects');
   const [filter, setFilter] = useState('live');
   const [mine, setMine] = useState(false);
   const [search, setSearch] = useState('');
@@ -207,51 +287,15 @@ export function ProjectsScreen() {
               : 'A won tender becomes one from its page.'}
           </EmptyState>
         ) : (
-          <Table minWidth="48rem">
-            <thead>
-              <tr>
-                <th>Number</th>
-                <th>Project</th>
-                <th>Start</th>
-                <th>Planned finish</th>
-                <th className="text-right">Contract value</th>
-                <th>Status</th>
-                <th>Lead</th>
-              </tr>
-            </thead>
-            <tbody aria-label="Projects">
-              {projects.data.items.map((p) => (
-                <tr key={p.id}>
-                  <td className="whitespace-nowrap font-mono text-xs text-fg-muted">{p.number}</td>
-                  <td className="max-w-[24rem]">
-                    <Link
-                      to="/projects/$projectId"
-                      params={{ projectId: p.id }}
-                      className="font-medium text-accent hover:underline"
-                    >
-                      {p.name}
-                    </Link>
-                    <div className="truncate text-xs text-fg-muted">
-                      {[p.client?.name, p.location].filter(Boolean).join(' · ') || '-'}
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap text-fg-muted">
-                    {p.startOn ? formatDate(p.startOn) : '-'}
-                  </td>
-                  <td className="whitespace-nowrap text-fg-muted">
-                    {p.plannedFinishOn ? formatDate(p.plannedFinishOn) : '-'}
-                  </td>
-                  <td className="whitespace-nowrap text-right tabular-nums">
-                    {formatInrShort(p.contractValue)}
-                  </td>
-                  <td>
-                    <Badge tone={STATUS_TONE[p.status]}>{PROJECT_STATUS[p.status]}</Badge>
-                  </td>
-                  <td className="text-fg-muted">{p.lead?.displayName ?? '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          <DataGrid
+            id="projects"
+            label="Projects"
+            columns={PROJECT_COLUMNS}
+            rows={projects.data.items}
+            rowKey={(p) => p.id}
+            storage={storage}
+            exportName="Projects"
+          />
         )}
       </Card>
     </div>

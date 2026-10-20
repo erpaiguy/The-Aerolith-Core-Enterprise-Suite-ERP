@@ -7,6 +7,7 @@ import { errorMessage } from '../lib/format';
 import { load, save } from '../lib/storage';
 import { clientKind } from '../platform';
 import { useSession } from '../session/session';
+import { LEGAL_DOCUMENTS } from '@aerolith/shared';
 import { Alert, AuthLayout, Button, Field, Input } from '@aerolith/ui';
 
 type Step =
@@ -160,6 +161,7 @@ export function SignInScreen() {
   return (
     <AuthLayout
       title="Sign in"
+      footer={<SignInFooter />}
       subtitle={
         session.entitlement
           ? `Licence ${session.entitlement.tier} · ${session.entitlement.seats} seats`
@@ -258,5 +260,29 @@ function DeviceFooter() {
           : 'Use a different licence key'}
       </button>
     </p>
+  );
+}
+
+/** Under the sign-in form: the product, and its legal documents for anyone to read before signing in (step 9b.3). */
+function SignInFooter() {
+  return (
+    <>
+      <p>Aerolith Core · Construction ERP</p>
+      <nav aria-label="Legal" className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
+        {LEGAL_DOCUMENTS.map((d) => (
+          <Link
+            key={d.key}
+            to="/legal/$key"
+            params={{ key: d.key }}
+            className="underline hover:text-fg"
+          >
+            {d.title}
+          </Link>
+        ))}
+        <Link to="/licences" className="underline hover:text-fg">
+          Third-party licences
+        </Link>
+      </nav>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   Card,
+  DataGrid,
   EmptyState,
   Field,
   Input,
@@ -15,6 +16,7 @@ import {
   Table,
   toast,
   useConfirm,
+  type GridColumn,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -24,12 +26,14 @@ import { api, saveFile } from '../../api/client';
 import type { Party, ProjectSummary } from '../../api/types';
 import { RCM_LABELS, ledgerOptions, today, useChart } from '../../accounts/model';
 import { describeError } from '../../lib/format';
+import { day, num, useGridStorage } from '../../lib/grid';
 import type { Order, OrderRow } from '../../procurement/orders';
 import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
 import { Books } from './Vouchers';
 import { printLink } from '../../print/Letterhead';
+import { PurchaseFlow } from '../shell/FlowStrip';
 
 const plusDays = (d: string, n: number) => {
   const x = new Date(`${d}T00:00:00Z`);
@@ -180,8 +184,81 @@ function Ageing({ entityId, asOf }: { entityId: string; asOf: string }) {
   );
 }
 
+const BILL_STATUS = { held: 'Held', posted: 'Posted', cancelled: 'Cancelled' } as const;
+
+const BILL_COLUMNS: GridColumn<BillRow>[] = [
+  {
+    id: 'party',
+    header: 'Supplier',
+    width: 200,
+    value: (b) => b.party,
+    cell: (b) => <span className="text-sm">{b.party}</span>,
+  },
+  {
+    id: 'bill',
+    header: 'Bill',
+    width: 220,
+    hideable: false,
+    value: (b) => b.billNo,
+    cell: (b) => (
+      <>
+        <Link
+          to="/accounts/vendor-bills/$billId"
+          params={{ billId: b.id }}
+          className="text-accent hover:underline"
+        >
+          {b.billNo}
+        </Link>{' '}
+        <span className="text-xs text-fg-muted">
+          {shortDate(b.billDate)}
+          {b.order && ` · ${b.order}`}
+        </span>
+      </>
+    ),
+  },
+  {
+    id: 'due',
+    header: 'Due',
+    width: 110,
+    value: (b) => day(b.dueDate),
+    cell: (b) => <span className="whitespace-nowrap">{shortDate(b.dueDate)}</span>,
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    width: 110,
+    value: (b) => BILL_STATUS[b.status],
+    cell: (b) => <Badge tone={STATUS_TONE[b.status]}>{BILL_STATUS[b.status]}</Badge>,
+  },
+  {
+    id: 'total',
+    header: 'Total',
+    align: 'right',
+    width: 130,
+    value: (b) => num(b.total),
+    cell: (b) => rupees(b.total),
+  },
+  {
+    id: 'tds',
+    header: 'TDS',
+    align: 'right',
+    width: 110,
+    value: (b) => (Number(b.tds) ? num(b.tds) : null),
+    cell: (b) => (Number(b.tds) ? rupees(b.tds) : ''),
+  },
+  {
+    id: 'outstanding',
+    header: 'Outstanding',
+    align: 'right',
+    width: 130,
+    value: (b) => (b.status === 'posted' ? num(b.outstanding) : null),
+    cell: (b) => (b.status === 'posted' ? rupees(b.outstanding) : ''),
+  },
+];
+
 function BillList({ entityId }: { entityId: string }) {
   const [status, setStatus] = useState('');
+  const storage = useGridStorage('vendor-bills');
   const list = useQuery({
     queryKey: ['vendor-bills', entityId, status],
     queryFn: () =>
@@ -207,54 +284,16 @@ function BillList({ entityId }: { entityId: string }) {
         </Select>
       }
     >
-      {!list.data?.length ? (
-        <EmptyState title="None.">Bills entered with Enter a bill show here.</EmptyState>
-      ) : (
-        <Table minWidth="48rem">
-          <thead>
-            <tr>
-              <th>Supplier</th>
-              <th>Bill</th>
-              <th>Due</th>
-              <th>Status</th>
-              <th className="text-right">Total</th>
-              <th className="text-right">TDS</th>
-              <th className="text-right">Outstanding</th>
-            </tr>
-          </thead>
-          <tbody aria-label="Vendor bills">
-            {list.data.map((b) => (
-              <tr key={b.id}>
-                <td className="text-sm">{b.party}</td>
-                <td>
-                  <Link
-                    to="/accounts/vendor-bills/$billId"
-                    params={{ billId: b.id }}
-                    className="text-accent hover:underline"
-                  >
-                    {b.billNo}
-                  </Link>{' '}
-                  <span className="text-xs text-fg-muted">
-                    {shortDate(b.billDate)}
-                    {b.order && ` · ${b.order}`}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap">{shortDate(b.dueDate)}</td>
-                <td>
-                  <Badge tone={STATUS_TONE[b.status]}>
-                    {b.status === 'held' ? 'Held' : b.status === 'posted' ? 'Posted' : 'Cancelled'}
-                  </Badge>
-                </td>
-                <td className="text-right tabular-nums">{rupees(b.total)}</td>
-                <td className="text-right tabular-nums">{Number(b.tds) ? rupees(b.tds) : ''}</td>
-                <td className="text-right tabular-nums">
-                  {b.status === 'posted' ? rupees(b.outstanding) : ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
+      <DataGrid
+        id="vendor-bills"
+        label="Vendor bills"
+        columns={BILL_COLUMNS}
+        rows={list.data ?? []}
+        rowKey={(b) => b.id}
+        storage={storage}
+        exportName="Suppliers' bills"
+        empty={<EmptyState title="None.">Bills entered with Enter a bill show here.</EmptyState>}
+      />
     </Card>
   );
 }
@@ -731,6 +770,7 @@ export function VendorBillScreen({ billId }: { billId: string }) {
           {x.status === 'held' ? 'Held' : x.status === 'posted' ? 'Posted' : 'Cancelled'}
         </Badge>
       </h1>
+      <PurchaseFlow kind="bill" id={x.id} stamp={`${x.status}-${x.outstanding}`} />
       {x.status === 'held' && (
         <Alert tone="warning">
           <div className="font-medium">Held: it does not match the order and receipts.</div>

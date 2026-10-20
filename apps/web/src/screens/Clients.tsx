@@ -6,15 +6,16 @@ import {
   Badge,
   Button,
   Card,
+  DataGrid,
   EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
-  Table,
   Textarea,
   toast,
+  type GridColumn,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
@@ -23,6 +24,7 @@ import { useDeferredValue, useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api/client';
 import type { Party } from '../api/types';
 import { describeError } from '../lib/format';
+import { useGridStorage } from '../lib/grid';
 import { useCanEditTenders } from './Tenders';
 import { useFocusForm, useNewParam } from '../lib/new-param';
 
@@ -290,6 +292,71 @@ export function ClientsScreen() {
     },
     placeholderData: keepPreviousData,
   });
+  const storage = useGridStorage('parties');
+  const types = (p: Party) =>
+    [
+      p.isClient && 'client',
+      p.isVendor && 'vendor',
+      p.isSubcontractor && 'subcontractor',
+      p.isCompetitor && 'competitor',
+    ]
+      .filter(Boolean)
+      .join(', ');
+  const contact = (p: Party) => [p.contactName, p.phone, p.email].filter(Boolean).join(' · ');
+  const columns: GridColumn<Party>[] = [
+    {
+      id: 'name',
+      header: 'Name',
+      width: 240,
+      hideable: false,
+      value: (p) => p.name,
+      cell: (p) => <span className="font-medium">{p.name}</span>,
+    },
+    {
+      id: 'type',
+      header: 'Type',
+      width: 200,
+      value: types,
+      cell: (p) => (
+        <span className="flex flex-wrap gap-1">
+          {p.isClient && <Badge tone="accent">client</Badge>}
+          {p.isVendor && <Badge>vendor</Badge>}
+          {p.isSubcontractor && <Badge>subcontractor</Badge>}
+          {p.isCompetitor && <Badge tone="warning">competitor</Badge>}
+        </span>
+      ),
+    },
+    {
+      id: 'gstin',
+      header: 'GSTIN',
+      width: 170,
+      value: (p) => p.gstin,
+      cell: (p) => <span className="font-mono text-xs">{p.gstin ?? '-'}</span>,
+    },
+    {
+      id: 'contact',
+      header: 'Contact',
+      width: 280,
+      value: (p) => contact(p) || null,
+      cell: (p) => <span className="text-fg-muted">{contact(p) || '-'}</span>,
+    },
+    {
+      id: 'actions',
+      header: '',
+      label: 'Edit',
+      width: 90,
+      hideable: false,
+      sortable: false,
+      exportable: false,
+      align: 'right',
+      cell: (p) =>
+        canEdit && (
+          <Button variant="ghost" onClick={() => setEditing(p)}>
+            Edit
+          </Button>
+        ),
+    },
+  ];
 
   return (
     <div className="space-y-5">
@@ -350,43 +417,15 @@ export function ClientsScreen() {
               : 'Add each client, supplier, subcontractor or competitor once with New party.'}
           </EmptyState>
         ) : (
-          <Table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>GSTIN</th>
-                <th>Contact</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {parties.data.map((p) => (
-                <tr key={p.id}>
-                  <td className="font-medium">{p.name}</td>
-                  <td>
-                    <span className="flex flex-wrap gap-1">
-                      {p.isClient && <Badge tone="accent">client</Badge>}
-                      {p.isVendor && <Badge>vendor</Badge>}
-                      {p.isSubcontractor && <Badge>subcontractor</Badge>}
-                      {p.isCompetitor && <Badge tone="warning">competitor</Badge>}
-                    </span>
-                  </td>
-                  <td className="font-mono text-xs">{p.gstin ?? '-'}</td>
-                  <td className="text-fg-muted">
-                    {[p.contactName, p.phone, p.email].filter(Boolean).join(' · ') || '-'}
-                  </td>
-                  <td className="text-right">
-                    {canEdit && (
-                      <Button variant="ghost" onClick={() => setEditing(p)}>
-                        Edit
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+          <DataGrid
+            id="parties"
+            label="Parties"
+            columns={columns}
+            rows={parties.data}
+            rowKey={(p) => p.id}
+            storage={storage}
+            exportName="Parties"
+          />
         )}
       </Card>
     </div>

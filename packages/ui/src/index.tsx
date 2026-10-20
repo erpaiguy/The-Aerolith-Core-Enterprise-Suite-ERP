@@ -15,6 +15,17 @@ import { AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react';
 import { cx } from './cx';
 
 export { cx } from './cx';
+export {
+  DataGrid,
+  type GridColumn,
+  type GridDensity,
+  type GridLayout,
+  type GridSort,
+  type GridState,
+  type GridStorage,
+  type GridValue,
+  type GridView,
+} from './data-grid';
 export { Dialog } from './dialog';
 export {
   ConfirmProvider,
@@ -32,6 +43,7 @@ export {
   type ToastTone,
 } from './feedback';
 export { Tabs, type TabItem } from './tabs';
+export { crc32, downloadBlob, xlsxBlob, xlsxBytes, zipStore, type XlsxValue } from './xlsx';
 
 const controlClass =
   'block w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-2 focus:outline-accent/30 disabled:opacity-60';
@@ -293,7 +305,7 @@ export function AuthLayout({
 }: {
   title: string;
   subtitle?: ReactNode;
-  footer?: string;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -307,7 +319,7 @@ export function AuthLayout({
           {subtitle && <p className="mt-1 text-sm text-fg-muted">{subtitle}</p>}
         </div>
         <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">{children}</div>
-        <p className="mt-6 text-center text-xs text-fg-subtle">{footer}</p>
+        <div className="mt-6 text-center text-xs text-fg-subtle">{footer}</div>
       </div>
     </main>
   );

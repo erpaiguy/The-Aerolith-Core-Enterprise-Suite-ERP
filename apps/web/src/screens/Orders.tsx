@@ -4,18 +4,20 @@ import {
   Alert,
   Badge,
   Card,
+  DataGrid,
   EmptyState,
   Field,
   PageHeader,
   Select,
   Spinner,
-  Table,
+  type GridColumn,
 } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { describeError } from '../lib/format';
+import { day, num, useGridStorage } from '../lib/grid';
 import { rupees } from '../procurement/OrderLines';
 import {
   ORDER_KIND,
@@ -72,59 +74,95 @@ export function OrderTable({
   rows: OrderRow[];
   showProject?: boolean;
 }) {
-  if (!rows.length)
-    return (
-      <EmptyState title="No orders.">
-        Write one from a project's page, or from the vendors chosen in its enquiry.
-      </EmptyState>
-    );
-  return (
-    <Table minWidth="44rem">
-      <thead>
-        <tr>
-          <th>Order</th>
-          {showProject && <th>Project</th>}
-          <th className="text-right">With GST</th>
-          <th>Deliver by</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody aria-label="Orders">
-        {rows.map((o) => (
-          <tr key={o.id}>
-            <td>
-              <Link
-                to="/orders/$orderId"
-                params={{ orderId: o.id }}
-                className="font-mono text-sm text-accent hover:underline"
-              >
-                {o.number}
-              </Link>
-              <span className="block text-xs text-fg-muted">
-                {ORDER_KIND[o.kind]} · {o.vendor}
-              </span>
-            </td>
-            {showProject && (
-              <td className="text-sm">
+  // The company-wide list and a project's own list keep separate layouts: the project column is only on the first.
+  const id = showProject ? 'orders' : 'project-orders';
+  const storage = useGridStorage(id);
+  const columns: GridColumn<OrderRow>[] = [
+    {
+      id: 'order',
+      header: 'Order',
+      width: 220,
+      hideable: false,
+      value: (o) => o.number,
+      cell: (o) => (
+        <>
+          <Link
+            to="/orders/$orderId"
+            params={{ orderId: o.id }}
+            className="font-mono text-sm text-accent hover:underline"
+          >
+            {o.number}
+          </Link>
+          <span className="block text-xs text-fg-muted">
+            {ORDER_KIND[o.kind]} · {o.vendor}
+          </span>
+        </>
+      ),
+    },
+    ...(showProject
+      ? [
+          {
+            id: 'project',
+            header: 'Project',
+            width: 220,
+            value: (o: OrderRow) => `${o.project.number} · ${o.project.name}`,
+            cell: (o: OrderRow) => (
+              <span className="text-sm">
                 {o.project.number} · {o.project.name}
-              </td>
-            )}
-            <td className="text-right tabular-nums">{rupees(o.total)}</td>
-            <td className="whitespace-nowrap tabular-nums">{shortDate(o.deliverBy)}</td>
-            <td>
-              <Badge tone={ORDER_TONE[o.status]}>{ORDER_STATUS[o.status]}</Badge>
-              {o.openStatus && o.status !== 'draft' && (
-                <span className="block text-xs text-fg-muted">
-                  Amendment {o.openRevision}: {REVISION_STATUS[o.openStatus].toLowerCase()}
-                </span>
-              )}
-              {o.openStatus && o.status === 'draft' && o.openStatus !== 'draft' && (
-                <span className="block text-xs text-fg-muted">{REVISION_STATUS[o.openStatus]}</span>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </Table>
+              </span>
+            ),
+          },
+        ]
+      : []),
+    {
+      id: 'total',
+      header: 'With GST',
+      align: 'right',
+      width: 130,
+      value: (o) => num(o.total),
+      cell: (o) => rupees(o.total),
+    },
+    {
+      id: 'deliverBy',
+      header: 'Deliver by',
+      width: 120,
+      value: (o) => day(o.deliverBy),
+      cell: (o) => <span className="whitespace-nowrap tabular-nums">{shortDate(o.deliverBy)}</span>,
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      width: 200,
+      value: (o) => ORDER_STATUS[o.status],
+      cell: (o) => (
+        <>
+          <Badge tone={ORDER_TONE[o.status]}>{ORDER_STATUS[o.status]}</Badge>
+          {o.openStatus && o.status !== 'draft' && (
+            <span className="block text-xs text-fg-muted">
+              Amendment {o.openRevision}: {REVISION_STATUS[o.openStatus].toLowerCase()}
+            </span>
+          )}
+          {o.openStatus && o.status === 'draft' && o.openStatus !== 'draft' && (
+            <span className="block text-xs text-fg-muted">{REVISION_STATUS[o.openStatus]}</span>
+          )}
+        </>
+      ),
+    },
+  ];
+  return (
+    <DataGrid
+      id={id}
+      label="Orders"
+      columns={columns}
+      rows={rows}
+      rowKey={(o) => o.id}
+      storage={storage}
+      exportName="Orders"
+      empty={
+        <EmptyState title="No orders.">
+          Write one from a project's page, or from the vendors chosen in its enquiry.
+        </EmptyState>
+      }
+    />
   );
 }

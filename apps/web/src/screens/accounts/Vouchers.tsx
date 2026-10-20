@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  DataGrid,
   EmptyState,
   Field,
   Input,
@@ -15,6 +16,7 @@ import {
   Textarea,
   toast,
   useConfirm,
+  type GridColumn,
 } from '@aerolith/ui';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -35,6 +37,7 @@ import {
 } from '../../accounts/model';
 import { formatAmount } from '../../boq/model';
 import { describeError, formatDateTime } from '../../lib/format';
+import { day, num, useGridStorage } from '../../lib/grid';
 import { shortDate } from '../../schedule/model';
 import { usePermission } from '../../session/permissions';
 
@@ -176,6 +179,63 @@ export function VouchersScreen() {
   );
 }
 
+const VOUCHER_COLUMNS: GridColumn<VoucherRow>[] = [
+  {
+    id: 'date',
+    header: 'Date',
+    width: 110,
+    value: (v) => day(v.date),
+    cell: (v) => <span className="whitespace-nowrap">{shortDate(v.date)}</span>,
+  },
+  {
+    id: 'voucher',
+    header: 'Voucher',
+    width: 200,
+    hideable: false,
+    value: (v) => v.number,
+    cell: (v) => (
+      <span className="whitespace-nowrap">
+        <Link
+          to="/accounts/vouchers/$voucherId"
+          params={{ voucherId: v.id }}
+          className="font-mono text-xs text-accent hover:underline"
+        >
+          {v.number}
+        </Link>{' '}
+        {v.reversed && <Badge tone="warning">Reversed</Badge>}
+        {v.isReversal && <Badge>Reversal</Badge>}
+      </span>
+    ),
+  },
+  {
+    id: 'type',
+    header: 'Type',
+    width: 130,
+    value: (v) => VOUCHER_TYPE[v.type],
+    cell: (v) => <span className="text-sm">{VOUCHER_TYPE[v.type]}</span>,
+  },
+  {
+    id: 'narration',
+    header: 'Narration',
+    width: 320,
+    value: (v) => (v.reference ? `${v.narration} · ${v.reference}` : v.narration),
+    cell: (v) => (
+      <span className="text-sm">
+        {v.narration}
+        {v.reference && <span className="text-xs text-fg-muted"> · {v.reference}</span>}
+      </span>
+    ),
+  },
+  {
+    id: 'amount',
+    header: 'Amount',
+    align: 'right',
+    width: 140,
+    value: (v) => num(v.total),
+    cell: (v) => formatAmount(v.total),
+  },
+];
+
 function VoucherList({
   entityId,
   filter,
@@ -191,49 +251,23 @@ function VoucherList({
       api.request<{ vouchers: VoucherRow[] }>(`/api/tenant/accounts/vouchers?${params}`),
     placeholderData: keepPreviousData,
   });
+  const storage = useGridStorage('vouchers');
   if (list.isPending) return <Spinner />;
   if (list.isError) return <Alert tone="danger">{describeError(list.error)}</Alert>;
   return (
     <Card>
-      {list.data.vouchers.length === 0 ? (
-        <EmptyState title="No vouchers.">Change the filters, or post a new voucher.</EmptyState>
-      ) : (
-        <Table minWidth="44rem">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Voucher</th>
-              <th>Type</th>
-              <th>Narration</th>
-              <th className="text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody aria-label="Vouchers">
-            {list.data.vouchers.map((v) => (
-              <tr key={v.id}>
-                <td className="whitespace-nowrap">{shortDate(v.date)}</td>
-                <td className="whitespace-nowrap">
-                  <Link
-                    to="/accounts/vouchers/$voucherId"
-                    params={{ voucherId: v.id }}
-                    className="font-mono text-xs text-accent hover:underline"
-                  >
-                    {v.number}
-                  </Link>{' '}
-                  {v.reversed && <Badge tone="warning">Reversed</Badge>}
-                  {v.isReversal && <Badge>Reversal</Badge>}
-                </td>
-                <td className="text-sm">{VOUCHER_TYPE[v.type]}</td>
-                <td className="text-sm">
-                  {v.narration}
-                  {v.reference && <span className="text-xs text-fg-muted"> · {v.reference}</span>}
-                </td>
-                <td className="text-right tabular-nums">{formatAmount(v.total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
+      <DataGrid
+        id="vouchers"
+        label="Vouchers"
+        columns={VOUCHER_COLUMNS}
+        rows={list.data.vouchers}
+        rowKey={(v) => v.id}
+        storage={storage}
+        exportName="Vouchers"
+        empty={
+          <EmptyState title="No vouchers.">Change the filters, or post a new voucher.</EmptyState>
+        }
+      />
     </Card>
   );
 }
