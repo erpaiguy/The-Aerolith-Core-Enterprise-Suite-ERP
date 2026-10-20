@@ -39,6 +39,7 @@ test('a near miss closed, a permit held for someone else to issue, a toolbox tal
   await expect(row).toContainText('near miss');
   await row.getByRole('button', { name: 'Investigate' }).click();
   await page.getByRole('button', { name: 'Close the incident' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Close the incident' }).click();
   await expect(row).toContainText('closed');
 
   // 2. A permit for work at height tomorrow: its requester may not issue it.
@@ -59,6 +60,7 @@ test('a near miss closed, a permit held for someone else to issue, a toolbox tal
   await expect(permit).toContainText('requested');
   for (const box of await permit.getByRole('checkbox').all()) await box.check();
   await permit.getByRole('button', { name: 'Issue' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Issue the permit' }).click();
   await expect(page.getByText('Someone other than whoever asked issues a permit.')).toBeVisible();
 
   // 3. A toolbox talk.

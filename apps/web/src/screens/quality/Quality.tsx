@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -162,6 +165,7 @@ function ProjectQuality({ projectId }: { projectId: string }) {
     queryKey: ['qa-templates'],
     queryFn: () => api.request<Template[]>('/api/tenant/quality/checklist-templates'),
   });
+  const confirm = useConfirm();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const call = async (
@@ -268,9 +272,12 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                 type="checkbox"
                 checked={d.holdUninspected}
                 onChange={(e) =>
-                  void call(`/api/tenant/projects/${projectId}/quality/hold`, 'PUT', {
-                    hold: e.target.checked,
-                  })
+                  void call(
+                    `/api/tenant/projects/${projectId}/quality/hold`,
+                    'PUT',
+                    { hold: e.target.checked },
+                    () => toast.success(t('Setting saved')),
+                  )
                 }
               />
               {t('Bill only inspected work')}
@@ -346,12 +353,24 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                           <Button
                             type="button"
                             variant="secondary"
-                            onClick={() =>
-                              void call(`/api/tenant/inspections/${i.id}/decide`, 'POST', {
-                                ...dec,
-                                decidedOn: today(),
-                              })
-                            }
+                            onClick={async () => {
+                              if (
+                                dec.status === 'rejected' &&
+                                !(await confirm({
+                                  title: t('Reject {number}?', { number: i.number }),
+                                  body: t('The inspection is recorded as rejected.'),
+                                  confirmLabel: t('Reject the work'),
+                                  tone: 'danger',
+                                }))
+                              )
+                                return;
+                              void call(
+                                `/api/tenant/inspections/${i.id}/decide`,
+                                'POST',
+                                { ...dec, decidedOn: today() },
+                                () => toast.success(t('{number} recorded', { number: i.number })),
+                              );
+                            }}
                           >
                             {t('Record')}
                           </Button>
@@ -369,7 +388,9 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           className="mt-3 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void call(`/api/tenant/projects/${projectId}/inspections`, 'POST', ir);
+            void call(`/api/tenant/projects/${projectId}/inspections`, 'POST', ir, () =>
+              toast.success(t('Inspection requested')),
+            );
           }}
         >
           <Field label={t('Measured work')}>
@@ -627,7 +648,9 @@ function ProjectQuality({ projectId }: { projectId: string }) {
 
       <Card title={t('NCRs')}>
         {d.ncrs.length === 0 ? (
-          <p className="text-sm text-fg-muted">{t('None.')}</p>
+          <EmptyState title={t('None.')}>
+            {t('A failed test or checklist raises an NCR here.')}
+          </EmptyState>
         ) : (
           <ul className="space-y-1 text-sm">
             {d.ncrs.map((n) => (
@@ -668,10 +691,15 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                     type="button"
                     variant="ghost"
                     onClick={() =>
-                      void call(`/api/tenant/snags/${s.id}`, 'PUT', {
-                        status: s.status === 'open' ? 'fixed' : 'closed',
-                        rowVersion: s.rowVersion,
-                      })
+                      void call(
+                        `/api/tenant/snags/${s.id}`,
+                        'PUT',
+                        {
+                          status: s.status === 'open' ? 'fixed' : 'closed',
+                          rowVersion: s.rowVersion,
+                        },
+                        () => toast.success(t('Snag updated')),
+                      )
                     }
                   >
                     {s.status === 'open' ? t('Fixed') : t('Close')}
@@ -696,7 +724,10 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                 dueOn: snag.dueOn || null,
                 backcharge: snag.backcharge || null,
               },
-              () => setSnag({ ...snag, description: '', backcharge: '' }),
+              () => {
+                toast.success(t('Snag added'));
+                setSnag({ ...snag, description: '', backcharge: '' });
+              },
             );
           }}
         >
@@ -763,7 +794,9 @@ function ProjectQuality({ projectId }: { projectId: string }) {
           </p>
         )}
         {d.materialApprovals.length === 0 ? (
-          <p className="text-sm text-fg-muted">{t('None submitted.')}</p>
+          <EmptyState title={t('None submitted.')}>
+            {t('Makes put up for approval are listed here to approve.')}
+          </EmptyState>
         ) : (
           <ul className="space-y-1 text-sm">
             {d.materialApprovals.map((a) => (
@@ -775,9 +808,12 @@ function ProjectQuality({ projectId }: { projectId: string }) {
                     type="button"
                     variant="ghost"
                     onClick={() =>
-                      void call(`/api/tenant/material-approvals/${a.id}/decide`, 'POST', {
-                        status: 'approved',
-                      })
+                      void call(
+                        `/api/tenant/material-approvals/${a.id}/decide`,
+                        'POST',
+                        { status: 'approved' },
+                        () => toast.success(t('Make approved')),
+                      )
                     }
                   >
                     {t('Approve')}
@@ -814,10 +850,12 @@ function Handovers({ projectId }: { projectId: string }) {
   });
   const [form, setForm] = useState({ area: '', handedTo: '', items: '' });
   const [error, setError] = useState<string | null>(null);
-  const run = async (path: string, body: object) => {
+  const confirm = useConfirm();
+  const run = async (path: string, body: object, done?: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: key });
       return true;
     } catch (err) {
@@ -852,9 +890,22 @@ function Handovers({ projectId }: { projectId: string }) {
                   <Button
                     type="button"
                     variant="ghost"
-                    onClick={() =>
-                      void run(`/api/tenant/handovers/${h.id}/hand-over`, { on: today() })
-                    }
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: t('Hand over {area}?', { area: h.area }),
+                          body: t('The handover is recorded today and its certificate is ready.'),
+                          confirmLabel: t('Hand over'),
+                          tone: 'primary',
+                        }))
+                      )
+                        return;
+                      void run(
+                        `/api/tenant/handovers/${h.id}/hand-over`,
+                        { on: today() },
+                        t('{number} handed over', { number: h.number }),
+                      );
+                    }}
                   >
                     {t('Hand over')}
                   </Button>
@@ -897,18 +948,22 @@ function Handovers({ projectId }: { projectId: string }) {
         className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          void run(`/api/tenant/projects/${projectId}/handovers`, {
-            area: form.area,
-            handedTo: form.handedTo,
-            checklist: form.items
-              .split(/\n|;/)
-              .map((x) => x.trim())
-              .filter(Boolean)
-              .map((item) => {
-                const ok = item.startsWith('+');
-                return { item: ok ? item.slice(1).trim() : item, ok, note: '' };
-              }),
-          }).then((ok) => ok && setForm({ area: '', handedTo: form.handedTo, items: '' }));
+          void run(
+            `/api/tenant/projects/${projectId}/handovers`,
+            {
+              area: form.area,
+              handedTo: form.handedTo,
+              checklist: form.items
+                .split(/\n|;/)
+                .map((x) => x.trim())
+                .filter(Boolean)
+                .map((item) => {
+                  const ok = item.startsWith('+');
+                  return { item: ok ? item.slice(1).trim() : item, ok, note: '' };
+                }),
+            },
+            t('Handover added'),
+          ).then((ok) => ok && setForm({ area: '', handedTo: form.handedTo, items: '' }));
         }}
       >
         <Field label={t('Area')}>
@@ -988,10 +1043,11 @@ function DefectLiability({ projectId }: { projectId: string }) {
     responsiblePartyId: '',
   });
   const [error, setError] = useState<string | null>(null);
-  const run = async (path: string, body: object) => {
+  const run = async (path: string, body: object, done?: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: key });
       return true;
     } catch (err) {
@@ -1055,7 +1111,13 @@ function DefectLiability({ projectId }: { projectId: string }) {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => void run(`/api/tenant/defects/${x.id}/fixed`, { on: today() })}
+                      onClick={() =>
+                        void run(
+                          `/api/tenant/defects/${x.id}/fixed`,
+                          { on: today() },
+                          t('Defect marked fixed'),
+                        )
+                      }
                     >
                       {t('Fixed')}
                     </Button>
@@ -1071,14 +1133,18 @@ function DefectLiability({ projectId }: { projectId: string }) {
         className="flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          void run(`/api/tenant/projects/${projectId}/defects`, {
-            contractId: form.contractId || null,
-            area: form.area,
-            description: form.description,
-            reportedOn: today(),
-            reportedBy: form.reportedBy,
-            responsiblePartyId: form.responsiblePartyId || null,
-          }).then((ok) => ok && setForm({ ...form, description: '' }));
+          void run(
+            `/api/tenant/projects/${projectId}/defects`,
+            {
+              contractId: form.contractId || null,
+              area: form.area,
+              description: form.description,
+              reportedOn: today(),
+              reportedBy: form.reportedBy,
+              responsiblePartyId: form.responsiblePartyId || null,
+            },
+            t('Defect reported'),
+          ).then((ok) => ok && setForm({ ...form, description: '' }));
         }}
       >
         <Field label={t('Contract')}>
@@ -1175,6 +1241,7 @@ function Templates() {
           body: { name, items: parsed },
         }),
       );
+      toast.success(t('Checklist template saved'));
       setName('');
       setItems('');
     } catch (err) {

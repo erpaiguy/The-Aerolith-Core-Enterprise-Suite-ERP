@@ -1,7 +1,18 @@
 // The recipient's page for a transmittal (docs/wave5-plan.md step 3): no account, only the expiring link. They see
 // what was sent and download it, acknowledge receipt with their name, and for a review answer with a code, a comment
 // and one file. Everything they do is recorded against the transmittal.
-import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, Textarea } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  Textarea,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, saveFile } from '../../api/client';
@@ -50,11 +61,12 @@ export function ShareScreen({ tenant, token }: { tenant: string; token: string }
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (f: () => Promise<View>) => {
+  const run = async (f: () => Promise<View>, done: string) => {
     setError(null);
     setBusy(true);
     try {
       qc.setQueryData(key, await f());
+      toast.success(done);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -153,12 +165,14 @@ export function ShareScreen({ tenant, token }: { tenant: string; token: string }
                       busy={busy}
                       disabled={name.trim().length < 2}
                       onClick={() =>
-                        void run(() =>
-                          api.request<View>(`${base}/acknowledge`, {
-                            method: 'POST',
-                            body: { name },
-                            auth: false,
-                          }),
+                        void run(
+                          () =>
+                            api.request<View>(`${base}/acknowledge`, {
+                              method: 'POST',
+                              body: { name },
+                              auth: false,
+                            }),
+                          'Receipt acknowledged',
                         )
                       }
                     >
@@ -177,12 +191,14 @@ export function ShareScreen({ tenant, token }: { tenant: string; token: string }
                         form.append('response', response);
                         form.append('code', code);
                         if (file) form.append('file', file, file.name);
-                        void run(() =>
-                          api.request<View>(`${base}/respond`, {
-                            method: 'POST',
-                            body: form,
-                            auth: false,
-                          }),
+                        void run(
+                          () =>
+                            api.request<View>(`${base}/respond`, {
+                              method: 'POST',
+                              body: form,
+                              auth: false,
+                            }),
+                          'Response sent',
                         );
                       }}
                     >

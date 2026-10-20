@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
@@ -154,10 +157,11 @@ function ProjectContracts({ projectId }: { projectId: string }) {
     completionOn: '',
     dlpMonths: '12',
   });
-  const call = async (path: string, body: object) => {
+  const call = async (path: string, body: object, done?: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: key });
       return true;
     } catch (err) {
@@ -174,7 +178,10 @@ function ProjectContracts({ projectId }: { projectId: string }) {
       {error && <Alert tone="danger">{error}</Alert>}
       <Card title="Calendar">
         {d.calendar.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing dated yet.</p>
+          <EmptyState title="Nothing dated yet">
+            Completion dates, securities and obligations of the contracts recorded below gather
+            here.
+          </EmptyState>
         ) : (
           <ul className="space-y-1 text-sm" data-testid="contract-calendar">
             {d.calendar.map((x, i) => (
@@ -239,14 +246,18 @@ function ProjectContracts({ projectId }: { projectId: string }) {
             onSubmit={async (e: FormEvent) => {
               e.preventDefault();
               if (
-                await call(`/api/tenant/projects/${projectId}/contracts`, {
-                  kind: c.kind,
-                  reference: c.reference,
-                  title: c.title,
-                  value: c.value || '0',
-                  completionOn: c.completionOn || null,
-                  dlpMonths: Number(c.dlpMonths || 0),
-                })
+                await call(
+                  `/api/tenant/projects/${projectId}/contracts`,
+                  {
+                    kind: c.kind,
+                    reference: c.reference,
+                    title: c.title,
+                    value: c.value || '0',
+                    completionOn: c.completionOn || null,
+                    dlpMonths: Number(c.dlpMonths || 0),
+                  },
+                  `Contract ${c.reference} recorded`,
+                )
               )
                 setC({ ...c, reference: '', title: '', value: '' });
             }}
@@ -305,8 +316,9 @@ function ContractDetail({
 }: {
   reg: Reg;
   contractId: string;
-  call: (path: string, body: object) => Promise<boolean>;
+  call: (path: string, body: object, done?: string) => Promise<boolean>;
 }) {
+  const confirm = useConfirm();
   const mine = <T extends { contractId: string }>(xs: T[]) =>
     xs.filter((x) => x.contractId === contractId);
   const [sec, setSec] = useState({
@@ -368,13 +380,26 @@ function ContractDetail({
                       <Button
                         type="button"
                         variant="ghost"
-                        onClick={() =>
-                          void call(`/api/tenant/contract-securities/${s.id}`, {
-                            validUntil: s.validUntil,
-                            status: 'returned',
-                            rowVersion: s.rowVersion,
-                          })
-                        }
+                        onClick={async () => {
+                          if (
+                            !(await confirm({
+                              title: `Mark ${s.number} returned?`,
+                              body: 'The security goes back to the party who gave it and its expiry leaves the calendar.',
+                              confirmLabel: 'Mark it returned',
+                              tone: 'danger',
+                            }))
+                          )
+                            return;
+                          void call(
+                            `/api/tenant/contract-securities/${s.id}`,
+                            {
+                              validUntil: s.validUntil,
+                              status: 'returned',
+                              rowVersion: s.rowVersion,
+                            },
+                            `${s.number} marked returned`,
+                          );
+                        }}
                       >
                         Returned
                       </Button>
@@ -391,7 +416,7 @@ function ContractDetail({
             className="mt-3 grid gap-3 sm:grid-cols-6"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (await call(`${base}/securities`, sec))
+              if (await call(`${base}/securities`, sec, `Security ${sec.number} recorded`))
                 setSec({ ...sec, number: '', amount: '', validUntil: '' });
             }}
           >
@@ -454,7 +479,13 @@ function ContractDetail({
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => void call(`/api/tenant/obligations/${o.id}/done`, { on: today() })}
+                  onClick={() =>
+                    void call(
+                      `/api/tenant/obligations/${o.id}/done`,
+                      { on: today() },
+                      'Obligation marked done',
+                    )
+                  }
                 >
                   Done
                 </Button>
@@ -471,7 +502,13 @@ function ContractDetail({
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => void call(`/api/tenant/notices/${n.id}/replied`, { on: today() })}
+                  onClick={() =>
+                    void call(
+                      `/api/tenant/notices/${n.id}/replied`,
+                      { on: today() },
+                      'Notice marked replied',
+                    )
+                  }
                 >
                   Replied
                 </Button>
@@ -484,7 +521,8 @@ function ContractDetail({
           className="mt-3 grid gap-3 sm:grid-cols-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (await call(`${base}/obligations`, ob)) setOb({ title: '', clause: '', dueOn: '' });
+            if (await call(`${base}/obligations`, ob, 'Obligation added'))
+              setOb({ title: '', clause: '', dueOn: '' });
           }}
         >
           <Field label="Obligation">
@@ -516,7 +554,13 @@ function ContractDetail({
             className="mt-3 grid gap-3 sm:grid-cols-6"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (await call(`${base}/notices`, { ...nt, replyBy: nt.replyBy || null }))
+              if (
+                await call(
+                  `${base}/notices`,
+                  { ...nt, replyBy: nt.replyBy || null },
+                  'Notice recorded',
+                )
+              )
                 setNt({ ...nt, subject: '', reference: '', replyBy: '' });
             }}
           >
@@ -579,7 +623,13 @@ function ContractDetail({
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => void call(`/api/tenant/eots/${e.id}`, { action: 'submit' })}
+                  onClick={() =>
+                    void call(
+                      `/api/tenant/eots/${e.id}`,
+                      { action: 'submit' },
+                      `Extension ${e.number} submitted`,
+                    )
+                  }
                 >
                   Submit
                 </Button>
@@ -618,12 +668,16 @@ function ContractDetail({
                     type="button"
                     variant="secondary"
                     onClick={() =>
-                      void call(`/api/tenant/eots/${e.id}`, {
-                        action: 'decide',
-                        daysGranted: Number(decide[e.id]?.days || 0),
-                        reference: decide[e.id]?.reference || '-',
-                        date: today(),
-                      })
+                      void call(
+                        `/api/tenant/eots/${e.id}`,
+                        {
+                          action: 'decide',
+                          daysGranted: Number(decide[e.id]?.days || 0),
+                          reference: decide[e.id]?.reference || '-',
+                          date: today(),
+                        },
+                        `Extension ${e.number} decided`,
+                      )
                     }
                   >
                     Decided
@@ -639,7 +693,8 @@ function ContractDetail({
             className="mt-3 flex flex-wrap items-end gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (await call(`${base}/eots`, period)) setPeriod({ from: '', to: '' });
+              if (await call(`${base}/eots`, period, 'Extension of time claimed'))
+                setPeriod({ from: '', to: '' });
             }}
           >
             <Field label="Hindrances from">
@@ -688,7 +743,11 @@ function ContractDetail({
                   type="button"
                   variant="ghost"
                   onClick={() =>
-                    void call(`/api/tenant/claims/${x.id}/status`, { status: 'submitted' })
+                    void call(
+                      `/api/tenant/claims/${x.id}/status`,
+                      { status: 'submitted' },
+                      `Claim ${x.number} submitted`,
+                    )
                   }
                 >
                   Submit
@@ -711,11 +770,15 @@ function ContractDetail({
                     type="button"
                     variant="secondary"
                     onClick={() =>
-                      void call(`/api/tenant/claims/${x.id}/status`, {
-                        status: 'settled',
-                        settledAmount: decide[x.id]?.amount || '0',
-                        date: today(),
-                      })
+                      void call(
+                        `/api/tenant/claims/${x.id}/status`,
+                        {
+                          status: 'settled',
+                          settledAmount: decide[x.id]?.amount || '0',
+                          date: today(),
+                        },
+                        `Claim ${x.number} settled`,
+                      )
                     }
                   >
                     Settled
@@ -731,7 +794,8 @@ function ContractDetail({
             className="mt-3 grid gap-3 sm:grid-cols-4"
             onSubmit={async (e) => {
               e.preventDefault();
-              if (await call(`${base}/claims`, cl)) setCl({ ...cl, title: '', amount: '' });
+              if (await call(`${base}/claims`, cl, 'Claim recorded'))
+                setCl({ ...cl, title: '', amount: '' });
             }}
           >
             <Field label="Claim for">

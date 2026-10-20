@@ -1,7 +1,18 @@
 // Revision control for a project (docs/wave5-plan.md step 4): the revision series the drawings register enforces, and
 // the distribution matrix: who gets which disciplines' new revisions (people inside acknowledge receipt; parties
 // outside get a draft transmittal ready to issue).
-import { Alert, Button, Card, Field, Input, Select, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Select,
+  Spinner,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/client';
@@ -46,10 +57,12 @@ export function RevisionControl({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const blank = { discipline: '', who: '', name: '', email: '', everyPurpose: false };
   const [row, setRow] = useState(blank);
-  const post = async (path: string, body: object) => {
+  const confirm = useConfirm();
+  const post = async (path: string, body: object, done?: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await api.request<Settings>(path, { method: 'POST', body }));
+      if (done) toast.success(done);
       return true;
     } catch (err) {
       setError(describeError(err));
@@ -72,10 +85,14 @@ export function RevisionControl({ projectId }: { projectId: string }) {
             <Select
               value={rule.enabled ? rule.construction : 'off'}
               onChange={(e) =>
-                void post(`/api/tenant/projects/${projectId}/revision-rule`, {
-                  enabled: e.target.value !== 'off',
-                  construction: e.target.value === 'off' ? rule.construction : e.target.value,
-                })
+                void post(
+                  `/api/tenant/projects/${projectId}/revision-rule`,
+                  {
+                    enabled: e.target.value !== 'off',
+                    construction: e.target.value === 'off' ? rule.construction : e.target.value,
+                  },
+                  'Revision series saved',
+                )
               }
             >
               <option value="off">Off (labels are free)</option>
@@ -101,13 +118,31 @@ export function RevisionControl({ projectId }: { projectId: string }) {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => void post(`/api/tenant/distribution/${m.id}/delete`, {})}
+                onClick={async () => {
+                  const who = m.user ?? m.name ?? '';
+                  if (
+                    !(await confirm({
+                      title: `Remove ${who} from the distribution?`,
+                      body: 'New revisions are no longer sent to them.',
+                      confirmLabel: 'Remove',
+                      tone: 'danger',
+                    }))
+                  )
+                    return;
+                  void post(`/api/tenant/distribution/${m.id}/delete`, {}, `${who} removed`);
+                }}
               >
                 Remove
               </Button>
             </li>
           ))}
-          {matrix.length === 0 && <li className="text-fg-muted">Nobody yet.</li>}
+          {matrix.length === 0 && (
+            <li>
+              <EmptyState title="Nobody yet">
+                Add the people who receive each new revision with the form below.
+              </EmptyState>
+            </li>
+          )}
         </ul>
         <form
           aria-label="Add to the matrix"
@@ -116,13 +151,17 @@ export function RevisionControl({ projectId }: { projectId: string }) {
             e.preventDefault();
             const inside = row.who !== 'outside';
             if (
-              await post(`/api/tenant/projects/${projectId}/distribution`, {
-                discipline: row.discipline || null,
-                userId: inside ? row.who : null,
-                name: inside ? null : row.name,
-                email: inside ? null : row.email || null,
-                everyPurpose: row.everyPurpose,
-              })
+              await post(
+                `/api/tenant/projects/${projectId}/distribution`,
+                {
+                  discipline: row.discipline || null,
+                  userId: inside ? row.who : null,
+                  name: inside ? null : row.name,
+                  email: inside ? null : row.email || null,
+                  everyPurpose: row.everyPurpose,
+                },
+                'Added to the distribution',
+              )
             )
               setRow(blank);
           }}

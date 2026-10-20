@@ -71,6 +71,10 @@ test('a transmittal answered through its link, and an RFI answered', async ({ pa
   await f.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByTestId('transmittal-status')).toContainText('draft');
   await page.getByRole('button', { name: 'Issue', exact: true }).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Issue the transmittal' })
+    .click();
   await expect(page.getByTestId('transmittal-status')).toContainText('issued');
   // Its cover sheet, printed (docs/wave7-plan.md step 7b.4); back, the project and transmittal are chosen again.
   await page.getByRole('link', { name: 'Print', exact: true }).click();

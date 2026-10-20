@@ -7,12 +7,14 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   Select,
   Spinner,
   Table,
   Textarea,
+  toast,
 } from '@aerolith/ui';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
@@ -346,7 +348,9 @@ function Enquiries({ client, onOpen }: { client: PortalClient; onOpen: (id: stri
       <Loading q={q}>
         {(rows) =>
           rows.length === 0 ? (
-            <p className="text-sm text-fg-muted">No open enquiries.</p>
+            <EmptyState title="No open enquiries">
+              When a buyer asks you to quote, the enquiry is listed here.
+            </EmptyState>
           ) : (
             <Table>
               <thead>
@@ -425,6 +429,7 @@ function Enquiry({ client, id, back }: { client: PortalClient; id: string; back:
         lines,
       });
       setSent(s.number);
+      toast.success(`Quote ${s.number} sent`);
       void qc.invalidateQueries({ queryKey: ['portal'] });
     } catch (err) {
       setError(describeError(err));
@@ -530,7 +535,9 @@ function Orders({ client, onOpen }: { client: PortalClient; onOpen: (id: string)
       <Loading q={q}>
         {(rows) =>
           rows.length === 0 ? (
-            <p className="text-sm text-fg-muted">No orders yet.</p>
+            <EmptyState title="No orders yet">
+              Orders placed with you are listed here, to acknowledge and bill against.
+            </EmptyState>
           ) : (
             <Table>
               <thead>
@@ -615,6 +622,7 @@ function Order({
     try {
       await f();
       setNotice(done);
+      toast.success(done.replace(/\.$/, ''));
       void qc.invalidateQueries({ queryKey: ['portal'] });
     } catch (err) {
       setError(describeError(err));
@@ -804,7 +812,9 @@ function Submissions({ client }: { client: PortalClient }) {
         rows.length ? (
           <SubmissionList rows={rows} />
         ) : (
-          <p className="text-sm text-fg-muted">Nothing sent yet.</p>
+          <EmptyState title="Nothing sent yet">
+            Quotes, measurements and invoices you send are listed here with where they stand.
+          </EmptyState>
         )
       }
     </Loading>
@@ -840,7 +850,10 @@ function Bills({ client }: { client: PortalClient }) {
         <div className="space-y-4">
           <Card title="Bills and payments">
             {d.bills.length === 0 ? (
-              <p className="text-sm text-fg-muted">No bills posted yet.</p>
+              <EmptyState title="No bills posted yet">
+                Once your invoices are accepted and posted, they are listed here with their
+                payments.
+              </EmptyState>
             ) : (
               <Table>
                 <thead>
@@ -1060,7 +1073,9 @@ function ClientProject({
           </Card>
           <Card title="Site photos, last 30 days">
             {p.photos.length === 0 ? (
-              <p className="text-sm text-fg-muted">No photos yet.</p>
+              <EmptyState title="No photos yet">
+                Photos from the site&apos;s daily reports of the last 30 days appear here.
+              </EmptyState>
             ) : (
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 {p.photos.map((ph) => (
@@ -1100,7 +1115,9 @@ function Transmittals({ client, onOpen }: { client: PortalClient; onOpen: (id: s
       <Loading q={q}>
         {(rows) =>
           rows.length === 0 ? (
-            <p className="text-sm text-fg-muted">Nothing sent to you yet.</p>
+            <EmptyState title="Nothing sent to you yet">
+              Drawings and documents sent to you by transmittal are listed here.
+            </EmptyState>
           ) : (
             <ul className="space-y-2 text-sm">
               {rows.map((t) => (
@@ -1145,10 +1162,11 @@ function Transmittal({ client, id, back }: { client: PortalClient; id: string; b
   const [response, setResponse] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const act = async (f: () => Promise<unknown>) => {
+  const act = async (f: () => Promise<unknown>, done: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await f());
+      toast.success(done);
       void qc.invalidateQueries({ queryKey: ['portal', 'transmittals'] });
     } catch (err) {
       setError(describeError(err));
@@ -1164,7 +1182,12 @@ function Transmittal({ client, id, back }: { client: PortalClient; id: string; b
             actions={
               t.status === 'issued' && (
                 <Button
-                  onClick={() => void act(() => client.post(`/transmittals/${id}/acknowledge`))}
+                  onClick={() =>
+                    void act(
+                      () => client.post(`/transmittals/${id}/acknowledge`),
+                      'Receipt acknowledged',
+                    )
+                  }
                 >
                   Acknowledge receipt
                 </Button>
@@ -1200,8 +1223,10 @@ function Transmittal({ client, id, back }: { client: PortalClient; id: string; b
                 className="space-y-3"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void act(() =>
-                    client.post(`/transmittals/${id}/respond`, { response, code: code || null }),
+                  void act(
+                    () =>
+                      client.post(`/transmittals/${id}/respond`, { response, code: code || null }),
+                    'Response sent',
                   );
                 }}
               >

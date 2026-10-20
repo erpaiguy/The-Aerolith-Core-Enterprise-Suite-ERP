@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, Field, Input, Spinner, toast, useConfirm } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft } from 'lucide-react';
@@ -25,42 +25,6 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-fg-muted">{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </>
-  );
-}
-
-/** A destructive button that needs a second click within 5 seconds. */
-function ConfirmButton({
-  label,
-  confirmLabel,
-  onConfirm,
-  busy,
-  disabled,
-}: {
-  label: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-  busy?: boolean;
-  disabled?: boolean;
-}) {
-  const [armed, setArmed] = useState(false);
-  return (
-    <Button
-      type="button"
-      variant={armed ? 'danger' : 'secondary'}
-      busy={busy ?? false}
-      disabled={disabled ?? false}
-      onClick={() => {
-        if (armed) {
-          setArmed(false);
-          onConfirm();
-        } else {
-          setArmed(true);
-          setTimeout(() => setArmed(false), 5000);
-        }
-      }}
-    >
-      {armed ? confirmLabel : label}
-    </Button>
   );
 }
 
@@ -185,6 +149,7 @@ function PortalCap({ licence }: { licence: LicenceDetail }) {
 
 function LicenceCard({ licenceId, ownerEmail }: { licenceId: string; ownerEmail: string }) {
   const { canWrite } = useSession();
+  const confirm = useConfirm();
   const [revealed, setRevealed] = useState<string | null>(null);
   const [revokeReason, setRevokeReason] = useState('');
   const licence = useQuery({
@@ -270,12 +235,26 @@ function LicenceCard({ licenceId, ownerEmail }: { licenceId: string; ownerEmail:
                 Email the key again
               </Button>
               {!revealed && (
-                <ConfirmButton
-                  label="Show key"
-                  confirmLabel="Show it (recorded in the audit log)"
+                <Button
+                  type="button"
+                  variant="secondary"
                   busy={reveal.busy}
-                  onConfirm={() => void reveal.run().then((r) => r && setRevealed(r.licenceKey))}
-                />
+                  onClick={async () => {
+                    if (
+                      !(await confirm({
+                        title: 'Show the licence key?',
+                        body: 'The key appears on this screen, and showing it is recorded in the audit log.',
+                        confirmLabel: 'Show the key',
+                        tone: 'primary',
+                      }))
+                    )
+                      return;
+                    const r = await reveal.run();
+                    if (r) setRevealed(r.licenceKey);
+                  }}
+                >
+                  Show key
+                </Button>
               )}
             </div>
             {resend.done && <Alert tone="success">{resend.done}</Alert>}
@@ -297,13 +276,26 @@ function LicenceCard({ licenceId, ownerEmail }: { licenceId: string; ownerEmail:
                   maxLength={500}
                 />
               </Field>
-              <ConfirmButton
-                label="Revoke licence"
-                confirmLabel="Click again to revoke"
+              <Button
+                type="button"
+                variant="secondary"
                 busy={revoke.busy}
                 disabled={revokeReason.trim().length < 3}
-                onConfirm={() => void revoke.run()}
-              />
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: 'Revoke this licence?',
+                      body: 'Every device loses access at its next check. There is no undo; the tenant would need a new licence.',
+                      confirmLabel: 'Revoke the licence',
+                      tone: 'danger',
+                    }))
+                  )
+                    return;
+                  void revoke.run();
+                }}
+              >
+                Revoke licence
+              </Button>
               {revoke.error && <Alert tone="danger">{revoke.error}</Alert>}
             </div>
           </div>
@@ -355,11 +347,24 @@ function LicenceCard({ licenceId, ownerEmail }: { licenceId: string; ownerEmail:
                       <Badge>removed</Badge>
                     ) : (
                       canWrite && (
-                        <ConfirmButton
-                          label="Remove"
-                          confirmLabel="Confirm"
-                          onConfirm={() => void revokeDevice.run(d.id)}
-                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={async () => {
+                            if (
+                              !(await confirm({
+                                title: `Remove ${d.label ?? d.platform} from the licence?`,
+                                body: 'That device loses access at its next check and frees its place for another.',
+                                confirmLabel: 'Remove the device',
+                                tone: 'danger',
+                              }))
+                            )
+                              return;
+                            void revokeDevice.run(d.id);
+                          }}
+                        >
+                          Remove
+                        </Button>
                       )
                     )}
                   </td>
@@ -411,7 +416,13 @@ function DatabaseCard({ tenantId }: { tenantId: string }) {
   );
   const local = useAction(
     () => api.post(`/api/owner/tenants/${tenantId}/provision`, { provider: 'local_postgres' }),
-    { invalidate },
+    {
+      invalidate,
+      success: () => {
+        toast.success('Local test database being set up');
+        return null;
+      },
+    },
   );
 
   return (

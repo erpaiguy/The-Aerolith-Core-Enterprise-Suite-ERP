@@ -131,6 +131,6 @@ test('a drawing reviewed, returned, revised and approved', async ({ page }) => {
   await page.getByRole('row', { name: 'RV-002' }).getByRole('button', { name: 'RV-002' }).click();
   await respond('A', 'F3 enlarged; good');
   await expect(page.getByTestId('review-status')).toContainText('approved');
-  await expect(page.getByText('Nothing waiting on you.')).toBeVisible();
+  await expect(page.getByText('Nothing waiting on you')).toBeVisible();
   await shot(page, 'reviews');
 });

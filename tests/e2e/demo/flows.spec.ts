@@ -85,7 +85,7 @@ test('Suresh accepts what came from the portals; the quote is in the RFQ', async
       .click();
     await expect(list.getByRole('listitem').filter({ hasText: `${kind} from` })).toHaveCount(0);
   }
-  await expect(page.getByText('Nothing waiting.')).toBeVisible();
+  await expect(page.getByText('Nothing waiting', { exact: true })).toBeVisible();
 });
 
 test('ZP answers the transmittal and sees the RA bill on the client portal', async ({
@@ -119,5 +119,6 @@ test('Priya raises the Plinth milestone and the demand appears', async ({ browse
     .filter({ hasText: 'Plinth' })
     .getByRole('button', { name: /Reached on/ })
     .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Raise the demands' }).click();
   await expect(plan.getByRole('listitem').filter({ hasText: 'Plinth' })).toContainText('reached');
 });

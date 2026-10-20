@@ -2,7 +2,7 @@
 // here), from the bytes the user may already download, so the server renders nothing. Drag on a page to draw a box
 // and comment on it; numbered pins show the comments, listed beside with replies, resolve and reopen. Boxes are kept
 // as fractions of the page, so they land in the same place at any size.
-import { Alert, Badge, Button, Spinner, Textarea } from '@aerolith/ui';
+import { Alert, Badge, Button, EmptyState, Spinner, Textarea, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
@@ -58,10 +58,11 @@ export function MarkupViewer({
   const [text, setText] = useState('');
   const [active, setActive] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const call = async (path: string, body: object) => {
+  const call = async (path: string, body: object, done?: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: key });
       void qc.invalidateQueries({ queryKey: ['reviews'] });
       return true;
@@ -143,12 +144,11 @@ export function MarkupViewer({
             onSubmit={async (e) => {
               e.preventDefault();
               if (
-                await call(`/api/tenant/documents/${documentId}/versions/${versionNo}/markups`, {
-                  reviewId,
-                  page: draft.page,
-                  box: draft.box,
-                  body: text,
-                })
+                await call(
+                  `/api/tenant/documents/${documentId}/versions/${versionNo}/markups`,
+                  { reviewId, page: draft.page, box: draft.box, body: text },
+                  'Comment added',
+                )
               )
                 setDraft(null);
             }}
@@ -185,7 +185,9 @@ export function MarkupViewer({
           ))}
         </ol>
         {list.length === 0 && !marks.isPending && (
-          <p className="text-sm text-fg-muted">No comments yet.</p>
+          <EmptyState title="No comments yet">
+            Comments on this version, and the areas they mark, are listed here.
+          </EmptyState>
         )}
       </aside>
     </div>
@@ -357,7 +359,7 @@ function Comment({
   m: Markup;
   active: boolean;
   onPick: () => void;
-  call: (path: string, body: object) => Promise<boolean>;
+  call: (path: string, body: object, done?: string) => Promise<boolean>;
 }) {
   const [reply, setReply] = useState('');
   return (
@@ -387,7 +389,14 @@ function Comment({
         className="mt-2 flex gap-1"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (await call(`/api/tenant/markups/${m.id}/replies`, { body: reply })) setReply('');
+          if (
+            await call(
+              `/api/tenant/markups/${m.id}/replies`,
+              { body: reply },
+              `Reply to comment ${m.number} sent`,
+            )
+          )
+            setReply('');
         }}
       >
         <Textarea
@@ -407,9 +416,11 @@ function Comment({
           variant="ghost"
           className="mt-1"
           onClick={() =>
-            void call(`/api/tenant/markups/${m.id}/status`, {
-              status: m.status === 'open' ? 'resolved' : 'open',
-            })
+            void call(
+              `/api/tenant/markups/${m.id}/status`,
+              { status: m.status === 'open' ? 'resolved' : 'open' },
+              `Comment ${m.number} ${m.status === 'open' ? 'resolved' : 'reopened'}`,
+            )
           }
         >
           {m.status === 'open' ? 'Resolve' : 'Reopen'}

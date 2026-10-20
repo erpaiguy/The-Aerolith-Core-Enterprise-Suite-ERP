@@ -1,4 +1,15 @@
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Spinner,
+  toast,
+  useConfirm,
+} from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api, type EmailRow, type Suppression } from '../api';
@@ -58,6 +69,7 @@ function TestEmail() {
 
 function Suppressions() {
   const { canWrite } = useSession();
+  const confirm = useConfirm();
   const [email, setEmail] = useState('');
   const list = useQuery({
     queryKey: ['suppressions'],
@@ -66,11 +78,23 @@ function Suppressions() {
   const add = useAction(
     () =>
       api.post('/api/owner/email-suppressions', { email: email.trim(), detail: 'added by owner' }),
-    { invalidate: [['suppressions']], success: () => null },
+    {
+      invalidate: [['suppressions']],
+      success: () => {
+        toast.success('Added to the do-not-send list');
+        return null;
+      },
+    },
   );
   const remove = useAction(
     (address: string) => api.post('/api/owner/email-suppressions/remove', { email: address }),
-    { invalidate: [['suppressions']] },
+    {
+      invalidate: [['suppressions']],
+      success: () => {
+        toast.success('Removed from the do-not-send list');
+        return null;
+      },
+    },
   );
   return (
     <Card title="Do-not-send list">
@@ -112,7 +136,10 @@ function Suppressions() {
       ) : list.isError ? (
         <Alert tone="danger">{errorMessage(list.error)}</Alert>
       ) : list.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">Empty.</p>
+        <EmptyState title="Empty">
+          Addresses that bounce permanently are added by themselves; add one above to stop mail to
+          it.
+        </EmptyState>
       ) : (
         <Table>
           <thead>
@@ -133,7 +160,22 @@ function Suppressions() {
                 <td className="whitespace-nowrap text-fg-muted">{formatDateTime(s.createdAt)}</td>
                 <td className="text-right">
                   {canWrite && (
-                    <Button type="button" variant="ghost" onClick={() => void remove.run(s.email)}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={async () => {
+                        if (
+                          !(await confirm({
+                            title: `Remove ${s.email} from the do-not-send list?`,
+                            body: 'Email is sent to this address again.',
+                            confirmLabel: 'Remove the address',
+                            tone: 'danger',
+                          }))
+                        )
+                          return;
+                        void remove.run(s.email);
+                      }}
+                    >
                       Remove
                     </Button>
                   )}
@@ -168,6 +210,10 @@ export function EmailScreen() {
   });
   const retry = useAction((id: string) => api.post(`/api/owner/emails/${id}/retry`), {
     invalidate: [['emails']],
+    success: () => {
+      toast.success('Email queued to send again');
+      return null;
+    },
   });
   const s = summary.data?.last7Days ?? {};
 
@@ -218,7 +264,11 @@ export function EmailScreen() {
         ) : emails.isError ? (
           <Alert tone="danger">{errorMessage(emails.error)}</Alert>
         ) : emails.data.length === 0 ? (
-          <p className="py-4 text-center text-sm text-fg-muted">No emails.</p>
+          <EmptyState title="No emails">
+            {filter === 'all'
+              ? 'Email the console or the apps send is listed here.'
+              : 'None with this status; choose another filter.'}
+          </EmptyState>
         ) : (
           <Table>
             <thead>

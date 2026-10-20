@@ -6,12 +6,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
@@ -153,7 +156,9 @@ export function SignOffsScreen() {
       <MySignature onError={setError} />
       <Card title="Waiting on my signature">
         {(mine.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing waiting on you.</p>
+          <EmptyState title="Nothing waiting on you">
+            Sign-offs that need your signature appear here when it is your turn.
+          </EmptyState>
         ) : (
           <ul className="space-y-1 text-sm" data-testid="signoffs-mine">
             {mine.data!.map((m) => (
@@ -215,6 +220,7 @@ function MySignature({ onError }: { onError: (e: string | null) => void }) {
               onError(null);
               try {
                 await api.request('/api/tenant/my-signature', { method: 'POST', body: { png } });
+                toast.success('Signature saved');
                 setEditing(false);
                 await q.refetch();
               } catch (err) {
@@ -247,13 +253,15 @@ function SignOff({
   const [png, setPng] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [verified, setVerified] = useState<boolean | null>(null);
+  const confirm = useConfirm();
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const d = q.data;
-  const act = async (path: string, body: object) => {
+  const act = async (path: string, body: object, done: string) => {
     onError(null);
     try {
       await api.request(`/api/tenant/sign-offs/${id}/${path}`, { method: 'POST', body });
+      toast.success(done);
       await q.refetch();
       onChanged();
     } catch (err) {
@@ -284,13 +292,20 @@ function SignOff({
           {drawing ? (
             <>
               <SignaturePad onChange={setPng} />
-              <Button type="button" disabled={!png} onClick={() => void act('sign', { png })}>
+              <Button
+                type="button"
+                disabled={!png}
+                onClick={() => void act('sign', { png }, `${d.number} signed`)}
+              >
                 Sign with this drawing
               </Button>
             </>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={() => void act('sign', { png: null })}>
+              <Button
+                type="button"
+                onClick={() => void act('sign', { png: null }, `${d.number} signed`)}
+              >
                 Sign with my saved signature
               </Button>
               <Button type="button" variant="secondary" onClick={() => setDrawing(true)}>
@@ -306,7 +321,18 @@ function SignOff({
               type="button"
               variant="ghost"
               disabled={reason.trim().length < 3}
-              onClick={() => void act('decline', { reason })}
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: `Decline to sign ${d.number}?`,
+                    body: 'The sign-off stops here and the person who started it sees your reason.',
+                    confirmLabel: 'Decline to sign',
+                    tone: 'danger',
+                  }))
+                )
+                  return;
+                void act('decline', { reason }, `${d.number} declined`);
+              }}
             >
               Decline
             </Button>
@@ -388,7 +414,9 @@ function ProjectSignOffs({
     <>
       <Card title="Sign-offs">
         {(list.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">None yet.</p>
+          <EmptyState title="None yet">
+            Start one below: pick a document, add the signers in order and place their fields.
+          </EmptyState>
         ) : (
           <Table minWidth="40rem">
             <thead>
@@ -553,6 +581,7 @@ function NewSignOff({
                 },
               },
             );
+            toast.success(`Sign-off ${title} started`);
             setTitle('');
             setSigners([]);
             onStarted(r.id);

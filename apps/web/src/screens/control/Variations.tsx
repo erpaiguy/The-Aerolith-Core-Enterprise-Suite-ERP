@@ -11,6 +11,8 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -228,6 +230,7 @@ function ProjectVariations({ projectId }: { projectId: string }) {
                     method: 'POST',
                     body: { billPending: e.target.checked },
                   });
+                  toast.success('Variation settings saved');
                   refresh();
                 } catch (err) {
                   setError(describeError(err));
@@ -263,6 +266,7 @@ function ProjectVariations({ projectId }: { projectId: string }) {
                       method: 'POST',
                       body: { deviationLimitPct: v },
                     });
+                    toast.success('Deviation limit saved');
                     refresh();
                   } catch (err) {
                     setError(describeError(err));
@@ -305,6 +309,7 @@ function ProjectVariations({ projectId }: { projectId: string }) {
               );
               setForm({ title: '', source: 'client_instruction', instructionRef: '', reason: '' });
               setLines([blank()]);
+              toast.success(`Variation ${form.title} raised`);
               refresh();
               setOpen(v.id);
             } catch (err) {
@@ -448,13 +453,15 @@ function Detail({
   const [error, setError] = useState<string | null>(null);
   const [client, setClient] = useState({ reference: '', date: today() });
   const [given, setGiven] = useState<Record<number, { qty?: string; rate?: string }>>({});
+  const confirm = useConfirm();
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const v = q.data;
-  const call = async (path: string, body: object = {}) => {
+  const call = async (path: string, body: object = {}, done?: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: ['variation', id] });
       onChange();
     } catch (err) {
@@ -536,7 +543,11 @@ function Detail({
           <Button
             type="button"
             onClick={() =>
-              void call(`/api/tenant/variations/${id}/submit`, { rowVersion: v.rowVersion })
+              void call(
+                `/api/tenant/variations/${id}/submit`,
+                { rowVersion: v.rowVersion },
+                `${v.number} submitted`,
+              )
             }
           >
             Submit
@@ -549,14 +560,29 @@ function Detail({
                 type="date"
                 value={v.startedOn ?? ''}
                 onChange={(e) =>
-                  void call(`/api/tenant/variations/${id}/started`, { on: e.target.value || null })
+                  void call(
+                    `/api/tenant/variations/${id}/started`,
+                    { on: e.target.value || null },
+                    'Start date saved',
+                  )
                 }
               />
             </Field>
             <Button
               type="button"
               variant="ghost"
-              onClick={() => void call(`/api/tenant/variations/${id}/withdraw`)}
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: `Withdraw ${v.number}?`,
+                    body: 'The variation is withdrawn and goes no further.',
+                    confirmLabel: 'Withdraw the variation',
+                    tone: 'danger',
+                  }))
+                )
+                  return;
+                void call(`/api/tenant/variations/${id}/withdraw`, {}, `${v.number} withdrawn`);
+              }}
             >
               Withdraw
             </Button>
@@ -586,16 +612,20 @@ function Detail({
             type="button"
             disabled={!client.reference}
             onClick={() =>
-              void call(`/api/tenant/variations/${id}/client`, {
-                decision: 'approved',
-                ...client,
-                rowVersion: v.rowVersion,
-                lines: Object.entries(given).map(([p, g]) => ({
-                  position: Number(p),
-                  ...(g.qty ? { qty: g.qty } : {}),
-                  ...(g.rate ? { rate: g.rate } : {}),
-                })),
-              })
+              void call(
+                `/api/tenant/variations/${id}/client`,
+                {
+                  decision: 'approved',
+                  ...client,
+                  rowVersion: v.rowVersion,
+                  lines: Object.entries(given).map(([p, g]) => ({
+                    position: Number(p),
+                    ...(g.qty ? { qty: g.qty } : {}),
+                    ...(g.rate ? { rate: g.rate } : {}),
+                  })),
+                },
+                `${v.number} recorded as approved by the client`,
+              )
             }
           >
             Approved by the client
@@ -604,13 +634,22 @@ function Detail({
             type="button"
             variant="secondary"
             disabled={!client.reference}
-            onClick={() =>
-              void call(`/api/tenant/variations/${id}/client`, {
-                decision: 'rejected',
-                ...client,
-                rowVersion: v.rowVersion,
-              })
-            }
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: `Record ${v.number} as rejected?`,
+                  body: `The client's rejection (${client.reference}) is recorded and the variation closes.`,
+                  confirmLabel: 'Record the rejection',
+                  tone: 'danger',
+                }))
+              )
+                return;
+              void call(
+                `/api/tenant/variations/${id}/client`,
+                { decision: 'rejected', ...client, rowVersion: v.rowVersion },
+                `${v.number} recorded as rejected by the client`,
+              );
+            }}
           >
             Rejected by the client
           </Button>

@@ -139,6 +139,28 @@ export const quality: AreaDict = {
     'retention bond': 'रिटेन्शन बाँड',
     insurance: 'विमा',
     other: 'इतर',
+    // What was just done, and the questions asked before what cannot be undone (step 9a.2).
+    'Setting saved': 'सेटिंग जतन केली',
+    'Reject {number}?': '{number} नाकारायचे?',
+    'The inspection is recorded as rejected.': 'तपासणी नाकारली म्हणून नोंदवली जाते.',
+    'Reject the work': 'काम नाकारा',
+    '{number} recorded': '{number} नोंदवले',
+    'Inspection requested': 'तपासणीची विनंती केली',
+    'A failed test or checklist raises an NCR here.':
+      'नापास चाचणी किंवा चेकलिस्टमुळे येथे NCR नोंदवला जातो.',
+    'Snag updated': 'स्नॅग अद्ययावत केला',
+    'Snag added': 'स्नॅग जोडला',
+    'Makes put up for approval are listed here to approve.':
+      'मंजुरीसाठी सादर केलेले मेक मंजूर करण्यासाठी येथे दिसतात.',
+    'Make approved': 'मेक मंजूर केला',
+    'Hand over {area}?': '{area} हस्तांतरित करायचे?',
+    'The handover is recorded today and its certificate is ready.':
+      'हस्तांतरण आजच्या तारखेने नोंदवले जाते आणि त्याचे प्रमाणपत्र तयार होते.',
+    '{number} handed over': '{number} हस्तांतरित केले',
+    'Handover added': 'हस्तांतरण जोडले',
+    'Defect marked fixed': 'दोष दुरुस्त म्हणून नोंदवला',
+    'Defect reported': 'दोष नोंदवला',
+    'Checklist template saved': 'चेकलिस्ट नमुना जतन केला',
   },
   hi: {
     'Inspections, checklists, tests, NCRs, snags and material approvals.':
@@ -277,5 +299,27 @@ export const quality: AreaDict = {
     'retention bond': 'रिटेंशन बॉन्ड',
     insurance: 'बीमा',
     other: 'अन्य',
+    // What was just done, and the questions asked before what cannot be undone (step 9a.2).
+    'Setting saved': 'सेटिंग सहेजी गई',
+    'Reject {number}?': '{number} अस्वीकार करें?',
+    'The inspection is recorded as rejected.': 'निरीक्षण अस्वीकृत के रूप में दर्ज होता है।',
+    'Reject the work': 'काम अस्वीकार करें',
+    '{number} recorded': '{number} दर्ज किया गया',
+    'Inspection requested': 'निरीक्षण का अनुरोध किया गया',
+    'A failed test or checklist raises an NCR here.':
+      'असफल परीक्षण या चेकलिस्ट से यहाँ NCR दर्ज होता है।',
+    'Snag updated': 'स्नैग अपडेट किया गया',
+    'Snag added': 'स्नैग जोड़ा गया',
+    'Makes put up for approval are listed here to approve.':
+      'स्वीकृति के लिए भेजे गए मेक स्वीकृत करने के लिए यहाँ दिखते हैं।',
+    'Make approved': 'मेक स्वीकृत किया गया',
+    'Hand over {area}?': '{area} सौंपें?',
+    'The handover is recorded today and its certificate is ready.':
+      'हस्तांतरण आज की तारीख से दर्ज होता है और उसका प्रमाणपत्र तैयार हो जाता है।',
+    '{number} handed over': '{number} सौंपा गया',
+    'Handover added': 'हस्तांतरण जोड़ा गया',
+    'Defect marked fixed': 'दोष ठीक के रूप में दर्ज किया गया',
+    'Defect reported': 'दोष दर्ज किया गया',
+    'Checklist template saved': 'चेकलिस्ट टेम्पलेट सहेजा गया',
   },
 };

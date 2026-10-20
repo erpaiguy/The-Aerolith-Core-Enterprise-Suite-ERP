@@ -76,6 +76,25 @@ export const safety: AreaDict = {
     cancelled: 'रद्द',
     passed: 'पास',
     failed: 'नापास',
+    // What was just done, and the questions asked before what cannot be undone (step 9a.2).
+    'Incident reported': 'घटना नोंदवली',
+    'Issue permit {number}?': 'परवाना {number} द्यायचा?',
+    'Work may start under it once it is issued.': 'परवाना दिल्यानंतर त्याखाली काम सुरू करता येते.',
+    'Issue the permit': 'परवाना द्या',
+    'Permit {number} issued': 'परवाना {number} दिला',
+    'Close permit {number}?': 'परवाना {number} बंद करायचा?',
+    'The work is recorded as done; it needs a new permit to start again.':
+      'काम पूर्ण म्हणून नोंदवले जाते; पुन्हा सुरू करण्यासाठी नवीन परवाना लागेल.',
+    'Close the permit': 'परवाना बंद करा',
+    'Permit {number} closed': 'परवाना {number} बंद केला',
+    'Permit asked for': 'परवान्याची मागणी केली',
+    'Toolbox talk recorded': 'टूलबॉक्स चर्चा नोंदवली',
+    'Action marked done': 'कृती पूर्ण म्हणून नोंदवली',
+    'Investigation saved': 'चौकशी जतन केली',
+    'Close {number}?': '{number} बंद करायची?',
+    'The investigation ends here; nothing more can be added to it.':
+      'चौकशी येथे संपते; त्यात आणखी काही जोडता येत नाही.',
+    '{number} closed': '{number} बंद केली',
   },
   hi: {
     'Incidents, permits to work, toolbox talks and the injury rates.':
@@ -151,5 +170,24 @@ export const safety: AreaDict = {
     cancelled: 'रद्द',
     passed: 'पास',
     failed: 'फ़ेल',
+    // What was just done, and the questions asked before what cannot be undone (step 9a.2).
+    'Incident reported': 'घटना दर्ज की गई',
+    'Issue permit {number}?': 'परमिट {number} जारी करें?',
+    'Work may start under it once it is issued.': 'जारी होने के बाद उसके तहत काम शुरू हो सकता है।',
+    'Issue the permit': 'परमिट जारी करें',
+    'Permit {number} issued': 'परमिट {number} जारी किया गया',
+    'Close permit {number}?': 'परमिट {number} बंद करें?',
+    'The work is recorded as done; it needs a new permit to start again.':
+      'काम पूरा दर्ज होता है; फिर से शुरू करने के लिए नया परमिट चाहिए।',
+    'Close the permit': 'परमिट बंद करें',
+    'Permit {number} closed': 'परमिट {number} बंद किया गया',
+    'Permit asked for': 'परमिट माँगा गया',
+    'Toolbox talk recorded': 'टूलबॉक्स टॉक दर्ज की गई',
+    'Action marked done': 'कार्रवाई पूरी दर्ज की गई',
+    'Investigation saved': 'जाँच सहेजी गई',
+    'Close {number}?': '{number} बंद करें?',
+    'The investigation ends here; nothing more can be added to it.':
+      'जाँच यहीं समाप्त होती है; इसमें और कुछ नहीं जोड़ा जा सकता।',
+    '{number} closed': '{number} बंद की गई',
   },
 };

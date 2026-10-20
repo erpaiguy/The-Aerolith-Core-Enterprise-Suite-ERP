@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -63,10 +66,12 @@ export function PortalUsersScreen() {
   const [error, setError] = useState<string | null>(null);
   const linkFor = (who: string, token: string) =>
     setLink({ who, url: `${window.location.origin}/portal/${tenant}/accept#${token}` });
-  const run = async (f: () => Promise<void>) => {
+  const confirm = useConfirm();
+  const run = async (f: () => Promise<void>, done: string) => {
     setError(null);
     try {
       await f();
+      toast.success(done);
       void qc.invalidateQueries({ queryKey: ['portal-users'] });
     } catch (err) {
       setError(describeError(err));
@@ -91,7 +96,7 @@ export function PortalUsersScreen() {
               });
               linkFor(form.email, r.token);
               setForm({ ...form, email: '', name: '' });
-            });
+            }, `${form.email} invited`);
           }}
         >
           <Field label="Portal">
@@ -210,20 +215,29 @@ export function PortalUsersScreen() {
                                 },
                               );
                               linkFor(u.email, r.token);
-                            })
+                            }, `New link made for ${u.email}`)
                           }
                         >
                           New link
                         </Button>
                         <Button
                           variant="ghost"
-                          onClick={() =>
+                          onClick={async () => {
+                            if (
+                              !(await confirm({
+                                title: `Deactivate ${u.name}?`,
+                                body: `${u.email} can no longer sign in to the portal.`,
+                                confirmLabel: 'Deactivate',
+                                tone: 'danger',
+                              }))
+                            )
+                              return;
                             void run(async () => {
                               await api.request(`/api/tenant/portal-users/${u.id}/deactivate`, {
                                 method: 'POST',
                               });
-                            })
-                          }
+                            }, `${u.name} deactivated`);
+                          }}
                         >
                           Deactivate
                         </Button>
@@ -292,10 +306,12 @@ export function PortalSubmissionsScreen() {
   });
   const [reason, setReason] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const act = async (f: () => Promise<unknown>) => {
+  const confirm = useConfirm();
+  const act = async (f: () => Promise<unknown>, done: string) => {
     setError(null);
     try {
       await f();
+      toast.success(done);
       void qc.invalidateQueries({ queryKey: ['portal-submissions'] });
     } catch (err) {
       setError(describeError(err));
@@ -321,7 +337,9 @@ export function PortalSubmissionsScreen() {
       {!q.data ? (
         <Spinner />
       ) : q.data.length === 0 ? (
-        <p className="text-sm text-fg-muted">Nothing waiting.</p>
+        <EmptyState title="Nothing waiting">
+          Quotes, measurements and invoices sent through the portals wait here to be accepted.
+        </EmptyState>
       ) : (
         <ul className="space-y-3" aria-label="Submissions">
           {q.data.map((s) => (
@@ -367,10 +385,12 @@ export function PortalSubmissionsScreen() {
                   <div className="mt-3 flex flex-wrap items-end gap-2">
                     <Button
                       onClick={() =>
-                        void act(() =>
-                          api.request(`/api/tenant/portal-submissions/${s.id}/accept`, {
-                            method: 'POST',
-                          }),
+                        void act(
+                          () =>
+                            api.request(`/api/tenant/portal-submissions/${s.id}/accept`, {
+                              method: 'POST',
+                            }),
+                          `${s.number} accepted`,
                         )
                       }
                     >
@@ -384,14 +404,25 @@ export function PortalSubmissionsScreen() {
                     </Field>
                     <Button
                       variant="secondary"
-                      onClick={() =>
-                        void act(() =>
-                          api.request(`/api/tenant/portal-submissions/${s.id}/reject`, {
-                            method: 'POST',
-                            body: { reason: reason[s.id] ?? '' },
-                          }),
+                      onClick={async () => {
+                        if (
+                          !(await confirm({
+                            title: `Reject ${s.number}?`,
+                            body: `${s.party} sees it as rejected, with the reason given.`,
+                            confirmLabel: `Reject the ${s.kind}`,
+                            tone: 'danger',
+                          }))
                         )
-                      }
+                          return;
+                        void act(
+                          () =>
+                            api.request(`/api/tenant/portal-submissions/${s.id}/reject`, {
+                              method: 'POST',
+                              body: { reason: reason[s.id] ?? '' },
+                            }),
+                          `${s.number} rejected`,
+                        );
+                      }}
                     >
                       Reject
                     </Button>

@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -12,6 +13,8 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -113,10 +116,11 @@ export function ReviewsScreen() {
   const [projectId, setProjectId] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const call = async <T,>(path: string, body: object) => {
+  const call = async <T,>(path: string, body: object, done?: string) => {
     setError(null);
     try {
       const r = await api.request<T>(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: ['reviews'] });
       void qc.invalidateQueries({ queryKey: ['inbox'] });
       return r;
@@ -153,7 +157,9 @@ export function ReviewsScreen() {
         {mine.isPending ? (
           <Spinner />
         ) : (mine.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing waiting on you.</p>
+          <EmptyState title="Nothing waiting on you">
+            Reviews that need your code appear here when their stage reaches you.
+          </EmptyState>
         ) : (
           <ul className="space-y-1 text-sm" data-testid="reviews-mine">
             {mine.data!.map((m) => (
@@ -182,7 +188,7 @@ export function ReviewsScreen() {
   );
 }
 
-type Call = <T>(path: string, body: object) => Promise<T | null>;
+type Call = <T>(path: string, body: object, done?: string) => Promise<T | null>;
 
 function ReviewDetail({
   id,
@@ -204,6 +210,7 @@ function ReviewDetail({
   const [code, setCode] = useState('');
   const [comment, setComment] = useState('');
   const [markup, setMarkup] = useState(false);
+  const confirm = useConfirm();
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const d = q.data;
@@ -255,7 +262,13 @@ function ReviewDetail({
           onSubmit={async (e) => {
             e.preventDefault();
             onError(null);
-            if (await call(`/api/tenant/review-tasks/${d.mine[0]}/respond`, { code, comment })) {
+            if (
+              await call(
+                `/api/tenant/review-tasks/${d.mine[0]}/respond`,
+                { code, comment },
+                `Responded to ${d.number} with code ${code}`,
+              )
+            ) {
               setCode('');
               setComment('');
             }
@@ -304,7 +317,18 @@ function ReviewDetail({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void call(`/api/tenant/reviews/${d.id}/withdraw`, {})}
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: `Withdraw review ${d.number}?`,
+                  body: 'The review stops at its current stage and the reviewers no longer see it.',
+                  confirmLabel: 'Withdraw the review',
+                  tone: 'danger',
+                }))
+              )
+                return;
+              void call(`/api/tenant/reviews/${d.id}/withdraw`, {}, `Review ${d.number} withdrawn`);
+            }}
           >
             Withdraw
           </Button>
@@ -313,7 +337,13 @@ function ReviewDetail({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => void call(`/api/tenant/reviews/${d.id}/resubmit`, { versionNo: null })}
+            onClick={() =>
+              void call(
+                `/api/tenant/reviews/${d.id}/resubmit`,
+                { versionNo: null },
+                `Review ${d.number} resubmitted`,
+              )
+            }
           >
             Resubmit the latest revision
           </Button>
@@ -361,7 +391,9 @@ function ProjectReviews({
         {reviews.isPending ? (
           <Spinner />
         ) : (reviews.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">No reviews yet.</p>
+          <EmptyState title="No reviews yet">
+            Start one below: pick a document and the workflow it goes through.
+          </EmptyState>
         ) : (
           <Table minWidth="52rem">
             <thead>
@@ -402,10 +434,11 @@ function ProjectReviews({
           className="mt-3 grid gap-3 sm:grid-cols-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            const r = await call<{ id: string }>(`/api/tenant/projects/${projectId}/reviews`, {
-              ...form,
-              versionNo: null,
-            });
+            const r = await call<{ id: string }>(
+              `/api/tenant/projects/${projectId}/reviews`,
+              { ...form, versionNo: null },
+              'Review started',
+            );
             if (r) {
               setForm({ documentId: '', workflowId: form.workflowId, title: '' });
               onOpen(r.id);
@@ -510,19 +543,24 @@ function WorkflowCard({
             </span>
           </li>
         ))}
-        {workflows.length === 0 && <li className="text-fg-muted">None yet.</li>}
+        {workflows.length === 0 && (
+          <li>
+            <EmptyState title="None yet">
+              Name a workflow and its stages below; reviews then follow it.
+            </EmptyState>
+          </li>
+        )}
       </ul>
       <form
         aria-label="New workflow"
         className="mt-3 space-y-3"
         onSubmit={async (e) => {
           e.preventDefault();
-          const r = await call('/api/tenant/review-workflows', {
-            id: null,
-            projectId: scope === 'project' ? projectId : null,
-            name,
-            stages,
-          });
+          const r = await call(
+            '/api/tenant/review-workflows',
+            { id: null, projectId: scope === 'project' ? projectId : null, name, stages },
+            `Workflow ${name} saved`,
+          );
           if (r) {
             setName('');
             setStages([blank()]);

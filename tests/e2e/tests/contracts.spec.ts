@@ -58,6 +58,7 @@ test('a contract, its guarantee and an obligation on the calendar', async ({ pag
     .getByRole('row', { name: 'performance BG/0042' })
     .getByRole('button', { name: 'Returned' })
     .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Mark it returned' }).click();
   await expect(page.getByRole('row', { name: 'performance BG/0042' })).toContainText('returned');
   await expect(cal).not.toContainText('BG/0042 expires');
   await shot(page, 'contracts');

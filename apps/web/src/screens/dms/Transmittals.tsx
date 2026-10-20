@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -13,6 +14,8 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -25,7 +28,7 @@ import { printLink } from '../../print/Letterhead';
 import { Link } from '@tanstack/react-router';
 
 type Tab = 'transmittals' | 'rfis' | 'submittals';
-type Call = <T>(path: string, body: object) => Promise<T | null>;
+type Call = <T>(path: string, body: object, done?: string) => Promise<T | null>;
 
 const tone = (s: string) =>
   s === 'responded' || s === 'approved' || s === 'answered' || s === 'closed'
@@ -52,10 +55,11 @@ export function TransmittalsScreen() {
   }, [askedRfi]);
   useFocusForm('New RFI', askedRfi && tab === 'rfis' && !!projectId);
   const [error, setError] = useState<string | null>(null);
-  const call: Call = async <T,>(path: string, body: object) => {
+  const call: Call = async <T,>(path: string, body: object, done?: string) => {
     setError(null);
     try {
       const r = await api.request<T>(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: ['dms', projectId] });
       return r;
     } catch (err) {
@@ -180,7 +184,9 @@ function Transmittals({ projectId, call }: { projectId: string; call: Call }) {
         {list.isPending ? (
           <Spinner />
         ) : (list.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">None yet.</p>
+          <EmptyState title="None yet">
+            Draft one below from the project&apos;s documents, then issue it.
+          </EmptyState>
         ) : (
           <Table minWidth="52rem">
             <thead>
@@ -223,15 +229,19 @@ function Transmittals({ projectId, call }: { projectId: string; call: Call }) {
           className="grid gap-3 sm:grid-cols-3"
           onSubmit={async (e) => {
             e.preventDefault();
-            const r = await call<{ id: string }>(`/api/tenant/projects/${projectId}/transmittals`, {
-              subject: f.subject,
-              recipient: f.recipient,
-              email: f.email || null,
-              purpose: f.purpose,
-              responseDays: f.purpose === 'information' ? null : f.responseDays,
-              notes: f.notes,
-              items: f.items.map((documentId) => ({ documentId })),
-            });
+            const r = await call<{ id: string }>(
+              `/api/tenant/projects/${projectId}/transmittals`,
+              {
+                subject: f.subject,
+                recipient: f.recipient,
+                email: f.email || null,
+                purpose: f.purpose,
+                responseDays: f.purpose === 'information' ? null : f.responseDays,
+                notes: f.notes,
+                items: f.items.map((documentId) => ({ documentId })),
+              },
+              'Transmittal draft saved',
+            );
             if (r) {
               setF(blank);
               setOpen(r.id);
@@ -320,11 +330,12 @@ function Transmittal({ id, projectId, call }: { id: string; projectId: string; c
   });
   const [link, setLink] = useState<string | null>(null);
   const [rec, setRec] = useState({ by: '', response: '' });
+  const confirm = useConfirm();
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const t = q.data;
-  const act = async (path: string, body: object = {}) => {
-    const r = await call<TDetail>(`/api/tenant/transmittals/${id}/${path}`, body);
+  const act = async (path: string, body: object = {}, done?: string) => {
+    const r = await call<TDetail>(`/api/tenant/transmittals/${id}/${path}`, body, done);
     if (r) await q.refetch();
     return r;
   };
@@ -366,7 +377,21 @@ function Transmittal({ id, projectId, call }: { id: string; projectId: string; c
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {t.status === 'draft' && (
-          <Button type="button" onClick={() => void act('issue')}>
+          <Button
+            type="button"
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: `Issue ${t.number} to ${t.recipient}?`,
+                  body: 'It is dated as sent and stands on the register as issued.',
+                  confirmLabel: 'Issue the transmittal',
+                  tone: 'primary',
+                }))
+              )
+                return;
+              void act('issue', {}, `${t.number} issued`);
+            }}
+          >
             Issue
           </Button>
         )}
@@ -376,9 +401,11 @@ function Transmittal({ id, projectId, call }: { id: string; projectId: string; c
               type="button"
               variant="secondary"
               onClick={async () => {
-                const r = await call<{ path: string }>(`/api/tenant/transmittals/${id}/link`, {
-                  days: 14,
-                });
+                const r = await call<{ path: string }>(
+                  `/api/tenant/transmittals/${id}/link`,
+                  { days: 14 },
+                  'Link made',
+                );
                 if (r) {
                   setLink(`${window.location.origin}${r.path}`);
                   await q.refetch();
@@ -388,11 +415,41 @@ function Transmittal({ id, projectId, call }: { id: string; projectId: string; c
               {live ? 'Make a new link' : 'Make a link for the recipient'}
             </Button>
             {live && (
-              <Button type="button" variant="ghost" onClick={() => void act('link/revoke')}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: 'Withdraw the link?',
+                      body: `${t.recipient} can no longer open the documents through it.`,
+                      confirmLabel: 'Withdraw the link',
+                      tone: 'danger',
+                    }))
+                  )
+                    return;
+                  void act('link/revoke', {}, 'Link withdrawn');
+                }}
+              >
                 Withdraw the link
               </Button>
             )}
-            <Button type="button" variant="ghost" onClick={() => void act('close')}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: `Close ${t.number}?`,
+                    body: 'Nothing more is expected on it, and any live link stops working.',
+                    confirmLabel: 'Close the transmittal',
+                    tone: 'danger',
+                  }))
+                )
+                  return;
+                void act('close', {}, `${t.number} closed`);
+              }}
+            >
               Close
             </Button>
           </>
@@ -417,7 +474,7 @@ function Transmittal({ id, projectId, call }: { id: string; projectId: string; c
           className="mt-3 grid gap-3 sm:grid-cols-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (await act('respond', { by: rec.by, response: rec.response }))
+            if (await act('respond', { by: rec.by, response: rec.response }, 'Answer recorded'))
               setRec({ by: '', response: '' });
           }}
         >
@@ -498,7 +555,13 @@ function Rfis({ projectId, call }: { projectId: string; call: Call }) {
         {(list.data ?? []).map((r) => (
           <RfiItem key={r.id} r={r} call={call} documents={vault.data?.documents ?? []} />
         ))}
-        {list.data?.length === 0 && <li className="text-fg-muted">None yet.</li>}
+        {list.data?.length === 0 && (
+          <li>
+            <EmptyState title="None yet">
+              Raise a question from site with the New RFI form below.
+            </EmptyState>
+          </li>
+        )}
       </ul>
       <form
         aria-label="New RFI"
@@ -506,10 +569,11 @@ function Rfis({ projectId, call }: { projectId: string; call: Call }) {
         onSubmit={async (e) => {
           e.preventDefault();
           if (
-            await call(`/api/tenant/projects/${projectId}/rfis`, {
-              ...f,
-              documentId: f.documentId || null,
-            })
+            await call(
+              `/api/tenant/projects/${projectId}/rfis`,
+              { ...f, documentId: f.documentId || null },
+              'RFI raised',
+            )
           )
             setF(blank);
         }}
@@ -617,7 +681,8 @@ function RfiItem({
           className="mt-2 flex gap-2"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (await call(`/api/tenant/rfis/${r.id}/answer`, { answer })) setAnswer('');
+            if (await call(`/api/tenant/rfis/${r.id}/answer`, { answer }, `${r.number} answered`))
+              setAnswer('');
           }}
         >
           <Input
@@ -649,11 +714,15 @@ function RfiItem({
             type="button"
             variant="secondary"
             onClick={() =>
-              void call(`/api/tenant/rfis/${r.id}/outcome`, {
-                outcome: revised ? 'revision' : 'none',
-                documentId: revised || null,
-                close: true,
-              })
+              void call(
+                `/api/tenant/rfis/${r.id}/outcome`,
+                {
+                  outcome: revised ? 'revision' : 'none',
+                  documentId: revised || null,
+                  close: true,
+                },
+                `${r.number} closed`,
+              )
             }
           >
             Close RFI
@@ -700,7 +769,9 @@ function Submittals({ projectId, call }: { projectId: string; call: Call }) {
   return (
     <Card title="Submittals">
       {(list.data ?? []).length === 0 ? (
-        <p className="text-sm text-fg-muted">None yet.</p>
+        <EmptyState title="None yet">
+          Send a shop drawing, sample or method statement for approval with the form below.
+        </EmptyState>
       ) : (
         <Table minWidth="48rem">
           <thead>
@@ -741,7 +812,14 @@ function Submittals({ projectId, call }: { projectId: string; call: Call }) {
         className="mt-3 grid gap-3 sm:grid-cols-5"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (await call(`/api/tenant/projects/${projectId}/submittals`, f)) setF(blank);
+          if (
+            await call(
+              `/api/tenant/projects/${projectId}/submittals`,
+              f,
+              `Submittal ${f.title} sent`,
+            )
+          )
+            setF(blank);
         }}
       >
         <Field label="Kind">

@@ -10,6 +10,7 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -168,6 +169,7 @@ function CompanyCash({ by, asOf }: { by: string; asOf: string }) {
                   method: 'POST',
                   body: { amount: overheads || d.overheadsMonthly },
                 });
+                toast.success('Company overheads saved');
                 void qc.invalidateQueries({ queryKey: ['cash-flow'] });
               } catch (err) {
                 setError(describeError(err));
@@ -247,6 +249,7 @@ function ProjectCash({ projectId, by, asOf }: { projectId: string; by: string; a
                 },
               });
               setTerms(null);
+              toast.success('Cash terms saved');
               void qc.invalidateQueries({ queryKey: ['cash-flow'] });
             } catch (err) {
               setError(describeError(err));

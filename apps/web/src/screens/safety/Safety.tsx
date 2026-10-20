@@ -11,6 +11,8 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
@@ -145,10 +147,12 @@ function ProjectSafety({ projectId }: { projectId: string }) {
       ),
   });
   const [error, setError] = useState<string | null>(null);
-  const call = async (path: string, body: object) => {
+  const confirm = useConfirm();
+  const call = async (path: string, body: object, done?: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: key });
       void qc.invalidateQueries({ queryKey: ['safety-stats', projectId] });
       return true;
@@ -306,11 +310,11 @@ function ProjectSafety({ projectId }: { projectId: string }) {
           className="mt-3 grid gap-3 sm:grid-cols-6"
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
-            void call(`/api/tenant/projects/${projectId}/incidents`, {
-              ...inc,
-              occurredAt: local(inc.occurredAt),
-              daysLost: Number(inc.daysLost || 0),
-            });
+            void call(
+              `/api/tenant/projects/${projectId}/incidents`,
+              { ...inc, occurredAt: local(inc.occurredAt), daysLost: Number(inc.daysLost || 0) },
+              t('Incident reported'),
+            );
           }}
         >
           <Field label={t('Kind')}>
@@ -399,7 +403,22 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                   ))}
                   <Button
                     type="button"
-                    onClick={() => void call(`/api/tenant/permits/${p.id}/issue`, { confirmed: c })}
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: t('Issue permit {number}?', { number: p.number }),
+                          body: t('Work may start under it once it is issued.'),
+                          confirmLabel: t('Issue the permit'),
+                          tone: 'primary',
+                        }))
+                      )
+                        return;
+                      void call(
+                        `/api/tenant/permits/${p.id}/issue`,
+                        { confirmed: c },
+                        t('Permit {number} issued', { number: p.number }),
+                      );
+                    }}
                   >
                     {t('Issue@@permit')}
                   </Button>
@@ -409,9 +428,24 @@ function ProjectSafety({ projectId }: { projectId: string }) {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() =>
-                    void call(`/api/tenant/permits/${p.id}/close`, { note: 'Work done' })
-                  }
+                  onClick={async () => {
+                    if (
+                      !(await confirm({
+                        title: t('Close permit {number}?', { number: p.number }),
+                        body: t(
+                          'The work is recorded as done; it needs a new permit to start again.',
+                        ),
+                        confirmLabel: t('Close the permit'),
+                        tone: 'danger',
+                      }))
+                    )
+                      return;
+                    void call(
+                      `/api/tenant/permits/${p.id}/close`,
+                      { note: 'Work done' },
+                      t('Permit {number} closed', { number: p.number }),
+                    );
+                  }}
                 >
                   {t('Close')}
                 </Button>
@@ -424,11 +458,11 @@ function ProjectSafety({ projectId }: { projectId: string }) {
           className="grid gap-3 sm:grid-cols-6"
           onSubmit={(e) => {
             e.preventDefault();
-            void call(`/api/tenant/projects/${projectId}/permits`, {
-              ...ptw,
-              validFrom: local(ptw.validFrom),
-              validTo: local(ptw.validTo),
-            });
+            void call(
+              `/api/tenant/projects/${projectId}/permits`,
+              { ...ptw, validFrom: local(ptw.validFrom), validTo: local(ptw.validTo) },
+              t('Permit asked for'),
+            );
           }}
         >
           <Field label={t('Work at')}>
@@ -494,10 +528,11 @@ function ProjectSafety({ projectId }: { projectId: string }) {
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void call(`/api/tenant/projects/${projectId}/toolbox-talks`, {
-              ...talk,
-              others: Number(talk.others || 0),
-            });
+            void call(
+              `/api/tenant/projects/${projectId}/toolbox-talks`,
+              { ...talk, others: Number(talk.others || 0) },
+              t('Toolbox talk recorded'),
+            );
           }}
         >
           <Field label={t('Held on')}>
@@ -574,10 +609,12 @@ function Investigation({
   });
   const [f, setF] = useState({ rootCause: '', action: '', owner: '', dueOn: '' });
   const [error, setError] = useState<string | null>(null);
-  const post = async (path: string, body: object) => {
+  const confirm = useConfirm();
+  const post = async (path: string, body: object, done: string) => {
     setError(null);
     try {
       qc.setQueryData(key, await api.request(path, { method: 'POST', body }));
+      toast.success(done);
       onChange();
     } catch (err) {
       setError(describeError(err));
@@ -604,7 +641,11 @@ function Investigation({
                   type="button"
                   variant="ghost"
                   onClick={() =>
-                    void post(`/api/tenant/incident-actions/${a.id}/done`, { doneOn: today() })
+                    void post(
+                      `/api/tenant/incident-actions/${a.id}/done`,
+                      { doneOn: today() },
+                      t('Action marked done'),
+                    )
                   }
                 >
                   {t('Done')}
@@ -620,12 +661,16 @@ function Investigation({
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void post(`/api/tenant/incidents/${id}/investigation`, {
-              rootCause: f.rootCause || d.rootCause,
-              actions: f.action
-                ? [{ action: f.action, owner: f.owner, dueOn: f.dueOn || null }]
-                : [],
-            });
+            void post(
+              `/api/tenant/incidents/${id}/investigation`,
+              {
+                rootCause: f.rootCause || d.rootCause,
+                actions: f.action
+                  ? [{ action: f.action, owner: f.owner, dueOn: f.dueOn || null }]
+                  : [],
+              },
+              t('Investigation saved'),
+            );
           }}
         >
           <Field label={t('Root cause')}>
@@ -647,7 +692,22 @@ function Investigation({
           {mayClose && (
             <Button
               type="button"
-              onClick={() => void post(`/api/tenant/incidents/${id}/close`, {})}
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: t('Close {number}?', { number: d.number }),
+                    body: t('The investigation ends here; nothing more can be added to it.'),
+                    confirmLabel: t('Close the incident'),
+                    tone: 'danger',
+                  }))
+                )
+                  return;
+                void post(
+                  `/api/tenant/incidents/${id}/close`,
+                  {},
+                  t('{number} closed', { number: d.number }),
+                );
+              }}
             >
               {t('Close the incident')}
             </Button>

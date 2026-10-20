@@ -45,6 +45,7 @@ test('a lead logged, followed up, made a tender and seen in the pipeline', async
   await page.getByRole('button', { name: 'Move to qualified' }).click();
   await expect(page.getByTestId('lead-status')).toContainText('qualified');
   await page.getByRole('button', { name: 'Make it a tender' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Make it a tender' }).click();
   await expect(page.getByTestId('lead-status')).toContainText('tender TND/');
 
   await page.getByRole('tab', { name: 'Pipeline' }).click();

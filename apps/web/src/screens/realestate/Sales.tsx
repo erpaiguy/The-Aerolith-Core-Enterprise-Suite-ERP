@@ -5,12 +5,15 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -175,10 +178,11 @@ function ProjectSales({ projectId, tab }: { projectId: string; tab: Tab }) {
   });
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const call = async <T,>(path: string, body: object) => {
+  const call = async <T,>(path: string, body: object, done?: string) => {
     setError(null);
     try {
       const r = await api.request<T>(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: ['sales', projectId] });
       return r;
     } catch (err) {
@@ -205,7 +209,7 @@ function ProjectSales({ projectId, tab }: { projectId: string; tab: Tab }) {
   );
 }
 
-type Call = <T>(path: string, body: object) => Promise<T | null>;
+type Call = <T>(path: string, body: object, done?: string) => Promise<T | null>;
 
 function Inventory({
   projectId,
@@ -258,7 +262,11 @@ function Inventory({
                     ))}
                 </div>
               ))}
-              {units.length === 0 && <p className="text-sm text-fg-muted">No units yet.</p>}
+              {units.length === 0 && (
+                <EmptyState title="No units yet">
+                  Add this tower&apos;s units with the New unit form below.
+                </EmptyState>
+              )}
             </div>
           </Card>
         );
@@ -276,10 +284,14 @@ function Inventory({
               className="mt-3 grid gap-3 sm:grid-cols-5"
               onSubmit={async (e) => {
                 e.preventDefault();
-                const r = await call<{ id: string }>(`/api/tenant/sales/units/${pick.id}/book`, {
-                  buyer: { name: buyer.name, phone: buyer.phone, pan: buyer.pan || null },
-                  bookedOn: buyer.bookedOn,
-                });
+                const r = await call<{ id: string }>(
+                  `/api/tenant/sales/units/${pick.id}/book`,
+                  {
+                    buyer: { name: buyer.name, phone: buyer.phone, pan: buyer.pan || null },
+                    bookedOn: buyer.bookedOn,
+                  },
+                  `Unit ${pick.number} booked for ${buyer.name}`,
+                );
                 if (r) onBooked(r.id);
               }}
             >
@@ -326,19 +338,23 @@ function Inventory({
           onSubmit={async (e) => {
             e.preventDefault();
             if (
-              await call(`/api/tenant/sales/towers/${unit.towerId}/units`, {
-                units: [
-                  {
-                    floor: unit.floor,
-                    number: unit.number,
-                    carpetSqm: unit.carpetSqm,
-                    ratePerSqm: unit.ratePerSqm,
-                    parking: unit.parking || '0',
-                    charges: unit.charges || '0',
-                    gstPct: unit.gstPct,
-                  },
-                ],
-              })
+              await call(
+                `/api/tenant/sales/towers/${unit.towerId}/units`,
+                {
+                  units: [
+                    {
+                      floor: unit.floor,
+                      number: unit.number,
+                      carpetSqm: unit.carpetSqm,
+                      ratePerSqm: unit.ratePerSqm,
+                      parking: unit.parking || '0',
+                      charges: unit.charges || '0',
+                      gstPct: unit.gstPct,
+                    },
+                  ],
+                },
+                `Unit ${unit.number} added`,
+              )
             )
               setUnit({ ...unit, number: '' });
           }}
@@ -429,7 +445,13 @@ function TowerForm({
       className="grid gap-3 sm:grid-cols-4"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (await call(`/api/tenant/projects/${projectId}/sales/towers`, tower))
+        if (
+          await call(
+            `/api/tenant/projects/${projectId}/sales/towers`,
+            tower,
+            `Tower ${tower.name} added`,
+          )
+        )
           setTower({ name: '', floors: tower.floors });
       }}
     >
@@ -487,7 +509,9 @@ function Bookings({
     <>
       <Card title="Bookings">
         {(q.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">None yet.</p>
+          <EmptyState title="None yet">
+            Pick a unit on the Inventory tab and book it for a buyer.
+          </EmptyState>
         ) : (
           <Table minWidth="52rem">
             <thead>
@@ -551,8 +575,8 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const b = q.data;
-  const act = async (path: string, body: object) => {
-    if (await call(`/api/tenant/sales/bookings/${id}/${path}`, body)) await q.refetch();
+  const act = async (path: string, body: object, done?: string) => {
+    if (await call(`/api/tenant/sales/bookings/${id}/${path}`, body, done)) await q.refetch();
   };
   return (
     <Card
@@ -607,7 +631,7 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
           className="mt-3 grid gap-3 sm:grid-cols-3"
           onSubmit={(e) => {
             e.preventDefault();
-            void act('agreement', agreement);
+            void act('agreement', agreement, `Agreement for ${b.number} registered`);
           }}
         >
           <Field label="Registered on">
@@ -637,13 +661,17 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
           className="mt-3 grid gap-3 sm:grid-cols-4"
           onSubmit={(e) => {
             e.preventDefault();
-            void act('receipts', {
-              on: rcpt.on,
-              amount: rcpt.amount,
-              reference: rcpt.reference,
-              mode: 'neft',
-              ...(Number(rcpt.tds) > 0 ? { tds: rcpt.tds, tdsAck: rcpt.tdsAck } : {}),
-            }).then(() => setRcpt({ ...rcpt, amount: '', reference: '', tds: '', tdsAck: '' }));
+            void act(
+              'receipts',
+              {
+                on: rcpt.on,
+                amount: rcpt.amount,
+                reference: rcpt.reference,
+                mode: 'neft',
+                ...(Number(rcpt.tds) > 0 ? { tds: rcpt.tds, tdsAck: rcpt.tdsAck } : {}),
+              },
+              `Receipt of ${formatInr(rcpt.amount)} recorded`,
+            ).then(() => setRcpt({ ...rcpt, amount: '', reference: '', tds: '', tdsAck: '' }));
           }}
         >
           <Field label="Received on">
@@ -688,7 +716,9 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => void act('interest', { on: today() })}
+                onClick={() =>
+                  void act('interest', { on: today() }, `Interest raised on ${b.number}`)
+                }
               >
                 Raise interest
               </Button>
@@ -709,7 +739,14 @@ const HANDOVER = [
 ];
 
 /** Cancellation, transfer, registration, possession and handover of a booking (docs/wave8-plan.md step 8f.1). */
-function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) => Promise<void> }) {
+function AfterSale({
+  b,
+  act,
+}: {
+  b: Booking;
+  act: (path: string, body: object, done?: string) => Promise<void>;
+}) {
+  const confirm = useConfirm();
   const banks = useQuery({
     queryKey: ['sales', 'banks'],
     queryFn: () =>
@@ -766,9 +803,22 @@ function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) =
         <form
           aria-label="Refund"
           className="flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            void act('refund', { on: today(), fromAccountId: cancel.bank });
+            if (
+              !(await confirm({
+                title: `Refund ${formatInr(b.refundDue)} on ${b.number}?`,
+                body: `The refund to ${b.buyer} is paid from the bank chosen and posted to the books.`,
+                confirmLabel: 'Refund the buyer',
+                tone: 'danger',
+              }))
+            )
+              return;
+            void act(
+              'refund',
+              { on: today(), fromAccountId: cancel.bank },
+              `${formatInr(b.refundDue)} refunded on ${b.number}`,
+            );
           }}
         >
           <Field label="Refund from">
@@ -794,7 +844,7 @@ function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) =
           className="grid gap-3 sm:grid-cols-5"
           onSubmit={(e) => {
             e.preventDefault();
-            void act('registration', reg);
+            void act('registration', reg, `Sale deed ${reg.registrationNo} recorded`);
           }}
         >
           <Field label="Stamp duty (₹)">
@@ -841,7 +891,21 @@ function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) =
         </form>
       )}
       {live && b.status === 'agreement' && !b.possessionOfferedOn && (
-        <Button variant="secondary" onClick={() => void act('offer-possession', { on: today() })}>
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            if (
+              !(await confirm({
+                title: `Offer possession of ${b.unit}?`,
+                body: `The remaining stages of the payment plan are raised on ${b.buyer} as demands.`,
+                confirmLabel: 'Offer possession',
+                tone: 'primary',
+              }))
+            )
+              return;
+            void act('offer-possession', { on: today() }, `Possession of ${b.unit} offered`);
+          }}
+        >
           Offer possession (raise the remaining stages)
         </Button>
       )}
@@ -849,12 +913,25 @@ function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) =
         <form
           aria-label="Hand over"
           className="space-y-2"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            void act('hand-over', {
-              on: today(),
-              checklist: HANDOVER.map((item) => ({ item, ok: !!checks[item], note: '' })),
-            });
+            if (
+              !(await confirm({
+                title: `Hand over ${b.unit} to ${b.buyer}?`,
+                body: 'Possession is recorded today and the defect liability period starts.',
+                confirmLabel: 'Hand over',
+                tone: 'primary',
+              }))
+            )
+              return;
+            void act(
+              'hand-over',
+              {
+                on: today(),
+                checklist: HANDOVER.map((item) => ({ item, ok: !!checks[item], note: '' })),
+              },
+              `${b.unit} handed over`,
+            );
           }}
         >
           <p className="text-sm">
@@ -879,13 +956,26 @@ function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) =
           <form
             aria-label="Transfer to a nominee"
             className="mt-3 grid gap-3 sm:grid-cols-4"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              void act('transfer', {
-                on: today(),
-                buyer: { name: nominee.name, pan: nominee.pan || null },
-                fee: nominee.fee || '0',
-              });
+              if (
+                !(await confirm({
+                  title: `Transfer ${b.number} to ${nominee.name}?`,
+                  body: `${nominee.name} becomes the buyer in place of ${b.buyer}; the transfer fee is billed with GST.`,
+                  confirmLabel: 'Transfer the booking',
+                  tone: 'danger',
+                }))
+              )
+                return;
+              void act(
+                'transfer',
+                {
+                  on: today(),
+                  buyer: { name: nominee.name, pan: nominee.pan || null },
+                  fee: nominee.fee || '0',
+                },
+                `${b.number} transferred to ${nominee.name}`,
+              );
             }}
           >
             <Field label="New buyer">
@@ -919,16 +1009,27 @@ function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) =
           <form
             aria-label="Cancel the booking"
             className="mt-3 grid gap-3 sm:grid-cols-4"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              if (!window.confirm(`Cancel ${b.number}? Its demands are reversed by credit notes.`))
+              if (
+                !(await confirm({
+                  title: `Cancel booking ${b.number}?`,
+                  body: 'Its demands are reversed by credit notes, and the forfeit and refund are booked.',
+                  confirmLabel: 'Cancel the booking',
+                  tone: 'danger',
+                }))
+              )
                 return;
-              void act('cancel', {
-                on: today(),
-                reason: cancel.reason,
-                forfeit: cancel.forfeit || '0',
-                refundFromAccountId: cancel.bank || null,
-              });
+              void act(
+                'cancel',
+                {
+                  on: today(),
+                  reason: cancel.reason,
+                  forfeit: cancel.forfeit || '0',
+                  refundFromAccountId: cancel.bank || null,
+                },
+                `Booking ${b.number} cancelled`,
+              );
             }}
           >
             <Field label="Why cancelled">
@@ -972,6 +1073,7 @@ function AfterSale({ b, act }: { b: Booking; act: (path: string, body: object) =
 }
 
 function Plan({ d, base, call }: { d: Overview; base: string; call: Call }) {
+  const confirm = useConfirm();
   const [stages, setStages] = useState(
     d.plan.length
       ? d.plan.map((s) => ({
@@ -1003,9 +1105,22 @@ function Plan({ d, base, call }: { d: Overview; base: string; call: Call }) {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() =>
-                      void call(`/api/tenant/sales/stages/${s.id}/reached`, { on: reachOn })
-                    }
+                    onClick={async () => {
+                      if (
+                        !(await confirm({
+                          title: `Mark ${s.name} reached on ${reachOn}?`,
+                          body: `The ${s.pct}% stage is raised as a demand on every booking it applies to.`,
+                          confirmLabel: 'Raise the demands',
+                          tone: 'primary',
+                        }))
+                      )
+                        return;
+                      void call(
+                        `/api/tenant/sales/stages/${s.id}/reached`,
+                        { on: reachOn },
+                        `${s.name} reached; demands raised`,
+                      );
+                    }}
                   >
                     Reached on {reachOn}
                   </Button>
@@ -1029,7 +1144,7 @@ function Plan({ d, base, call }: { d: Overview; base: string; call: Call }) {
           className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void call(`${base}/plan`, { stages });
+            void call(`${base}/plan`, { stages }, 'Payment plan saved');
           }}
         >
           {stages.map((s, i) => (
@@ -1112,7 +1227,7 @@ function ReraTab({ projectId, call }: { projectId: string; call: Call }) {
         className="mt-3 grid gap-3 sm:grid-cols-3"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (await call(base, { kind: 'deposit', ...dep })) await q.refetch();
+          if (await call(base, { kind: 'deposit', ...dep }, 'Deposit recorded')) await q.refetch();
         }}
       >
         <Field label="Deposited on">
@@ -1171,7 +1286,7 @@ function Setup({ d, base, call }: { d: Overview; base: string; call: Call }) {
         className="grid gap-3 sm:grid-cols-3"
         onSubmit={(e) => {
           e.preventDefault();
-          void call(`${base}/setup`, s);
+          void call(`${base}/setup`, s, 'Sales setup saved');
         }}
       >
         <Field label="RERA registration">

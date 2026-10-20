@@ -1,6 +1,16 @@
 // New drawing revisions sent to me by the distribution matrix, to acknowledge (docs/wave5-plan.md step 4); and the
 // check behind the QR on a controlled copy, which needs no account and says only whether the print is current.
-import { Alert, Badge, Button, Card, PageHeader, Spinner, Table } from '@aerolith/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  Spinner,
+  Table,
+  toast,
+} from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/client';
@@ -36,7 +46,9 @@ export function DrawingReceiptsScreen() {
         {q.isPending ? (
           <Spinner />
         ) : (q.data ?? []).length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing sent to you.</p>
+          <EmptyState title="Nothing sent to you">
+            When a new revision of a drawing is sent to you, it is listed here to acknowledge.
+          </EmptyState>
         ) : (
           <Table minWidth="44rem">
             <thead>
@@ -78,6 +90,7 @@ export function DrawingReceiptsScreen() {
                                 { method: 'POST', body: {} },
                               ),
                             );
+                            toast.success(`${r.number} rev ${r.revision} acknowledged`);
                             void qc.invalidateQueries({ queryKey: ['inbox'] });
                           } catch (err) {
                             setError(describeError(err));

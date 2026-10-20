@@ -80,6 +80,7 @@ test('a cost placed, its cost to complete entered, the month closed', async ({ p
 
   // 5. The month closed; compared with now.
   await page.getByRole('button', { name: 'Close the month' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Close the month' }).click();
   const month = await page.getByLabel('Month').inputValue();
   await page.getByLabel('Compare with').selectOption(month);
   await expect(page.getByRole('columnheader', { name: `Forecast ${month}` })).toBeVisible();

@@ -6,12 +6,14 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
   Select,
   Spinner,
   Table,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -139,7 +141,13 @@ export function ReportBuilderScreen() {
                 {r.schedules?.length ? <Badge tone="success">scheduled</Badge> : null}
               </li>
             ))}
-            {saved.data?.length === 0 && <li className="text-fg-muted">None yet.</li>}
+            {saved.data?.length === 0 && (
+              <li>
+                <EmptyState title="None yet">
+                  Build a report, run it, then save it under a name to find it here.
+                </EmptyState>
+              </li>
+            )}
           </ul>
         </Card>
         <div className="space-y-5">
@@ -222,6 +230,7 @@ export function ReportBuilderScreen() {
                       },
                     );
                     setCurrent(r.id);
+                    toast.success(`Report ${name} saved`);
                     void qc.invalidateQueries({ queryKey: ['bi', 'saved'] });
                   } catch (err) {
                     setError(describeError(err));
@@ -561,6 +570,7 @@ function ScheduleForm({
               monthday: cadence === 'monthly' ? monthday : null,
             },
           });
+          toast.success('Report scheduled');
           onDone();
         } catch (err) {
           onError(describeError(err));

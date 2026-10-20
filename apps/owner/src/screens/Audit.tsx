@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Spinner } from '@aerolith/ui';
+import { Alert, Button, Card, EmptyState, Spinner } from '@aerolith/ui';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { api, type AuditRow } from '../api';
@@ -65,7 +65,9 @@ export function AuditScreen() {
         ) : audit.isError ? (
           <Alert tone="danger">{errorMessage(audit.error)}</Alert>
         ) : audit.data.pages[0]!.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nothing yet.</p>
+          <EmptyState title="Nothing yet">
+            Each change made from this console is recorded here as it happens.
+          </EmptyState>
         ) : (
           <>
             <Table>

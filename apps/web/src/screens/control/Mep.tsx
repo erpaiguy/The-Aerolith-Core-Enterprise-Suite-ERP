@@ -11,6 +11,7 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -97,6 +98,7 @@ export function MepScreen() {
               setLoaded(
                 `${r.boqTemplates.length} BOQ templates and ${r.checklists.length} checklists added.`,
               );
+              toast.success('MEP pack loaded');
               void qc.invalidateQueries({ queryKey: ['mep'] });
             } catch (err) {
               setError(describeError(err));
@@ -142,10 +144,11 @@ function ProjectMep({
     description: '',
   });
   const [pick, setPick] = useState<Record<string, string>>({});
-  const call = async (path: string, body: object) => {
+  const call = async (path: string, body: object, done?: string) => {
     onError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: key });
       return true;
     } catch (err) {
@@ -188,11 +191,15 @@ function ProjectMep({
                       aria-label={`Status, ${e.tag}`}
                       value={e.status}
                       onChange={(x) =>
-                        void call(`/api/tenant/mep-equipment/${e.id}/status`, {
-                          status: x.target.value,
-                          checklistId: pick[e.id] || null,
-                          rowVersion: e.rowVersion,
-                        })
+                        void call(
+                          `/api/tenant/mep-equipment/${e.id}/status`,
+                          {
+                            status: x.target.value,
+                            checklistId: pick[e.id] || null,
+                            rowVersion: e.rowVersion,
+                          },
+                          `${e.tag} marked ${x.target.value}`,
+                        )
                       }
                     >
                       {STATUSES.map((s) => (
@@ -231,7 +238,13 @@ function ProjectMep({
           className="mt-3 grid gap-3 sm:grid-cols-6"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (await call(`/api/tenant/projects/${projectId}/mep/equipment`, eq))
+            if (
+              await call(
+                `/api/tenant/projects/${projectId}/mep/equipment`,
+                eq,
+                `Equipment ${eq.tag} added`,
+              )
+            )
               setEq({ ...eq, tag: '', description: '', capacity: '', location: '' });
           }}
         >
@@ -291,10 +304,11 @@ function ProjectMep({
                   onClick={() => {
                     const resolution = window.prompt('How was it resolved?');
                     if (resolution)
-                      void call(`/api/tenant/coordination-issues/${i.id}/resolve`, {
-                        resolution,
-                        on: today(),
-                      });
+                      void call(
+                        `/api/tenant/coordination-issues/${i.id}/resolve`,
+                        { resolution, on: today() },
+                        `${i.number} resolved`,
+                      );
                   }}
                 >
                   Resolve
@@ -309,10 +323,11 @@ function ProjectMep({
           onSubmit={async (e) => {
             e.preventDefault();
             if (
-              await call(`/api/tenant/projects/${projectId}/mep/issues`, {
-                ...is,
-                raisedOn: today(),
-              })
+              await call(
+                `/api/tenant/projects/${projectId}/mep/issues`,
+                { ...is, raisedOn: today() },
+                'Clash logged',
+              )
             )
               setIs({ ...is, location: '', description: '' });
           }}

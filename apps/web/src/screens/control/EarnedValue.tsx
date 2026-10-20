@@ -1,7 +1,7 @@
 // Earned value (docs/wave4-plan.md step 3), for a project: PV from the baseline schedule at budget value, EV from
 // the measurement book at budget rates, AC from the ledger; indices, the estimates at completion side by side, by
 // WBS element, and the S-curves.
-import { Alert, Card, Field, Input, PageHeader, Select, Spinner, Table } from '@aerolith/ui';
+import { Alert, Card, Field, Input, PageHeader, Select, Spinner, Table, toast } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { api } from '../../api/client';
@@ -165,6 +165,7 @@ function ProjectEv({ projectId, asOf }: { projectId: string; asOf: string }) {
                     method: 'POST',
                     body: { method: e.target.value },
                   });
+                  toast.success('Forecast method saved');
                   void qc.invalidateQueries({ queryKey: ['earned-value', projectId] });
                 } catch (err) {
                   setError(describeError(err));

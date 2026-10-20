@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Spinner } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, EmptyState, Spinner, useConfirm } from '@aerolith/ui';
 import { useQuery } from '@tanstack/react-query';
 import { api, type MigrationRun } from '../api';
 import { errorMessage, formatDateTime } from '../format';
@@ -37,6 +37,7 @@ function Results({ counts }: { counts: Record<string, number> }) {
 /** Tenant database schema rollouts (docs/tenant-provisioning.md). */
 export function MigrationsScreen() {
   const { canWrite } = useSession();
+  const confirm = useConfirm();
   const runs = useQuery({
     queryKey: ['migration-runs'],
     queryFn: () => api.get<MigrationRun[]>('/api/owner/migrations/runs'),
@@ -54,7 +55,22 @@ export function MigrationsScreen() {
           pauses by itself if too many tenants fail, so one bad migration cannot break everyone.
         </p>
         {canWrite && (
-          <Button type="button" busy={rollout.busy} onClick={() => void rollout.run()}>
+          <Button
+            type="button"
+            busy={rollout.busy}
+            onClick={async () => {
+              if (
+                !(await confirm({
+                  title: 'Roll out the latest schema?',
+                  body: 'New migrations are applied to every ready tenant database. Applied migrations are not rolled back.',
+                  confirmLabel: 'Start the rollout',
+                  tone: 'primary',
+                }))
+              )
+                return;
+              void rollout.run();
+            }}
+          >
             Start rollout
           </Button>
         )}
@@ -80,7 +96,9 @@ export function MigrationsScreen() {
         ) : runs.isError ? (
           <Alert tone="danger">{errorMessage(runs.error)}</Alert>
         ) : runs.data.length === 0 ? (
-          <p className="text-sm text-fg-muted">No rollouts yet.</p>
+          <EmptyState title="No rollouts yet">
+            Each rollout started above is listed here with what happened on each tenant.
+          </EmptyState>
         ) : (
           <Table>
             <thead>

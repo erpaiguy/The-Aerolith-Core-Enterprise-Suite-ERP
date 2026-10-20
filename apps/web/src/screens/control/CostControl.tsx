@@ -11,6 +11,8 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
@@ -163,11 +165,13 @@ function ProjectCost({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const [month, setMonth] = useState(today().slice(0, 7));
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
   const refresh = () => void qc.invalidateQueries({ queryKey: ['cost-control', projectId] });
-  const call = async (path: string, body: object) => {
+  const call = async (path: string, body: object, done?: string) => {
     setError(null);
     try {
       await api.request(path, { method: 'POST', body });
+      if (done) toast.success(done);
       refresh();
       return true;
     } catch (err) {
@@ -245,7 +249,18 @@ function ProjectCost({ projectId }: { projectId: string }) {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => void call(`${base}/baseline`, {})}
+                onClick={async () => {
+                  if (
+                    !(await confirm({
+                      title: 'Take the original budget?',
+                      body: 'Today’s budget becomes the original one, which later changes are measured against. It is taken once.',
+                      confirmLabel: 'Take the original budget',
+                      tone: 'primary',
+                    }))
+                  )
+                    return;
+                  void call(`${base}/baseline`, {}, 'Original budget taken');
+                }}
               >
                 Take the original budget
               </Button>
@@ -255,7 +270,18 @@ function ProjectCost({ projectId }: { projectId: string }) {
             </Field>
             <Button
               type="button"
-              onClick={() => void call(`${base}/months/${month}/close`, {})}
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: `Close ${month}?`,
+                    body: 'The forecast as it stands now is kept for this month, to compare with later.',
+                    confirmLabel: 'Close the month',
+                    tone: 'primary',
+                  }))
+                )
+                  return;
+                void call(`${base}/months/${month}/close`, {}, `${month} closed`);
+              }}
               disabled={!month}
             >
               Close the month
@@ -337,7 +363,9 @@ function ProjectCost({ projectId }: { projectId: string }) {
                   mayForecast={d.mayForecast}
                   open={open === x.key}
                   onOpen={() => setOpen(open === x.key ? null : x.key)}
-                  onCtc={(amount, note) => call(`${base}/ctc`, { key: x.key, amount, note })}
+                  onCtc={(amount, note) =>
+                    call(`${base}/ctc`, { key: x.key, amount, note }, 'Cost to complete saved')
+                  }
                 />
               ))}
             </tbody>
@@ -357,7 +385,7 @@ function ProjectCost({ projectId }: { projectId: string }) {
           mayForecast={d.mayForecast}
           codes={codes.data ?? []}
           wbs={wbs.data ?? []}
-          onAllocate={(body) => call(`${base}/allocations`, body)}
+          onAllocate={(body) => call(`${base}/allocations`, body, 'Cost placed')}
         />
       )}
 
@@ -373,9 +401,11 @@ function ProjectCost({ projectId }: { projectId: string }) {
                 <Select
                   value={x.costCode?.id ?? ''}
                   onChange={(e) =>
-                    void call(`/api/tenant/cost-control/defaults/${x.source}`, {
-                      costCodeId: e.target.value || null,
-                    })
+                    void call(
+                      `/api/tenant/cost-control/defaults/${x.source}`,
+                      { costCodeId: e.target.value || null },
+                      `Default for ${x.label} saved`,
+                    )
                   }
                 >
                   <option value="">Not set</option>

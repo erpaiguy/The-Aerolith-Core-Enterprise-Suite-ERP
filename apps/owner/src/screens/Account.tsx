@@ -1,4 +1,4 @@
-import { Alert, AuthLayout, Badge, Button, Card, Field, Input } from '@aerolith/ui';
+import { Alert, AuthLayout, Badge, Button, Card, Field, Input, toast } from '@aerolith/ui';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { errorMessage } from '../format';
@@ -24,6 +24,7 @@ function PasswordForm({ forced, onDone }: { forced: boolean; onDone?: () => void
         { currentPassword: current, newPassword: password },
       );
       session.passwordChanged(accessToken);
+      toast.success('Password changed');
       setCurrent('');
       setPassword('');
       setConfirm('');

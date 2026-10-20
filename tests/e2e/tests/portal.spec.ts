@@ -104,7 +104,7 @@ test('a subcontractor invited to the portal quotes online and the quote is accep
   await expect(sub).toContainText('quote from Aqua Seal Systems');
   await expect(sub).toContainText('2 rates');
   await sub.getByRole('button', { name: 'Accept' }).click();
-  await expect(page.getByText('Nothing waiting.')).toBeVisible();
+  await expect(page.getByText('Nothing waiting', { exact: true })).toBeVisible();
   await page.goto(rfqUrl);
   await expect(aqua.getByText(/Quote ASS\/P\/9, received/)).toBeVisible();
   const cs = page.getByRole('rowgroup', { name: 'Comparative statement' });

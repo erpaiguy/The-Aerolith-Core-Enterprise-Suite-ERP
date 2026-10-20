@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Field,
   Input,
   PageHeader,
@@ -12,6 +13,8 @@ import {
   Spinner,
   Table,
   Textarea,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -111,10 +114,11 @@ export function CrmScreen() {
     new URLSearchParams(window.location.search).get('lead'),
   );
   const [error, setError] = useState<string | null>(null);
-  const call = async <T,>(path: string, body: object) => {
+  const call = async <T,>(path: string, body: object, done?: string) => {
     setError(null);
     try {
       const r = await api.request<T>(path, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: ['crm'] });
       return r;
     } catch (err) {
@@ -248,7 +252,7 @@ function Leads({
   call,
 }: {
   onOpen: (id: string) => void;
-  call: <T>(path: string, body: object) => Promise<T | null>;
+  call: <T>(path: string, body: object, done?: string) => Promise<T | null>;
 }) {
   const [stage, setStage] = useState('');
   const q = useQuery({
@@ -331,16 +335,20 @@ function Leads({
           className="grid gap-3 sm:grid-cols-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            const r = await call<{ id: string }>('/api/tenant/crm/leads', {
-              title: f.title,
-              partyId: f.who && f.who !== 'new' ? f.who : null,
-              organisation: f.who === 'new' || !f.who ? f.organisation : null,
-              source: f.source,
-              segment: f.segment,
-              location: f.location,
-              value: f.value || null,
-              expectedMonth: f.expectedMonth || null,
-            });
+            const r = await call<{ id: string }>(
+              '/api/tenant/crm/leads',
+              {
+                title: f.title,
+                partyId: f.who && f.who !== 'new' ? f.who : null,
+                organisation: f.who === 'new' || !f.who ? f.organisation : null,
+                source: f.source,
+                segment: f.segment,
+                location: f.location,
+                value: f.value || null,
+                expectedMonth: f.expectedMonth || null,
+              },
+              `Lead ${f.title} added`,
+            );
             if (r) {
               setF(blank);
               onOpen(r.id);
@@ -427,9 +435,10 @@ function LeadCard({
   onClose,
 }: {
   id: string;
-  call: <T>(path: string, body: object) => Promise<T | null>;
+  call: <T>(path: string, body: object, done?: string) => Promise<T | null>;
   onClose: () => void;
 }) {
+  const confirm = useConfirm();
   const q = useQuery({
     queryKey: ['crm', 'lead', id],
     queryFn: () => api.request<LeadDetail>(`/api/tenant/crm/leads/${id}`),
@@ -440,7 +449,23 @@ function LeadCard({
   if (q.isPending) return <Spinner />;
   if (q.isError) return <Alert tone="danger">{describeError(q.error)}</Alert>;
   const l = q.data;
-  const move = (stage: string) => call(`/api/tenant/crm/leads/${id}/stage`, { stage, reason });
+  const move = async (stage: string) => {
+    if (
+      (stage === 'lost' || stage === 'dropped') &&
+      !(await confirm({
+        title: `Mark ${l.number} ${stage}?`,
+        body: 'The lead closes and leaves the pipeline. The reason typed is kept with it.',
+        confirmLabel: stage === 'lost' ? 'Mark it lost' : 'Drop the lead',
+        tone: 'danger',
+      }))
+    )
+      return null;
+    return call(
+      `/api/tenant/crm/leads/${id}/stage`,
+      { stage, reason },
+      `${l.number} moved to ${stage}`,
+    );
+  };
   const closed = ['won', 'lost', 'dropped', 'tender'].includes(l.stage);
   return (
     <Card title={`${l.number} ${l.title}`}>
@@ -462,7 +487,18 @@ function LeadCard({
           {['qualified', 'proposal', 'negotiation'].includes(l.stage) && (
             <Button
               type="button"
-              onClick={() => void call(`/api/tenant/crm/leads/${id}/convert`, {})}
+              onClick={async () => {
+                if (
+                  !(await confirm({
+                    title: `Make ${l.number} a tender?`,
+                    body: 'A tender is opened from this lead, and the lead closes as passed to tendering.',
+                    confirmLabel: 'Make it a tender',
+                    tone: 'primary',
+                  }))
+                )
+                  return;
+                void call(`/api/tenant/crm/leads/${id}/convert`, {}, `${l.number} made a tender`);
+              }}
             >
               Make it a tender
             </Button>
@@ -496,7 +532,13 @@ function LeadCard({
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => void call(`/api/tenant/crm/follow-ups/${x.id}/done`, {})}
+                      onClick={() =>
+                        void call(
+                          `/api/tenant/crm/follow-ups/${x.id}/done`,
+                          {},
+                          'Follow-up marked done',
+                        )
+                      }
                     >
                       Done
                     </Button>
@@ -514,13 +556,17 @@ function LeadCard({
           onSubmit={async (e) => {
             e.preventDefault();
             if (
-              await call(`/api/tenant/crm/leads/${id}/interactions`, {
-                kind: i.kind,
-                happenedAt: new Date().toISOString(),
-                summary: i.summary,
-                followUpOn: i.followUpOn || null,
-                followUp: i.followUp,
-              })
+              await call(
+                `/api/tenant/crm/leads/${id}/interactions`,
+                {
+                  kind: i.kind,
+                  happenedAt: new Date().toISOString(),
+                  summary: i.summary,
+                  followUpOn: i.followUpOn || null,
+                  followUp: i.followUp,
+                },
+                'Interaction logged',
+              )
             )
               setI(blank);
           }}
@@ -571,7 +617,11 @@ function LeadCard({
   );
 }
 
-function Contacts({ call }: { call: <T>(path: string, body: object) => Promise<T | null> }) {
+function Contacts({
+  call,
+}: {
+  call: <T>(path: string, body: object, done?: string) => Promise<T | null>;
+}) {
   const q = useQuery({
     queryKey: ['crm', 'contacts'],
     queryFn: () =>
@@ -599,14 +649,20 @@ function Contacts({ call }: { call: <T>(path: string, body: object) => Promise<T
             </span>
           </li>
         ))}
-        {q.data?.length === 0 && <li className="text-fg-muted">None yet.</li>}
+        {q.data?.length === 0 && (
+          <li>
+            <EmptyState title="None yet">
+              Add a client&apos;s people with the New contact form below.
+            </EmptyState>
+          </li>
+        )}
       </ul>
       <form
         aria-label="New contact"
         className="mt-3 grid gap-3 sm:grid-cols-6"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (await call('/api/tenant/crm/contacts', f)) setF(blank);
+          if (await call('/api/tenant/crm/contacts', f, `Contact ${f.name} added`)) setF(blank);
         }}
       >
         <Field label="Client">

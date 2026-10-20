@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Field, Input, Spinner } from '@aerolith/ui';
+import { Alert, Badge, Button, Card, EmptyState, Field, Input, Spinner, toast } from '@aerolith/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Plus, Search } from 'lucide-react';
@@ -24,6 +24,7 @@ function NewTrial({ onClose }: { onClose: () => void }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const r = await create.run();
+    if (r) toast.success(`Trial for ${name.trim()} created`);
     if (r) await navigate({ to: '/tenants/$tenantId', params: { tenantId: r.tenantId } });
   };
   return (
@@ -114,9 +115,11 @@ export function TenantsScreen() {
         ) : tenants.isError ? (
           <Alert tone="danger">{errorMessage(tenants.error)}</Alert>
         ) : tenants.data.length === 0 ? (
-          <p className="py-6 text-center text-sm text-fg-muted">
-            {q ? 'No tenant matches that search.' : 'No tenants yet.'}
-          </p>
+          <EmptyState title={q ? 'No tenant matches that search.' : 'No tenants yet'}>
+            {q
+              ? 'Search by part of the company name or the admin email.'
+              : 'Start one with New trial: its admin gets a licence key and a link to set a password.'}
+          </EmptyState>
         ) : (
           <Table>
             <thead>

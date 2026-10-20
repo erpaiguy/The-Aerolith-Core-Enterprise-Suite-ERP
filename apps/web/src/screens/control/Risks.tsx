@@ -11,6 +11,8 @@ import {
   Select,
   Spinner,
   Table,
+  toast,
+  useConfirm,
 } from '@aerolith/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -121,10 +123,12 @@ function Register({ projectId }: { projectId: string | null }) {
   const [action, setAction] = useState<Record<string, string>>({});
   const [held, setHeld] = useState('');
   const [draw, setDraw] = useState<Record<string, string>>({});
-  const call = async (p: string, body: object) => {
+  const confirm = useConfirm();
+  const call = async (p: string, body: object, done?: string) => {
     setError(null);
     try {
       await api.request(p, { method: 'POST', body });
+      if (done) toast.success(done);
       void qc.invalidateQueries({ queryKey: key });
       return true;
     } catch (err) {
@@ -195,7 +199,13 @@ function Register({ projectId }: { projectId: string | null }) {
               className="mt-2 flex items-end gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (await call(`/api/tenant/projects/${projectId}/contingency`, { held }))
+                if (
+                  await call(
+                    `/api/tenant/projects/${projectId}/contingency`,
+                    { held },
+                    'Contingency saved',
+                  )
+                )
                   setHeld('');
               }}
             >
@@ -256,18 +266,22 @@ function Register({ projectId }: { projectId: string | null }) {
                       aria-label={`Status, ${x.number}`}
                       value={x.status}
                       onChange={(e) =>
-                        void call(`/api/tenant/risks/${x.id}`, {
-                          category: x.category,
-                          cause: x.cause,
-                          event: x.event,
-                          effect: x.effect,
-                          probability: x.probability,
-                          impact: x.impact,
-                          costImpact: x.costImpact,
-                          timeImpact: x.timeImpact,
-                          status: e.target.value,
-                          rowVersion: x.rowVersion,
-                        })
+                        void call(
+                          `/api/tenant/risks/${x.id}`,
+                          {
+                            category: x.category,
+                            cause: x.cause,
+                            event: x.event,
+                            effect: x.effect,
+                            probability: x.probability,
+                            impact: x.impact,
+                            costImpact: x.costImpact,
+                            timeImpact: x.timeImpact,
+                            status: e.target.value,
+                            rowVersion: x.rowVersion,
+                          },
+                          `${x.number} marked ${e.target.value}`,
+                        )
                       }
                     >
                       <option value="open">open</option>
@@ -287,10 +301,20 @@ function Register({ projectId }: { projectId: string | null }) {
                           variant="secondary"
                           onClick={async () => {
                             if (
-                              await call(`/api/tenant/risks/${x.id}/draws`, {
-                                amount: draw[x.id],
-                                date: today(),
-                              })
+                              !(await confirm({
+                                title: `Draw ${formatInr(draw[x.id] || '0')} for ${x.number}?`,
+                                body: 'The amount comes out of the contingency held for this project and is recorded against the risk.',
+                                confirmLabel: 'Draw the contingency',
+                                tone: 'primary',
+                              }))
+                            )
+                              return;
+                            if (
+                              await call(
+                                `/api/tenant/risks/${x.id}/draws`,
+                                { amount: draw[x.id], date: today() },
+                                `${formatInr(draw[x.id] || '0')} drawn for ${x.number}`,
+                              )
                             )
                               setDraw({ ...draw, [x.id]: '' });
                           }}
@@ -313,7 +337,11 @@ function Register({ projectId }: { projectId: string | null }) {
                               type="button"
                               className="ml-1 underline"
                               onClick={() =>
-                                void call(`/api/tenant/risk-actions/${a.id}/done`, { on: today() })
+                                void call(
+                                  `/api/tenant/risk-actions/${a.id}/done`,
+                                  { on: today() },
+                                  'Action marked done',
+                                )
                               }
                             >
                               done
@@ -328,10 +356,11 @@ function Register({ projectId }: { projectId: string | null }) {
                       onSubmit={async (e) => {
                         e.preventDefault();
                         if (
-                          await call(`/api/tenant/risks/${x.id}/actions`, {
-                            action: action[x.id] ?? '',
-                            dueOn: null,
-                          })
+                          await call(
+                            `/api/tenant/risks/${x.id}/actions`,
+                            { action: action[x.id] ?? '', dueOn: null },
+                            `Action added to ${x.number}`,
+                          )
                         )
                           setAction({ ...action, [x.id]: '' });
                       }}
@@ -358,16 +387,20 @@ function Register({ projectId }: { projectId: string | null }) {
           onSubmit={async (e) => {
             e.preventDefault();
             if (
-              await call(path, {
-                category: form.category,
-                event: form.event,
-                cause: form.cause,
-                effect: form.effect,
-                probability: Number(form.probability),
-                impact: Number(form.impact),
-                costImpact: form.costImpact || '0',
-                timeImpact: Number(form.timeImpact || 0),
-              })
+              await call(
+                path,
+                {
+                  category: form.category,
+                  event: form.event,
+                  cause: form.cause,
+                  effect: form.effect,
+                  probability: Number(form.probability),
+                  impact: Number(form.impact),
+                  costImpact: form.costImpact || '0',
+                  timeImpact: Number(form.timeImpact || 0),
+                },
+                'Risk raised',
+              )
             )
               setForm({
                 ...form,
