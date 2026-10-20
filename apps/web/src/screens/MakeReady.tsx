@@ -19,7 +19,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api/client';
 import { today } from '../accounts/model';
-import { EChart, themeColours, type ChartOption } from '../charts/EChart';
+import { ChartFigure } from '../charts/ChartFigure';
+import type { ChartOption } from '../charts/EChart';
+import { valueAxis } from '../charts/measure';
 import { describeError } from '../lib/format';
 
 const KINDS = ['drawings', 'material', 'front', 'approvals', 'labour', 'equipment', 'other'];
@@ -165,28 +167,26 @@ export function MakeReadyScreen({ planId }: { planId: string }) {
     );
   };
 
-  const colours = typeof document === 'undefined' ? null : themeColours();
-  const option: ChartOption | null =
-    trend.data && colours
-      ? {
-          grid: { top: 30, bottom: 28, left: 40, right: 16 },
-          tooltip: { trigger: 'axis' },
-          xAxis: { type: 'category', data: trend.data.weeks.map((w) => w.weekStart.slice(5)) },
-          yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%' } },
-          series: [
-            {
-              name: 'PPC',
-              type: 'line',
-              data: trend.data.weeks.map((w) => w.ppc),
-              itemStyle: { color: colours.accent },
-              markLine: {
-                data: [{ yAxis: 80, name: 'Aim' }],
-                lineStyle: { color: colours.success },
-              },
+  const option: ChartOption | null = trend.data
+    ? {
+        grid: { top: 56, bottom: 28, left: 48, right: 16 },
+        xAxis: { type: 'category', data: trend.data.weeks.map((w) => w.weekStart) },
+        yAxis: valueAxis('pct', { min: 0, max: 100 }),
+        series: [
+          {
+            name: 'PPC',
+            type: 'line',
+            data: trend.data.weeks.map((w) => w.ppc),
+            markLine: {
+              symbol: 'none',
+              data: [{ yAxis: 80, name: 'Aim' }],
+              label: { formatter: 'Aim {c}%' },
+              lineStyle: { type: 'dashed' },
             },
-          ],
-        }
-      : null;
+          },
+        ],
+      }
+    : null;
 
   return (
     <div className="space-y-5">
@@ -440,7 +440,18 @@ export function MakeReadyScreen({ planId }: { planId: string }) {
 
       {trend.data && trend.data.weeks.length > 0 && option && (
         <Card title="Percent plan complete">
-          <EChart option={option} label="Percent plan complete week by week" />
+          <ChartFigure
+            title="Percent plan complete"
+            label="Percent plan complete week by week"
+            heading="Week starting"
+            option={option}
+            measures="pct"
+            onPick={(e) => {
+              const w = trend.data.weeks[e.dataIndex];
+              if (w) setWeekStart(w.weekStart);
+            }}
+          />
+          <p className="mt-1 text-xs text-fg-muted">Click a week for its commitments.</p>
           {trend.data.reasons.length > 0 && (
             <p className="mt-2 text-sm text-fg-muted">
               Missed for: {trend.data.reasons.map((r) => `${r.reason} (${r.n})`).join(', ')}

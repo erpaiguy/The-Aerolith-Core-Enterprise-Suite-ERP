@@ -61,6 +61,24 @@ test('an estimator reads the dashboards, adds a tile and drills into the pipelin
   await expect(
     page.getByRole('img', { name: 'Tenders and their estimates by stage' }),
   ).toBeVisible();
+  // Every chart has its figures as a table (step 9a.6): both tenders are leads, ₹42.5 lakh in full; the stage
+  // label drills like the bar does.
+  const stages = page.getByRole('figure', { name: 'Pipeline by stage' });
+  await stages.getByRole('button', { name: 'Table' }).click();
+  const lead = stages
+    .getByRole('table', { name: 'Pipeline by stage' })
+    .getByRole('row')
+    .filter({ hasText: 'Lead' });
+  await expect(lead).toContainText('2 tenders');
+  await expect(lead).toContainText('₹42,50,000');
+  const csv = page.waitForEvent('download');
+  await stages.getByRole('button', { name: 'Download CSV' }).click();
+  expect((await csv).suggestedFilename()).toBe('Pipeline by stage.csv');
+  await lead.getByRole('link', { name: 'Lead' }).click();
+  await expect(page.getByRole('heading', { name: 'Bid pipeline' })).toBeVisible();
+  await expect(page.getByLabel('Status')).toHaveValue('lead');
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Tenders and bids' })).toBeVisible();
 
   // 2. A tile of my own: open tenders. It stays after a reload.
   await page.getByRole('button', { name: 'Tiles' }).click();

@@ -23,7 +23,9 @@ import type {
   EstimationDashboardData,
   TenderDashboardData,
 } from '../api/types';
-import { EChart, themeColours, type ChartOption } from '../charts/EChart';
+import { ChartFigure } from '../charts/ChartFigure';
+import type { ChartOption } from '../charts/EChart';
+import { valueAxis, type Measure } from '../charts/measure';
 import {
   describeError,
   formatDate,
@@ -223,11 +225,7 @@ export function DashboardScreen({ name }: { name: DashboardName }) {
                 </section>
               )
             )}
-            {d.dashboard === 'tender' ? (
-              <TenderCharts d={d} go={go} />
-            ) : (
-              <EstimationCharts d={d} go={go} />
-            )}
+            {d.dashboard === 'tender' ? <TenderCharts d={d} /> : <EstimationCharts d={d} />}
           </>
         )
       )}
@@ -398,154 +396,90 @@ function Panel({ title, children, note }: { title: string; children: ReactNode; 
   );
 }
 
-const shortAxis = (v: number) => formatInrShort(String(v));
+const TENDERS: Measure = { unit: 'tenders' };
 
-function TenderCharts({ d, go }: { d: TenderDashboardData; go: (to: string) => void }) {
+function TenderCharts({ d }: { d: TenderDashboardData }) {
   const c = d.charts;
   const options = useMemo(() => {
-    const t = themeColours();
-    const axis = {
-      axisLine: { lineStyle: { color: t.line } },
-      splitLine: { lineStyle: { color: t.line } },
-    };
     const stages = c.stages.filter(
       (s) => s.count > 0 || ['lead', 'evaluating', 'bidding', 'submitted'].includes(s.status),
     );
     return {
       stages: {
-        tooltip: {
-          trigger: 'axis',
-          valueFormatter: (v: number) => String(v),
-        },
-        legend: { top: 0, data: ['Tenders', 'Estimate'], textStyle: { color: t.muted } },
-        grid: { left: 48, right: 64, top: 32, bottom: 28 },
-        xAxis: { type: 'category', data: stages.map((s) => STATUS_LABEL[s.status]), ...axis },
-        yAxis: [
-          { type: 'value', minInterval: 1, ...axis },
-          {
-            type: 'value',
-            axisLabel: { formatter: shortAxis },
-            ...axis,
-            splitLine: { show: false },
-          },
-        ],
+        grid: { left: 48, right: 64, top: 56, bottom: 28 },
+        xAxis: { type: 'category', data: stages.map((s) => STATUS_LABEL[s.status]) },
+        yAxis: [valueAxis(TENDERS), valueAxis('money', { splitLine: { show: false } })],
         series: [
-          {
-            name: 'Tenders',
-            type: 'bar',
-            barMaxWidth: 36,
-            data: stages.map((s) => s.count),
-            itemStyle: { color: t.accent },
-          },
+          { name: 'Tenders', type: 'bar', data: stages.map((s) => s.count) },
           {
             name: 'Estimate',
             type: 'line',
             yAxisIndex: 1,
             data: stages.map((s) => Number(s.estimatedValue)),
-            itemStyle: { color: t.info },
-            tooltip: { valueFormatter: (v: number) => formatInr(String(v)) },
           },
         ],
       } as ChartOption,
       stageKeys: stages.map((s) => s.status),
       quarters: {
-        tooltip: { trigger: 'axis' },
-        legend: { top: 0, data: ['Submitted', 'Won', 'Lost'], textStyle: { color: t.muted } },
-        grid: { left: 40, right: 16, top: 32, bottom: 28 },
-        xAxis: { type: 'category', data: c.quarters.map((q) => q.quarter), ...axis },
-        yAxis: { type: 'value', minInterval: 1, ...axis },
+        grid: { left: 48, right: 16, top: 56, bottom: 28 },
+        xAxis: { type: 'category', data: c.quarters.map((q) => q.quarter) },
+        yAxis: valueAxis(TENDERS),
         series: [
-          {
-            name: 'Submitted',
-            type: 'bar',
-            barMaxWidth: 36,
-            data: c.quarters.map((q) => q.submitted),
-            itemStyle: { color: t.info },
-          },
-          {
-            name: 'Won',
-            type: 'bar',
-            barMaxWidth: 36,
-            stack: 'r',
-            data: c.quarters.map((q) => q.won),
-            itemStyle: { color: t.success },
-          },
-          {
-            name: 'Lost',
-            type: 'bar',
-            barMaxWidth: 36,
-            stack: 'r',
-            data: c.quarters.map((q) => q.lost),
-            itemStyle: { color: t.danger },
-          },
+          { name: 'Submitted', type: 'bar', data: c.quarters.map((q) => q.submitted) },
+          { name: 'Won', type: 'bar', stack: 'r', data: c.quarters.map((q) => q.won) },
+          { name: 'Lost', type: 'bar', stack: 'r', data: c.quarters.map((q) => q.lost) },
         ],
       } as ChartOption,
       verticals: {
-        tooltip: { trigger: 'axis' },
-        legend: { top: 0, data: ['Open', 'Won', 'Lost'], textStyle: { color: t.muted } },
-        grid: { left: 40, right: 16, top: 32, bottom: 28 },
+        grid: { left: 48, right: 16, top: 56, bottom: 28 },
         xAxis: {
           type: 'category',
           data: c.verticals.map((v) => VERTICALS[v.vertical] ?? v.vertical),
-          ...axis,
         },
-        yAxis: { type: 'value', minInterval: 1, ...axis },
+        yAxis: valueAxis(TENDERS),
         series: [
-          {
-            name: 'Open',
-            type: 'bar',
-            barMaxWidth: 36,
-            data: c.verticals.map((v) => v.open),
-            itemStyle: { color: t.accent },
-          },
-          {
-            name: 'Won',
-            type: 'bar',
-            barMaxWidth: 36,
-            data: c.verticals.map((v) => v.won),
-            itemStyle: { color: t.success },
-          },
-          {
-            name: 'Lost',
-            type: 'bar',
-            barMaxWidth: 36,
-            data: c.verticals.map((v) => v.lost),
-            itemStyle: { color: t.danger },
-          },
+          { name: 'Open', type: 'bar', data: c.verticals.map((v) => v.open) },
+          { name: 'Won', type: 'bar', data: c.verticals.map((v) => v.won) },
+          { name: 'Lost', type: 'bar', data: c.verticals.map((v) => v.lost) },
         ],
       } as ChartOption,
     };
   }, [c]);
   const fyq = d.filter.fy ? `fy=${d.filter.fy}&` : '';
+  const quarters = `Bids and results by quarter, FY ${d.filter.fy}`;
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Panel title="Pipeline by stage" note="Click a stage for its tenders.">
-        <EChart
+        <ChartFigure
+          title="Pipeline by stage"
           label="Tenders and their estimates by stage"
+          heading="Stage"
           option={options.stages}
-          onClick={(e) => go(`/reports/pipeline?status=${options.stageKeys[e.dataIndex]}`)}
+          measures={{ Tenders: TENDERS, Estimate: 'money' }}
+          drill={(e) => `/reports/pipeline?status=${options.stageKeys[e.dataIndex]}`}
         />
       </Panel>
-      <Panel
-        title={`Bids and results by quarter, FY ${d.filter.fy}`}
-        note="Click a quarter for the year's tenders."
-      >
-        <EChart
+      <Panel title={quarters} note="Click a quarter for the year's tenders.">
+        <ChartFigure
+          title={quarters}
           label="Bids submitted, won and lost by quarter"
+          heading="Quarter"
           option={options.quarters}
-          onClick={() => go(`/reports/pipeline?${fyq}status=all`)}
+          measures={TENDERS}
+          drill={() => `/reports/pipeline?${fyq}status=all`}
         />
       </Panel>
       <Panel
         title="By vertical"
         note={`Open now; won and lost in FY ${d.filter.fy}. Click a vertical for its tenders.`}
       >
-        <EChart
+        <ChartFigure
+          title="By vertical"
           label="Open, won and lost tenders by vertical"
+          heading="Vertical"
           option={options.verticals}
-          onClick={(e) =>
-            go(`/reports/pipeline?vertical=${c.verticals[e.dataIndex]?.vertical ?? ''}`)
-          }
+          measures={TENDERS}
+          drill={(e) => `/reports/pipeline?vertical=${c.verticals[e.dataIndex]?.vertical ?? ''}`}
         />
       </Panel>
       <Panel title="Next 30 days">
@@ -618,88 +552,42 @@ function TenderCharts({ d, go }: { d: TenderDashboardData; go: (to: string) => v
   );
 }
 
-const PART_COLOURS: Record<string, keyof ReturnType<typeof themeColours> | string> = {
-  material: '#2563eb',
-  labour: '#16a34a',
-  equipment: '#d97706',
-  subcontract: '#7c3aed',
-  other: '#64748b',
-  additions: '#db2777',
-  provisional: '#0d9488',
-  not_analysed: '#cbd5e1',
-};
-
-function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: string) => void }) {
+function EstimationCharts({ d }: { d: EstimationDashboardData }) {
   const c = d.charts;
   const options = useMemo(() => {
-    const t = themeColours();
-    const axis = {
-      axisLine: { lineStyle: { color: t.line } },
-      splitLine: { lineStyle: { color: t.line } },
-    };
     const parts = c.breakdown.parts.filter((p) => Number(p.amount) !== 0);
     const top = [...c.topBoqs].reverse();
     return {
       estimators: {
-        tooltip: { trigger: 'axis' },
-        legend: { top: 0, data: ['BOQs', 'Items not priced'], textStyle: { color: t.muted } },
-        grid: { left: 40, right: 16, top: 32, bottom: 28 },
-        xAxis: { type: 'category', data: c.estimators.map((e) => e.name), ...axis },
-        yAxis: { type: 'value', minInterval: 1, ...axis },
+        grid: { left: 48, right: 16, top: 56, bottom: 28 },
+        xAxis: { type: 'category', data: c.estimators.map((e) => e.name) },
+        yAxis: valueAxis({ unit: 'BOQs / items' }),
         series: [
-          {
-            name: 'BOQs',
-            type: 'bar',
-            barMaxWidth: 36,
-            data: c.estimators.map((e) => e.boqs),
-            itemStyle: { color: t.accent },
-          },
-          {
-            name: 'Items not priced',
-            type: 'bar',
-            barMaxWidth: 36,
-            data: c.estimators.map((e) => e.unpriced),
-            itemStyle: { color: t.warning },
-          },
+          { name: 'BOQs', type: 'bar', data: c.estimators.map((e) => e.boqs) },
+          { name: 'Items not priced', type: 'bar', data: c.estimators.map((e) => e.unpriced) },
         ],
       } as ChartOption,
       top: {
-        tooltip: { trigger: 'axis', valueFormatter: (v: number) => formatInr(String(v)) },
-        grid: { left: 8, right: 24, top: 8, bottom: 24, containLabel: true },
-        xAxis: { type: 'value', axisLabel: { formatter: shortAxis }, ...axis },
+        grid: { left: 8, right: 24, top: 32, bottom: 24, containLabel: true },
+        xAxis: valueAxis('money'),
         yAxis: {
           type: 'category',
           data: top.map((b) => `${b.tender.number} · ${b.name}`),
           axisLabel: { width: 180, overflow: 'truncate' },
-          ...axis,
         },
-        series: [
-          {
-            type: 'bar',
-            barMaxWidth: 36,
-            data: top.map((b) => Number(b.total)),
-            itemStyle: { color: t.info },
-          },
-        ],
+        series: [{ name: 'Value', type: 'bar', data: top.map((b) => Number(b.total)) }],
       } as ChartOption,
       topIds: top.map((b) => b.id),
       breakdown: {
-        tooltip: {
-          trigger: 'item',
-          valueFormatter: (v: number) => formatInr(String(v)),
-        },
-        legend: { orient: 'vertical', right: 0, top: 'middle', textStyle: { color: t.muted } },
+        legend: { orient: 'vertical', right: 0, top: 'middle' },
         series: [
           {
+            name: 'Amount',
             type: 'pie',
             radius: ['45%', '72%'],
             center: ['35%', '50%'],
             label: { show: false },
-            data: parts.map((p) => ({
-              name: PART_LABEL[p.part],
-              value: Number(p.amount),
-              itemStyle: { color: PART_COLOURS[p.part] },
-            })),
+            data: parts.map((p) => ({ name: PART_LABEL[p.part], value: Number(p.amount) })),
           },
         ],
       } as ChartOption,
@@ -714,12 +602,15 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
         {c.estimators.length === 0 ? (
           <EmptyState title="No BOQ is in progress." />
         ) : (
-          <EChart
+          <ChartFigure
+            title="BOQs in progress by estimator"
             label="BOQs in progress and items not priced, by estimator"
+            heading="Estimator"
             option={options.estimators}
-            onClick={(e) => {
+            measures={{ BOQs: { unit: 'BOQs' }, 'Items not priced': { unit: 'items' } }}
+            drill={(e) => {
               const id = c.estimators[e.dataIndex]?.id;
-              go(`/reports/pipeline?status=open${id ? `&owner=${id}` : ''}`);
+              return `/reports/pipeline?status=open${id ? `&owner=${id}` : ''}`;
             }}
           />
         )}
@@ -728,11 +619,14 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
         {c.topBoqs.length === 0 ? (
           <EmptyState title="No BOQ is in progress." />
         ) : (
-          <EChart
+          <ChartFigure
+            title="Largest BOQs in progress"
             label="The ten largest BOQs in progress by value"
+            heading="BOQ"
             option={options.top}
-            height={Math.max(160, c.topBoqs.length * 30 + 40)}
-            onClick={(e) => go(`/boqs/${options.topIds[e.dataIndex]}`)}
+            measures="money"
+            height={Math.max(160, c.topBoqs.length * 30 + 64)}
+            drill={(e) => `/boqs/${options.topIds[e.dataIndex]}`}
           />
         )}
       </Panel>
@@ -744,9 +638,12 @@ function EstimationCharts({ d, go }: { d: EstimationDashboardData; go: (to: stri
           <EmptyState title="Nothing is priced yet." />
         ) : (
           <>
-            <EChart
+            <ChartFigure
+              title="What the BOQs in progress are made of"
               label="Cost breakdown of the BOQs in progress"
+              heading="Part"
               option={options.breakdown}
+              measures="money"
               height={220}
             />
             <table className="mt-2 w-full text-sm" aria-label="Cost breakdown">

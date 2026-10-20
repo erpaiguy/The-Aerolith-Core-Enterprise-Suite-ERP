@@ -18,7 +18,9 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { api, saveFile } from '../../api/client';
-import { EChart, type ChartOption } from '../../charts/EChart';
+import { ChartFigure } from '../../charts/ChartFigure';
+import type { ChartOption } from '../../charts/EChart';
+import { valueAxis } from '../../charts/measure';
 import { describeError, formatInr } from '../../lib/format';
 
 interface ViewDef {
@@ -450,18 +452,27 @@ function ResultCard({
     if (chart.kind === 'table' || !chart.label || !chart.value) return null;
     const labels = result.rows.map((r) => String(r[chart.label!] ?? '—'));
     const values = result.rows.map((r) => Number(r[chart.value!] ?? 0));
+    const name = columns.find((c) => c.name === chart.value)?.label ?? 'Value';
     if (chart.kind === 'pie')
       return {
-        tooltip: { trigger: 'item' },
-        series: [{ type: 'pie', data: labels.map((name, i) => ({ name, value: values[i] })) }],
+        legend: { type: 'scroll', top: 0 },
+        series: [
+          {
+            name,
+            type: 'pie',
+            top: 32,
+            data: labels.map((n, i) => ({ name: n, value: values[i] })),
+          },
+        ],
       };
+    const money = columns.find((c) => c.name === chart.value)?.type === 'money';
     return {
-      tooltip: { trigger: 'axis' },
+      grid: { left: 64, right: 16, top: 56, bottom: 28 },
       xAxis: { type: 'category', data: labels },
-      yAxis: { type: 'value' },
-      series: [{ type: chart.kind, data: values }],
+      yAxis: valueAxis(money ? 'money' : { unit: '' }),
+      series: [{ name, type: chart.kind, data: values }],
     };
-  }, [chart, result]);
+  }, [chart, result, columns]);
   return (
     <Card title={`${result.rows.length} rows${result.truncated ? ' (the first ones)' : ''}`}>
       <div className="mb-3 flex flex-wrap gap-2">
@@ -508,7 +519,17 @@ function ResultCard({
           </>
         )}
       </div>
-      {option && <EChart option={option} label="The report as a chart" />}
+      {option && (
+        <ChartFigure
+          title="The report as a chart"
+          label="The report as a chart"
+          heading={columns.find((c) => c.name === chart.label)?.label ?? ''}
+          option={option}
+          measures={
+            columns.find((c) => c.name === chart.value)?.type === 'money' ? 'money' : { unit: '' }
+          }
+        />
+      )}
       <Table minWidth="40rem">
         <thead>
           <tr>

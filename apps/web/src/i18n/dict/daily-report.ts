@@ -144,6 +144,15 @@ export const dailyReport: AreaDict = {
     'Photo removed': 'फोटो काढला',
     "Each site's report for the day is started from Today at the site.":
       'प्रत्येक साइटचा दिवसाचा अहवाल "आज साइटवर" बटणाने सुरू होतो.',
+    // Charts (wave 9a.6)
+    Week: 'आठवडा',
+    Table: 'तक्ता',
+    'Show the figures as a table': 'आकडे तक्त्यात दाखवा',
+    'Download CSV': 'CSV डाउनलोड करा',
+    'No figures.': 'आकडे नाहीत.',
+    '{name} highest at {label}, {value}': '{name} सर्वाधिक {label} येथे, {value}',
+    '{n} entry': '{n} नोंद',
+    '{n} entries': '{n} नोंदी',
   },
   hi: {
     // Report screen
@@ -287,5 +296,14 @@ export const dailyReport: AreaDict = {
     'Photo removed': 'फ़ोटो हटाया',
     "Each site's report for the day is started from Today at the site.":
       'हर साइट की दिन की रिपोर्ट "आज साइट पर" बटन से शुरू होती है।',
+    // Charts (wave 9a.6)
+    Week: 'सप्ताह',
+    Table: 'तालिका',
+    'Show the figures as a table': 'आँकड़े तालिका में दिखाएँ',
+    'Download CSV': 'CSV डाउनलोड करें',
+    'No figures.': 'कोई आँकड़े नहीं।',
+    '{name} highest at {label}, {value}': '{name} सबसे अधिक {label} पर, {value}',
+    '{n} entry': '{n} प्रविष्टि',
+    '{n} entries': '{n} प्रविष्टियाँ',
   },
 };

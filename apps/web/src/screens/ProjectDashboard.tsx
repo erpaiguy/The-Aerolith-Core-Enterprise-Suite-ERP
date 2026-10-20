@@ -19,7 +19,9 @@ import { ArrowLeft, Printer } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { api } from '../api/client';
 import type { ProjectDetail } from '../api/types';
-import { EChart, themeColours, type ChartOption } from '../charts/EChart';
+import { ChartFigure } from '../charts/ChartFigure';
+import type { ChartOption } from '../charts/EChart';
+import { valueAxis } from '../charts/measure';
 import { describeError, formatInr, formatInrShort } from '../lib/format';
 import { shortDate } from '../schedule/model';
 import type { Done } from './Progress';
@@ -290,7 +292,7 @@ export function ProjectDashboardScreen({ projectId }: { projectId: string }) {
 
       <Card title="S-curve">
         {d.curve ? (
-          <SCurve curve={d.curve} contract={d.money.contract} />
+          <SCurve curve={d.curve} contract={d.money.contract} projectId={projectId} />
         ) : (
           <EmptyState title="Nothing to draw yet.">
             Link BOQ items to schedule activities (in an activity&apos;s panel) and measure work
@@ -472,42 +474,29 @@ function Disagreements({ schedules }: { schedules: ProjectDashboard['schedules']
 function SCurve({
   curve,
   contract,
+  projectId,
 }: {
   curve: NonNullable<ProjectDashboard['curve']>;
   contract: string;
+  projectId: string;
 }) {
   const option = useMemo<ChartOption>(() => {
-    const c = themeColours();
-    const line = (name: string, data: (number | null)[], colour: string, dashed = false) => ({
+    const line = (name: string, data: (number | null)[], dashed = false) => ({
       name,
       type: 'line',
       data,
       showSymbol: data.length < 30,
       connectNulls: false,
-      lineStyle: { color: colour, width: 2, type: dashed ? 'dashed' : 'solid' },
-      itemStyle: { color: colour },
+      lineStyle: { type: dashed ? 'dashed' : 'solid' },
     });
     return {
-      grid: { left: 70, right: 16, top: 30, bottom: 30 },
-      legend: { top: 0, textStyle: { color: c.muted } },
-      tooltip: {
-        trigger: 'axis',
-        valueFormatter: (v: unknown) => (typeof v === 'number' ? formatInr(String(v)) : '-'),
-      },
-      xAxis: {
-        type: 'category',
-        data: curve.months.map(monthLabel),
-        axisLine: { lineStyle: { color: c.line } },
-      },
-      yAxis: {
-        type: 'value',
-        axisLabel: { formatter: (v: number) => formatInrShort(String(v)) },
-        splitLine: { lineStyle: { color: c.line } },
-      },
+      grid: { left: 70, right: 16, top: 56, bottom: 30 },
+      xAxis: { type: 'category', data: curve.months.map(monthLabel) },
+      yAxis: valueAxis('money'),
       series: [
-        ...(curve.planned ? [line('Planned (baseline)', curve.planned, c.muted, true)] : []),
-        line('Forecast (schedule)', curve.forecast, c.info),
-        line('Earned (measured)', curve.earned, c.success),
+        ...(curve.planned ? [line('Planned (baseline)', curve.planned, true)] : []),
+        line('Forecast (schedule)', curve.forecast),
+        line('Earned (measured)', curve.earned),
       ],
     };
   }, [curve]);
@@ -517,45 +506,23 @@ function SCurve({
       : 0;
   return (
     <div className="space-y-2">
-      <EChart
+      <ChartFigure
+        title="S-curve"
         option={option}
         height={280}
-        label="S-curve: planned, forecast and earned value by month (figures in the table below)"
+        heading="Month"
+        measures="money"
+        label="S-curve: planned, forecast and earned value by month"
+        drill={() => `/projects/${projectId}/progress`}
       />
       <p className="text-xs text-fg-muted" data-testid="dash-coverage">
         Planned and forecast spread the {formatInr(curve.linkedValue)} of contract work linked to
         schedule activities ({linkedShare}% of {formatInr(contract)}), over their working days.
-        Earned is all work measured, linked or not, at contract rates.
+        Earned is all work measured, linked or not, at contract rates. Click a month for the
+        progress report.
         {linkedShare < 90 &&
           ' Link more items to activities for the planned and forecast curves to cover the contract.'}
       </p>
-      <details className="text-sm">
-        <summary className="cursor-pointer text-fg-muted print:hidden">Figures by month</summary>
-        <Table minWidth="32rem">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th className="text-right">Planned</th>
-              <th className="text-right">Forecast</th>
-              <th className="text-right">Earned</th>
-            </tr>
-          </thead>
-          <tbody aria-label="S-curve by month">
-            {curve.months.map((m, i) => (
-              <tr key={m}>
-                <td>{monthLabel(m)}</td>
-                <td className="text-right tabular-nums">
-                  {curve.planned ? formatInr(String(curve.planned[i])) : '-'}
-                </td>
-                <td className="text-right tabular-nums">{formatInr(String(curve.forecast[i]))}</td>
-                <td className="text-right tabular-nums">
-                  {curve.earned[i] === null ? '-' : formatInr(String(curve.earned[i]))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </details>
     </div>
   );
 }

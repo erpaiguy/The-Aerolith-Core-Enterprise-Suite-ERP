@@ -6,7 +6,9 @@ import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useCompany } from '../accounts/model';
-import { EChart, type ChartOption } from '../charts/EChart';
+import { ChartFigure } from '../charts/ChartFigure';
+import type { ChartOption } from '../charts/EChart';
+import { valueAxis } from '../charts/measure';
 import { describeError, formatInr } from '../lib/format';
 import { CompanyPicker } from './accounts/Vouchers';
 
@@ -62,8 +64,13 @@ interface Dashboard {
   };
 }
 
-const lakh = (v: string) => Math.round(Number(v) / 1000) / 100;
 const right = 'text-right';
+const monthName = (m: string) =>
+  new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-IN', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 
 export function CompanyDashboardScreen() {
   const { company, choose } = useCompany();
@@ -80,17 +87,15 @@ export function CompanyDashboardScreen() {
     if (!q.data) return null;
     const m = q.data.revenue.months;
     return {
-      tooltip: { trigger: 'axis' },
-      legend: { top: 0, data: ['Plan', 'Booked'] },
-      grid: { left: 48, right: 16, top: 40, bottom: 28 },
-      xAxis: { type: 'category', data: m.map((x) => x.month.slice(5)) },
-      yAxis: { type: 'value', name: '₹ lakh' },
+      grid: { left: 64, right: 16, top: 56, bottom: 28 },
+      xAxis: { type: 'category', data: m.map((x) => monthName(x.month)) },
+      yAxis: valueAxis('money'),
       series: [
-        { name: 'Plan', type: 'line', data: m.map((x) => lakh(x.plan)) },
+        { name: 'Plan', type: 'line', data: m.map((x) => Number(x.plan)) },
         {
           name: 'Booked',
           type: 'bar',
-          data: m.map((x) => (x.actual === null ? null : lakh(x.actual))),
+          data: m.map((x) => (x.actual === null ? null : Number(x.actual))),
         },
       ],
     } as ChartOption;
@@ -136,11 +141,18 @@ export function CompanyDashboardScreen() {
           <div className="grid gap-4 xl:grid-cols-2">
             <Card title={`Revenue against plan, FY ${q.data.fy}`}>
               {option ? (
-                <EChart option={option} label="Revenue booked by month against plan" />
+                <ChartFigure
+                  title={`Revenue against plan, FY ${q.data.fy}`}
+                  label="Revenue booked by month against plan"
+                  heading="Month"
+                  option={option}
+                  measures="money"
+                  drill={() => '/accounts/statements'}
+                />
               ) : null}
               <p className="mt-1 text-xs text-fg-muted">
                 Plan: each project's contract value spread evenly from its start to its planned
-                finish.
+                finish. Click a month for the financial statements.
               </p>
             </Card>
             <Card title="Order book">

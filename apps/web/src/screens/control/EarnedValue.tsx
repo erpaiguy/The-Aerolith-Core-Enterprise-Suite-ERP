@@ -7,8 +7,10 @@ import { useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import type { ProjectSummary } from '../../api/types';
 import { today } from '../../accounts/model';
-import { EChart, themeColours, type ChartOption } from '../../charts/EChart';
-import { describeError, formatInr, formatInrShort } from '../../lib/format';
+import { ChartFigure } from '../../charts/ChartFigure';
+import type { ChartOption } from '../../charts/EChart';
+import { valueAxis } from '../../charts/measure';
+import { describeError, formatInr } from '../../lib/format';
 import { useProjectParam } from '../../lib/project-param';
 
 type Method = 'cpi' | 'budget_rate' | 'cpi_spi' | 'bottom_up';
@@ -230,66 +232,33 @@ function ProjectEv({ projectId, asOf }: { projectId: string; asOf: string }) {
 
 function Curves({ curve }: { curve: Report['curve'] }) {
   const option = useMemo<ChartOption>(() => {
-    const c = themeColours();
     const n = (xs: (string | null)[]) => xs.map((x) => (x === null ? null : Number(x)));
-    const line = (name: string, data: (number | null)[], colour: string, dashed = false) => ({
+    const line = (name: string, data: (number | null)[], dashed = false) => ({
       name,
       type: 'line',
       data,
       showSymbol: data.length < 30,
-      lineStyle: { color: colour, width: 2, type: dashed ? 'dashed' : 'solid' },
-      itemStyle: { color: colour },
+      lineStyle: { type: dashed ? 'dashed' : 'solid' },
     });
     return {
-      grid: { left: 70, right: 16, top: 30, bottom: 30 },
-      legend: { top: 0, textStyle: { color: c.muted } },
-      tooltip: {
-        trigger: 'axis',
-        valueFormatter: (v: unknown) => (typeof v === 'number' ? formatInr(String(v)) : '-'),
-      },
-      xAxis: { type: 'category', data: curve.months, axisLine: { lineStyle: { color: c.line } } },
-      yAxis: {
-        type: 'value',
-        axisLabel: { formatter: (v: number) => formatInrShort(String(v)) },
-        splitLine: { lineStyle: { color: c.line } },
-      },
+      grid: { left: 70, right: 16, top: 56, bottom: 30 },
+      xAxis: { type: 'category', data: curve.months },
+      yAxis: valueAxis('money'),
       series: [
-        ...(curve.pv ? [line('Planned value', n(curve.pv), c.muted, true)] : []),
-        line('Earned value', n(curve.ev), c.success),
-        line('Actual cost', n(curve.ac), c.danger),
+        ...(curve.pv ? [line('Planned value', n(curve.pv), true)] : []),
+        line('Earned value', n(curve.ev)),
+        line('Actual cost', n(curve.ac)),
       ],
     };
   }, [curve]);
   return (
-    <>
-      <EChart
-        option={option}
-        height={280}
-        label="S-curves: planned value, earned value and actual cost by month"
-      />
-      <details className="mt-2 text-sm">
-        <summary>The figures</summary>
-        <Table minWidth="32rem">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th className="text-right">PV</th>
-              <th className="text-right">EV</th>
-              <th className="text-right">AC</th>
-            </tr>
-          </thead>
-          <tbody data-testid="ev-curve">
-            {curve.months.map((m, i) => (
-              <tr key={m}>
-                <td>{m}</td>
-                <td className="text-right tabular-nums">{curve.pv ? inr(curve.pv[i]!) : '—'}</td>
-                <td className="text-right tabular-nums">{inr(curve.ev[i] ?? null)}</td>
-                <td className="text-right tabular-nums">{inr(curve.ac[i] ?? null)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </details>
-    </>
+    <ChartFigure
+      title="S-curves"
+      option={option}
+      height={280}
+      heading="Month"
+      measures="money"
+      label="S-curves: planned value, earned value and actual cost by month"
+    />
   );
 }

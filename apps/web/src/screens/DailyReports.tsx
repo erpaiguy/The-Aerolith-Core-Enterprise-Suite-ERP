@@ -17,7 +17,9 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { ProjectDetail } from '../api/types';
-import { EChart, themeColours, type ChartOption } from '../charts/EChart';
+import { ChartFigure } from '../charts/ChartFigure';
+import type { ChartOption } from '../charts/EChart';
+import { valueAxis, type Measure } from '../charts/measure';
 import { useT } from '../i18n/i18n';
 import { describeError } from '../lib/format';
 import {
@@ -259,19 +261,19 @@ export function ReportTable({ rows }: { rows: DailyReportList['reports'] }) {
 /** The last eight weeks, from submitted reports. */
 function Weekly({ s }: { s: Summary }) {
   const t = useT();
-  const colours = themeColours();
   const weeks = useMemo(
     () =>
       [...new Set([...s.manpower.map((m) => m.week), ...s.equipment.map((e) => e.week)])].sort(),
     [s],
   );
   const trades = [...new Set(s.manpower.map((m) => m.trade))];
+  const manDays: Measure = { unit: t('man-days') };
+  const hours: Measure = { unit: t('hours') };
   const manpower: ChartOption = {
-    tooltip: { trigger: 'axis' },
-    legend: { bottom: 0 },
-    grid: { left: 40, right: 12, top: 12, bottom: 48 },
+    legend: { bottom: 0, type: 'scroll' },
+    grid: { left: 48, right: 12, top: 32, bottom: 48 },
     xAxis: { type: 'category', data: weeks.map((w) => t('w/c {date}', { date: shortDate(w) })) },
-    yAxis: { type: 'value', name: t('man-days') },
+    yAxis: valueAxis(manDays),
     series: trades.map((tr) => ({
       name: tr,
       type: 'bar',
@@ -282,24 +284,21 @@ function Weekly({ s }: { s: Summary }) {
   const sum = (w: string, k: 'worked' | 'idle') =>
     s.equipment.filter((e) => e.week === w).reduce((x, e) => x + Number(e[k]), 0);
   const equipment: ChartOption = {
-    tooltip: { trigger: 'axis' },
     legend: { bottom: 0 },
-    grid: { left: 40, right: 12, top: 12, bottom: 48 },
+    grid: { left: 48, right: 12, top: 32, bottom: 48 },
     xAxis: { type: 'category', data: weeks.map((w) => t('w/c {date}', { date: shortDate(w) })) },
-    yAxis: { type: 'value', name: t('hours') },
+    yAxis: valueAxis(hours),
     series: [
       {
         name: t('Worked'),
         type: 'bar',
         stack: 'e',
-        color: colours.success,
         data: weeks.map((w) => sum(w, 'worked')),
       },
       {
         name: t('Idle'),
         type: 'bar',
         stack: 'e',
-        color: colours.warning,
         data: weeks.map((w) => sum(w, 'idle')),
       },
     ],
@@ -309,10 +308,22 @@ function Weekly({ s }: { s: Summary }) {
     <>
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title={t('Man-days by week')}>
-          <EChart option={manpower} label={t('Man-days by trade, by week')} />
+          <ChartFigure
+            title={t('Man-days by week')}
+            label={t('Man-days by trade, by week')}
+            heading={t('Week')}
+            option={manpower}
+            measures={manDays}
+          />
         </Card>
         <Card title={t('Equipment hours by week')}>
-          <EChart option={equipment} label={t('Equipment hours worked and idle, by week')} />
+          <ChartFigure
+            title={t('Equipment hours by week')}
+            label={t('Equipment hours worked and idle, by week')}
+            heading={t('Week')}
+            option={equipment}
+            measures={hours}
+          />
         </Card>
       </div>
       <Card title={t('Hindrances, last eight weeks')}>
