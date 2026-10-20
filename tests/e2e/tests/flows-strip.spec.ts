@@ -148,10 +148,6 @@ test('the strip follows a purchase from requisition to bill', async ({ page }) =
   await bill.getByLabel('Against an order').selectOption({ index: 1 });
   await bill.getByLabel('Their bill no.').fill('V/101');
   await bill.getByLabel('Bill date').fill('2026-10-01');
-  await bill
-    .getByRole('group', { name: 'Bill line 1' })
-    .getByLabel('Ledger')
-    .selectOption({ label: 'X1001 Material consumption' });
   await bill.getByRole('button', { name: 'Enter the bill' }).click();
   await page.waitForURL(/\/accounts\/vendor-bills\/[0-9a-f-]{36}$/);
   await expect(page.getByText('Posted', { exact: true })).toBeVisible();

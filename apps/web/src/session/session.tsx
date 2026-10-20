@@ -1,5 +1,6 @@
 // Session state for the whole app: device activation (licence key → entitlement token), sign-in, and sign-out.
 import { toast } from '@aerolith/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
   useCallback,
@@ -110,6 +111,8 @@ const initial: SessionState = {
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>(initial);
+  // What was fetched for one person must not show for the next one on this device (docs/debug-log.md D-24).
+  const queries = useQueryClient();
 
   const setEntitlement = useCallback((token: string | null) => {
     save(ENTITLEMENT_KEY, token);
@@ -218,9 +221,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     api.onSessionLost = () => {
       rememberUser(null);
+      queries.clear();
       setState((s) => (s.status === 'signed_in' ? { ...s, status: 'signed_out', user: null } : s));
     };
-  }, []);
+  }, [queries]);
 
   const value = useMemo<SessionApi>(
     () => ({
@@ -241,6 +245,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setState((s) => ({ ...s, status: 'signed_out', licenceProblem: null }));
       },
       async signedIn(result) {
+        queries.clear();
         api.setAccessToken(result.accessToken);
         if (result.refreshToken) await desktop()?.setRefreshToken(result.refreshToken);
         rememberUser({
@@ -276,6 +281,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         rememberUser(null);
         api.setAccessToken(null);
         await desktop()?.setRefreshToken(null);
+        queries.clear();
         setState((s) => ({
           ...s,
           status: 'signed_out',
@@ -296,7 +302,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setState((s) => ({ ...s, status: 'needs_activation', user: null, licenceProblem: null }));
       },
     }),
-    [state, setEntitlement],
+    [state, setEntitlement, queries],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

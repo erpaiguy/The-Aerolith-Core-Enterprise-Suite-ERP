@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe('unsaved changes', () => {
   it('typing in a form marks the page; a save clears it', async () => {
-    const $ = page('<form><input name="qty"></form>');
+    const $ = page('<form><input name="qty"><button>Save</button></form>');
     type($('input'));
     expect(hasUnsavedChanges()).toBe(true);
     await answering(200).request('/api/tenant/x', { method: 'POST', body: {} });
@@ -30,7 +30,7 @@ describe('unsaved changes', () => {
   });
 
   it('a refused save keeps the mark; reading never clears it', async () => {
-    const $ = page('<form><textarea></textarea></form>');
+    const $ = page('<form><textarea></textarea><button type="submit">Save</button></form>');
     type($('textarea'));
     await answering(409)
       .request('/api/tenant/x', { method: 'POST', body: {} })
@@ -46,6 +46,14 @@ describe('unsaved changes', () => {
     $('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     vi.advanceTimersByTime(1_600);
     expect(hasUnsavedChanges()).toBe(false);
+  });
+
+  it('filter forms never count: labelled so, or with nothing that submits them', () => {
+    const $ = page(
+      '<form aria-label="Filters"><select id="f"><option>a</option></select><button>Show</button></form><form><input id="g"></form>',
+    );
+    expect(countsAsEdit($('#f'))).toBe(false);
+    expect(countsAsEdit($('#g'))).toBe(false);
   });
 
   it('search boxes, fields outside forms and opted-out areas never count', () => {

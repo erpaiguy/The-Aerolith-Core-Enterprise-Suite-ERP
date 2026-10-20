@@ -15,19 +15,23 @@ export function LeaveGuard() {
   const mine = usePending().filter((p) => !p.userId || p.userId === session.user?.id).length;
 
   useBlocker({
-    // Only a move to another page: filters and tabs that change the address keep the form.
-    shouldBlockFn: async ({ current, next }) => {
+    // Only a move to another page: filters and tabs that change the address keep the form. Answered at once when
+    // nothing is unsaved: an asynchronous "no" still makes the router wait, and the redirect after signing out then
+    // runs again and again.
+    shouldBlockFn: ({ current, next }) => {
       if (!hasUnsavedChanges() || current.pathname === next.pathname) return false;
-      const leave = await confirm({
+      return confirm({
         title: 'Leave without saving?',
         body: 'What you typed on this page has not been saved and will be lost.',
         confirmLabel: 'Leave without saving',
         cancelLabel: 'Stay on this page',
         tone: 'danger',
+      }).then((leave) => {
+        if (leave) setUnsaved(false);
+        return !leave;
       });
-      if (leave) setUnsaved(false);
-      return !leave;
     },
+    disabled: session.status !== 'signed_in',
     enableBeforeUnload: () => hasUnsavedChanges(),
   });
 

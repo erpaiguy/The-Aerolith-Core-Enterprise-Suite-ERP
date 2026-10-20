@@ -363,8 +363,8 @@ function LegalReview() {
   const title = (key: string) => LEGAL_DOCUMENTS.find((d) => d.key === key)?.title ?? key;
   const review = async (document: string, reviewed: boolean) => {
     try {
-      qc.setQueryData(
-        ['legal'],
+      qc.setQueriesData(
+        { queryKey: ['legal'] },
         await api.request<LegalState>('/api/tenant/legal/review', {
           method: 'POST',
           body: { document, reviewed },

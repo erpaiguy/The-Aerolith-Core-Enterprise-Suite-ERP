@@ -34,7 +34,17 @@ export function countsAsEdit(target: EventTarget | null): boolean {
     return false;
   if (target instanceof HTMLInputElement && SKIP_TYPES.has(target.type)) return false;
   if (target.closest('[data-no-unsaved]')) return false;
-  return target.closest('form') !== null;
+  const form = target.closest('form');
+  if (!form) return false;
+  // Filters and searches apply as they change: a form labelled so, or with no button that submits it, holds no work.
+  if (
+    form.getAttribute('role') === 'search' ||
+    /filter/i.test(form.getAttribute('aria-label') ?? '')
+  )
+    return false;
+  return (
+    form.querySelector('button:not([type]), button[type="submit"], input[type="submit"]') !== null
+  );
 }
 
 // A submit that starts no save within this long was a filter or a search, not a form to keep.

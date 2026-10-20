@@ -28,7 +28,7 @@ export interface LegalState {
 export function useLegalState() {
   const session = useSession();
   return useQuery({
-    queryKey: ['legal'],
+    queryKey: ['legal', session.user?.id],
     queryFn: () => api.request<LegalState>('/api/tenant/legal'),
     enabled: session.status === 'signed_in',
     staleTime: 60_000,
@@ -158,7 +158,7 @@ export function AcceptLegalScreen({ pending }: { pending: LegalState['documents'
               method: 'POST',
               body: { documents: pending.map((d) => d.key) },
             });
-            qc.setQueryData(['legal'], next);
+            qc.setQueryData(['legal', session.user?.id], next);
             toast.success('Thank you', 'Your acceptance is recorded with the date and time.');
           } catch (err) {
             setError(describeError(err));

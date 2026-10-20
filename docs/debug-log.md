@@ -47,6 +47,8 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-21 | Tests | After the ECharts upgrade the dashboards browser test failed: it expected the licence notice to say `echarts 6.0.0` and ECharts' 2025 copyright line, and the notice rightly said 6.1.0 and 2026. [Certain] | Low | Fixed: the test reads the version from the web app's `package.json` and accepts any copyright end year; 79 of 79 |
 | D-22 | Offline outbox | Site entries kept on a device with no signal carried no record of who made them, so on a shared site tablet they were sent under whoever signed in next. Found while building the sign-out warning (Wave 9). [Certain] | High | Fixed (`fec91ec`): each entry keeps its author and is sent only while that person is signed in; tested |
 | D-23 | Site photos | The web server's `Permissions-Policy` turned location off for the app itself (`geolocation=()`), so photos on the daily report never recorded where they were taken in the Docker deployment. Found while reviewing headers (Wave 9). [Certain] | Medium | Fixed: `geolocation=(self)` in deploy/Caddyfile |
+| D-24 | Privacy, shared devices | The app keeps what it fetched in a cache, and nothing emptied it when someone signed out: the next person signing in on the same device could briefly see the previous person's lists, and (found by the browser suite) was not asked to accept the terms because the previous person's answer was still cached. [Certain] | High | Fixed: the cache is emptied on signing in, on signing out and when a session is lost; the terms state is kept per person |
+| D-25 | Leaving a page (Wave 9's own) | Two faults in the new unsaved-changes warning, caught by the browser suite before release: changing a filter counted as unsaved work, so following a link asked "Leave without saving?"; and the warning's check answered asynchronously even when nothing was unsaved, so the redirect after signing out repeated without end and the page froze. [Certain] | High | Fixed: filter forms (labelled so, or with nothing that submits them) never count; the check answers at once and is off when nobody is signed in |
 
 ## Actions taken
 
@@ -65,6 +67,8 @@ inference from the code, [Guessing] a judgement that needs an expert.
 | D-21 | The licence-notice check follows the shipped ECharts version. | `tests/e2e/tests/dashboards.spec.ts` passes |
 | D-22 | Outbox entries carry their author; others' wait for them. | `apps/web/src/offline/outbox.test.ts` |
 | D-23 | Location allowed for the app's own pages. | deploy/Caddyfile; docs/hardening.md |
+| D-24 | Cache emptied on sign-in, sign-out and lost sessions. | `tests/e2e/tests/first-run.spec.ts` (the worker is asked to accept the terms) |
+| D-25 | Filters ignored; synchronous check, off when signed out. | `apps/web/src/lib/unsaved.test.ts`; `first-run.spec.ts`, `quality.spec.ts`, `leaving.spec.ts` |
 | D-9, D-11, D-13, D-16 | Left for the owner: see each row. | — |
 
 ## Recommendations
