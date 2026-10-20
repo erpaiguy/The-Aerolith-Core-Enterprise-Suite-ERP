@@ -21,6 +21,7 @@ import type {
 import { formatDateTime } from '../lib/format';
 import { load, save } from '../lib/storage';
 import { outbox } from '../offline';
+import { loadPrefs } from '../lib/prefs';
 import { clientKind, desktop } from '../platform';
 
 const ENTITLEMENT_KEY = 'aerolith.entitlement';
@@ -209,6 +210,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const userId = state.status === 'signed_in' ? (state.user?.id ?? null) : null;
   useEffect(() => {
     outbox.setUser(userId);
+    void loadPrefs(userId);
     if (userId && typeof navigator !== 'undefined' && navigator.onLine) void outbox.flush();
   }, [userId]);
 

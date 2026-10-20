@@ -1,6 +1,7 @@
 {
   "name": "aerolith-core",
   "private": true,
+  "version": "0.9.0",
   "description": "Aerolith Core: construction ERP (multi-tenant SaaS + desktop)",
   "license": "UNLICENSED",
   "packageManager": "pnpm@10.28.0",

@@ -76,6 +76,7 @@ import type { Inbox, ProjectSummary } from '../api/types';
 import { daysUntil, formatDate } from '../lib/format';
 import { LANGUAGES, useLanguage, type Lang } from '../i18n/i18n';
 import { LeaveGuard } from '../session/LeaveGuard';
+import { FavouriteToggle, PersonalNav, StatusBar, useRecordRecent } from './shell/Personal';
 import { useSession } from '../session/session';
 import { usePending } from '../offline';
 import { Badge, Select, useConfirm } from '@aerolith/ui';
@@ -534,6 +535,7 @@ function NewMenu({ projectId }: { projectId: string | null }) {
 
 export function AppShell() {
   const session = useSession();
+  useRecordRecent();
   const isAdmin = session.user?.role === 'admin';
   const mayBooks = usePermission('accounts.view');
   const mayPortals = usePermission('portal.manage');
@@ -1055,6 +1057,7 @@ export function AppShell() {
             {projectId ? (
               <ProjectWorkspace projectId={projectId} open={open} toggle={toggle} />
             ) : null}
+            <PersonalNav />
             <nav className="space-y-0.5" aria-label="Main">
               <NavItem
                 to="/"
@@ -1084,7 +1087,8 @@ export function AppShell() {
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="print:hidden flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">
-            <div className="min-w-0 text-sm">
+            <div className="flex min-w-0 items-center gap-1.5 text-sm">
+              <FavouriteToggle />
               <span className="font-medium">{session.user?.displayName}</span>{' '}
               <Badge>{session.user?.role}</Badge>
             </div>
@@ -1111,6 +1115,7 @@ export function AppShell() {
           <main className="flex-1 px-4 py-6 md:px-6">
             <Outlet />
           </main>
+          <StatusBar />
           <LeaveGuard />
         </div>
       </div>
