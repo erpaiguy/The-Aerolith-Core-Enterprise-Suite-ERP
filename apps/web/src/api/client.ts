@@ -26,6 +26,38 @@ export interface RefreshResult {
 
 type Fetch = typeof fetch;
 
+/**
+ * The last requests this app made, for a support request's diagnostics (docs/wave9-plan.md step 9b.2): when, the
+ * method, the path without its query, the status and the server's reference. Never bodies, headers or tokens.
+ */
+export interface RequestRecord {
+  at: string;
+  method: string;
+  path: string;
+  status: number;
+  ref: string | null;
+}
+export const RECENT_REQUESTS_MAX = 10;
+const recent: RequestRecord[] = [];
+
+export function recordRequest(r: RequestRecord): void {
+  recent.push({
+    at: r.at,
+    method: r.method,
+    path: r.path.split(/[?#]/)[0]!,
+    status: r.status,
+    ref: r.ref,
+  });
+  if (recent.length > RECENT_REQUESTS_MAX) recent.splice(0, recent.length - RECENT_REQUESTS_MAX);
+}
+
+/** Newest last; copies, so the caller cannot change the record. */
+export const recentRequests = (): RequestRecord[] => recent.map((r) => ({ ...r }));
+
+export function clearRecentRequests(): void {
+  recent.length = 0;
+}
+
 export class ApiClient {
   private accessToken: string | null = null;
   private refreshing: Promise<RefreshResult | null> | null = null;
@@ -127,16 +159,21 @@ export class ApiClient {
     // FormData sets its own multipart content type with the boundary.
     if (init.body !== undefined && !form) headers['content-type'] = 'application/json';
     if (auth && this.accessToken) headers.authorization = `Bearer ${this.accessToken}`;
+    const method = init.method ?? (init.body === undefined ? 'GET' : 'POST');
+    const at = new Date().toISOString();
     try {
-      return await this.fetchImpl(`${apiBase()}${path}`, {
-        method: init.method ?? (init.body === undefined ? 'GET' : 'POST'),
+      const res = await this.fetchImpl(`${apiBase()}${path}`, {
+        method,
         headers,
         ...(init.body === undefined
           ? {}
           : { body: form ? (init.body as FormData) : JSON.stringify(init.body) }),
         credentials: 'same-origin',
       });
+      recordRequest({ at, method, path, status: res.status, ref: res.headers.get('x-request-id') });
+      return res;
     } catch {
+      recordRequest({ at, method, path, status: 0, ref: null });
       throw new ApiError(0, 'network_error', {});
     }
   }
