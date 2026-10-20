@@ -27,6 +27,7 @@ import { useT } from '../i18n/i18n';
 import type { Inspection, Receipt } from '../procurement/orders';
 import { shortDate } from '../schedule/model';
 import { printLink } from '../print/Letterhead';
+import { PurchaseFlow } from './shell/FlowStrip';
 
 const INSPECTION: Record<Inspection, string> = {
   gate: 'Accepted at the gate',
@@ -131,6 +132,7 @@ function ReceiptView({ r, onChanged }: { r: Receipt; onChanged: (next: Receipt) 
           </div>
         }
       />
+      <PurchaseFlow kind="receipt" id={r.id} stamp={`${r.rowVersion}-${r.status}`} />
       {r.status === 'cancelled' && r.statusReason && (
         <Alert tone="info">
           {t('Cancelled: {reason}. What it recorded is owed again on the order.', {

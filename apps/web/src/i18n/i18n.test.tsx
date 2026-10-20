@@ -2,6 +2,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { common } from './dict/common';
 import { dailyReport } from './dict/daily-report';
+import { flows } from './dict/flows';
 import { muster } from './dict/muster';
 import { quality } from './dict/quality';
 import { safety } from './dict/safety';
@@ -59,7 +60,7 @@ describe('site screen languages (step 8g.5)', () => {
   });
 
   it('never translates the same English two ways in two areas (one would silently win)', () => {
-    const areas = { common, dailyReport, muster, quality, safety, stores };
+    const areas = { common, dailyReport, muster, quality, safety, stores, flows };
     const clashes: string[] = [];
     for (const lang of ['mr', 'hi'] as const) {
       const seen = new Map<string, [string, string]>();

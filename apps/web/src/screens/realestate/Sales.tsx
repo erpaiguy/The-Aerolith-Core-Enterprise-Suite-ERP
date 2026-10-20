@@ -23,6 +23,8 @@ import { today } from '../../accounts/model';
 import { describeError, formatInr } from '../../lib/format';
 import { printLink } from '../../print/Letterhead';
 import { Link } from '@tanstack/react-router';
+import { FlowStrip } from '../shell/FlowStrip';
+import { bookingSteps } from '../shell/flows';
 
 interface Overview {
   setup: {
@@ -593,6 +595,9 @@ function BookingCard({ id, call }: { id: string; call: Call }) {
         {formatInr(b.totals.outstanding)}
         {Number(b.totals.interestDue) > 0 && ` · interest due ${formatInr(b.totals.interestDue)}`}
       </p>
+      <div className="my-3">
+        <FlowStrip steps={bookingSteps(b)} />
+      </div>
       <Table minWidth="44rem">
         <thead>
           <tr>

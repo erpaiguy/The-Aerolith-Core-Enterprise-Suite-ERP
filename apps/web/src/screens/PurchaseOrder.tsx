@@ -46,6 +46,7 @@ import { WorkOrderSubcontract } from './accounts/Subcontract';
 import { ResourcePicker } from '../procurement/ResourcePicker';
 import { shortDate } from '../schedule/model';
 import { printLink } from '../print/Letterhead';
+import { PurchaseFlow } from './shell/FlowStrip';
 
 const trimZeros = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v);
 
@@ -262,6 +263,11 @@ function OrderView({ o, onChanged }: { o: Order; onChanged: (next?: Order) => vo
             )}
           </div>
         }
+      />
+      <PurchaseFlow
+        kind="order"
+        id={o.id}
+        stamp={`${o.rowVersion}-${o.status}-${o.revisions.length}-${o.receipts.length}`}
       />
       {editing && over.length > 0 && (
         <Alert tone="warning">

@@ -38,6 +38,7 @@ import { LastRates } from '../procurement/LastRates';
 import { RequisitionLines } from '../procurement/RequisitionLines';
 import { shortDate } from '../schedule/model';
 import { usePermission } from '../session/permissions';
+import { PurchaseFlow } from './shell/FlowStrip';
 
 interface LineDraft {
   resourceId: string | null;
@@ -202,6 +203,7 @@ function RequisitionView({
           </div>
         }
       />
+      <PurchaseFlow kind="requisition" id={r.id} stamp={r.rowVersion} />
       {r.status === 'rejected' && r.statusReason && (
         <Alert tone="warning">
           Rejected: {r.statusReason}. Change it and submit it again, or cancel it.

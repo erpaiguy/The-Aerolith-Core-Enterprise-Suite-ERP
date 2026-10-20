@@ -29,6 +29,8 @@ import { rupees } from '../../procurement/OrderLines';
 import { shortDate } from '../../schedule/model';
 import { ClientBillGst } from './Gst';
 import { printLink } from '../../print/Letterhead';
+import { FlowStrip } from '../shell/FlowStrip';
+import { clientBillSteps } from '../shell/flows';
 
 const n = (v: string | null | undefined) => Number(v ?? 0);
 const q = (v: number) => formatQty(String(Math.round(v * 10000) / 10000));
@@ -187,6 +189,7 @@ function BillView({ b, onChanged }: { b: ClientBill; onChanged: (next: ClientBil
           </div>
         }
       />
+      <FlowStrip steps={clientBillSteps(b)} />
       {b.statusReason && (
         <Alert tone={b.status === 'cancelled' ? 'info' : 'warning'}>
           {b.status === 'cancelled' ? 'Cancelled' : 'Sent back'}: {b.statusReason}

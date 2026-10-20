@@ -26,6 +26,8 @@ import { ScrapToolsController } from './scrap-tools.controller.js';
 import { ScrapToolsService } from './scrap-tools.service.js';
 import { DeliveryController } from './delivery.controller.js';
 import { DeliveryService } from './delivery.service.js';
+import { FlowController } from './flows.controller.js';
+import { FlowService } from './flows.service.js';
 import { VendorMasterController } from './vendor-master.controller.js';
 import { VendorMasterService } from './vendor-master.service.js';
 import { DocumentsModule } from '../documents/documents.module.js';
@@ -54,6 +56,7 @@ import { AccountsModule } from '../accounts/accounts.module.js';
     DeliveryController,
     BuyingHistoryController,
     ScrapToolsController,
+    FlowController,
   ],
   providers: [
     RequisitionService,
@@ -68,6 +71,7 @@ import { AccountsModule } from '../accounts/accounts.module.js';
     DeliveryService,
     BuyingHistoryService,
     ScrapToolsService,
+    FlowService,
   ],
 })
 export class ProcurementModule {}
