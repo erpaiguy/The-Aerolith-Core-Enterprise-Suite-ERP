@@ -10,6 +10,8 @@ export interface DesktopConfig {
   apiBaseUrl: string;
   /** Directory holding the built web UI (apps/web/dist). */
   webRoot: string;
+  /** The release key updates must be signed with (step 9b.4); none means updating by hand. */
+  releasePublicKey: string | null;
 }
 
 export function loadConfig(): DesktopConfig {
@@ -25,6 +27,7 @@ export function loadConfig(): DesktopConfig {
     throw new Error('Packaged builds must use an https API URL');
   return {
     apiBaseUrl: url.origin,
+    releasePublicKey: process.env.AEROLITH_RELEASE_PUBLIC_KEY ?? fromFile.releasePublicKey ?? null,
     webRoot: packaged
       ? join(process.resourcesPath, 'web')
       : join(__dirname, '..', '..', 'web', 'dist'),

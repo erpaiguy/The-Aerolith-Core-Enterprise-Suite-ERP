@@ -64,6 +64,8 @@ export interface UpdateStatus {
   configured: boolean;
   checkedAt: string | null;
   latest: ReleaseManifest | null;
+  /** The publisher's signature of `latest`, so the desktop app checks it with its own key, not the server's word. */
+  signature: string | null;
   available: boolean;
   /** This version is below the release's minimum: update now. */
   required: boolean;

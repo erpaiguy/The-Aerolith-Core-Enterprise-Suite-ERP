@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { APP_ORIGIN, loadConfig } from './config.js';
 import { registerSchemeAsPrivileged, serveApp } from './protocol.js';
 import { deviceId, getRefreshToken, setRefreshToken } from './secure-store.js';
+import { Updater } from './updater.js';
 
 const SMOKE_TEST = process.argv.includes('--smoke-test');
 const platformName =
@@ -134,6 +135,20 @@ app.whenReady().then(() => {
   registerIpc();
   const win = createWindow(config.apiBaseUrl);
   registerCloseGuard(win);
+  const updater = new Updater(
+    config.apiBaseUrl,
+    config.releasePublicKey,
+    platformName === 'windows' ? 'windows' : platformName === 'macos' ? 'macos' : 'linux',
+  );
+  ipcMain.handle('aerolith:update:get', (e) => (fromOurUi(e) ? updater.get() : null));
+  ipcMain.handle('aerolith:update:check', (e) => (fromOurUi(e) ? updater.check() : null));
+  ipcMain.handle('aerolith:update:mode', (e, mode: unknown) => {
+    if (fromOurUi(e) && (mode === 'auto' || mode === 'manual')) updater.setMode(mode);
+  });
+  ipcMain.handle('aerolith:update:restart', (e) => {
+    if (fromOurUi(e)) updater.restartToUpdate();
+  });
+  if (!SMOKE_TEST) updater.start();
 
   if (SMOKE_TEST) {
     // CI/dev check: the UI loads, the bridge is present and no Node APIs leak into the page.

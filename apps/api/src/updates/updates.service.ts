@@ -61,6 +61,7 @@ export class UpdatesService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(UpdatesService.name);
   private timer: NodeJS.Timeout | null = null;
   private latest: ReleaseManifest | null = null;
+  private signature: string | null = null;
   private checkedAt: Date | null = null;
   private problem: string | null = null;
 
@@ -88,6 +89,7 @@ export class UpdatesService implements OnModuleInit, OnModuleDestroy {
       configured: this.configured(),
       checkedAt: this.checkedAt?.toISOString() ?? null,
       latest,
+      signature: this.signature,
       available: !!latest && compareVersions(latest.version, API_VERSION) > 0,
       required: !!latest?.minimumVersion && compareVersions(API_VERSION, latest.minimumVersion) < 0,
       problem: this.problem,
@@ -109,6 +111,7 @@ export class UpdatesService implements OnModuleInit, OnModuleDestroy {
       if (!manifestSignedBy(signed, publicKey))
         throw new Error('The release manifest is not signed with this installation’s release key.');
       this.latest = signed.manifest;
+      this.signature = signed.signature;
       this.problem = null;
     } catch (err) {
       this.problem = (err as Error).message;
