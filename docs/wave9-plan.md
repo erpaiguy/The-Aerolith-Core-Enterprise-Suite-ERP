@@ -84,4 +84,4 @@ anything a person sees), committed and pushed.
 - [x] 9b.5 Hardening: headers and content security policy reviewed, rate limits, dependency audit in CI, structured
       logs with request IDs, health and readiness, connection limits, load test, backup restore drill
 - [x] 9b.6 Release engineering: version numbers, changelog, signed installers, release checklist
-- [ ] 9b exit and Wave 9 exit: full check, browser suite, demo reseed and crawl; report to the owner
+- [x] 9b exit and Wave 9 exit: full check, browser suite, demo reseed and crawl; report to the owner

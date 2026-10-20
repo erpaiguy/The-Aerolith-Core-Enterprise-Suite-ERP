@@ -74,4 +74,25 @@ a quarter, also do it the hard way, on another machine:
 
 ## Wave 9 exit
 
-To be filled in at the exit run.
+20 October 2026, on the reseeded demo company, one machine (API, Postgres and the load generator together), product
+version 0.9.0.
+
+- Demo reseed: no failed steps. Crawl of every screen as every person, the portals and the demo flows: 19 of 19.
+- Load test (`node tools/bench/dist/load.js`, as the manager suresh): 10 people × 5 rounds × 10 lists = 500 requests in 1.8 s (285/s). Failed: 0.
+
+| List | Requests | Median ms | 95% ms | 99% ms |
+| --- | ---: | ---: | ---: | ---: |
+| /api/tenant/inbox | 50 | 33 | 69 | 84 |
+| /api/tenant/projects | 50 | 38 | 53 | 78 |
+| /api/tenant/tenders | 50 | 35 | 77 | 95 |
+| /api/tenant/orders | 50 | 31 | 54 | 57 |
+| /api/tenant/parties | 50 | 24 | 37 | 38 |
+| /api/tenant/stores | 50 | 22 | 42 | 44 |
+| /api/tenant/people | 50 | 22 | 42 | 51 |
+| /api/tenant/accounts/vouchers | 50 | 30 | 56 | 74 |
+| /api/tenant/accounts/vendor-bills | 50 | 51 | 76 | 90 |
+| /api/tenant/accounts/payment-runs | 50 | 29 | 75 | 85 |
+
+Every list answered within 100 ms at the 99th percentile under ten people at once. These are figures from a
+development container, not a promise for a customer's server; run the same command on the real server after
+installing it, and again if screens feel slow.
