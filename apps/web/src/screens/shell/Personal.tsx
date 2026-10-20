@@ -179,6 +179,8 @@ export function StatusBar({ release }: { release?: ReactNode }) {
   const company = useQuery({
     queryKey: ['welcome'],
     queryFn: () => api.request<{ company: string | null }>('/api/auth/welcome'),
+    // The frame can be drawn for a moment before the redirect to sign-in; nobody to ask about yet.
+    enabled: session.status === 'signed_in',
     staleTime: Infinity,
   });
   return (
