@@ -62,6 +62,13 @@ async function main() {
   if (!login.accessToken)
     throw new Error(`Sign-in did not finish (${login.status}): use a user without two-factor.`);
   const headers = { authorization: `Bearer ${login.accessToken}`, 'x-aerolith-client': 'desktop' };
+  // The books are kept per company (entity); the accounts lists are asked for the first one, as the screens do.
+  const companies = (await (
+    await fetch(`${values.api}/api/tenant/companies`, { headers })
+  ).json()) as { companies?: { id: string }[] };
+  const entityId = companies.companies?.[0]?.id;
+  const urlOf = (p: string) =>
+    p.startsWith('/api/tenant/accounts/') && entityId ? `${p}?entityId=${entityId}` : p;
 
   const times = new Map<string, number[]>(PATHS.map((p) => [p, []]));
   const failures: string[] = [];
@@ -69,7 +76,7 @@ async function main() {
     for (let r = 0; r < Number(values.rounds); r++)
       for (const p of PATHS) {
         const t0 = performance.now();
-        const res = await fetch(`${values.api}${p}`, { headers });
+        const res = await fetch(`${values.api}${urlOf(p)}`, { headers });
         await res.arrayBuffer();
         times.get(p)!.push(performance.now() - t0);
         if (!res.ok) failures.push(`${p} ${res.status} ${res.headers.get('x-request-id') ?? ''}`);
