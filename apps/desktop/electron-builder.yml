@@ -17,11 +17,16 @@ extraResources:
   - from: notices
     to: .
 win:
+  # The app's mark (apps/web/public/icon.svg) at every size Windows asks for; drawn by tools/icons/desktop-icon.py.
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: [x64]
   artifactName: AerolithCore-Setup-${version}.${ext}
 nsis:
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
