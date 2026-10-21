@@ -40,7 +40,8 @@ The API client refreshes once for any number of concurrent expired requests, the
   answered only for our own UI's origin and validates its input.
 - Navigation away from the app is blocked; `https` links open in the user's browser; every permission request
   (camera, microphone, location…) is denied.
-- Packaged builds refuse a non-https API URL.
+- Packaged builds refuse a non-https API URL, except to this computer itself (`localhost`, `127.0.0.1`, `::1`), so an
+  installer can be pointed at a server or demo running on the same PC.
 - The API's CORS allow-list contains only `app://aerolith` by default (`CORS_ORIGINS`), without credentials.
 
 ## Running locally

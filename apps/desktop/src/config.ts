@@ -3,6 +3,7 @@
 import { app } from 'electron';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { apiUrlAllowed } from './api-url';
 
 export const APP_ORIGIN = 'app://aerolith';
 
@@ -23,8 +24,8 @@ export function loadConfig(): DesktopConfig {
     : {};
   const apiBaseUrl = process.env.AEROLITH_API_URL ?? fromFile.apiBaseUrl ?? 'http://127.0.0.1:3000';
   const url = new URL(apiBaseUrl);
-  if (packaged && url.protocol !== 'https:')
-    throw new Error('Packaged builds must use an https API URL');
+  if (!apiUrlAllowed(url, packaged))
+    throw new Error('Packaged builds must use an https API URL (plain http only to this computer)');
   return {
     apiBaseUrl: url.origin,
     releasePublicKey: process.env.AEROLITH_RELEASE_PUBLIC_KEY ?? fromFile.releasePublicKey ?? null,
