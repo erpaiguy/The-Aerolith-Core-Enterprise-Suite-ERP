@@ -91,7 +91,7 @@ jobs:
       - name: Browser end-to-end
         run: pnpm --filter @aerolith/e2e e2e
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-results
           path: tests/e2e/test-results
@@ -144,7 +144,7 @@ jobs:
       - if: failure()
         run: $COMPOSE logs --no-color --tail 200
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-stack-e2e-results
           path: tests/e2e/test-results
@@ -169,7 +169,7 @@ jobs:
       - name: Build Windows installer
         run: pnpm --filter @aerolith/desktop dist:win
       # The installer is ~100 MB: kept from main only, briefly, so branch pushes do not fill the artifact quota.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: github.ref == 'refs/heads/main'
         with:
           name: windows-installer-unsigned
