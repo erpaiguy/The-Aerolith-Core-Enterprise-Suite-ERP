@@ -14,7 +14,7 @@
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.63.0",
     "@types/mailparser": "^3.9.0",
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.6.5",
     "exceljs": "4.4.0",
     "mailparser": "^3.9.36",
     "postgres": "^3.4.9"
